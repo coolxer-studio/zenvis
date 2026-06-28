@@ -21,7 +21,7 @@
 - `LlmService.java` — LLM 调用封装，ThreadLocal 模型切换（134行）
 - `BaseSchemaService.java` — Schema RAG 检索（285行）
 - `EChartsConverter.java` — 图表数据转换（269行）
-- `AIAgentService.java` — 原始 ReactAgent（已废弃，工具被注释掉）
+- `AIAgentService.java` — 原始 ReAct 实验死代码已移除
 
 ---
 
@@ -30,9 +30,9 @@
 ### P0 — 架构缺陷
 
 #### 1. AIAgentService 与 InspectionAgent 双轨并行，职责混乱
-- `AIAgentService.java` 使用 Spring AI Alibaba 的 `ReactAgent`，但**工具全部被注释掉**，成为死代码
+- 原 `AIAgentService.java` 使用已废弃的 ReAct 实验实现，但**工具全部被注释掉**，已移除
 - `InspectionAgent.java` 实际承载了所有业务逻辑，但它不是 Agent，只是一个 Pipeline
-- **问题**：两个类共存导致开发者困惑，且 ReactAgent 的真正能力（工具调用、推理循环）未被利用
+- **问题**：历史双轨实现导致开发者困惑，后续如需 ReAct 能力应基于 Spring AI 工具调用重新设计
 
 #### 2. 无对话记忆（Conversational Memory）
 - `InspectionAgent.chat()` 是完全无状态的，每次调用独立
@@ -131,7 +131,7 @@ public String chatAgent(@RequestParam("query") String query) {
 
 ### 方案 B：演进为真正的 ReAct Agent（推荐中期方案）
 
-激活 `AIAgentService` 中的 `ReactAgent`，将 Pipeline 步骤改造为可调用的 Tool：
+基于 Spring AI 工具调用能力，将 Pipeline 步骤改造为可调用的 Tool：
 
 1. **定义 Tool 集合**
    ```
@@ -209,7 +209,7 @@ public String chatAgent(@RequestParam("query") String query) {
 | `LlmService.java` | 替换 ThreadLocal，增加超时和缓存 |
 | `BaseNl2SqlService.java` | 重构多步骤调用链，支持并行化 |
 | `EChartsConverter.java` | 扩展图表类型，增加数据感知 |
-| `AIAgentService.java` | 激活 ReactAgent 或移除死代码 |
+| `AIAgentService.java` | 已移除死代码，后续按需重建工具调用式 Agent |
 | `AIAgentConfiguration.java` | 统一配置管理，清理硬编码 |
 | `RedisSchemaService.java` | 实现 agentId 隔离逻辑 |
 

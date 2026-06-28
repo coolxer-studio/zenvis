@@ -20,7 +20,7 @@ ZenVis 集成了基于大语言模型的智能分析能力，支持自然语言�
 │                                                             │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    │
 │  │   User      │───▶│  Inspection  │───▶│   LLM       │    │
-│  │  (Natural   │    │   Agent      │    │ (DashScope) │    │
+│  │  (Natural   │    │   Agent      │    │  (OpenAI)   │    │
 │  │   Language) │    │              │    │             │    │
 │  └─────────────┘    └──────────────┘    └─────────────┘    │
 │                            │                     ▲          │
@@ -42,7 +42,7 @@ ZenVis 集成了基于大语言模型的智能分析能力，支持自然语言�
 
 ## InspectionAgent
 
-InspectionAgent 是核心的智能巡检 Agent，基于 Spring AI Alibaba 框架实现。
+InspectionAgent 是核心的智能巡检 Agent，基于 Spring AI OpenAI 集成实现。
 
 ### 位置
 
@@ -219,10 +219,12 @@ curl -X POST http://localhost:11001/api/v1/dih/chat \
 
 ### API Key 配置
 
-在 `application.properties` 中配置阿里云 DashScope API Key：
+在 `application.properties` 中配置 OpenAI API Key 和模型：
 
 ```properties
-spring.ai.dashscope.api-key=${DASHSCOPE_API_KEY}
+spring.ai.openai.api-key=${OPENAI_API_KEY}
+spring.ai.openai.chat.options.model=${OPENAI_CHAT_MODEL}
+spring.ai.openai.embedding.options.model=${OPENAI_EMBEDDING_MODEL}
 ```
 
 ### 模型配置
@@ -230,10 +232,9 @@ spring.ai.dashscope.api-key=${DASHSCOPE_API_KEY}
 支持多种模型：
 
 ```properties
-# 可选模型
-# qwen-max
-# qwen-plus
-# qwen-turbo
+# 模型由部署环境配置
+# OPENAI_CHAT_MODEL
+# OPENAI_EMBEDDING_MODEL
 ```
 
 ## 错误处理

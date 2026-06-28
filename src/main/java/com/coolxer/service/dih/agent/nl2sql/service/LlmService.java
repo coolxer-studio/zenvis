@@ -12,9 +12,10 @@
  */
 package com.coolxer.service.dih.agent.nl2sql.service;
 
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
 /**
@@ -34,7 +35,7 @@ public class LlmService {
 	 * 设置当前线程使用的模型，为 null 时清除
 	 */
 	public void setModel(String model) {
-		if (model != null) {
+		if (StringUtils.hasText(model)) {
 			CURRENT_MODEL.set(model);
 		}
 		else {
@@ -59,27 +60,26 @@ public class LlmService {
 	/**
 	 * 构建同步调用的运行时模型选项（禁用流式相关参数）
 	 */
-	private DashScopeChatOptions buildSyncModelOptions() {
+	private OpenAiChatOptions buildSyncModelOptions() {
 		String model = currentModel();
 		if (model == null) {
 			return null;
 		}
-		return DashScopeChatOptions.builder()
-				.withModel(model)
-				.withIncrementalOutput(false)
+		return OpenAiChatOptions.builder()
+				.model(model)
 				.build();
 	}
 
 	/**
 	 * 构建流式调用的运行时模型选项
 	 */
-	private DashScopeChatOptions buildStreamModelOptions() {
+	private OpenAiChatOptions buildStreamModelOptions() {
 		String model = currentModel();
 		if (model == null) {
 			return null;
 		}
-		return DashScopeChatOptions.builder()
-				.withModel(model)
+		return OpenAiChatOptions.builder()
+				.model(model)
 				.build();
 	}
 
@@ -87,7 +87,7 @@ public class LlmService {
 	 * 同步调用 LLM
 	 */
 	public String call(String prompt) {
-		DashScopeChatOptions options = buildSyncModelOptions();
+		OpenAiChatOptions options = buildSyncModelOptions();
 		var spec = chatClient.prompt().user(prompt);
 		if (options != null) {
 			spec = spec.options(options);
@@ -99,7 +99,7 @@ public class LlmService {
 	 * 带系统提示的同步调用
 	 */
 	public String callWithSystemPrompt(String systemPrompt, String userPrompt) {
-		DashScopeChatOptions options = buildSyncModelOptions();
+		OpenAiChatOptions options = buildSyncModelOptions();
 		var spec = chatClient.prompt().system(systemPrompt).user(userPrompt);
 		if (options != null) {
 			spec = spec.options(options);
@@ -111,7 +111,7 @@ public class LlmService {
 	 * 流式调用 LLM
 	 */
 	public Flux<ChatResponse> streamCall(String prompt) {
-		DashScopeChatOptions options = buildStreamModelOptions();
+		OpenAiChatOptions options = buildStreamModelOptions();
 		var spec = chatClient.prompt().user(prompt);
 		if (options != null) {
 			spec = spec.options(options);
@@ -123,7 +123,7 @@ public class LlmService {
 	 * 带系统提示的流式调用
 	 */
 	public Flux<ChatResponse> streamCallWithSystemPrompt(String systemPrompt, String userPrompt) {
-		DashScopeChatOptions options = buildStreamModelOptions();
+		OpenAiChatOptions options = buildStreamModelOptions();
 		var spec = chatClient.prompt().system(systemPrompt).user(userPrompt);
 		if (options != null) {
 			spec = spec.options(options);

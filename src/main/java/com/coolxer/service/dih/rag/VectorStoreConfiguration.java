@@ -14,13 +14,13 @@ public class VectorStoreConfiguration {
     /**
      * 提供基于内存的向量存储（SimpleVectorStore）
      * <p>
-     * 依赖 EmbeddingModel（自动注入，Alibaba 的嵌入模型）
+     * 依赖 EmbeddingModel（由 Spring AI 自动注入）
      *
      * @param embeddingModel
      * @return
      */
     @Bean
-    public VectorStore simpleVectorStore(@Qualifier("dashscopeEmbeddingModel") EmbeddingModel embeddingModel) {
+    public VectorStore simpleVectorStore(EmbeddingModel embeddingModel) {
         return SimpleVectorStore.builder(embeddingModel).build();
     }
 

@@ -20,8 +20,7 @@ import org.springframework.web.client.RestTemplate;
 @ServletComponentScan
 @SpringBootApplication(
         exclude = {
-                DataSourceAutoConfiguration.class,
-                com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeEmbeddingAutoConfiguration.class
+                DataSourceAutoConfiguration.class
         }
 )
 public class Application {

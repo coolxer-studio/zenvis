@@ -35,7 +35,7 @@ public class RedisVectorConfiguration {
 
     @Bean
     @Qualifier("redisVectorStoreCustom")
-    public RedisVectorStore vectorStore(JedisPooled jedisPooled, @Qualifier("dashscopeEmbeddingModel") EmbeddingModel embeddingModel) {
+    public RedisVectorStore vectorStore(JedisPooled jedisPooled, EmbeddingModel embeddingModel) {
         logger.info("create redis vector store");
         return RedisVectorStore.builder(jedisPooled, embeddingModel)
                 .indexName(indexName)                // Optional: defaults to "spring-ai-index"
@@ -52,13 +52,13 @@ public class RedisVectorConfiguration {
      * 为Agent单独创建一个向量数据库，索引单独拆开
      *
      * @param jedisPooled    与 #vectorStore 共用一个jedis 链接
-     * @param embeddingModel dashscope embedding model
+     * @param embeddingModel embedding model
      * @return
      */
     @Bean
     @Qualifier("redisVectorStoreForAgent")
     public RedisVectorStore vectorStoreForAgent(JedisPooled jedisPooled,
-                                                @Qualifier("dashscopeEmbeddingModel") EmbeddingModel embeddingModel) {
+                                                EmbeddingModel embeddingModel) {
 
         return RedisVectorStore.builder(jedisPooled, embeddingModel)
                 .indexName("agent_vector_index")

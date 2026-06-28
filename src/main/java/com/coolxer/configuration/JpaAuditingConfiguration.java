@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Map;
 import java.util.Optional;
@@ -33,16 +34,21 @@ public class JpaAuditingConfiguration implements AuditorAware<Integer> {
             HashOperations<String, String, String> hashOperations = stringRedisTemplate.opsForHash();
             RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
             if (requestAttributes != null) {
-                String sessionId = requestAttributes.getSessionId();
+                String sessionId = requestAttributes instanceof ServletRequestAttributes servletRequestAttributes
+                        ? servletRequestAttributes.getRequest().getRequestedSessionId()
+                        : requestAttributes.getSessionId();
                 if (StringUtils.isNotEmpty(sessionId)) {
                     Map<String, String> mapSession = hashOperations.entries(sessionId);
-                    return Optional.of(Integer.valueOf(mapSession.get("strUid")));
+                    String userId = mapSession.get("strUid");
+                    if (StringUtils.isNotEmpty(userId)) {
+                        return Optional.of(Integer.valueOf(userId));
+                    }
                 }
             }
             return Optional.ofNullable(1);
 
         } catch (Exception e) {
-            log.error("", e);
+            log.warn("Failed to resolve current auditor, fallback to system user.", e);
             return Optional.ofNullable(1);
         }
     }

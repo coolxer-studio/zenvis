@@ -2,7 +2,7 @@
 
 ## 概述
 
-ZenVis Backend 集成了多个AI Agent，提供智能数据分析、自然语言查询和可视化能力。基于Spring AI Alibaba框架和阿里云DashScope大语言模型，实现了强大的智能巡检和数据分析功能。
+ZenVis Backend 集成了多个AI Agent，提供智能数据分析、自然语言查询和可视化能力。基于 Spring AI 和 OpenAI 大语言模型，实现了强大的智能巡检和数据分析功能。
 
 ## 核心Agent架构
 
@@ -76,38 +76,12 @@ SQL安全校验
 - ChatMemory: 对话记忆管理
 ```
 
-### 2. AIAgentService（ReAct Agent）
-
-**位置**: `com.coolxer.service.dih.agent.AIAgentService`
+### 2. 向量化与工具能力
 
 **核心功能**:
-- 基于ReAct（推理+行动）模式的智能Agent
-- 工具调用和任务编排
 - 向量存储和相似性搜索
 - 数据库Schema向量化
-
-**技术架构**:
-
-```java
-// 基于Spring AI Alibaba的ReAct Agent
-ReactAgent.builder()
-    .name("inspection_agent")
-    .model(chatModel)
-    .tools(/* 工具回调 */)
-    .build()
-```
-
-**关键能力**:
-
-1. **Schema向量化**
-   - 数据库表结构向量化存储
-   - 字段和关系向量化
-   - 支持相似性搜索和召回
-
-2. **工具编排**
-   - 数据库查询工具
-   - 向量检索工具
-   - 可扩展的工具机制
+- 可扩展的工具机制
 
 ## NL2SQL 服务架构
 
@@ -251,7 +225,7 @@ ReactAgent.builder()
 **位置**: `com.coolxer.service.dih.agent.AIAgentConfiguration`
 
 **配置项**:
-- DashScope API密钥
+- OpenAI API密钥与模型配置
 - 模型选择
 - 向量存储配置
 - 记忆管理配置
@@ -278,7 +252,7 @@ ReactAgent.builder()
 {
   "query": "查询最近7天的API调用次数",
   "chatId": "session-123",
-  "model": "qwen-max"
+  "model": "auto"
 }
 ```
 
@@ -420,8 +394,8 @@ curl -X POST http://localhost:11001/api/v1/dih/chat \
 
 ## 相关文档
 
-- [Spring AI Alibaba文档](https://sca.aliyun.com/ai/)
-- [DashScope API文档](https://help.aliyun.com/zh/dashscope/)
+- [Spring AI文档](https://docs.spring.io/spring-ai/reference/)
+- [OpenAI API文档](https://platform.openai.com/docs/)
 - [Redis Vector Search](https://redis.io/docs/stack/search/)
 - [ECharts文档](https://echarts.apache.org/)
 

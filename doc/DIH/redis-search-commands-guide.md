@@ -830,7 +830,7 @@ FT.SEARCH idx:vector "*" =>{$embedding:[vector_bytes]} PARAMS 2 embedding [b64_v
 ```
 用户查询
   ↓
-Embedding 模型（DashScope）→ 生成查询向量
+Embedding 模型（OpenAI）→ 生成查询向量
   ↓
 RedisVectorStore.similaritySearch(query, topK, filter)
   ↓

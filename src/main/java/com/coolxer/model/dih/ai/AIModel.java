@@ -1,13 +1,9 @@
-package com.coolxer.model.dih.dashscope;
+package com.coolxer.model.dih.ai;
 
 import java.io.Serial;
 import java.io.Serializable;
 
-/**
- *
- */
-
-public class DashScopeModel implements Serializable {
+public class AIModel implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 2123534567887673L;

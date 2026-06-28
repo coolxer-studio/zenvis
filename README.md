@@ -139,7 +139,7 @@ ZenVis = **配置化数据存储 + 可视化引擎 + 检索分析 + 插件扩展
 | 语言      | Java                | 17       |
 | 框架      | Spring Boot         | 3.2.0    |
 | AI 框架   | Spring AI           | 1.1.0-M4 |
-| AI 服务   | Alibaba DashScope   | -        |
+| AI 服务   | OpenAI              | -        |
 | 关系型数据库  | MySQL               | 8.0+     |
 | 时序数据库   | ClickHouse          | 22.3+    |
 | 缓存/向量存储 | Redis / Redis Stack | 7.0+     |
@@ -235,7 +235,7 @@ PUSH_IMAGE=true ./build.sh
 | `spring.datasource.clickhouse.jdbc-url`  | -           | ClickHouse 连接地址       |
 | `spring.data.redis.host`                 | `localhost` | Redis 主机地址            |
 | `spring.data.redis.port`                 | `6379`      | Redis 端口              |
-| `spring.ai.dashscope.api-key`            | -           | 阿里云 DashScope API Key |
+| `spring.ai.openai.api-key`               | -           | OpenAI API Key           |
 | `spring.servlet.multipart.max-file-size` | `300MB`     | 最大上传文件大小              |
 | `server.servlet.session.timeout`         | `3600S`     | 会话超时时间                |
 

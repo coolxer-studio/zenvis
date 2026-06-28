@@ -25,7 +25,7 @@ java -jar target/application.jar --spring.profiles.active=dev
 
 ## Project Overview
 
-This is a Spring Boot 3.2.0 web service (Java 17) that provides an intelligent inspection platform with AI capabilities. It integrates with Alibaba's DashScope LLM for AI features including chat, code completion, and intelligent inspection agents.
+This is a Spring Boot 3.2.0 web service (Java 17) that provides an intelligent inspection platform with AI capabilities. It integrates with OpenAI through Spring AI for AI features including chat, code completion, and intelligent inspection agents.
 
 **Key Features:**
 - Multi-datasource architecture (MySQL + ClickHouse + Redis)
@@ -84,14 +84,13 @@ src/main/java/com/coolxer/
 └── commons/             # Shared utilities, enums, exceptions
 ```
 
-### AI Integration (Spring AI Alibaba)
+### AI Integration (Spring AI OpenAI)
 
-The application uses Spring AI Alibaba framework for AI capabilities:
+The application uses Spring AI's official OpenAI integration for AI capabilities:
 
-- **DashScope Chat Model**: Primary LLM integration for chat and reasoning
+- **OpenAI Chat Model**: Primary LLM integration for chat and reasoning
 - **Vector Store**: Redis-based vector storage for RAG (Retrieval Augmented Generation)
 - **Chat Memory**: MySQL-backed conversation history persistence
-- **ReAct Agent**: Intelligent inspection agent with tool orchestration
 - **NL2SQL**: Natural language to SQL conversion with schema understanding
 
 Key AI services:
@@ -168,7 +167,7 @@ Description requirements:
 - Lombok is used extensively for reducing boilerplate
 - Redis is used for both caching and vector storage (RAG)
 - ClickHouse is the primary database for time-series data
-- AI features require valid DashScope API key configuration
+- AI features require valid OpenAI API key and model configuration
 - Vector embeddings are stored in Redis for semantic search
 
 ## AI Agent Development
@@ -192,7 +191,7 @@ When working with AI agents:
 ## Testing AI Features
 
 To test AI features locally:
-1. Configure DashScope API key in `application.properties`
+1. Configure OpenAI API key and model names in `application.properties`
 2. Ensure Redis is running for vector storage
 3. Use the `/api/v1/dih/chat` endpoint for testing
 4. Check logs for detailed AI pipeline information

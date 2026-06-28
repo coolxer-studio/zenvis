@@ -1,7 +1,5 @@
 package com.coolxer.service.dih.agent;
 
-import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
 import com.coolxer.service.dih.agent.nl2sql.connector.accessor.ClickHouseAccessor;
 import com.coolxer.service.dih.agent.nl2sql.service.LlmService;
 import com.google.gson.Gson;
@@ -9,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -33,16 +30,7 @@ public class AIAgentConfiguration {
 
 
     @Bean
-    public LlmService llmService(@Value("${spring.ai.dashscope.api-key}") String dashscopeApiKey) {
-        DashScopeApi dashScopeApi = DashScopeApi.builder()
-                .apiKey(dashscopeApiKey)
-                .build();
-        ChatModel chatModel = DashScopeChatModel.builder()
-//                .options(DashScopeChatOptions.builder()
-//                        .withModel(DashScopeModel.ChatModel.QWEN_PLUS.getValue())
-//                        .build())
-                .dashScopeApi(dashScopeApi)
-                .build();
+    public LlmService llmService(ChatModel chatModel) {
         ChatClient chatClient = ChatClient.builder(chatModel)
                 .defaultAdvisors(new SimpleLoggerAdvisor())
                 .build();

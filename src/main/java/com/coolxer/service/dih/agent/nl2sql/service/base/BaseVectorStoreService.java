@@ -40,9 +40,19 @@ public abstract class BaseVectorStoreService {
 	protected abstract EmbeddingModel getEmbeddingModel();
 
 	/**
+	 * Embedding/RAG is disabled by default and enabled explicitly by configuration.
+	 */
+	public boolean isEmbeddingEnabled() {
+		return true;
+	}
+
+	/**
 	 * 获取嵌入向量（Double）
 	 */
 	public List<Double> embedDouble(String text) {
+		if (!isEmbeddingEnabled()) {
+			return new ArrayList<>();
+		}
 		float[] embedding = getEmbeddingModel().embed(text);
 		return convertToDoubleList(embedding);
 	}
@@ -51,6 +61,9 @@ public abstract class BaseVectorStoreService {
 	 * 获取嵌入向量（Float）
 	 */
 	public List<Float> embedFloat(String text) {
+		if (!isEmbeddingEnabled()) {
+			return new ArrayList<>();
+		}
 		float[] embedding = getEmbeddingModel().embed(text);
 		return convertToFloatList(embedding);
 	}

@@ -1,10 +1,6 @@
 package com.coolxer.service.dih;
 
-import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
-import com.alibaba.cloud.ai.dashscope.api.DashScopeResponseFormat;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
-import com.alibaba.cloud.ai.memory.jdbc.MysqlChatMemoryRepository;
+import com.coolxer.configuration.ai.AiEmbeddingProperties;
 import com.coolxer.service.dih.advisor.ReasoningContentAdvisor;
 import com.coolxer.service.dih.rag.VectorStoreDelegate;
 import org.slf4j.Logger;
@@ -16,13 +12,16 @@ import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvi
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
+import org.springframework.ai.chat.memory.repository.jdbc.MysqlChatMemoryRepositoryDialect;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
 import javax.sql.DataSource;
@@ -45,28 +44,25 @@ public class AIChatService {
 
     private final VectorStoreDelegate vectorStoreDelegate;
 
+    private final AiEmbeddingProperties embeddingProperties;
+
     public AIChatService(
             @Qualifier("mysqlDataSource") DataSource mysqlDataSource,
-            @Value("${spring.ai.dashscope.api-key}") String dashscopeApiKey,
+            ChatModel chatModel,
             @Qualifier("askSystemPromptTemplate") PromptTemplate systemPromptTemplate,
             @Qualifier("deepThinkPromptTemplate") PromptTemplate deepThinkPromptTemplate,
-            VectorStoreDelegate vectorStoreDelegate
+            VectorStoreDelegate vectorStoreDelegate,
+            AiEmbeddingProperties embeddingProperties
     ) {
         // 构造 ChatMemoryRepository 和 ChatMemory
-        ChatMemoryRepository chatMemoryRepository = MysqlChatMemoryRepository.mysqlBuilder()
+        ChatMemoryRepository chatMemoryRepository = JdbcChatMemoryRepository.builder()
                 .jdbcTemplate(new JdbcTemplate(mysqlDataSource))
+                .dialect(new MysqlChatMemoryRepositoryDialect())
                 .build();
         ChatMemory chatMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(chatMemoryRepository)
                 .build();
 
-        DashScopeApi dashScopeApi = DashScopeApi.builder()
-                .apiKey(dashscopeApiKey)
-                .build();
-
-        ChatModel chatModel = DashScopeChatModel.builder()
-                .dashScopeApi(dashScopeApi)
-                .build();
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(
                         systemPromptTemplate.getTemplate()
@@ -77,6 +73,7 @@ public class AIChatService {
         this.deepThinkPromptTemplate = deepThinkPromptTemplate;
         this.reasoningContentAdvisor = new ReasoningContentAdvisor(1);
         this.vectorStoreDelegate = vectorStoreDelegate;
+        this.embeddingProperties = embeddingProperties;
     }
 
     public Flux<String> chat(String chatId, String model, String prompt) {
@@ -88,20 +85,21 @@ public class AIChatService {
             // add reasoning content advisor.
             chatClient.prompt().advisors(reasoningContentAdvisor);
         }
-        var runtimeOptions = DashScopeChatOptions.builder()
-                .withModel(model)
-                .withTemperature(0.8)
-                .withResponseFormat(DashScopeResponseFormat.builder()
-                        .type(DashScopeResponseFormat.Type.TEXT)
-                        .build()
-                ).build();
+        var runtimeOptions = buildRuntimeOptions(model);
 
-        return chatClient.prompt()
+        var promptSpec = chatClient.prompt()
                 .options(runtimeOptions)
                 .user(prompt)
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
-                ).advisors(
+                );
+
+        if (!embeddingProperties.isEnabled()) {
+            log.debug("Skip chat RAG advisor because app.ai.embedding.enabled=false.");
+            return promptSpec.stream().content();
+        }
+
+        return promptSpec.advisors(
                         QuestionAnswerAdvisor
                                 .builder(vectorStoreDelegate.getVectorStore("redis"))
                                 .searchRequest(
@@ -120,18 +118,21 @@ public class AIChatService {
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt) {
 
         return chatClient.prompt()
-                .options(DashScopeChatOptions.builder()
-                        .withModel(model)
-                        .withTemperature(0.8)
-                        .withResponseFormat(DashScopeResponseFormat.builder()
-                                .type(DashScopeResponseFormat.Type.TEXT)
-                                .build()
-                        ).build()
-                ).system(deepThinkPromptTemplate.getTemplate())
+                .options(buildRuntimeOptions(model))
+                .system(deepThinkPromptTemplate.getTemplate())
                 .user(prompt)
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 ).stream()
                 .content();
+    }
+
+    private OpenAiChatOptions buildRuntimeOptions(String model) {
+        var builder = OpenAiChatOptions.builder()
+                .temperature(0.8);
+        if (StringUtils.hasText(model)) {
+            builder.model(model);
+        }
+        return builder.build();
     }
 }

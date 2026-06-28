@@ -17,6 +17,7 @@
 
 package com.coolxer.service.dih.rag;
 
+import com.coolxer.configuration.ai.AiEmbeddingProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -67,7 +68,14 @@ public class VectorStoreInitializerService {
     @Autowired
     private JedisPooled jedisPooled;
 
+    @Autowired
+    private AiEmbeddingProperties embeddingProperties;
+
     public void loadDocToRag(String docSource, Path docPath) {
+        if (!embeddingProperties.isEnabled()) {
+            logger.info("Skip loading docs into RAG because app.ai.embedding.enabled=false. source={}", docSource);
+            return;
+        }
         VectorStore vectorStore = vectorStoreDelegate.getVectorStore("redis");
         List<MarkdownDocumentReader> markdownDocumentReaderList = loadMarkdownDocuments(docPath);
         int size = 0;

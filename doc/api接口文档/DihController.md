@@ -101,7 +101,7 @@ curl -X GET http://localhost:8080/api/v1/dih/model/list
   "status": 0,
   "msg": "success",
   "data": [
-    {"model": "qwen-plus", "label": "Qwen Plus"}
+    {"model": "auto", "label": "系统默认模型"}
   ]
 }
 ```

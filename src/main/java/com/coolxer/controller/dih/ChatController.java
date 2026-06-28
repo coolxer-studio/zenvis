@@ -1,6 +1,5 @@
 package com.coolxer.controller.dih;
 
-import com.alibaba.cloud.ai.dashscope.spec.DashScopeModel;
 import com.coolxer.commons.enums.MessageType;
 import com.coolxer.controller.BaseController;
 import com.coolxer.dao.mysql.entity.ChatSession;
@@ -60,11 +59,11 @@ public class ChatController extends BaseController {
      * 1. When the send prompt is empty, an error message is returned.
      * 2. When sending a model, it is allowed to be empty, and when the parameter has a value and
      * is in the model configuration list, the corresponding model is called. If there is no return error.
-     * If the model parameter is empty, set the default model. qwen-plus
+     * If the model parameter is empty, use the model configured by Spring AI OpenAI.
      * 3. The chatId chat memory, passed by the front-end, is of type Object and cannot be repeated
      */
     @PostMapping("/chat")
-    @Operation(summary = "DashScope Flux Chat")
+    @Operation(summary = "AI Flux Chat")
     public Flux<String> chat(
             HttpServletResponse response,
             @Valid @RequestBody ChatDto chatDto
@@ -75,9 +74,10 @@ public class ChatController extends BaseController {
         }
 
 
-        List<Map<String, String>> dashScope = baseService.getDashScope();
-        List<String> modelName = dashScope.stream()
-                .flatMap(map -> map.keySet().stream().map(map::get))
+        List<Map<String, String>> models = baseService.getModels();
+        List<String> modelName = models.stream()
+                .map(map -> map.get("model"))
+                .filter(StringUtils::hasText)
                 .distinct()
                 .toList();
 
@@ -87,15 +87,15 @@ public class ChatController extends BaseController {
         if (StringUtils.hasText(model)) {
             if (!modelName.contains(model)) {
                 return Flux.just("Input model not support.");
-            } else if ("auto".endsWith(model)) {
-                // 当前自动选择模型固定为qwen-plus
-                model = DashScopeModel.ChatModel.QWEN_PLUS.getValue();
-            } else if ("x-sage-v1".endsWith(model)) {
+            } else if ("auto".equals(model)) {
+                // 使用配置中的默认模型
+                model = null;
+            } else if ("x-sage-v1".equals(model)) {
                 // TODO 以后再添加自己的模型
-                model = DashScopeModel.ChatModel.QWEN_PLUS.getValue();
+                model = null;
             }
         } else {
-            model = DashScopeModel.ChatModel.QWEN_PLUS.getValue();
+            model = null;
         }
 
         // 检查chatId，如果不是已有会话，创建新的会话记录

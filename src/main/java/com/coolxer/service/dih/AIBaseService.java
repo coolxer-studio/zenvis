@@ -16,12 +16,12 @@ import java.util.Map;
 @Service
 public class AIBaseService {
 
-    public List<Map<String, String>> getDashScope() {
+    public List<Map<String, String>> getModels() {
         List<Map<String, String>> resultSet;
         try {
-            resultSet = ModelsUtils.getDashScopeModels();
+            resultSet = ModelsUtils.getModels();
         } catch (IOException e) {
-            throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "Get DashScope Model failed, " + e.getMessage());
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "Get AI model list failed, " + e.getMessage());
         }
         return resultSet;
     }

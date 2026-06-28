@@ -18,8 +18,8 @@
 package com.coolxer.utils;
 
 
-import com.coolxer.model.dih.dashscope.DashScopeModel;
-import com.coolxer.model.dih.dashscope.DashScopeModels;
+import com.coolxer.model.dih.ai.AIModel;
+import com.coolxer.model.dih.ai.AIModels;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * ModelsUtils
@@ -42,22 +44,48 @@ public final class ModelsUtils {
 
     private static final String DESC = "desc";
 
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([^}:]+)(?::([^}]*))?}");
+
     private ModelsUtils() {
     }
 
-    public static List<Map<String, String>> getDashScopeModels() throws IOException {
+    public static List<Map<String, String>> getModels() throws IOException {
 
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         InputStream resourceAsStream = ModelsUtils.class.getClassLoader().getResourceAsStream(MODELS_FILE_PATH);
-        DashScopeModels models = mapper.readValue(resourceAsStream, DashScopeModels.class);
+        AIModels models = mapper.readValue(resourceAsStream, AIModels.class);
         List<Map<String, String>> resultSet = new ArrayList<>();
-        for (DashScopeModel model : models.getDashScope()) {
+        for (AIModel model : models.getModels()) {
+            String modelName = resolvePlaceholders(model.getName());
+            if (modelName == null || modelName.isBlank()) {
+                continue;
+            }
             Map<String, String> modelMap = new HashMap<>();
-            modelMap.put(MODEL, model.getName());
+            modelMap.put(MODEL, modelName);
             modelMap.put(DESC, model.getDescription());
             resultSet.add(modelMap);
         }
         return resultSet;
+    }
+
+    private static String resolvePlaceholders(String value) {
+        if (value == null) {
+            return null;
+        }
+        Matcher matcher = PLACEHOLDER.matcher(value);
+        StringBuffer resolved = new StringBuffer();
+        while (matcher.find()) {
+            String replacement = System.getenv(matcher.group(1));
+            if (replacement == null) {
+                replacement = System.getProperty(matcher.group(1));
+            }
+            if (replacement == null) {
+                replacement = matcher.group(2) == null ? "" : matcher.group(2);
+            }
+            matcher.appendReplacement(resolved, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(resolved);
+        return resolved.toString();
     }
 
 }

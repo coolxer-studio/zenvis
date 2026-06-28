@@ -51,6 +51,9 @@ public class VectorStoreQueryController {
 
     @PostMapping("/build-schema")
     public String buildSchema() {
+        if (!redisVectorManagementService.isEmbeddingEnabled()) {
+            return "embedding is disabled, skip build schema";
+        }
         redisVectorManagementService.schema();
         return "success";
     }

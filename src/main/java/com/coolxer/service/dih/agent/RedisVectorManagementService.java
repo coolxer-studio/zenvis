@@ -1,5 +1,6 @@
 package com.coolxer.service.dih.agent;
 
+import com.coolxer.configuration.ai.AiEmbeddingProperties;
 import com.coolxer.model.policy.vo.ConfigVo;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.dih.agent.nl2sql.connector.bo.ColumnInfoBO;
@@ -38,7 +39,7 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
 
     private static final Logger log = LoggerFactory.getLogger(RedisVectorManagementService.class);
 
-    // 阿里云DashScope API单次请求文本数量限制
+    // Embedding API 单次请求文本数量限制
     private static final int BATCH_SIZE = 25;
 
     @Autowired
@@ -46,7 +47,6 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
     private RedisVectorStore redisVectorStore;
 
     @Autowired
-    @Qualifier("dashscopeEmbeddingModel")
     private EmbeddingModel embeddingModel;
 
     @Autowired
@@ -55,13 +55,24 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private AiEmbeddingProperties embeddingProperties;
+
     @Override
     protected EmbeddingModel getEmbeddingModel() {
         return embeddingModel;
     }
 
     @Override
+    public boolean isEmbeddingEnabled() {
+        return embeddingProperties.isEnabled();
+    }
+
+    @Override
     public List<Document> searchWithVectorType(SearchRequest searchRequestDTO) {
+        if (skipEmbeddingOperation("searchWithVectorType")) {
+            return List.of();
+        }
 
         log.debug("Searching with vectorType: {}, query: {}, topK: {}", searchRequestDTO.getVectorType(),
                 searchRequestDTO.getQuery(), searchRequestDTO.getTopK());
@@ -86,6 +97,10 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
 
     @Override
     public List<Document> searchWithFilter(SearchRequest searchRequestDTO) {
+        if (skipEmbeddingOperation("searchWithFilter")) {
+            return List.of();
+        }
+
         log.debug("Searching with custom filter: vectorType={}, query={}, topK={}", searchRequestDTO.getVectorType(),
                 searchRequestDTO.getQuery(), searchRequestDTO.getTopK());
 
@@ -111,6 +126,10 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
 
     @Override
     public List<Document> searchTableByNameAndVectorType(SearchRequest searchRequestDTO) {
+        if (skipEmbeddingOperation("searchTableByNameAndVectorType")) {
+            return List.of();
+        }
+
         log.debug("Searching table by name and vectorType: name={}, vectorType={}, topK={}", searchRequestDTO.getName(),
                 searchRequestDTO.getVectorType(), searchRequestDTO.getTopK());
 
@@ -143,6 +162,10 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
      * 项目应从配置文件中获取然后解析并加入redis vector store
      */
     public void schema() {
+        if (skipEmbeddingOperation("schema")) {
+            return;
+        }
+
         List<TableInfoBO> tableInfoBOS = Lists.newArrayList();
         List<ColumnInfoBO> columnInfoBOS = Lists.newArrayList();
         readSchemaInfoFromCfg(tableInfoBOS, columnInfoBOS);
@@ -178,6 +201,10 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
      * @param documents 文档列表
      */
     private void addDocumentsInBatches(List<Document> documents) {
+        if (skipEmbeddingOperation("addDocumentsInBatches")) {
+            return;
+        }
+
         // 将文档列表分批处理，每批不超过BATCH_SIZE个
         for (int i = 0; i < documents.size(); i += BATCH_SIZE) {
             int endIndex = Math.min(i + BATCH_SIZE, documents.size());
@@ -327,6 +354,10 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
      * @return 文档列表
      */
     public List<Document> getAllDocuments() {
+        if (skipEmbeddingOperation("getAllDocuments")) {
+            return List.of();
+        }
+
         try {
             List<Document> results = redisVectorStore.similaritySearch(
                     org.springframework.ai.vectorstore.SearchRequest.builder()
@@ -340,6 +371,14 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
             log.error("Error retrieving all documents", e);
             return List.of();
         }
+    }
+
+    private boolean skipEmbeddingOperation(String operation) {
+        if (embeddingProperties.isEnabled()) {
+            return false;
+        }
+        log.info("Skip vector store operation {} because app.ai.embedding.enabled=false.", operation);
+        return true;
     }
 
     /**

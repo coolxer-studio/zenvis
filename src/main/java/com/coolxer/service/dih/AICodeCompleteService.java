@@ -20,21 +20,26 @@ import java.nio.charset.StandardCharsets;
  */
 @Service
 public class AICodeCompleteService {
-    @Value("${spring.ai.dashscope.compatible.url}")
+    @Value("${spring.ai.openai.completion.url:https://api.openai.com/v1/completions}")
     private String apiUrl;
-    @Value("${spring.ai.dashscope.api-key}")
+    @Value("${spring.ai.openai.api-key:}")
     private String apiKey;
+    @Value("${spring.ai.openai.completion.options.model:}")
+    private String completionModel;
 
     /**
-     * 调用DashScope API完成代码补全
+     * 调用 OpenAI API 完成代码补全
      *
      * @param prompt 代码提示
      * @return API响应结果
      * @throws Exception 网络或IO异常
      */
     public String completeCode(String prompt) throws Exception {
+        if (completionModel == null || completionModel.isBlank()) {
+            throw new IllegalStateException("OpenAI completion model is not configured.");
+        }
         // 构建请求JSON数据
-        String jsonInputString = JacksonUtil.toJson(new CompletionParams("qwen2.5-coder-32b-instruct", prompt));
+        String jsonInputString = JacksonUtil.toJson(new CompletionParams(completionModel, prompt));
         // 创建URL连接
         URL url = new URL(apiUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -85,7 +90,7 @@ public class AICodeCompleteService {
                 }
             }
         } else {
-            throw new RuntimeException("API调用失败，响应码: " + responseCode);
+            throw new RuntimeException("OpenAI API调用失败，响应码: " + responseCode);
         }
     }
 

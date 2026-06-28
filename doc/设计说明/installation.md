@@ -189,8 +189,10 @@ spring.datasource.clickhouse.password=
 spring.data.redis.host=localhost
 spring.data.redis.port=6379
 
-# AI配置（阿里云DashScope）
-spring.ai.dashscope.api-key=your-api-key
+# AI配置（OpenAI）
+spring.ai.openai.api-key=${OPENAI_API_KEY}
+spring.ai.openai.chat.options.model=${OPENAI_CHAT_MODEL}
+spring.ai.openai.embedding.options.model=${OPENAI_EMBEDDING_MODEL}
 ```
 
 ### 5. 启动后端

@@ -1,13 +1,5 @@
-dashScope:
+models:
   - name: auto
     description: "系统自动选择合适的模型"
-  - name: x-sage-v1
-    description: "X-Sage-V1 进行了SFT之后的模型，效果、速度、成本均衡"
-  - name: deepseek-r1
-    description: "包含 671B 参数，激活 37B，在后训练阶段大规模使用了强化学习技术，在仅有极少标注数据的情况下，极大提升了模型推理能力，尤其在数学、代码、自然语言推理等任务上"
-  - name: deepseek-v3
-    description: "MoE 模型，671B 参数，激活 37B，在 14.8T Token 上进行了预训练，在长文本、代码、数学、百科、中文能力上表现优秀"
-  - name: qwen-plus
-    description: "效果、速度、成本均衡"
-  - name: qwen-max
-    description: "适合复杂任务，推理能力最强"
+  - name: ${OPENAI_CHAT_MODEL}
+    description: "配置的 OpenAI 默认聊天模型"

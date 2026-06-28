@@ -62,7 +62,7 @@ ZenVis 是一个配置化数据分析应用框架，采用分层架构设计，�
 | Spring Boot | 3.2.0 | 应用框架 |
 | Spring MVC | 6.x | Web层 |
 | Spring Data JPA | 3.x | 数据访问 |
-| Spring AI Alibaba | 1.1.0 | AI集成 |
+| Spring AI OpenAI | 1.1.0-M4 | AI集成 |
 
 ### 数据存储
 
@@ -76,7 +76,7 @@ ZenVis 是一个配置化数据分析应用框架，采用分层架构设计，�
 
 | 技术 | 说明 |
 | :--- | :--- |
-| DashScope | 阿里云大模型服务 |
+| OpenAI | 大模型服务 |
 | Spring AI | AI框架 |
 | Redis Vector | 向量检索 |
 

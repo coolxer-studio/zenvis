@@ -16,7 +16,7 @@
 ```json
 {
   "message": "你好",          // String - 用户消息内容
-  "model": "qwen-plus",       // String - AI模型名称（可选，默认qwen-plus）
+  "model": "auto",            // String - AI模型名称（可选，不传或auto时使用配置默认模型）
   "chatId": "chat-001",       // String - 会话ID
   "type": "ask",              // String - 聊天类型（ask/agent_inspect等）
   "deepThink": false,         // Boolean - 是否深度思考模式
@@ -73,7 +73,7 @@ curl -X POST http://localhost:8080/api/v1/dih/chat \
   -H "Accept: text/event-stream" \
   -d '{
     "message": "请分析当前系统的风险态势",
-    "model": "qwen-plus",
+    "model": "auto",
     "chatId": "chat-001",
     "type": "ask",
     "deepThink": false
@@ -112,6 +112,6 @@ data: "对不起，当前智能体没有开通权限，请联系管理员！"
 1. **认证授权**: 需要登录认证
 2. **流式响应**: 使用SSE(Server-Sent Events)协议返回流式响应
 3. **会话管理**: chatId用于维护会话上下文，首次传入时会自动创建会话
-4. **模型支持**: 支持的模型包括qwen-plus等，不传时默认使用qwen-plus
+4. **模型支持**: 支持的模型来自 `models.yaml` 与 OpenAI 环境配置，不传时使用 Spring AI 配置默认模型
 5. **智能体权限**: 除agent_inspect外，其他agent类型需要管理员开通权限
 6. **深度思考**: 设置deepThink为true可启用深度思考模式

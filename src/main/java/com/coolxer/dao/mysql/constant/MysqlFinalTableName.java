@@ -72,6 +72,11 @@ public class MysqlFinalTableName {
     public static final String T_AI_CHAT_SESSION = TABLE_PREFIX + "ai_chat_session";
 
     /**
+     * AI分析任务
+     */
+    public static final String T_AI_ANALYSIS_TASK = TABLE_PREFIX + "ai_analysis_task";
+
+    /**
      * 系统信息表
      */
     public static final String T_SYS_INFO = TABLE_PREFIX + "sys_info";

@@ -42,7 +42,7 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
     // Embedding API 单次请求文本数量限制
     private static final int BATCH_SIZE = 25;
 
-    @Autowired
+    @Autowired(required = false)
     @Qualifier("redisVectorStoreForAgent")
     private RedisVectorStore redisVectorStore;
 
@@ -374,11 +374,15 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
     }
 
     private boolean skipEmbeddingOperation(String operation) {
-        if (embeddingProperties.isEnabled()) {
-            return false;
+        if (!embeddingProperties.isEnabled()) {
+            log.info("Skip vector store operation {} because app.ai.embedding.enabled=false.", operation);
+            return true;
         }
-        log.info("Skip vector store operation {} because app.ai.embedding.enabled=false.", operation);
-        return true;
+        if (redisVectorStore == null) {
+            log.warn("Skip vector store operation {} because Redis vector store is not available.", operation);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -388,6 +392,9 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
      * @return 删除是否成功
      */
     public boolean deleteDocumentById(String documentId) {
+        if (skipEmbeddingOperation("deleteDocumentById")) {
+            return false;
+        }
         try {
             redisVectorStore.delete(List.of(documentId));
             log.info("Successfully deleted document with ID: {}", documentId);
@@ -405,6 +412,9 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
      * @return 删除是否成功
      */
     public boolean deleteDocumentsByIds(List<String> documentIds) {
+        if (skipEmbeddingOperation("deleteDocumentsByIds")) {
+            return false;
+        }
         try {
             redisVectorStore.delete(documentIds);
             log.info("Successfully deleted {} documents", documentIds.size());

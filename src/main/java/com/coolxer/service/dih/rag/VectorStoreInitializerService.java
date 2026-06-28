@@ -67,14 +67,14 @@ public class VectorStoreInitializerService {
     @Autowired
     private VectorStoreDelegate vectorStoreDelegate;
 
-    @Autowired
+    @Autowired(required = false)
     @Qualifier("redisVectorStoreCustom")
     private RedisVectorStore redisVectorStore;
 
     @Value("${spring.ai.vectorstore.redis.index}")
     private String indexName;
 
-    @Autowired
+    @Autowired(required = false)
     private JedisPooled jedisPooled;
 
     @Autowired
@@ -111,6 +111,10 @@ public class VectorStoreInitializerService {
     }
 
     public void unloadDocFromRag(String docSource) {
+        if (!embeddingProperties.isEnabled() || redisVectorStore == null || jedisPooled == null) {
+            logger.info("Skip unloading docs from RAG because Redis vector store is disabled. source={}", docSource);
+            return;
+        }
         logger.info("start delete data with filter");
         FilterExpressionBuilder b = new FilterExpressionBuilder();
         Filter.Expression expression = b.eq("source", docSource).build();

@@ -1,7 +1,6 @@
 package com.coolxer.service.dih.rag;
 
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 
 /**
  * 矢量库代理
@@ -16,16 +15,16 @@ public class VectorStoreDelegate {
     /**
      * redis矢量库
      */
-    private RedisVectorStore redisVectorStore;
+    private VectorStore redisVectorStore;
 
 
-    public VectorStoreDelegate(RedisVectorStore redisVectorStore, VectorStore simpleVectorStore) {
+    public VectorStoreDelegate(VectorStore redisVectorStore, VectorStore simpleVectorStore) {
         this.simpleVectorStore = simpleVectorStore;
         this.redisVectorStore = redisVectorStore;
     }
 
     public VectorStore getVectorStore(String vectorStoreType) {
-        if ("redis".equals(vectorStoreType)) {
+        if ("redis".equals(vectorStoreType) && redisVectorStore != null) {
             return redisVectorStore;
         }
         return simpleVectorStore;

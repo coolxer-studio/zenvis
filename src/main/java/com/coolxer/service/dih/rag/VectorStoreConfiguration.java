@@ -4,6 +4,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,11 +27,11 @@ public class VectorStoreConfiguration {
 
     @Bean
     public VectorStoreDelegate vectorStoreDelegate(
-            @Qualifier("redisVectorStoreCustom") RedisVectorStore redisVectorStore,
+            @Qualifier("redisVectorStoreCustom") ObjectProvider<RedisVectorStore> redisVectorStoreProvider,
             @Qualifier("simpleVectorStore") VectorStore simpleVectorStore
     ) {
 
-        return new VectorStoreDelegate(redisVectorStore, simpleVectorStore);
+        return new VectorStoreDelegate(redisVectorStoreProvider.getIfAvailable(), simpleVectorStore);
     }
 
 }

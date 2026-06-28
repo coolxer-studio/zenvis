@@ -81,12 +81,15 @@ public class PluginServiceImpl implements PluginService {
     @Autowired
     private ExtendJarManager extendJarManager;
 
+<<<<<<< HEAD
     @Autowired
     private VectorStoreInitializerService vectorStoreInitializerService;
 
     @Autowired
     private SkillService skillService;
 
+=======
+>>>>>>> upstream/main
     private static ConcurrentSkipListMap<Long, String> LOG_CACHE = new ConcurrentSkipListMap<>();
 
     @Override

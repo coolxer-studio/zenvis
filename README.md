@@ -19,13 +19,18 @@ cd zenvis-backend/deploy
 docker-compose up -d
 ```
 
+> 默认运行架构为amd64架构，如果需要运行在arm架构上需要修改.env文件：ARCH=arm64  
+> 默认用户名: admin@admin.com   
+> 默认密码: admin@!QAZ2wsx
+
 ### 2. 服务访问
 
-| 服务         | 地址                                        |
-| :--------- | :---------------------------------------- |
-| web前端服务    | `http://<ip>:11000`                       |
-| API接口 服务   | `http://<ip>:11001`                       |
-| Swagger 文档 | `http://<ip>:11001/swagger-ui/index.html` |
+| 服务          | 地址                                          |
+|:------------|:--------------------------------------------|
+| web前端服务     | `http://<ip>:11000`                         |
+| API 接口 服务   | `http://<ip>:11001`                         |
+| MCP 接口 服务   | `http://<ip>:11002/sse`                     |
+| Swagger 文档  | `http://<ip>:11001/swagger-ui/index.html`   |
 
 ***
 

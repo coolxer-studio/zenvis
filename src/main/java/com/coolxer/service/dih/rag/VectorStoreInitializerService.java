@@ -48,6 +48,15 @@ import java.util.stream.Stream;
 
 /**
  * VectorStoreInitializer
+ * <p>
+ * 使用示例：
+ * writeLog(id, "文档加载到RAG......");
+ * try {
+ * vectorStoreInitializerService.loadDocToRag(plugin.getPackageName().replaceAll("\\.", "_"), pluginPackTool.getDocPath());
+ * } catch (Exception e) {
+ * log.error("加载到RAG失败......", e);
+ * writeLog(id, "加载到RAG失败......，跳过");
+ * }
  */
 
 @Service

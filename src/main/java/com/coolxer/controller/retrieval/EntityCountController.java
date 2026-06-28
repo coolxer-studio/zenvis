@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,11 +41,15 @@ public class EntityCountController extends BaseController {
         }
     }
 
-    @GetMapping({"/count_today"})
-    public ResponseWrap<?> countToday(@RequestParam(value = "entities") List<String> entities) {
+    @GetMapping({"/count-increase"})
+    public ResponseWrap<?> countIncrease(@RequestParam(value = "entities") List<String> entities) {
         try {
-            Map<String, Object> entitiesCount = entityCoreService.countToady(entities);
-            return ResponseWrap.success(entitiesCount);
+            Map<String, Object> entitiesCount = entityCoreService.count(entities);
+            Map<String, Object> entitiesCountToday = entityCoreService.countToady(entities);
+            Map<String, Object> data = new HashMap<>();
+            data.put("count", entitiesCount);
+            data.put("countToday", entitiesCountToday);
+            return ResponseWrap.success(data);
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }

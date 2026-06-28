@@ -50,7 +50,11 @@ public class ReasoningContentAdvisor implements BaseAdvisor {
 
         // 注释，避免冗长的日志打印
         // logger.debug("Advisor metadata output: {}", resp.getResults().get(0).getOutput().getMetadata());
-        String reasoningContent = String.valueOf(resp.getResults().get(0).getOutput().getMetadata().get("reasoningContent"));
+        if (resp.getResults() == null || resp.getResults().isEmpty() || resp.getResults().get(0).getOutput() == null) {
+            return chatClientResponse;
+        }
+        Object reasoningContentValue = resp.getResults().get(0).getOutput().getMetadata().get("reasoningContent");
+        String reasoningContent = Objects.toString(reasoningContentValue, "");
         // logger.debug("Advisor reasoning content: {}", reasoningContent);
         if (StringUtils.hasText(reasoningContent)) {
             List<Generation> thinkGenerations = resp.getResults().stream()

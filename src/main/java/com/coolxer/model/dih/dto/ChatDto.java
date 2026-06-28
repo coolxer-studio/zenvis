@@ -1,7 +1,9 @@
 package com.coolxer.model.dih.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import com.coolxer.model.dih.ChatAttachment;
 import lombok.Data;
+
+import java.util.List;
 
 @Data
 public class ChatDto {
@@ -24,8 +26,12 @@ public class ChatDto {
     /**
      * 会话内容
      */
-    @NotBlank(message = "消息内容不能为空")
     private String message;
+
+    /**
+     * 本轮消息携带的附件。
+     */
+    private List<ChatAttachment> attachments;
 
     /**
      * 是否深度思考
@@ -36,5 +42,10 @@ public class ChatDto {
      * 是否在线检索
      */
     private Boolean onlineSearch;
+
+    /**
+     * 响应格式：text 或 events
+     */
+    private String responseFormat;
 
 }

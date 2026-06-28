@@ -22,6 +22,11 @@ public class DeepThinkPromptTemplateConfig {
                         You need to think deeply before answering the questions. Think as divergent as possible,
                         and think about multiple aspects that are directly related to the problem.
                         And put the output inside the `<think></think>` tag. Then answer the user's questions.
+
+                        IMPORTANT: Your response must start with a `<think>` block and then continue with the final
+                        answer outside the block. If detailed reasoning is unavailable, still provide a concise,
+                        high-level thinking summary inside `<think></think>` so the user can see that deep thinking
+                        mode was used.
                         			
                         During the answering process, you will need to adhere to the following conventions:
                         			

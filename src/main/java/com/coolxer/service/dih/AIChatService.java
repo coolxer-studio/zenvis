@@ -6,6 +6,7 @@ import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.coolxer.service.dih.advisor.ReasoningContentAdvisor;
+import com.coolxer.service.dih.logging.LlmLogHelper;
 import com.coolxer.service.dih.rag.VectorStoreDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,11 +38,13 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -131,6 +134,13 @@ public class AIChatService {
             return nativeOpenAiChat(chatId, model, prompt, attachments, user, false);
         }
 
+        String scene = "AIChatService.chat";
+        String requestId = LlmLogHelper.newRequestId();
+        long startedAtNanos = System.nanoTime();
+        boolean ragEnabled = embeddingProperties.isEnabled();
+        LlmLogHelper.logRequest(log, requestId, scene,
+                buildChatLogRequest(chatId, model, prompt, attachments, false, ragEnabled));
+
         var runtimeOptions = buildRuntimeOptions(model);
 
         var promptSpec = chatClient.prompt()
@@ -146,7 +156,7 @@ public class AIChatService {
 
         if (!embeddingProperties.isEnabled()) {
             log.debug("Skip chat RAG advisor because app.ai.embedding.enabled=false.");
-            return promptSpec.stream().content();
+            return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
         }
 
         promptSpec = promptSpec.advisors(
@@ -162,7 +172,7 @@ public class AIChatService {
                                 .build()
                 );
 
-        return promptSpec.stream().content();
+        return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
     }
 
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt) {
@@ -175,6 +185,12 @@ public class AIChatService {
             return nativeOpenAiChat(chatId, model, prompt, attachments, user, true);
         }
 
+        String scene = "AIChatService.deepThinkingChat";
+        String requestId = LlmLogHelper.newRequestId();
+        long startedAtNanos = System.nanoTime();
+        LlmLogHelper.logRequest(log, requestId, scene,
+                buildChatLogRequest(chatId, model, prompt, attachments, true, false));
+
         var promptSpec = chatClient.prompt()
                 .options(buildRuntimeOptions(model))
                 .system(deepThinkPromptTemplate.getTemplate())
@@ -185,7 +201,7 @@ public class AIChatService {
 
         promptSpec = promptSpec.advisors(reasoningContentAdvisor);
 
-        return promptSpec.stream().content();
+        return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
     }
 
     private Flux<String> nativeOpenAiChat(
@@ -198,15 +214,21 @@ public class AIChatService {
     ) {
         AtomicReference<String> finalAnswer = new AtomicReference<>("");
         AtomicReference<String> fullResponse = new AtomicReference<>("");
+        String scene = deepThinking ? "AIChatService.deepThinkingChat.native" : "AIChatService.chat.native";
+        String requestId = LlmLogHelper.newRequestId();
+        long startedAtNanos = System.nanoTime();
 
         return Flux.<String>create(sink -> {
                     AtomicBoolean inThinking = new AtomicBoolean(false);
                     try {
-                        String requestBody = JacksonConfig.OBJECT_MAPPER.writeValueAsString(
-                                buildNativeChatRequest(chatId, model, prompt, attachments, user, deepThinking)
-                        );
+                        String chatCompletionsUrl = openAiChatCompletionsUrl();
+                        Map<String, Object> nativeRequest =
+                                buildNativeChatRequest(chatId, model, prompt, attachments, user, deepThinking);
+                        LlmLogHelper.logRequest(log, requestId, scene,
+                                buildNativeHttpLogRequest(chatCompletionsUrl, nativeRequest));
+                        String requestBody = JacksonConfig.OBJECT_MAPPER.writeValueAsString(nativeRequest);
                         HttpRequest request = HttpRequest.newBuilder()
-                                .uri(URI.create(openAiChatCompletionsUrl()))
+                                .uri(URI.create(chatCompletionsUrl))
                                 .timeout(Duration.ofMinutes(5))
                                 .header("Content-Type", "application/json")
                                 .header("Accept", "text/event-stream")
@@ -216,6 +238,12 @@ public class AIChatService {
 
                         HttpResponse<Stream<String>> response = openAiHttpClient.send(request, HttpResponse.BodyHandlers.ofLines());
                         if (response.statusCode() >= 400) {
+                            String errorBody;
+                            try (Stream<String> lines = response.body()) {
+                                errorBody = lines.collect(Collectors.joining("\n"));
+                            }
+                            LlmLogHelper.logResponse(log, requestId, scene,
+                                    buildNativeHttpLogResponse(response.statusCode(), errorBody), startedAtNanos);
                             sink.error(new IllegalStateException("本地模型请求失败，HTTP " + response.statusCode()));
                             return;
                         }
@@ -247,8 +275,51 @@ public class AIChatService {
                         }
                     }
                 })
+                .doOnComplete(() -> LlmLogHelper.logResponse(log, requestId, scene,
+                        buildNativeStreamLogResponse(finalAnswer.get(), fullResponse.get()), startedAtNanos))
                 .doOnComplete(() -> saveNativeChatMemory(chatId, prompt, finalAnswer.get(), fullResponse.get()))
+                .doOnError(error -> LlmLogHelper.logError(log, requestId, scene,
+                        buildNativeStreamLogResponse(finalAnswer.get(), fullResponse.get()), startedAtNanos, error))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Map<String, Object> buildChatLogRequest(
+            String chatId,
+            String model,
+            String prompt,
+            List<ChatAttachment> attachments,
+            boolean deepThinking,
+            boolean ragEnabled
+    ) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("chat_id", chatId);
+        request.put("model", StringUtils.hasText(model) ? model : defaultChatModel);
+        request.put("prompt", prompt);
+        request.put("deep_thinking", deepThinking);
+        request.put("rag_enabled", ragEnabled);
+        request.put("attachment_count", attachments == null ? 0 : attachments.size());
+        return request;
+    }
+
+    private Map<String, Object> buildNativeHttpLogRequest(String url, Map<String, Object> body) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("url", url);
+        request.put("body", body);
+        return request;
+    }
+
+    private Map<String, Object> buildNativeHttpLogResponse(int statusCode, String body) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("status_code", statusCode);
+        response.put("body", body);
+        return response;
+    }
+
+    private Map<String, Object> buildNativeStreamLogResponse(String finalAnswer, String fullResponse) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("final_answer", finalAnswer);
+        response.put("full_response", fullResponse);
+        return response;
     }
 
     private Map<String, Object> buildNativeChatRequest(

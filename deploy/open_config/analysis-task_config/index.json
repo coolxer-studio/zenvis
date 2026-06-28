@@ -1,0 +1,497 @@
+{
+  "type": "page",
+  "title": "AI分析任务",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "dialog",
+      "label": "创建分析任务",
+      "primary": true,
+      "dialog": {
+        "title": "创建分析任务",
+        "mode": "horizontal",
+        "size": "lg",
+        "body": {
+          "type": "form",
+          "api": "/zenvis/api/v1/system/analysis-task/add",
+          "reload": "analysis_task_list,analysis_task_queue_status",
+          "body": [
+            {
+              "label": "任务名称",
+              "name": "name",
+              "type": "input-text",
+              "required": true,
+              "clearable": true
+            },
+            {
+              "label": "模型",
+              "name": "model",
+              "type": "input-text",
+              "placeholder": "auto",
+              "value": "auto",
+              "clearable": true
+            },
+            {
+              "label": "优先级",
+              "name": "priority",
+              "type": "input-number",
+              "value": 0,
+              "min": 0,
+              "description": "数值越大越先执行"
+            },
+            {
+              "label": "计划执行时间",
+              "name": "scheduled_time",
+              "type": "input-datetime",
+              "format": "YYYY-MM-DD HH:mm:ss",
+              "inputFormat": "YYYY-MM-DD HH:mm:ss",
+              "clearable": true
+            },
+            {
+              "label": "描述说明",
+              "name": "description",
+              "type": "textarea",
+              "clearable": true,
+              "minRows": 2,
+              "maxRows": 4
+            },
+            {
+              "label": "分析提示词",
+              "name": "prompt",
+              "type": "editor",
+              "language": "markdown",
+              "editorTheme": "vs-dark",
+              "required": true,
+              "size": "lg"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "执行一次队列",
+      "level": "info",
+      "icon": "fa fa-play-circle",
+      "actionType": "ajax",
+      "confirmText": "确认立即取出一个到期任务执行？",
+      "api": "post:/zenvis/api/v1/system/analysis-task/queue/run-once",
+      "reload": "analysis_task_list,analysis_task_queue_status"
+    },
+    {
+      "type": "button",
+      "label": "刷新",
+      "icon": "fa fa-refresh",
+      "actionType": "reload",
+      "target": "analysis_task_list,analysis_task_queue_status"
+    }
+  ],
+  "body": [
+    {
+      "name": "analysis_task_queue_status",
+      "type": "service",
+      "api": "/zenvis/api/v1/system/analysis-task/queue/status",
+      "interval": 60000,
+      "body": [
+        {
+          "type": "property",
+          "title": "队列状态",
+          "column": 4,
+          "items": [
+            {
+              "label": "等待任务",
+              "content": "${pending_count|default:0}"
+            },
+            {
+              "label": "到期可执行",
+              "content": "${ready_count|default:0}"
+            },
+            {
+              "label": "执行中",
+              "content": "${running_count|default:0}"
+            },
+            {
+              "label": "下一个任务",
+              "content": "${next_task.name|default:'暂无任务'}"
+            },
+            {
+              "label": "当前任务",
+              "content": "${running_task.name|default:'暂无任务'}"
+            },
+            {
+              "label": "检查时间",
+              "content": "${checked_at|default:'-'}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "analysis_task_list",
+      "type": "crud",
+      "api": "/zenvis/api/v1/system/analysis-task/list",
+      "defaultParams": {
+        "page": 1,
+        "perPage": 10
+      },
+      "filter": {
+        "title": "搜索",
+        "body": [
+          {
+            "label": "任务名称",
+            "type": "input-text",
+            "name": "name",
+            "clearable": true,
+            "placeholder": "通过任务名称搜索"
+          },
+          {
+            "label": "任务状态",
+            "type": "select",
+            "name": "status",
+            "clearable": true,
+            "options": [
+              {
+                "label": "等待执行",
+                "value": "PENDING"
+              },
+              {
+                "label": "执行中",
+                "value": "RUNNING"
+              },
+              {
+                "label": "执行成功",
+                "value": "SUCCESS"
+              },
+              {
+                "label": "执行失败",
+                "value": "FAILED"
+              },
+              {
+                "label": "已取消",
+                "value": "CANCELED"
+              }
+            ]
+          },
+          {
+            "label": "模型",
+            "type": "input-text",
+            "name": "model",
+            "clearable": true,
+            "placeholder": "auto 或模型名称"
+          }
+        ],
+        "actions": [
+          {
+            "type": "reset",
+            "label": "重置"
+          },
+          {
+            "type": "submit",
+            "level": "primary",
+            "label": "查询"
+          }
+        ]
+      },
+      "columns": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "text",
+          "width": 70,
+          "toggled": true
+        },
+        {
+          "name": "name",
+          "label": "任务名称",
+          "type": "text",
+          "searchable": true,
+          "toggled": true
+        },
+        {
+          "name": "status",
+          "label": "状态",
+          "type": "mapping",
+          "map": {
+            "PENDING": "<span class='label label-info'>等待执行</span>",
+            "RUNNING": "<span class='label label-warning'>执行中</span>",
+            "SUCCESS": "<span class='label label-success'>执行成功</span>",
+            "FAILED": "<span class='label label-danger'>执行失败</span>",
+            "CANCELED": "<span class='label label-default'>已取消</span>",
+            "*": "<span class='label label-default'>未知</span>"
+          },
+          "toggled": true
+        },
+        {
+          "name": "model",
+          "label": "模型",
+          "type": "text",
+          "placeholder": "默认模型",
+          "toggled": true
+        },
+        {
+          "name": "priority",
+          "label": "优先级",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "type": "tpl",
+          "tpl": "${prompt|truncate:60}",
+          "name": "prompt",
+          "label": "提示词",
+          "toggled": true,
+          "popOver": {
+            "body": {
+              "type": "code",
+              "language": "markdown",
+              "maxHeight": 400,
+              "value": "${prompt}"
+            }
+          }
+        },
+        {
+          "type": "tpl",
+          "tpl": "${result|default:'-'|truncate:60}",
+          "name": "result",
+          "label": "返回结果",
+          "toggled": true,
+          "popOver": {
+            "body": {
+              "type": "markdown",
+              "value": "${result}"
+            }
+          }
+        },
+        {
+          "name": "run_count",
+          "label": "执行次数",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "name": "scheduled_time",
+          "label": "计划时间",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "name": "start_time",
+          "label": "开始时间",
+          "type": "text",
+          "toggled": false
+        },
+        {
+          "name": "finish_time",
+          "label": "结束时间",
+          "type": "text",
+          "toggled": false
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": 260,
+          "buttons": [
+            {
+              "type": "button",
+              "icon": "fa fa-eye text-info",
+              "tooltip": "查看详情",
+              "actionType": "dialog",
+              "dialog": {
+                "size": "full",
+                "title": "分析任务详情",
+                "body": {
+                  "type": "service",
+                  "api": "/zenvis/api/v1/system/analysis-task/${id}/view",
+                  "body": [
+                    {
+                      "type": "property",
+                      "title": "任务信息",
+                      "column": 3,
+                      "items": [
+                        {
+                          "label": "任务ID",
+                          "content": "${id}"
+                        },
+                        {
+                          "label": "任务名称",
+                          "content": "${name}"
+                        },
+                        {
+                          "label": "状态",
+                          "content": "${status_description}"
+                        },
+                        {
+                          "label": "模型",
+                          "content": "${model|default:'默认模型'}"
+                        },
+                        {
+                          "label": "优先级",
+                          "content": "${priority}"
+                        },
+                        {
+                          "label": "执行次数",
+                          "content": "${run_count}"
+                        },
+                        {
+                          "label": "计划时间",
+                          "content": "${scheduled_time|default:'立即执行'}"
+                        },
+                        {
+                          "label": "开始时间",
+                          "content": "${start_time|default:'-'}"
+                        },
+                        {
+                          "label": "结束时间",
+                          "content": "${finish_time|default:'-'}"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tabs",
+                      "tabsMode": "simple",
+                      "tabs": [
+                        {
+                          "title": "描述",
+                          "body": {
+                            "type": "markdown",
+                            "value": "${description|default:'暂无描述'}"
+                          }
+                        },
+                        {
+                          "title": "提示词",
+                          "body": {
+                            "type": "code",
+                            "language": "markdown",
+                            "value": "${prompt}"
+                          }
+                        },
+                        {
+                          "title": "返回结果",
+                          "body": {
+                            "type": "markdown",
+                            "value": "${result|default:'暂无结果'}"
+                          }
+                        },
+                        {
+                          "title": "错误信息",
+                          "body": {
+                            "type": "code",
+                            "language": "text",
+                            "value": "${error_message|default:'暂无错误'}"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-pencil",
+              "tooltip": "编辑",
+              "disabledOn": "status == 'RUNNING'",
+              "actionType": "dialog",
+              "dialog": {
+                "size": "lg",
+                "title": "编辑分析任务",
+                "body": {
+                  "type": "form",
+                  "api": "/zenvis/api/v1/system/analysis-task/$id/update",
+                  "reload": "analysis_task_list,analysis_task_queue_status",
+                  "body": [
+                    {
+                      "label": "任务名称",
+                      "name": "name",
+                      "type": "input-text",
+                      "required": true,
+                      "clearable": true
+                    },
+                    {
+                      "label": "模型",
+                      "name": "model",
+                      "type": "input-text",
+                      "placeholder": "auto",
+                      "clearable": true
+                    },
+                    {
+                      "label": "优先级",
+                      "name": "priority",
+                      "type": "input-number",
+                      "min": 0,
+                      "description": "数值越大越先执行"
+                    },
+                    {
+                      "label": "计划执行时间",
+                      "name": "scheduled_time",
+                      "type": "input-datetime",
+                      "format": "YYYY-MM-DD HH:mm:ss",
+                      "inputFormat": "YYYY-MM-DD HH:mm:ss",
+                      "clearable": true
+                    },
+                    {
+                      "label": "描述说明",
+                      "name": "description",
+                      "type": "textarea",
+                      "clearable": true,
+                      "minRows": 2,
+                      "maxRows": 4
+                    },
+                    {
+                      "label": "分析提示词",
+                      "name": "prompt",
+                      "type": "editor",
+                      "language": "markdown",
+                      "editorTheme": "vs-dark",
+                      "required": true,
+                      "size": "lg"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-repeat text-success",
+              "tooltip": "重新入队",
+              "disabledOn": "status == 'RUNNING'",
+              "actionType": "ajax",
+              "confirmText": "确认将该任务重新放入队列？",
+              "api": "post:/zenvis/api/v1/system/analysis-task/$id/enqueue",
+              "reload": "analysis_task_list,analysis_task_queue_status"
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-ban text-warning",
+              "tooltip": "取消任务",
+              "hiddenOn": "status == 'CANCELED' || status == 'SUCCESS'",
+              "disabledOn": "status == 'RUNNING'",
+              "actionType": "ajax",
+              "confirmText": "确认取消该任务？",
+              "api": "post:/zenvis/api/v1/system/analysis-task/$id/cancel",
+              "reload": "analysis_task_list,analysis_task_queue_status"
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-times text-danger",
+              "tooltip": "删除",
+              "disabledOn": "status == 'RUNNING'",
+              "actionType": "ajax",
+              "confirmText": "确认删除该分析任务？",
+              "api": "delete:/zenvis/api/v1/system/analysis-task/$id",
+              "reload": "analysis_task_list,analysis_task_queue_status"
+            }
+          ],
+          "toggled": true
+        }
+      ]
+    }
+  ]
+}

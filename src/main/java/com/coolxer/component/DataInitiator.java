@@ -95,13 +95,16 @@ public class DataInitiator {
             menuRepository.save(new Menu().setName("元数据配置").setType(MenuType.POLICY_CONFIG).setRoute(MenuType.POLICY_CONFIG.getRoute()).setParams("meta").setIsEditable(false).setParentId(policyMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("静态页面配置").setType(MenuType.POLICY_CONFIG).setRoute(MenuType.POLICY_CONFIG.getRoute()).setParams("html-page").setIsEditable(false).setParentId(policyMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
 
-            Menu systemMenu = menuRepository.save(new Menu().setName("系统管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(4).setLevel(MenuLevel.LEVEL_1));
+            Menu serviceMenu = menuRepository.save(new Menu().setName("服务管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(4).setLevel(MenuLevel.LEVEL_1));
+            menuRepository.save(new Menu().setName("数推服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("push-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("分析任务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("analysis-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
+            
+            Menu systemMenu = menuRepository.save(new Menu().setName("系统管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(5).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("菜单管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("menu").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("插件管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("plugin").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
-            menuRepository.save(new Menu().setName("数推服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("push-task").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(3).setLevel(MenuLevel.LEVEL_2));
-            menuRepository.save(new Menu().setName("看板管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("dashboard").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(4).setLevel(MenuLevel.LEVEL_2));
-            menuRepository.save(new Menu().setName("用户管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("user").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(5).setLevel(MenuLevel.LEVEL_2));
-            menuRepository.save(new Menu().setName("角色管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("role").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(6).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("看板管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("dashboard").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(3).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("用户管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("user").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(4).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("角色管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("role").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(5).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("关于产品").setType(MenuType.BUILT_APP).setRoute("system-about").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(7).setLevel(MenuLevel.LEVEL_2));
 
         }

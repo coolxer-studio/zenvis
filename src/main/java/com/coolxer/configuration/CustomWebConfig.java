@@ -30,6 +30,12 @@ public class CustomWebConfig {
     private String pluginPath;
 
     /**
+     * AI Skill 配置目录
+     */
+    @Value("${app.paths.skills:${app.paths.config.base:.}/skill_config}")
+    private String skillPath;
+
+    /**
      * 系统信息文件目录
      */
     @Value("${app.paths.system.config}")

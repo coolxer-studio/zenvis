@@ -6,6 +6,7 @@ import com.coolxer.service.dih.agent.nl2sql.constant.Constant;
 import com.coolxer.service.dih.agent.dto.schema.SchemaDTO;
 import com.coolxer.service.dih.agent.nl2sql.service.RedisNl2sqlService;
 import com.coolxer.service.dih.agent.nl2sql.service.base.BaseSchemaService;
+import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.agent.nl2sql.util.SqlSafeValidator;
 import com.coolxer.service.dih.agent.nl2sql.util.SqlValidationResult;
 import com.coolxer.commons.enums.MessageType;
@@ -24,6 +25,7 @@ import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -63,19 +65,22 @@ public class InspectionAgent {
     private final LlmService llmService;
     private final PromptTemplate systemPromptTemplate;
     private final ChatMemory chatMemory;
+    private final SkillService skillService;
 
     public InspectionAgent(@Qualifier("redisNl2sqlService") RedisNl2sqlService baseNl2SqlService,
                            @Qualifier("redisSchemaService") BaseSchemaService baseSchemaService,
                            EChartsConverter eChartsConverter,
                            @Qualifier("llmService") LlmService llmService,
                            @Qualifier("agentInspectSystemPromptTemplate") PromptTemplate systemPromptTemplate,
-                           @Qualifier("inspectionAgentChatMemory") ChatMemory chatMemory) {
+                           @Qualifier("inspectionAgentChatMemory") ChatMemory chatMemory,
+                           SkillService skillService) {
         this.baseNl2SqlService = baseNl2SqlService;
         this.baseSchemaService = baseSchemaService;
         this.eChartsConverter = eChartsConverter;
         this.llmService = llmService;
         this.systemPromptTemplate = systemPromptTemplate;
         this.chatMemory = chatMemory;
+        this.skillService = skillService;
     }
 
     /**
@@ -284,6 +289,10 @@ public class InspectionAgent {
     private ChatResponse handleSmallTalk(String query, String chatId, List<Message> conversationHistory) {
         try {
             String systemPrompt = systemPromptTemplate.getTemplate();
+            String skillPrompt = skillService.buildEnabledSkillPrompt("agent_inspect");
+            if (StringUtils.hasText(skillPrompt)) {
+                systemPrompt = systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
+            }
 
             // 构建带对话上下文的用户 prompt
             String userPrompt = query;

@@ -1,5 +1,6 @@
 package com.coolxer.configuration.mcp;
 
+import com.coolxer.controller.system.AnalysisTaskMcpTool;
 import com.coolxer.controller.retrieval.RetrievalMcpTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
@@ -18,25 +19,31 @@ import java.lang.reflect.Method;
 public class McpServerToolConfiguration {
 
     @Bean
-    public MethodToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool) {
-        log.info("=== Creating MethodToolCallbackProvider for RetrievalMcpTool ===");
-        
-        // 扫描并记录所有 @Tool 方法
-        Method[] methods = RetrievalMcpTool.class.getDeclaredMethods();
+    public MethodToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool,
+                                                                    AnalysisTaskMcpTool analysisTaskMcpTool) {
+        log.info("=== Creating MethodToolCallbackProvider for MCP tools ===");
+
+        logToolMethods(RetrievalMcpTool.class);
+        logToolMethods(AnalysisTaskMcpTool.class);
+
+        // 创建 MethodToolCallbackProvider
+        MethodToolCallbackProvider provider = MethodToolCallbackProvider.builder()
+                .toolObjects(retrievalMcpTool, analysisTaskMcpTool)
+                .build();
+
+        log.info("=== MethodToolCallbackProvider created successfully ===");
+        return provider;
+    }
+
+    private void logToolMethods(Class<?> toolClass) {
+        Method[] methods = toolClass.getDeclaredMethods();
         for (Method method : methods) {
             Tool toolAnnotation = method.getAnnotation(Tool.class);
             if (toolAnnotation != null) {
-                log.info("Found @Tool method: name={}, description={}", 
+                log.info("Found @Tool method: class={}, name={}, description={}",
+                    toolClass.getSimpleName(),
                     toolAnnotation.name(), toolAnnotation.description());
             }
         }
-        
-        // 创建 MethodToolCallbackProvider
-        MethodToolCallbackProvider provider = MethodToolCallbackProvider.builder()
-                .toolObjects(retrievalMcpTool)
-                .build();
-        
-        log.info("=== MethodToolCallbackProvider created successfully ===");
-        return provider;
     }
 }

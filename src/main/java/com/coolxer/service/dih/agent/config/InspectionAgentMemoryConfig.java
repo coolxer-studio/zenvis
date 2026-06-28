@@ -1,15 +1,11 @@
 package com.coolxer.service.dih.agent.config;
 
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
-import org.springframework.ai.chat.memory.repository.jdbc.MysqlChatMemoryRepositoryDialect;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jdbc.core.JdbcTemplate;
-
-import javax.sql.DataSource;
 
 /**
  * InspectionAgent 对话记忆配置
@@ -20,12 +16,9 @@ public class InspectionAgentMemoryConfig {
 
 	@Bean("inspectionAgentChatMemory")
 	public ChatMemory inspectionAgentChatMemory(
-			@Qualifier("mysqlDataSource") DataSource mysqlDataSource) {
+			@Qualifier("springAiChatMemoryRepository") ChatMemoryRepository chatMemoryRepository) {
 		return MessageWindowChatMemory.builder()
-				.chatMemoryRepository(JdbcChatMemoryRepository.builder()
-						.jdbcTemplate(new JdbcTemplate(mysqlDataSource))
-						.dialect(new MysqlChatMemoryRepositoryDialect())
-						.build())
+				.chatMemoryRepository(chatMemoryRepository)
 				.maxMessages(10)
 				.build();
 	}

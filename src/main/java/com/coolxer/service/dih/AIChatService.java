@@ -12,19 +12,15 @@ import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvi
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
-import org.springframework.ai.chat.memory.repository.jdbc.MysqlChatMemoryRepositoryDialect;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
-import javax.sql.DataSource;
 import java.util.Objects;
 
 /**
@@ -47,18 +43,13 @@ public class AIChatService {
     private final AiEmbeddingProperties embeddingProperties;
 
     public AIChatService(
-            @Qualifier("mysqlDataSource") DataSource mysqlDataSource,
+            @Qualifier("springAiChatMemoryRepository") ChatMemoryRepository chatMemoryRepository,
             ChatModel chatModel,
             @Qualifier("askSystemPromptTemplate") PromptTemplate systemPromptTemplate,
             @Qualifier("deepThinkPromptTemplate") PromptTemplate deepThinkPromptTemplate,
             VectorStoreDelegate vectorStoreDelegate,
             AiEmbeddingProperties embeddingProperties
     ) {
-        // 构造 ChatMemoryRepository 和 ChatMemory
-        ChatMemoryRepository chatMemoryRepository = JdbcChatMemoryRepository.builder()
-                .jdbcTemplate(new JdbcTemplate(mysqlDataSource))
-                .dialect(new MysqlChatMemoryRepositoryDialect())
-                .build();
         ChatMemory chatMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(chatMemoryRepository)
                 .build();

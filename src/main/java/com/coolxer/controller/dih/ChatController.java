@@ -11,6 +11,7 @@ import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.FixedPromptResponseService;
 import com.coolxer.service.dih.agent.InspectionAgent;
 import com.coolxer.utils.JacksonUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,7 @@ import reactor.core.publisher.Flux;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -50,6 +52,8 @@ public class ChatController extends BaseController {
 
     @Autowired
     private ChatSessionService chatSessionService;
+    @Autowired
+    private FixedPromptResponseService fixedPromptResponseService;
     @Autowired
     private InspectionAgent inspectionAgent;
 
@@ -135,7 +139,12 @@ public class ChatController extends BaseController {
         AtomicReference<MessageType> messageType = new AtomicReference<>(MessageType.TEXT);
 
         Flux<String> fluxResponse;
-        if ("agent_inspect".equals(chatDto.getType())) {
+        Optional<String> fixedResponse = fixedPromptResponseService.findResponse(prompt);
+        if (fixedResponse.isPresent()) {
+            log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
+            messageType.set(MessageType.TEXT);
+            fluxResponse = Flux.just(fixedResponse.get());
+        } else if ("agent_inspect".equals(chatDto.getType())) {
             ChatResponse chatResponse = inspectionAgent.chat(chatDto.getMessage(), model, chatId);
             messageType.set(chatResponse.getType());
             fluxResponse = Flux.just(chatResponse.getContent());

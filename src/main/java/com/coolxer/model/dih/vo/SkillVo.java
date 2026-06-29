@@ -1,5 +1,6 @@
 package com.coolxer.model.dih.vo;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -45,6 +46,7 @@ public class SkillVo implements Serializable {
     /**
      * 适用智能体类型。为空时表示全局可用。
      */
+    @JsonAlias("agentTypes")
     private List<String> agentTypes = new ArrayList<>();
 
     /**

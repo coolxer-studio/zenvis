@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -155,10 +156,31 @@ public class SkillService {
      * 将启用的 skill 汇总为 Agent 可注入的提示词片段。
      */
     public String buildEnabledSkillPrompt(String agentType) {
+        return buildSkillPrompt(agentType, Set.of());
+    }
+
+    /**
+     * 将启用的 skill 与指定的强制 skill 汇总为 Agent 可注入的提示词片段。
+     */
+    public String buildRequiredSkillPrompt(String agentType, List<String> requiredSkillIds) {
+        Set<String> requiredIds = requiredSkillIds == null ? Set.of() : requiredSkillIds.stream()
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toSet());
+        if (requiredIds.isEmpty()) {
+            return buildEnabledSkillPrompt(agentType);
+        }
+        for (String requiredId : requiredIds) {
+            if (!skillCache.containsKey(requiredId)) {
+                log.warn("强制加载的 Skill 未找到: {}", requiredId);
+            }
+        }
+        return buildSkillPrompt(agentType, requiredIds);
+    }
+
+    private String buildSkillPrompt(String agentType, Set<String> requiredSkillIds) {
         StringBuilder prompt = new StringBuilder();
         List<SkillRecord> records = skillCache.values().stream()
-                .filter(record -> Boolean.TRUE.equals(record.getSkill().getEnabled()))
-                .filter(record -> matchAgentType(record.getSkill(), agentType))
+                .filter(record -> shouldLoadSkill(record, agentType, requiredSkillIds))
                 .sorted(Comparator.comparing(record -> record.getSkill().getId()))
                 .toList();
 
@@ -184,6 +206,14 @@ public class SkillService {
             }
         }
         return prompt.toString().trim();
+    }
+
+    private boolean shouldLoadSkill(SkillRecord record, String agentType, Set<String> requiredSkillIds) {
+        if (requiredSkillIds.contains(record.getSkill().getId())) {
+            return true;
+        }
+        return Boolean.TRUE.equals(record.getSkill().getEnabled())
+                && matchAgentType(record.getSkill(), agentType);
     }
 
     /**

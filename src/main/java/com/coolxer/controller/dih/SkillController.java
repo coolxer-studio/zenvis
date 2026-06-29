@@ -6,6 +6,7 @@ import com.coolxer.model.base.vo.SingleValueVo;
 import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
+import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -90,7 +91,10 @@ public class SkillController {
     @Operation(summary = "Agent Skill Prompt", description = "查看指定 Agent 当前会加载的 Skill 提示词片段")
     public ResponseWrap<SingleValueVo> agentPrompt(@PathVariable("agentType") String agentType) {
         try {
-            return ResponseWrap.success(new SingleValueVo(skillService.buildEnabledSkillPrompt(agentType)));
+            String skillPrompt = DataAccessAgent.AGENT_TYPE.equals(agentType)
+                    ? skillService.buildRequiredSkillPrompt(agentType, List.of(DataAccessAgent.REQUIRED_SKILL_ID))
+                    : skillService.buildEnabledSkillPrompt(agentType);
+            return ResponseWrap.success(new SingleValueVo(skillPrompt));
         } catch (Exception e) {
             log.error("查询 Agent Skill Prompt 失败, agentType={}", agentType, e);
             return ResponseWrap.fail(e);

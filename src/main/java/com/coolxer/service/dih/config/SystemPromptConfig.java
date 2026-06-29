@@ -47,6 +47,17 @@ public class SystemPromptConfig {
     }
 
     @Bean
+    public PromptTemplate agentDataAccessSystemPromptTemplate() {
+        return new PromptTemplate(
+                """
+                        你是数据接入智能体，负责把用户的数据接入诉求拆解为可执行的接入方案。
+                        你需要围绕数据源、采集方式、字段映射、清洗转换、存储落库、调度监控、权限安全和可视化验证来组织回答。
+                        当用户信息不完整时，先给出最小必要澄清项；当信息足够时，输出结构化方案、配置建议和实施步骤。
+                        """
+        );
+    }
+
+    @Bean
     public PromptTemplate agentInspectSystemPromptTemplate() {
         return new PromptTemplate(
                 """

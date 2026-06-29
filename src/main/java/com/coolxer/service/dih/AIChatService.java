@@ -65,6 +65,8 @@ public class AIChatService {
 
     private final ChatClient chatClient;
 
+    private final ChatClient systemPromptChatClient;
+
     private final ChatMemory chatMemory;
 
     private final PromptTemplate deepThinkPromptTemplate;
@@ -106,6 +108,10 @@ public class AIChatService {
                 .defaultSystem(
                         systemPromptTemplate.getTemplate()
                 ).defaultAdvisors(new SimpleLoggerAdvisor())
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
+        this.systemPromptChatClient = ChatClient.builder(chatModel)
+                .defaultAdvisors(new SimpleLoggerAdvisor())
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
 
@@ -175,6 +181,56 @@ public class AIChatService {
         return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
     }
 
+    public Flux<String> chatWithSystemPrompt(String chatId, String model, String systemPrompt, String prompt,
+                                             List<ChatAttachment> attachments, User user) {
+        if (!StringUtils.hasText(systemPrompt)) {
+            return chat(chatId, model, prompt, attachments, user);
+        }
+
+        log.debug("agent chat model is: {}", model);
+
+        if (chatAttachmentService.hasImageAttachment(attachments) && canUseNativeOpenAiStream()) {
+            return nativeOpenAiChat(chatId, model, prompt, attachments, user, false, systemPrompt);
+        }
+
+        String scene = "AIChatService.chatWithSystemPrompt";
+        String requestId = LlmLogHelper.newRequestId();
+        long startedAtNanos = System.nanoTime();
+        boolean ragEnabled = embeddingProperties.isEnabled();
+        LlmLogHelper.logRequest(log, requestId, scene,
+                buildChatLogRequest(chatId, model, prompt, attachments, false, ragEnabled, systemPrompt));
+
+        var promptSpec = systemPromptChatClient.prompt()
+                .options(buildRuntimeOptions(model))
+                .system(systemPrompt)
+                .user(prompt)
+                .advisors(memoryAdvisor -> memoryAdvisor
+                        .param(ChatMemory.CONVERSATION_ID, chatId)
+                );
+
+        if (supportsReasoningContent(model)) {
+            promptSpec = promptSpec.advisors(reasoningContentAdvisor);
+        }
+
+        if (!embeddingProperties.isEnabled()) {
+            log.debug("Skip agent chat RAG advisor because app.ai.embedding.enabled=false.");
+            return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
+        }
+
+        promptSpec = promptSpec.advisors(
+                QuestionAnswerAdvisor
+                        .builder(vectorStoreDelegate.getVectorStore("redis"))
+                        .searchRequest(
+                                SearchRequest.builder()
+                                        .topK(6)
+                                        .build()
+                        )
+                        .build()
+        );
+
+        return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
+    }
+
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt) {
         return deepThinkingChat(chatId, model, prompt, List.of(), null);
     }
@@ -212,9 +268,23 @@ public class AIChatService {
             User user,
             boolean deepThinking
     ) {
+        return nativeOpenAiChat(chatId, model, prompt, attachments, user, deepThinking, null);
+    }
+
+    private Flux<String> nativeOpenAiChat(
+            String chatId,
+            String model,
+            String prompt,
+            List<ChatAttachment> attachments,
+            User user,
+            boolean deepThinking,
+            String systemPromptOverride
+    ) {
         AtomicReference<String> finalAnswer = new AtomicReference<>("");
         AtomicReference<String> fullResponse = new AtomicReference<>("");
-        String scene = deepThinking ? "AIChatService.deepThinkingChat.native" : "AIChatService.chat.native";
+        String scene = StringUtils.hasText(systemPromptOverride)
+                ? "AIChatService.chatWithSystemPrompt.native"
+                : deepThinking ? "AIChatService.deepThinkingChat.native" : "AIChatService.chat.native";
         String requestId = LlmLogHelper.newRequestId();
         long startedAtNanos = System.nanoTime();
 
@@ -223,7 +293,7 @@ public class AIChatService {
                     try {
                         String chatCompletionsUrl = openAiChatCompletionsUrl();
                         Map<String, Object> nativeRequest =
-                                buildNativeChatRequest(chatId, model, prompt, attachments, user, deepThinking);
+                                buildNativeChatRequest(chatId, model, prompt, attachments, user, deepThinking, systemPromptOverride);
                         LlmLogHelper.logRequest(log, requestId, scene,
                                 buildNativeHttpLogRequest(chatCompletionsUrl, nativeRequest));
                         String requestBody = JacksonConfig.OBJECT_MAPPER.writeValueAsString(nativeRequest);
@@ -291,9 +361,24 @@ public class AIChatService {
             boolean deepThinking,
             boolean ragEnabled
     ) {
+        return buildChatLogRequest(chatId, model, prompt, attachments, deepThinking, ragEnabled, null);
+    }
+
+    private Map<String, Object> buildChatLogRequest(
+            String chatId,
+            String model,
+            String prompt,
+            List<ChatAttachment> attachments,
+            boolean deepThinking,
+            boolean ragEnabled,
+            String systemPrompt
+    ) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("chat_id", chatId);
         request.put("model", StringUtils.hasText(model) ? model : defaultChatModel);
+        if (StringUtils.hasText(systemPrompt)) {
+            request.put("system_prompt", systemPrompt);
+        }
         request.put("prompt", prompt);
         request.put("deep_thinking", deepThinking);
         request.put("rag_enabled", ragEnabled);
@@ -328,7 +413,8 @@ public class AIChatService {
             String prompt,
             List<ChatAttachment> attachments,
             User user,
-            boolean deepThinking
+            boolean deepThinking,
+            String systemPromptOverride
     ) {
         Map<String, Object> request = new HashMap<>();
         request.put("model", StringUtils.hasText(model) ? model : defaultChatModel);
@@ -337,7 +423,7 @@ public class AIChatService {
         if (deepThinking && supportsQwenReasoningStream(model)) {
             request.put("chat_template_kwargs", Map.of("enable_thinking", true));
         }
-        request.put("messages", buildNativeMessages(chatId, model, prompt, attachments, user, deepThinking));
+        request.put("messages", buildNativeMessages(chatId, model, prompt, attachments, user, deepThinking, systemPromptOverride));
         return request;
     }
 
@@ -347,10 +433,14 @@ public class AIChatService {
             String prompt,
             List<ChatAttachment> attachments,
             User user,
-            boolean deepThinking
+            boolean deepThinking,
+            String systemPromptOverride
     ) {
         List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", nativeSystemPrompt(model, deepThinking)));
+        String systemPrompt = StringUtils.hasText(systemPromptOverride)
+                ? systemPromptOverride
+                : nativeSystemPrompt(model, deepThinking);
+        messages.add(Map.of("role", "system", "content", systemPrompt));
 
         if (StringUtils.hasText(chatId)) {
             for (Message message : chatMemory.get(chatId)) {

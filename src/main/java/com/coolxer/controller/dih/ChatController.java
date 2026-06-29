@@ -19,6 +19,7 @@ import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.ChatMessagePartParser;
 import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.FixedPromptResponseService;
+import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.InspectionAgent;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -79,6 +80,8 @@ public class ChatController extends BaseController {
     @Autowired
     private FixedPromptResponseService fixedPromptResponseService;
     @Autowired
+    private DataAccessAgent dataAccessAgent;
+    @Autowired
     private InspectionAgent inspectionAgent;
     @Autowired
     private ChatMessagePartParser chatMessagePartParser;
@@ -107,7 +110,9 @@ public class ChatController extends BaseController {
         }
 
         // TODO 临时限制ask之外的不允许使用
-        if (chatDto.getType() != null && chatDto.getType().startsWith("agent") && !"agent_inspect".equals(chatDto.getType())) {
+        if (chatDto.getType() != null && chatDto.getType().startsWith("agent")
+                && !DataAccessAgent.AGENT_TYPE.equals(chatDto.getType())
+                && !"agent_inspect".equals(chatDto.getType())) {
             return errorResponse(eventStream, "对不起，当前智能体没有开通权限，请联系管理员！");
         }
 
@@ -176,7 +181,10 @@ public class ChatController extends BaseController {
 
         Flux<String> fluxResponse;
         Optional<String> fixedResponse = fixedPromptResponseService.findResponse(userMessage);
-        if (fixedResponse.isPresent()) {
+        if (DataAccessAgent.AGENT_TYPE.equals(chatDto.getType())) {
+            messageType.set(MessageType.TEXT);
+            fluxResponse = dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
+        } else if (fixedResponse.isPresent()) {
             log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
             messageType.set(MessageType.TEXT);
             fluxResponse = Flux.just(fixedResponse.get());

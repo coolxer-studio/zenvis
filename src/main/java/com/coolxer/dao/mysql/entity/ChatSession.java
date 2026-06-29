@@ -50,6 +50,12 @@ public class ChatSession extends BaseEntity {
     private String messages;
 
     /**
+     * 附加数据（json格式）
+     */
+    @Column(name = "extra_data", columnDefinition = "TEXT")
+    private String extraData;
+
+    /**
      * 是否深度思考
      */
     @Column(name = "deep_think")
@@ -79,6 +85,9 @@ public class ChatSession extends BaseEntity {
         }
         if (StringUtils.isNotEmpty(chatSessionDto.getMessages())) {
             this.messages = chatSessionDto.getMessages();
+        }
+        if (StringUtils.isNotEmpty(chatSessionDto.getExtraData())) {
+            this.extraData = chatSessionDto.getExtraData();
         }
         if (chatSessionDto.getDeepThink() != null) {
             this.deepThink = chatSessionDto.getDeepThink();

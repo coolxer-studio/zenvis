@@ -43,6 +43,11 @@ public class ChatSessionVo implements Serializable {
     private List<Message> messageList;
 
     /**
+     * 附加数据（json）
+     */
+    private String extraData;
+
+    /**
      * 是否深度思考
      */
     private Boolean deepThink;
@@ -69,6 +74,7 @@ public class ChatSessionVo implements Serializable {
         this.type = chatSession.getType();
         this.messageList = JacksonUtil.toList(chatSession.getMessages(), new TypeReference<List<Message>>() {
         });
+        this.extraData = chatSession.getExtraData();
         this.deepThink = chatSession.getDeepThink();
         this.onlineSearch = chatSession.getOnlineSearch();
         this.pin = chatSession.getPin();

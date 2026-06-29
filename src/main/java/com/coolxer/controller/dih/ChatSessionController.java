@@ -121,9 +121,9 @@ public class ChatSessionController extends BaseController {
     }
 
     private static final String PROLOGUE_DEFAULT = "我是数智助手（X-Sage），可以解答系统相关运营问题，有什么问题尽管提问吧！";
-    private static final String PROLOGUE_AGENT_PLUGIN = "我是插件智能体，可以帮助用户快速构建插件应用。\\n" +
-            " 生成元数据配置、数推服务配置、UI可视化配置、扩展接口及菜单,支持预览，用户确认后生成插件并导出。\\n" +
-            " 请提供给我插件的必要信息，如名称、包名、用途等！";
+    private static final String PROLOGUE_AGENT_DATA_ACCESS = "我是数据接入智能体，专注于多源日志数据的数据接入、存储和可视化。\\n" +
+            " 通过全局随机抽样与重点数据智能挖掘，实时提供精准的数据统计、查询及可视化服务。\\n" +
+            " 我将根据用户提供的实体、字段和统计维度，自动调用最优查询接口并智能匹配最合适的图表组件，确保数据洞察清晰直观。";
     private static final String PROLOGUE_AGENT_INSPECT = "我是巡检智能体，专注于多源日志数据的智能分析与可视化呈现。\\n" +
             " 通过全局随机抽样与重点数据智能挖掘，实时提供精准的数据统计、查询及可视化服务。\\n" +
             " 我将根据用户提供的实体、字段和统计维度，自动调用最优查询接口并智能匹配最合适的图表组件，确保数据洞察清晰直观。";
@@ -133,9 +133,6 @@ public class ChatSessionController extends BaseController {
     private static final String PROLOGUE_AGENT_DISPOSE = "我是策略智能体，负责系统策略的全生命周期管理。\\n" +
             " 涵盖探针数据采集、动态标记引擎、处置响应、设备指纹、风险评定、数据推送及可视化等策略配置。\\n" +
             " 所有策略变更需经管理员审批后生效，确保系统配置安全可控、合规有效。";
-    private static final String PROLOGUE_AGENT_CHECK = "我是检验智能体，专注于问题闭环验证与效果评估。\\n" +
-            " 针对巡检发现的问题、研判结果及策略调整，通过自动化工具进行效果核验。\\n" +
-            " 未通过验证的问题将自动生成结构化工单并推送至指定负责人，确保问题解决过程可追踪、可闭环。";
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\\n" +
             " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
@@ -155,6 +152,9 @@ public class ChatSessionController extends BaseController {
                     case "ask":
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_DEFAULT, DateUtil.getCurrentDateTime()));
                         break;
+                    case "agent_data_access":
+                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_DATA_ACCESS, DateUtil.getCurrentDateTime()));
+                        break;
                     case "agent_inspect":
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_INSPECT, DateUtil.getCurrentDateTime()));
                         break;
@@ -164,14 +164,8 @@ public class ChatSessionController extends BaseController {
                     case "agent_dispose":
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_DISPOSE, DateUtil.getCurrentDateTime()));
                         break;
-                    case "agent_check":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_CHECK, DateUtil.getCurrentDateTime()));
-                        break;
                     case "agent_report":
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_REPORT, DateUtil.getCurrentDateTime()));
-                        break;
-                    case "agent_plugin":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_PLUGIN, DateUtil.getCurrentDateTime()));
                         break;
                     default:
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_DEFAULT, DateUtil.getCurrentDateTime()));

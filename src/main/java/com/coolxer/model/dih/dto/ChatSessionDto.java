@@ -31,6 +31,11 @@ public class ChatSessionDto {
     private String messages;
 
     /**
+     * 附加数据（json）
+     */
+    private String extraData;
+
+    /**
      * 是否深度思考
      */
     private Boolean deepThink;

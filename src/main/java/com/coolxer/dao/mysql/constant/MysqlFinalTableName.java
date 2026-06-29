@@ -77,6 +77,11 @@ public class MysqlFinalTableName {
     public static final String T_AI_ANALYSIS_TASK = TABLE_PREFIX + "ai_analysis_task";
 
     /**
+     * MCP客户端服务配置
+     */
+    public static final String T_AI_MCP_SERVER = TABLE_PREFIX + "ai_mcp_server";
+
+    /**
      * 系统信息表
      */
     public static final String T_SYS_INFO = TABLE_PREFIX + "sys_info";

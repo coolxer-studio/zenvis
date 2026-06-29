@@ -10,6 +10,7 @@ import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.agent.McpAgent;
 import com.coolxer.utils.DateUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -136,6 +137,8 @@ public class ChatSessionController extends BaseController {
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\\n" +
             " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
+    private static final String PROLOGUE_AGENT_MCP = "我是 MCP 智能体，可以调用已启用并连接成功的外部 MCP 服务。\\n" +
+            " 我会根据你的问题选择合适工具，并在参数不足时先补充确认。";
 
     @GetMapping({"/{sessionId}/session"})
     public ResponseWrap<ChatSessionVo> sessionInfo(@PathVariable("sessionId") String sessionId, @RequestParam(value = "type", required = false) String type) {
@@ -166,6 +169,9 @@ public class ChatSessionController extends BaseController {
                         break;
                     case "agent_report":
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_REPORT, DateUtil.getCurrentDateTime()));
+                        break;
+                    case McpAgent.AGENT_TYPE:
+                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_MCP, DateUtil.getCurrentDateTime()));
                         break;
                     default:
                         chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_DEFAULT, DateUtil.getCurrentDateTime()));

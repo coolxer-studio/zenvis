@@ -99,6 +99,7 @@ public class DataInitiator {
             menuRepository.save(new Menu().setName("数推服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("push-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("分析任务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("analysis-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("Skill 管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("skill").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(3).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("MCP 服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("mcp").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(4).setLevel(MenuLevel.LEVEL_2));
 
             Menu systemMenu = menuRepository.save(new Menu().setName("系统管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(5).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("菜单管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("menu").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));

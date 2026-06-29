@@ -21,6 +21,7 @@ import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.FixedPromptResponseService;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.InspectionAgent;
+import com.coolxer.service.dih.agent.McpAgent;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.swagger.v3.oas.annotations.Operation;
@@ -84,6 +85,8 @@ public class ChatController extends BaseController {
     @Autowired
     private InspectionAgent inspectionAgent;
     @Autowired
+    private McpAgent mcpAgent;
+    @Autowired
     private ChatMessagePartParser chatMessagePartParser;
     @Autowired
     private ChatAttachmentService chatAttachmentService;
@@ -112,6 +115,7 @@ public class ChatController extends BaseController {
         // TODO 临时限制ask之外的不允许使用
         if (chatDto.getType() != null && chatDto.getType().startsWith("agent")
                 && !DataAccessAgent.AGENT_TYPE.equals(chatDto.getType())
+                && !McpAgent.AGENT_TYPE.equals(chatDto.getType())
                 && !"agent_inspect".equals(chatDto.getType())) {
             return errorResponse(eventStream, "对不起，当前智能体没有开通权限，请联系管理员！");
         }
@@ -184,6 +188,9 @@ public class ChatController extends BaseController {
         if (DataAccessAgent.AGENT_TYPE.equals(chatDto.getType())) {
             messageType.set(MessageType.TEXT);
             fluxResponse = dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
+        } else if (McpAgent.AGENT_TYPE.equals(chatDto.getType())) {
+            messageType.set(MessageType.TEXT);
+            fluxResponse = mcpAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
         } else if (fixedResponse.isPresent()) {
             log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
             messageType.set(MessageType.TEXT);

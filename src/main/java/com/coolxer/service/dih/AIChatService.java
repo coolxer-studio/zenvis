@@ -23,6 +23,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -183,17 +184,32 @@ public class AIChatService {
 
     public Flux<String> chatWithSystemPrompt(String chatId, String model, String systemPrompt, String prompt,
                                              List<ChatAttachment> attachments, User user) {
+        return chatWithSystemPromptInternal(chatId, model, systemPrompt, prompt, attachments, user,
+                null, true, "AIChatService.chatWithSystemPrompt");
+    }
+
+    public Flux<String> chatWithSystemPromptAndTools(String chatId, String model, String systemPrompt, String prompt,
+                                                     List<ChatAttachment> attachments, User user,
+                                                     ToolCallbackProvider toolCallbackProvider) {
+        return chatWithSystemPromptInternal(chatId, model, systemPrompt, prompt, attachments, user,
+                toolCallbackProvider, false, "AIChatService.chatWithSystemPromptAndTools");
+    }
+
+    private Flux<String> chatWithSystemPromptInternal(String chatId, String model, String systemPrompt, String prompt,
+                                                      List<ChatAttachment> attachments, User user,
+                                                      ToolCallbackProvider toolCallbackProvider,
+                                                      boolean allowNativeImageStream,
+                                                      String scene) {
         if (!StringUtils.hasText(systemPrompt)) {
             return chat(chatId, model, prompt, attachments, user);
         }
 
         log.debug("agent chat model is: {}", model);
 
-        if (chatAttachmentService.hasImageAttachment(attachments) && canUseNativeOpenAiStream()) {
+        if (allowNativeImageStream && chatAttachmentService.hasImageAttachment(attachments) && canUseNativeOpenAiStream()) {
             return nativeOpenAiChat(chatId, model, prompt, attachments, user, false, systemPrompt);
         }
 
-        String scene = "AIChatService.chatWithSystemPrompt";
         String requestId = LlmLogHelper.newRequestId();
         long startedAtNanos = System.nanoTime();
         boolean ragEnabled = embeddingProperties.isEnabled();
@@ -207,6 +223,10 @@ public class AIChatService {
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 );
+
+        if (toolCallbackProvider != null) {
+            promptSpec = promptSpec.toolCallbacks(toolCallbackProvider);
+        }
 
         if (supportsReasoningContent(model)) {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);

@@ -1,0 +1,18 @@
+{
+  "id": "retrieval-metadata-generator",
+  "name": "检索元数据配置生成",
+  "description": "指导数据接入智能体生成可被 Zenvis Retrieval 模块加载、建表、检索和实体接口使用的 meta_config JSON。",
+  "version": "1.0.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_data_access"
+  ],
+  "tags": [
+    "retrieval",
+    "metadata",
+    "meta-config",
+    "clickhouse"
+  ],
+  "enabled": true,
+  "entry": "SKILL.md"
+}

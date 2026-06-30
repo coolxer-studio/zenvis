@@ -203,6 +203,7 @@ services:
     container_name: zenvis-backend
     environment:
       TZ: Asia/Shanghai
+      MCP_BEARER_TOKEN: sk-zenvis-token
     ports:
       - "11001:11001"
     volumes:
@@ -255,6 +256,7 @@ services:
       - ./data/vectum/vector:/var/lib/vector
     environment:
       TZ: Asia/Shanghai
+      VECTUM_AUTH_TOKEN: sk-vectum-token
     restart: unless-stopped
     networks:
       - zenvis-network

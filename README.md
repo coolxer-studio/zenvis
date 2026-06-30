@@ -241,8 +241,11 @@ PUSH_IMAGE=true ./build.sh
 | `spring.data.redis.host`                 | `localhost` | Redis 主机地址            |
 | `spring.data.redis.port`                 | `6379`      | Redis 端口              |
 | `spring.ai.openai.api-key`               | -           | OpenAI API Key           |
+| `app.security.mcp.bearer-token`          | -           | MCP Server Bearer Token，未配置时 MCP 接口返回 401 |
 | `spring.servlet.multipart.max-file-size` | `300MB`     | 最大上传文件大小              |
 | `server.servlet.session.timeout`         | `3600S`     | 会话超时时间                |
+
+MCP 客户端访问 Spring AI MCP Server 接口时需要携带请求头：`Authorization: Bearer <app.security.mcp.bearer-token>`。
 
 ### 数据库初始化
 

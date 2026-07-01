@@ -14,6 +14,10 @@ import {
   UpdateChatSessionResponse,
   DeleteChatSessionResponse,
   GetChatSessionParams,
+  AgentSkillVo,
+  PageRowsVo,
+  SkillSearchParams,
+  SkillVo,
 } from '@/types/type-dih';
 import { withBaseUrl } from '@u/url';
 
@@ -71,6 +75,32 @@ const normalizeStreamEvent = (event: any): ChatStreamEvent => {
     message: event?.message,
   };
 };
+
+const normalizeSkill = (item: any): SkillVo => ({
+  id: item?.id || '',
+  name: item?.name || '',
+  description: item?.description || '',
+  version: item?.version || '',
+  author: item?.author || '',
+  agentTypes: item?.agent_types || item?.agentTypes || [],
+  tags: item?.tags || [],
+  enabled: item?.enabled || false,
+  entry: item?.entry || 'SKILL.md',
+  path: item?.path || '',
+  updateTime: item?.update_time || item?.updateTime || '',
+});
+
+const normalizeAgentSkill = (item: any): AgentSkillVo => ({
+  skillId: item?.skill_id || item?.skillId || '',
+  agentType: item?.agent_type || item?.agentType || '',
+  label: item?.label || '',
+  name: item?.name || '',
+  description: item?.description || '',
+  enabled: item?.enabled || false,
+  order: item?.order ?? 0,
+  path: item?.path || '',
+  updateTime: item?.update_time || item?.updateTime || '',
+});
 
 export class DihService {
   /**
@@ -184,6 +214,19 @@ export class DihService {
       model: (item as any).model || '',
       desc: (item as any).desc || '',
     }));
+  }
+
+  static async getSkillList(params: SkillSearchParams = {}): Promise<PageRowsVo<SkillVo>> {
+    const response = await request<{ rows: object[]; total: number }>(`${prefix}/skills/list`, params, 'GET');
+    return {
+      rows: (response.rows || []).map(normalizeSkill),
+      total: response.total || 0,
+    };
+  }
+
+  static async getAgentSkills(enabled = true): Promise<AgentSkillVo[]> {
+    const response = await request<Array<object>>(`${prefix}/skills/agents`, { enabled }, 'GET');
+    return response.map(normalizeAgentSkill);
   }
 
   static async getChatSessionForPin(): Promise<ChatSession[]> {

@@ -42,15 +42,15 @@ import ViewRightDataAccess from './components/view-right-data-access.vue'
 import ViewRightReport from './components/view-right-report.vue'
 
 import ViewDrawer from './components/view-drawer.vue'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ArrowDown, ArrowUp, Connection, DataAnalysis, Document, Monitor, Operation
 } from '@element-plus/icons-vue'
+import { DihService } from '@/service/api'
+import type { AgentSkillVo } from '@/types/type-dih'
 
 const route = useRoute()
-const rightPanelTypes = ['agent_inspect', 'agent_analysis', 'agent_dispose', 'agent_data_access', 'agent_report']
-const showRightPanel = computed(() => rightPanelTypes.includes(String(route.query.type || '')))
 
 // 抽屉显示状态
 const drawerVisible = ref(false)
@@ -66,14 +66,38 @@ interface Suggestion {
   label: string
   icon: any
 }
-// 建议数据
-const mySuggestions = ref<Suggestion[]>([
-  { type: 'agent_data_access', label: '数据接入', icon: Connection },
-  { type: 'agent_inspect', label: '智能巡检', icon: Monitor },
-  { type: 'agent_analysis', label: '研判分析', icon: DataAnalysis },
-  { type: 'agent_dispose', label: '策略控制', icon: Operation },
-  { type: 'agent_report', label: '报表制作', icon: Document },
-])
+
+const agentIconMap: Record<string, any> = {
+  agent_data_access: Connection,
+  agent_inspect: Monitor,
+  agent_analysis: DataAnalysis,
+  agent_dispose: Operation,
+  agent_report: Document,
+}
+
+const mySuggestions = ref<Suggestion[]>([])
+const rightPanelTypes = computed(() => mySuggestions.value.map(item => item.type))
+const showRightPanel = computed(() => rightPanelTypes.value.includes(String(route.query.type || '')))
+
+const toSuggestion = (agentSkill: AgentSkillVo): Suggestion => ({
+  type: agentSkill.agentType,
+  label: agentSkill.label || agentSkill.name || agentSkill.agentType,
+  icon: agentIconMap[agentSkill.agentType] || Monitor,
+})
+
+const loadAgentSkills = async () => {
+  try {
+    const agentSkills = await DihService.getAgentSkills(true)
+    mySuggestions.value = agentSkills.map(toSuggestion)
+  } catch (error) {
+    console.error('获取内置智能体 Skill 列表失败:', error)
+    mySuggestions.value = []
+  }
+}
+
+onMounted(() => {
+  loadAgentSkills()
+})
 
 </script>
 

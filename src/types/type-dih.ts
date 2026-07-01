@@ -68,6 +68,45 @@ export type ModelInfo = {
   desc: string;
 };
 
+export type SkillVo = {
+  id: string;
+  name: string;
+  description?: string;
+  version?: string;
+  author?: string;
+  agentTypes: string[];
+  tags: string[];
+  enabled: boolean;
+  entry: string;
+  path?: string;
+  updateTime?: string;
+};
+
+export type AgentSkillVo = {
+  skillId: string;
+  agentType: string;
+  label: string;
+  name?: string;
+  description?: string;
+  enabled: boolean;
+  order: number;
+  path?: string;
+  updateTime?: string;
+};
+
+export type SkillSearchParams = {
+  keyword?: string;
+  agentType?: string;
+  enabled?: boolean;
+  page?: number;
+  perPage?: number;
+};
+
+export type PageRowsVo<T> = {
+  rows: T[];
+  total: number;
+};
+
 // 上传文件响应
 export type UploadFileResponse = ChatAttachment & {
   success?: boolean;

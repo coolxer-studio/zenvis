@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'notice' | 'confirm' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'notice' | 'confirm' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 

@@ -56,6 +56,29 @@
         <pre class="code-content"><code>{{ part.content }}</code></pre>
       </div>
 
+      <div v-else-if="part.type === 'config'" class="config-part">
+        <div class="config-card-header">
+          <div class="config-card-title">
+            <el-icon><Document /></el-icon>
+            <span class="config-card-name">{{ part.title || '配置文件' }}</span>
+            <el-tag size="small" effect="plain">{{ configKindText(part) }}</el-tag>
+          </div>
+          <el-tooltip content="复制配置" placement="top">
+            <el-button
+              class="config-copy-btn"
+              size="small"
+              :icon="CopyDocument"
+              circle
+              @click="copyPart(part.content || '')"
+            />
+          </el-tooltip>
+        </div>
+        <div class="config-card-meta">
+          <span>默认文件：{{ defaultConfigFileName(part) }}</span>
+        </div>
+        <pre class="config-card-content"><code>{{ part.content }}</code></pre>
+      </div>
+
       <div v-else-if="part.type === 'notice'" class="notice-part" :class="noticeClass(part)">
         <div class="notice-title">
           <el-icon><component :is="noticeIcon(part)" /></el-icon>
@@ -101,6 +124,7 @@ import {
   Close,
   CopyDocument,
   DataAnalysis,
+  Document,
   InfoFilled,
   Loading,
   QuestionFilled,
@@ -202,6 +226,23 @@ const parseMarkdown = (content: string) => {
 
 const copyPart = (content: string) => {
   emit('copyCode', content);
+};
+
+const metadataText = (part: ChatMessagePart, key: string) => {
+  const value = part.metadata?.[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const configKindText = (part: ChatMessagePart) => {
+  const kind = metadataText(part, 'configKind');
+  if (kind === 'low-code-page') return '低代码页面';
+  if (kind === 'low-code-app') return '低代码应用';
+  if (kind === 'html-page') return '静态 HTML';
+  return kind || '配置';
+};
+
+const defaultConfigFileName = (part: ChatMessagePart) => {
+  return metadataText(part, 'defaultFileName') || '-';
 };
 
 const requestDecision = async (part: ChatMessagePart, decision: 'approved' | 'rejected') => {
@@ -368,6 +409,62 @@ const confirmStatusText = (status?: string) => {
 }
 
 .code-content code {
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+.config-part {
+  border: 1px solid #b3d8ff;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fbff;
+}
+
+.config-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #ecf5ff;
+  border-bottom: 1px solid #d9ecff;
+}
+
+.config-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #303133;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.config-card-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.config-copy-btn {
+  flex: 0 0 auto;
+}
+
+.config-card-meta {
+  padding: 8px 12px 0;
+  color: #606266;
+  font-size: 12px;
+}
+
+.config-card-content {
+  margin: 0;
+  padding: 10px 12px 12px;
+  overflow-x: auto;
+  color: #1f2329;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.config-card-content code {
   font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 

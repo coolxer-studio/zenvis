@@ -80,47 +80,9 @@ const metadataConfigs: ConfigItem[] = [
   }
 ]
 
-const visualizationConfigs: ConfigItem[] = [
-  {
-    id: 'view-001',
-    name: '主机行为可视化配置',
-    jumpLink: '/dih/data-access/visualization/host-behavior'
-  },
-  {
-    id: 'view-002',
-    name: '威胁情报可视化配置',
-    jumpLink: '/dih/data-access/visualization/threat-intel'
-  },
-  {
-    id: 'view-003',
-    name: '资产基线可视化配置',
-    jumpLink: '/dih/data-access/visualization/asset-baseline'
-  }
-]
-
-const menuConfigs: ConfigItem[] = [
-  {
-    id: 'menu-001',
-    name: '数据接入总览菜单',
-    jumpLink: '/dih/data-access/menu/overview'
-  },
-  {
-    id: 'menu-002',
-    name: '数据推送服务菜单',
-    jumpLink: '/dih/data-access/menu/push-service'
-  },
-  {
-    id: 'menu-003',
-    name: '配置管理菜单',
-    jumpLink: '/dih/data-access/menu/config-management'
-  }
-]
-
 const configSections: ConfigSection[] = [
   { name: 'metadataConfigs', label: '元数据配置', items: metadataConfigs },
-  { name: 'dataPushServices', label: '数据推送服务', items: dataPushServices },
-  { name: 'visualizationConfigs', label: '可视化配置', items: visualizationConfigs },
-  { name: 'menuConfigs', label: '菜单配置', items: menuConfigs }
+  { name: 'dataPushServices', label: '数据推送服务', items: dataPushServices }
 ]
 </script>
 

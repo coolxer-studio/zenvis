@@ -51,9 +51,9 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="可视化页面" name="visualPages">
+        <el-tab-pane label="可视化页面配置" name="visualPageConfigs">
           <div class="resource-container">
-            <el-table :data="visualPages" stripe style="width: 100%">
+            <el-table :data="visualPageConfigs" stripe style="width: 100%">
               <el-table-column prop="id" label="ID" min-width="100" />
               <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
               <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
@@ -67,9 +67,41 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="数据看板" name="dashboards">
+        <el-tab-pane label="可视化应用配置" name="visualAppConfigs">
           <div class="resource-container">
-            <el-table :data="dashboards" stripe style="width: 100%">
+            <el-table :data="visualAppConfigs" stripe style="width: 100%">
+              <el-table-column prop="id" label="ID" min-width="100" />
+              <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+              <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
+                <template #default="scope">
+                  <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
+                    {{ scope.row.jumpLink }}
+                  </el-link>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="数据看板配置" name="dashboardConfigs">
+          <div class="resource-container">
+            <el-table :data="dashboardConfigs" stripe style="width: 100%">
+              <el-table-column prop="id" label="ID" min-width="100" />
+              <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+              <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
+                <template #default="scope">
+                  <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
+                    {{ scope.row.jumpLink }}
+                  </el-link>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="菜单配置" name="menuConfigs">
+          <div class="resource-container">
+            <el-table :data="menuConfigs" stripe style="width: 100%">
               <el-table-column prop="id" label="ID" min-width="100" />
               <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
               <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
@@ -195,41 +227,79 @@ const visualizationCharts = ref<VisualizationChart[]>([
   }
 ])
 
-// 可视化页面数据
-const visualPages = ref<ResourceItem[]>([
+// 可视化页面配置数据
+const visualPageConfigs = ref<ResourceItem[]>([
   {
-    id: 'page-001',
-    name: '主机行为分析页面',
-    jumpLink: '/visualization/pages/host-behavior'
+    id: 'page-config-001',
+    name: '主机行为可视化页面配置',
+    jumpLink: '/visualization/page-configs/host-behavior'
   },
   {
-    id: 'page-002',
-    name: '网络连接分析页面',
-    jumpLink: '/visualization/pages/network-connection'
+    id: 'page-config-002',
+    name: '网络连接可视化页面配置',
+    jumpLink: '/visualization/page-configs/network-connection'
   },
   {
-    id: 'page-003',
-    name: '风险事件研判页面',
-    jumpLink: '/visualization/pages/risk-analysis'
+    id: 'page-config-003',
+    name: '风险事件可视化页面配置',
+    jumpLink: '/visualization/page-configs/risk-analysis'
   }
 ])
 
-// 数据看板数据
-const dashboards = ref<ResourceItem[]>([
+// 可视化应用配置数据
+const visualAppConfigs = ref<ResourceItem[]>([
+  {
+    id: 'app-config-001',
+    name: '主机行为可视化应用配置',
+    jumpLink: '/visualization/app-configs/host-behavior'
+  },
+  {
+    id: 'app-config-002',
+    name: '网络连接可视化应用配置',
+    jumpLink: '/visualization/app-configs/network-connection'
+  },
+  {
+    id: 'app-config-003',
+    name: '风险事件可视化应用配置',
+    jumpLink: '/visualization/app-configs/risk-analysis'
+  }
+])
+
+// 数据看板配置数据
+const dashboardConfigs = ref<ResourceItem[]>([
   {
     id: 'dashboard-001',
-    name: '安全态势总览',
-    jumpLink: '/dashboard/security-overview'
+    name: '安全态势总览配置',
+    jumpLink: '/dashboard/configs/security-overview'
   },
   {
     id: 'dashboard-002',
-    name: '巡检指标看板',
-    jumpLink: '/dashboard/inspection-metrics'
+    name: '巡检指标看板配置',
+    jumpLink: '/dashboard/configs/inspection-metrics'
   },
   {
     id: 'dashboard-003',
-    name: '资产风险看板',
-    jumpLink: '/dashboard/asset-risk'
+    name: '资产风险看板配置',
+    jumpLink: '/dashboard/configs/asset-risk'
+  }
+])
+
+// 菜单配置数据
+const menuConfigs = ref<ResourceItem[]>([
+  {
+    id: 'menu-001',
+    name: '巡检总览菜单配置',
+    jumpLink: '/inspect/menu-configs/overview'
+  },
+  {
+    id: 'menu-002',
+    name: '图表库菜单配置',
+    jumpLink: '/inspect/menu-configs/chart-library'
+  },
+  {
+    id: 'menu-003',
+    name: '数据看板菜单配置',
+    jumpLink: '/inspect/menu-configs/dashboard'
   }
 ])
 

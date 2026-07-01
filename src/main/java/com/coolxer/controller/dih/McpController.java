@@ -8,7 +8,9 @@ import com.coolxer.model.dih.dto.McpServerSearchDto;
 import com.coolxer.model.dih.dto.McpToolCallDto;
 import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.dih.vo.McpToolVo;
+import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpClientService;
+import com.coolxer.service.dih.mcp.McpToolContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -36,6 +38,9 @@ public class McpController {
 
     @Autowired
     private McpClientService mcpClientService;
+
+    @Autowired
+    private AgentMcpToolService agentMcpToolService;
 
     @GetMapping("/servers/list")
     @Operation(summary = "MCP服务列表", description = "分页查询外部MCP服务配置")
@@ -163,12 +168,13 @@ public class McpController {
     }
 
     @GetMapping("/agent/prompt")
-    @Operation(summary = "MCP Agent Prompt", description = "查看MCP Agent当前会加载的服务和工具提示词")
-    public ResponseWrap<SingleValueVo> agentPrompt() {
+    @Operation(summary = "业务 Agent MCP 工具提示词", description = "查看指定业务Agent当前会加载的MCP服务和工具提示词")
+    public ResponseWrap<SingleValueVo> agentPrompt(@RequestParam(value = "agentType", required = false) String agentType) {
         try {
-            return ResponseWrap.success(new SingleValueVo(mcpClientService.buildEnabledMcpPrompt()));
+            McpToolContext context = agentMcpToolService.resolve(agentType);
+            return ResponseWrap.success(new SingleValueVo(context.systemPrompt()));
         } catch (Exception e) {
-            log.error("查询MCP Agent Prompt失败", e);
+            log.error("查询业务Agent MCP工具提示词失败", e);
             return ResponseWrap.fail(e);
         }
     }

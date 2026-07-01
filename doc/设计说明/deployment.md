@@ -135,6 +135,7 @@ spring.data.redis.vector-host=redis-stack-service
 spring.data.redis.vector-port=6379
 
 # Spring AI 配置
+spring.ai.openai.base-url=${OPENAI_BASE_URL:}
 spring.ai.openai.api-key=${OPENAI_API_KEY}
 spring.ai.openai.chat.options.model=${OPENAI_CHAT_MODEL}
 spring.ai.openai.embedding.options.model=${OPENAI_EMBEDDING_MODEL}

@@ -155,7 +155,6 @@ Description requirements:
 - `proguard.cfg`: ProGuard obfuscation rules
 - `src/main/resources/application.properties`: Base configuration
 - `src/main/resources/application-{profile}.properties`: Profile-specific config
-- `src/main/resources/models.yaml`: AI model configurations
 - `src/main/resources/agent_prompt/`: Agent prompt templates
 - `src/main/resources/schema/`: JSON schemas for data validation
 

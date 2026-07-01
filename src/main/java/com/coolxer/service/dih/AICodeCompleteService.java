@@ -29,7 +29,7 @@ import java.util.Map;
 public class AICodeCompleteService {
     private static final Logger log = LoggerFactory.getLogger(AICodeCompleteService.class);
 
-    @Value("${spring.ai.openai.completion.url:https://api.openai.com/v1/completions}")
+    @Value("${spring.ai.openai.completion.url:}")
     private String apiUrl;
     @Value("${spring.ai.openai.api-key:}")
     private String apiKey;
@@ -49,6 +49,9 @@ public class AICodeCompleteService {
         long startedAtNanos = System.nanoTime();
         if (completionModel == null || completionModel.isBlank()) {
             throw new IllegalStateException("OpenAI completion model is not configured.");
+        }
+        if (apiUrl == null || apiUrl.isBlank()) {
+            throw new IllegalStateException("OpenAI completion url is not configured.");
         }
         // 构建请求JSON数据
         String jsonInputString = JacksonUtil.toJson(new CompletionParams(completionModel, prompt));

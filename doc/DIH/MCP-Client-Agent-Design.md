@@ -1,4 +1,4 @@
-# MCP Client 与 MCP 工具智能体设计说明
+# MCP Client 与业务 Agent 工具集成设计说明
 
 ## Context
 
@@ -9,8 +9,9 @@ ZenVis 已经通过 Spring AI MCP Server 对外提供本系统工具能力。本
 - 支持在 MySQL 中管理多个 MCP 服务配置。
 - 支持服务启停、刷新连接、查看工具、测试调用工具。
 - 支持通过 AMIS 低代码页面完成配置管理。
-- 支持 AI 聊天通过 `agent_mcp` 自动使用已连接 MCP 工具。
-- 参考 Skill 管理流程，形成“配置管理 + 运行期加载 + Agent 注入”的闭环。
+- 支持普通问答和各业务 Agent 按需使用已连接 MCP 工具。
+- 支持通过配置控制每个业务 Agent 可使用的 MCP 服务范围。
+- 参考 Skill 管理流程，形成“配置管理 + 运行期加载 + 工具上下文注入”的闭环。
 
 ---
 
@@ -32,17 +33,17 @@ McpClientServiceImpl
         │   - 工具查看
         │   - 工具测试调用
         │
-        └─ McpAgent(agent_mcp)
+        └─ AgentMcpToolService
+            - 按业务 Agent 类型解析 MCP scope
             - 构造 MCP 工具提示词
             - 构造 ToolCallbackProvider
-            - 注入 AIChatService
+            - 注入普通问答 / DataAccessAgent / InspectionAgent / AnalysisTask
                     │
                     ▼
-              Spring AI ChatClient
-              toolCallbacks(...)
+              Spring AI ChatClient toolCallbacks(...)
                     │
                     ▼
-              AI 自动选择并调用 MCP 工具
+              AI 在业务语境中按需调用 MCP 工具
 ```
 
 核心思路与 Skill 管理一致：
@@ -52,7 +53,7 @@ McpClientServiceImpl
 | 配置来源 | `deploy/open_config/skill_config` 文件 | MySQL 表 `t_ai_mcp_server` |
 | 管理接口 | `SkillController` | `McpController` |
 | 运行期加载 | `SkillService.reload()` | `McpClientService.refresh()/refreshAll()` |
-| Agent 注入 | 构造 Skill Prompt | 构造 MCP Prompt + ToolCallbackProvider |
+| Agent 注入 | 构造 Skill Prompt | 按业务 Agent 构造 MCP Prompt + ToolCallbackProvider |
 | 前端管理 | AMIS 低代码页 | AMIS 低代码页 |
 
 ---
@@ -196,7 +197,7 @@ AI 工具名: risk_system_query_user
 | POST | `/servers/refresh` | 刷新全部已启用 MCP 服务连接 |
 | GET | `/tools` | 查询已连接 MCP 工具列表，可选 `serverId` |
 | POST | `/tools/call` | 测试调用 MCP 工具 |
-| GET | `/agent/prompt` | 查看 MCP Agent 当前加载的工具提示词 |
+| GET | `/agent/prompt` | 查看指定业务 Agent 当前加载的 MCP 工具提示词 |
 
 工具测试调用使用原始 MCP 工具名，不使用 AI 前缀工具名：
 
@@ -228,7 +229,7 @@ AI 工具名: risk_system_query_user
 - 刷新全部服务连接
 - 查看已连接工具
 - 测试调用工具
-- 查看 MCP Agent Prompt
+- 查看业务 Agent MCP 工具提示词
 
 默认菜单：
 
@@ -253,77 +254,62 @@ params = mcp
 
 ## 六、AI 调用链路设计
 
-### Agent 类型
-
-新增聊天类型：
-
-```text
-agent_mcp
-```
+MCP 不再作为独立聊天 Agent。它是通用工具能力层，由普通问答和业务 Agent 按 scope 注入。
 
 核心文件：
 
-- `src/main/java/com/coolxer/service/dih/agent/McpAgent.java`
+- `src/main/java/com/coolxer/service/dih/mcp/AgentMcpToolService.java`
+- `src/main/java/com/coolxer/service/dih/mcp/McpClientServiceImpl.java`
 - `src/main/java/com/coolxer/controller/dih/ChatController.java`
 - `src/main/java/com/coolxer/service/dih/AIChatService.java`
+- `src/main/java/com/coolxer/service/dih/agent/nl2sql/service/LlmService.java`
 
 ### 调用流程
 
 ```text
 POST /api/v1/dih/chat
-  type = agent_mcp
+  type = ask / agent_data_access / agent_inspect / ...
         │
         ▼
 ChatController
-  → mcpAgent.chat(...)
+  → AgentMcpToolService.resolve(type)
         │
         ▼
-McpAgent
-  → 检查是否有已连接工具
-  → buildEnabledMcpPrompt()
-  → getToolCallbackProvider()
+业务 Agent / AIChatService / LlmService
+  → 注入 MCP system prompt
+  → 注入 ToolCallbackProvider
         │
         ▼
-AIChatService.chatWithSystemPromptAndTools(...)
-  → ChatClient.prompt()
-  → system(...)
-  → user(...)
-  → toolCallbacks(toolCallbackProvider)
-  → stream().content()
+Spring AI ChatClient.toolCallbacks(...)
 ```
 
-### System Prompt 边界
+### MCP 工具 Prompt 边界
 
-`McpAgent` 的系统提示词要求：
+注入到业务 Agent 的 MCP 工具提示词要求：
 
-- 当问题需要外部系统信息时，优先选择语义最匹配的 MCP 工具。
+- 仅当用户问题确实需要外部系统数据、动作或上下文时才调用工具。
 - 参数不足时先追问，不编造参数。
 - 写入、删除、执行任务等副作用工具，先说明动作并请求用户确认。
 - 工具返回后用中文归纳结果，保留关键字段、异常信息和下一步建议。
 
-### 无可用工具时
+### Scope 配置
 
-如果没有启用且连接成功的 MCP 服务，`agent_mcp` 会直接返回：
+默认所有业务 Agent 都可以使用全部已连接 MCP 服务。可通过配置收窄范围：
 
-```text
-当前没有启用且连接成功的 MCP 服务，请先在 MCP 服务管理中配置并刷新服务。
+```properties
+app.ai.mcp.enabled=true
+app.ai.mcp.agent-scopes.default=*
+app.ai.mcp.agent-scopes.agent_data_access=risk,asset
+app.ai.mcp.agent-scopes.agent_inspect=none
 ```
+
+scope 值为 `none/off/false/disabled` 时，该业务 Agent 不注入 MCP 工具。
 
 ---
 
 ## 七、前端入口
 
-文件：
-
-`zenvis-frontend/src/views/dih/index.vue`
-
-新增智能体建议项：
-
-```ts
-{ type: 'agent_mcp', label: 'MCP 工具', icon: Tools }
-```
-
-MCP 工具智能体不挂载专属右侧面板，聊天中间栏保持主要交互区域。
+前端不需要新增独立 MCP 聊天入口。保留 MCP 服务管理页，用于配置、刷新和测试外部 MCP 服务；聊天侧继续选择普通问答或具体业务 Agent。
 
 ---
 
@@ -352,7 +338,7 @@ spring.ai.mcp.server.capabilities.tool=true
 
 - MCP Server：把本系统 `@Tool` 暴露给外部客户端。
 - MCP Client：连接其他系统暴露的 MCP Server。
-- MCP Agent：把外部 MCP 工具注入 AI 对话。
+- MCP 工具上下文：把外部 MCP 工具按业务 Agent scope 注入 AI 对话。
 
 ---
 
@@ -385,7 +371,7 @@ npm run test
 2. 调用刷新连接接口。
 3. 查询工具列表，确认工具数大于 0。
 4. 调用工具测试接口，确认外部 MCP 工具可返回结果。
-5. 调用 `/api/v1/dih/chat`，传入 `type=agent_mcp`，确认 AI 能根据问题触发工具调用。
+5. 调用 `/api/v1/dih/chat`，传入 `type=ask` 或具体业务 Agent，确认 AI 能根据问题触发工具调用。
 
 ### 聊天请求示例
 
@@ -395,7 +381,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
   -H "Accept: text/event-stream" \
   -d '{
     "chat_id": "mcp-demo-001",
-    "type": "agent_mcp",
+    "type": "agent_data_access",
     "model": "auto",
     "message": "帮我查询风险系统中 userId 为 10001 的风险记录"
   }'
@@ -409,7 +395,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 
 - 当前实现使用 Spring AI MCP SSE Client，适配 SSE MCP 服务。
 - 工具调用权限依赖外部 MCP 服务自身鉴权，ZenVis 侧通过固定 headers 支持令牌透传。
-- `agent_mcp` 已在 prompt 中约束副作用工具需先确认，但最终是否调用仍依赖模型工具调用行为。
+- MCP 工具 prompt 已约束副作用工具需先确认，但最终是否调用仍依赖模型工具调用行为。
 - 已有环境需要手动添加“`MCP 服务`”低代码菜单和角色权限。
 
 ### 后续可演进方向
@@ -423,4 +409,3 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 | 多传输协议 | 后续按 Spring AI MCP 能力扩展 Streamable HTTP 等传输 |
 | 工具分组 | 在 AMIS 管理页支持按服务、标签、只读/写入风险筛选工具 |
 | 故障降级 | MCP 服务不可用时给出可恢复建议或转为普通问答 |
-

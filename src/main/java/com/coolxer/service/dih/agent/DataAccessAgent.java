@@ -4,6 +4,7 @@ import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.mcp.McpToolContext;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -32,14 +33,34 @@ public class DataAccessAgent {
     }
 
     public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user) {
-        return chatService.chatWithSystemPrompt(chatId, model, buildSystemPrompt(), prompt, attachments, user);
+        return chat(chatId, model, prompt, attachments, user, McpToolContext.empty());
     }
 
-    private String buildSystemPrompt() {
+    public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                             McpToolContext mcpToolContext) {
+        String systemPrompt = buildSystemPrompt(mcpToolContext);
+        if (mcpToolContext != null && mcpToolContext.hasTools()) {
+            return chatService.chatWithSystemPromptAndTools(
+                    chatId,
+                    model,
+                    systemPrompt,
+                    prompt,
+                    attachments,
+                    user,
+                    mcpToolContext.toolCallbackProvider()
+            );
+        }
+        return chatService.chatWithSystemPrompt(chatId, model, systemPrompt, prompt, attachments, user);
+    }
+
+    private String buildSystemPrompt(McpToolContext mcpToolContext) {
         String systemPrompt = systemPromptTemplate.getTemplate();
         String skillPrompt = skillService.buildRequiredSkillPrompt(AGENT_TYPE, List.of(REQUIRED_SKILL_ID));
         if (StringUtils.hasText(skillPrompt)) {
-            return systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
+            systemPrompt = systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
+        }
+        if (mcpToolContext != null && mcpToolContext.hasTools()) {
+            systemPrompt = systemPrompt + "\n\n" + mcpToolContext.systemPrompt();
         }
         return systemPrompt;
     }

@@ -13,11 +13,13 @@
 package com.coolxer.service.dih.agent.nl2sql.service;
 
 import com.coolxer.service.dih.logging.LlmLogHelper;
+import com.coolxer.service.dih.mcp.McpToolContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
@@ -32,6 +34,10 @@ public class LlmService {
 	private static final Logger log = LoggerFactory.getLogger(LlmService.class);
 
 	private static final ThreadLocal<String> CURRENT_MODEL = new ThreadLocal<>();
+
+	private static final ThreadLocal<ToolCallbackProvider> CURRENT_TOOL_CALLBACK_PROVIDER = new ThreadLocal<>();
+
+	private static final ThreadLocal<String> CURRENT_TOOL_SYSTEM_PROMPT = new ThreadLocal<>();
 
 	private final ChatClient chatClient;
 
@@ -56,6 +62,21 @@ public class LlmService {
 	 */
 	public void clearModel() {
 		CURRENT_MODEL.remove();
+	}
+
+	public void setMcpToolContext(McpToolContext context) {
+		if (context != null && context.hasTools()) {
+			CURRENT_TOOL_CALLBACK_PROVIDER.set(context.toolCallbackProvider());
+			CURRENT_TOOL_SYSTEM_PROMPT.set(context.systemPrompt());
+		}
+		else {
+			clearMcpToolContext();
+		}
+	}
+
+	public void clearMcpToolContext() {
+		CURRENT_TOOL_CALLBACK_PROVIDER.remove();
+		CURRENT_TOOL_SYSTEM_PROMPT.remove();
 	}
 
 	/**
@@ -100,8 +121,14 @@ public class LlmService {
 		long startedAtNanos = System.nanoTime();
 		OpenAiChatOptions options = buildSyncModelOptions();
 		var spec = chatClient.prompt().user(prompt);
+		if (StringUtils.hasText(currentToolSystemPrompt())) {
+			spec = spec.system(currentToolSystemPrompt());
+		}
 		if (options != null) {
 			spec = spec.options(options);
+		}
+		if (currentToolCallbackProvider() != null) {
+			spec = spec.toolCallbacks(currentToolCallbackProvider());
 		}
 		LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(null, prompt, false));
 		try {
@@ -123,9 +150,12 @@ public class LlmService {
 		String requestId = LlmLogHelper.newRequestId();
 		long startedAtNanos = System.nanoTime();
 		OpenAiChatOptions options = buildSyncModelOptions();
-		var spec = chatClient.prompt().system(systemPrompt).user(userPrompt);
+		var spec = chatClient.prompt().system(appendToolSystemPrompt(systemPrompt)).user(userPrompt);
 		if (options != null) {
 			spec = spec.options(options);
+		}
+		if (currentToolCallbackProvider() != null) {
+			spec = spec.toolCallbacks(currentToolCallbackProvider());
 		}
 		LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(systemPrompt, userPrompt, false));
 		try {
@@ -148,8 +178,14 @@ public class LlmService {
 		long startedAtNanos = System.nanoTime();
 		OpenAiChatOptions options = buildStreamModelOptions();
 		var spec = chatClient.prompt().user(prompt);
+		if (StringUtils.hasText(currentToolSystemPrompt())) {
+			spec = spec.system(currentToolSystemPrompt());
+		}
 		if (options != null) {
 			spec = spec.options(options);
+		}
+		if (currentToolCallbackProvider() != null) {
+			spec = spec.toolCallbacks(currentToolCallbackProvider());
 		}
 		LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(null, prompt, true));
 		return LlmLogHelper.logChatResponseStream(log, requestId, scene, spec.stream().chatResponse(), startedAtNanos);
@@ -163,12 +199,34 @@ public class LlmService {
 		String requestId = LlmLogHelper.newRequestId();
 		long startedAtNanos = System.nanoTime();
 		OpenAiChatOptions options = buildStreamModelOptions();
-		var spec = chatClient.prompt().system(systemPrompt).user(userPrompt);
+		var spec = chatClient.prompt().system(appendToolSystemPrompt(systemPrompt)).user(userPrompt);
 		if (options != null) {
 			spec = spec.options(options);
 		}
+		if (currentToolCallbackProvider() != null) {
+			spec = spec.toolCallbacks(currentToolCallbackProvider());
+		}
 		LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(systemPrompt, userPrompt, true));
 		return LlmLogHelper.logChatResponseStream(log, requestId, scene, spec.stream().chatResponse(), startedAtNanos);
+	}
+
+	private ToolCallbackProvider currentToolCallbackProvider() {
+		return CURRENT_TOOL_CALLBACK_PROVIDER.get();
+	}
+
+	private String currentToolSystemPrompt() {
+		return CURRENT_TOOL_SYSTEM_PROMPT.get();
+	}
+
+	private String appendToolSystemPrompt(String systemPrompt) {
+		String toolSystemPrompt = currentToolSystemPrompt();
+		if (!StringUtils.hasText(toolSystemPrompt)) {
+			return systemPrompt;
+		}
+		if (!StringUtils.hasText(systemPrompt)) {
+			return toolSystemPrompt;
+		}
+		return systemPrompt + "\n\n" + toolSystemPrompt;
 	}
 
 	private Map<String, Object> buildLogRequest(String systemPrompt, String userPrompt, boolean stream) {

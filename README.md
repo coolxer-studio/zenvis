@@ -240,6 +240,7 @@ PUSH_IMAGE=true ./build.sh
 | `spring.datasource.clickhouse.jdbc-url`  | -           | ClickHouse 连接地址       |
 | `spring.data.redis.host`                 | `localhost` | Redis 主机地址            |
 | `spring.data.redis.port`                 | `6379`      | Redis 端口              |
+| `spring.ai.openai.base-url`              | -           | OpenAI 兼容模型服务地址；未配置不影响启动，调用 AI 功能时报错 |
 | `spring.ai.openai.api-key`               | -           | OpenAI API Key           |
 | `app.security.mcp.bearer-token`          | -           | MCP Server Bearer Token，未配置时 MCP 接口返回 401 |
 | `spring.servlet.multipart.max-file-size` | `300MB`     | 最大上传文件大小              |

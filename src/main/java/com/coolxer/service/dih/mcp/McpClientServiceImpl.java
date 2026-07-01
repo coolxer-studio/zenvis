@@ -37,9 +37,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -236,15 +238,23 @@ public class McpClientServiceImpl implements McpClientService {
 
     @Override
     public boolean hasAvailableTools() {
-        return clients.values().stream().anyMatch(holder -> !holder.getTools().isEmpty());
+        return hasAvailableTools(null);
+    }
+
+    @Override
+    public boolean hasAvailableTools(List<String> serverCodes) {
+        return activeHolders(serverCodes).stream().anyMatch(holder -> !holder.getTools().isEmpty());
     }
 
     @Override
     public String buildEnabledMcpPrompt() {
+        return buildEnabledMcpPrompt(null);
+    }
+
+    @Override
+    public String buildEnabledMcpPrompt(List<String> serverCodes) {
         StringBuilder prompt = new StringBuilder();
-        List<ClientHolder> holders = clients.values().stream()
-                .sorted((left, right) -> left.getServerId().compareTo(right.getServerId()))
-                .toList();
+        List<ClientHolder> holders = activeHolders(serverCodes);
 
         for (ClientHolder holder : holders) {
             StringBuilder block = new StringBuilder();
@@ -271,8 +281,13 @@ public class McpClientServiceImpl implements McpClientService {
 
     @Override
     public ToolCallbackProvider getToolCallbackProvider() {
+        return getToolCallbackProvider(null);
+    }
+
+    @Override
+    public ToolCallbackProvider getToolCallbackProvider(List<String> serverCodes) {
         return SyncMcpToolCallbackProvider.builder()
-                .mcpClients(getActiveClients())
+                .mcpClients(getActiveClients(serverCodes))
                 .toolNamePrefixGenerator((connectionInfo, tool) -> {
                     String prefix = connectionInfo.clientInfo() == null
                             ? "mcp"
@@ -284,10 +299,36 @@ public class McpClientServiceImpl implements McpClientService {
 
     @Override
     public List<McpSyncClient> getActiveClients() {
-        return clients.values().stream()
-                .sorted((left, right) -> left.getServerId().compareTo(right.getServerId()))
+        return getActiveClients(null);
+    }
+
+    @Override
+    public List<McpSyncClient> getActiveClients(List<String> serverCodes) {
+        return activeHolders(serverCodes).stream()
                 .map(ClientHolder::getClient)
                 .toList();
+    }
+
+    private List<ClientHolder> activeHolders(List<String> serverCodes) {
+        Set<String> scope = normalizeServerCodes(serverCodes);
+        return clients.values().stream()
+                .filter(holder -> scope.isEmpty() || scope.contains(holder.getServerCode()))
+                .sorted((left, right) -> left.getServerId().compareTo(right.getServerId()))
+                .toList();
+    }
+
+    private Set<String> normalizeServerCodes(List<String> serverCodes) {
+        if (serverCodes == null || serverCodes.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String serverCode : serverCodes) {
+            String value = normalizeCodeLenient(serverCode);
+            if (StringUtils.isNotBlank(value)) {
+                normalized.add(value);
+            }
+        }
+        return normalized;
     }
 
     private void refreshEnabledServers() {
@@ -420,6 +461,11 @@ public class McpClientServiceImpl implements McpClientService {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "MCP服务标识不能超过64个字符");
         }
         return normalized;
+    }
+
+    private static String normalizeCodeLenient(String code) {
+        return StringUtils.trimToEmpty(code)
+                .replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     private static String normalizeEndpoint(String endpoint) {

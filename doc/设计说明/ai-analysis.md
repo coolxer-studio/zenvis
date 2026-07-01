@@ -222,6 +222,7 @@ curl -X POST http://localhost:11001/api/v1/dih/chat \
 在 `application.properties` 中配置 OpenAI API Key 和模型：
 
 ```properties
+spring.ai.openai.base-url=${OPENAI_BASE_URL:}
 spring.ai.openai.api-key=${OPENAI_API_KEY}
 spring.ai.openai.chat.options.model=${OPENAI_CHAT_MODEL}
 spring.ai.openai.embedding.options.model=${OPENAI_EMBEDDING_MODEL}
@@ -233,6 +234,7 @@ spring.ai.openai.embedding.options.model=${OPENAI_EMBEDDING_MODEL}
 
 ```properties
 # 模型由部署环境配置
+# OPENAI_BASE_URL
 # OPENAI_CHAT_MODEL
 # OPENAI_EMBEDDING_MODEL
 ```

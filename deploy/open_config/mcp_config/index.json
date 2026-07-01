@@ -100,11 +100,11 @@
     },
     {
       "type": "button",
-      "label": "MCP Agent Prompt",
+      "label": "业务 Agent MCP 工具提示词",
       "icon": "fa fa-file-text-o",
       "actionType": "dialog",
       "dialog": {
-        "title": "MCP Agent Prompt",
+        "title": "业务 Agent MCP 工具提示词",
         "size": "lg",
         "body": {
           "type": "service",

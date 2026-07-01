@@ -35,9 +35,17 @@ public interface McpClientService {
 
     boolean hasAvailableTools();
 
+    boolean hasAvailableTools(List<String> serverCodes);
+
     String buildEnabledMcpPrompt();
+
+    String buildEnabledMcpPrompt(List<String> serverCodes);
 
     ToolCallbackProvider getToolCallbackProvider();
 
+    ToolCallbackProvider getToolCallbackProvider(List<String> serverCodes);
+
     List<McpSyncClient> getActiveClients();
+
+    List<McpSyncClient> getActiveClients(List<String> serverCodes);
 }

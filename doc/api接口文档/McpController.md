@@ -119,7 +119,7 @@
 | POST | `/api/v1/dih/mcp/servers/refresh` | 刷新全部已启用 MCP 服务连接 |
 | GET | `/api/v1/dih/mcp/tools` | 查询 MCP 工具列表 |
 | POST | `/api/v1/dih/mcp/tools/call` | 测试调用 MCP 工具 |
-| GET | `/api/v1/dih/mcp/agent/prompt` | 查看 MCP Agent 当前工具提示词 |
+| GET | `/api/v1/dih/mcp/agent/prompt` | 查看业务 Agent MCP 工具提示词 |
 
 ---
 
@@ -293,29 +293,29 @@ curl -X POST "http://localhost:11001/api/v1/dih/mcp/tools/call" \
   }'
 ```
 
-### 查看 MCP Agent Prompt
+### 查看业务 Agent MCP 工具提示词
 
 **接口地址**: `GET /api/v1/dih/mcp/agent/prompt`
 
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| agentType | String | 否 | 业务 Agent 类型，如 `ask`、`agent_data_access`、`agent_inspect`；不传时按默认 scope |
+
 ```bash
-curl "http://localhost:11001/api/v1/dih/mcp/agent/prompt"
+curl "http://localhost:11001/api/v1/dih/mcp/agent/prompt?agentType=agent_data_access"
 ```
 
-返回当前 `agent_mcp` 会加载的已连接服务和工具摘要。
+返回指定业务 Agent 当前会注入的 MCP 工具规则和已连接服务工具摘要。
 
 ---
 
 ## 聊天中使用 MCP 工具
 
-MCP 工具通过聊天接口使用：
+MCP 工具作为通用工具能力注入聊天接口，不再需要单独的 `agent_mcp` 类型。
 
 **接口地址**: `POST /api/v1/dih/chat`
 
-请求中的 `type` 传入：
-
-```text
-agent_mcp
-```
+请求中的 `type` 可为普通问答 `ask`，也可为具体业务 Agent，如 `agent_data_access`、`agent_inspect`。后端会根据 `app.ai.mcp.agent-scopes.<type>` 控制可用 MCP 服务范围。
 
 示例：
 
@@ -325,7 +325,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
   -H "Accept: text/event-stream" \
   -d '{
     "chat_id": "mcp-demo-001",
-    "type": "agent_mcp",
+    "type": "agent_data_access",
     "model": "auto",
     "message": "帮我查询 userId 为 10001 的风险记录"
   }'
@@ -340,4 +340,4 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 3. MCP 服务只有在 `enabled=true` 且刷新连接成功后，工具才会进入 AI 可用工具列表。
 4. 工具测试接口使用原始 MCP 工具名；AI 对话中使用的是带服务前缀的规范化工具名。
 5. 当前实现主要面向 SSE MCP 服务，`base_url` 需要填写服务根地址，`sse_endpoint` 填写 SSE 路径。
-
+6. 可通过 `app.ai.mcp.agent-scopes.<agentType>=serverCode1,serverCode2` 限制某个业务 Agent 可使用的 MCP 服务；值为 `none` 时禁用该 Agent 的 MCP 工具。

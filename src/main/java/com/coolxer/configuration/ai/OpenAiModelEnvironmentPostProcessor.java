@@ -21,7 +21,7 @@ public class OpenAiModelEnvironmentPostProcessor implements EnvironmentPostProce
         Map<String, Object> defaults = new LinkedHashMap<>();
         boolean embeddingEnabled = Boolean.parseBoolean(environment.getProperty("app.ai.embedding.enabled", "false"));
 
-        if (isMissingOpenAiKey(environment)) {
+        if (isMissingRequiredOpenAiConfig(environment)) {
             disableModelIfUnset(environment, defaults, "spring.ai.model.chat");
             disableModelIfUnset(environment, defaults, "spring.ai.model.embedding");
             disableModelIfUnset(environment, defaults, "spring.ai.model.image");
@@ -55,8 +55,9 @@ public class OpenAiModelEnvironmentPostProcessor implements EnvironmentPostProce
         }
     }
 
-    private static boolean isMissingOpenAiKey(ConfigurableEnvironment environment) {
+    private static boolean isMissingRequiredOpenAiConfig(ConfigurableEnvironment environment) {
+        String baseUrl = environment.getProperty("spring.ai.openai.base-url", "");
         String apiKey = environment.getProperty("spring.ai.openai.api-key", "");
-        return !StringUtils.hasText(apiKey) || PLACEHOLDER_API_KEY.equals(apiKey);
+        return !StringUtils.hasText(baseUrl) || !StringUtils.hasText(apiKey) || PLACEHOLDER_API_KEY.equals(apiKey);
     }
 }

@@ -21,7 +21,8 @@ import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.FixedPromptResponseService;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.InspectionAgent;
-import com.coolxer.service.dih.agent.McpAgent;
+import com.coolxer.service.dih.mcp.AgentMcpToolService;
+import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,7 +51,6 @@ import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.nio.file.Path;
@@ -69,6 +69,8 @@ public class ChatController extends BaseController {
     private static final String RESPONSE_FORMAT_EVENTS = "events";
     private static final String DECISION_APPROVED = "approved";
     private static final String DECISION_REJECTED = "rejected";
+    private static final String TYPE_ASK = "ask";
+    private static final String LEGACY_MCP_AGENT_TYPE = "agent_mcp";
 
     @Autowired
     private AIChatService chatService;
@@ -85,11 +87,11 @@ public class ChatController extends BaseController {
     @Autowired
     private InspectionAgent inspectionAgent;
     @Autowired
-    private McpAgent mcpAgent;
-    @Autowired
     private ChatMessagePartParser chatMessagePartParser;
     @Autowired
     private ChatAttachmentService chatAttachmentService;
+    @Autowired
+    private AgentMcpToolService agentMcpToolService;
 
 
     /**
@@ -112,21 +114,15 @@ public class ChatController extends BaseController {
             response.setContentType("application/x-ndjson;charset=UTF-8");
         }
 
+        String chatType = normalizeChatType(chatDto.getType());
+
         // TODO 临时限制ask之外的不允许使用
-        if (chatDto.getType() != null && chatDto.getType().startsWith("agent")
-                && !DataAccessAgent.AGENT_TYPE.equals(chatDto.getType())
-                && !McpAgent.AGENT_TYPE.equals(chatDto.getType())
-                && !"agent_inspect".equals(chatDto.getType())) {
+        if (chatType != null && chatType.startsWith("agent")
+                && !DataAccessAgent.AGENT_TYPE.equals(chatType)
+                && !"agent_inspect".equals(chatType)) {
             return errorResponse(eventStream, "对不起，当前智能体没有开通权限，请联系管理员！");
         }
 
-
-        List<Map<String, String>> models = baseService.getModels();
-        List<String> modelName = models.stream()
-                .map(map -> map.get("model"))
-                .filter(StringUtils::hasText)
-                .distinct()
-                .toList();
 
         String model = chatDto.getModel();
         String userMessage = resolveUserMessage(chatDto);
@@ -134,19 +130,18 @@ public class ChatController extends BaseController {
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
-        if (StringUtils.hasText(model)) {
-            if (!modelName.contains(model)) {
-                return errorResponse(eventStream, "Input model not support.");
-            } else if ("auto".equals(model)) {
-                // 使用配置中的默认模型
-                model = null;
-            } else if ("x-sage-v1".equals(model)) {
-                // TODO 以后再添加自己的模型
-                model = null;
-            }
-        } else {
-            model = null;
+        if (!baseService.isModelSupported(model)) {
+            return errorResponse(eventStream, "Input model not support.");
         }
+        boolean hasImageAttachment = chatAttachmentService.hasImageAttachment(chatDto.getAttachments());
+        model = baseService.resolveChatModel(
+                model,
+                BooleanUtils.isTrue(chatDto.getDeepThink()),
+                hasImageAttachment
+        );
+        McpToolContext mcpToolContext = hasImageAttachment
+                ? McpToolContext.empty()
+                : agentMcpToolService.resolve(chatType);
 
         // 检查chatId，如果不是已有会话，创建新的会话记录
         // 添加用户消息到文档中
@@ -157,7 +152,7 @@ public class ChatController extends BaseController {
             ChatSessionDto chatSessionDto = new ChatSessionDto();
             chatSessionDto.setSessionId(chatId);
             chatSessionDto.setTitle(userMessage);
-            chatSessionDto.setType(chatDto.getType());
+            chatSessionDto.setType(chatType);
             chatSessionDto.setDeepThink(chatDto.getDeepThink());
             chatSessionDto.setOnlineSearch(chatDto.getOnlineSearch());
             List<Message> messages = new ArrayList<>();
@@ -185,28 +180,41 @@ public class ChatController extends BaseController {
 
         Flux<String> fluxResponse;
         Optional<String> fixedResponse = fixedPromptResponseService.findResponse(userMessage);
-        if (DataAccessAgent.AGENT_TYPE.equals(chatDto.getType())) {
+        if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
-            fluxResponse = dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
-        } else if (McpAgent.AGENT_TYPE.equals(chatDto.getType())) {
-            messageType.set(MessageType.TEXT);
-            fluxResponse = mcpAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
+            fluxResponse = dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         } else if (fixedResponse.isPresent()) {
             log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
             messageType.set(MessageType.TEXT);
             fluxResponse = Flux.just(fixedResponse.get());
-        } else if ("agent_inspect".equals(chatDto.getType())) {
-            ChatResponse chatResponse = inspectionAgent.chat(prompt, model, chatId);
+        } else if ("agent_inspect".equals(chatType)) {
+            ChatResponse chatResponse = inspectionAgent.chat(prompt, model, chatId, mcpToolContext);
             messageType.set(chatResponse.getType());
             fluxResponse = Flux.just(chatResponse.getContent());
         } else if (BooleanUtils.isTrue(chatDto.getDeepThink())) {
             // 普通深度思考对话，类型为 TEXT
             messageType.set(MessageType.TEXT);
-            fluxResponse = chatService.deepThinkingChat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
+            fluxResponse = chatService.deepThinkingChat(
+                    chatId,
+                    model,
+                    prompt,
+                    chatDto.getAttachments(),
+                    currentUser,
+                    mcpToolContext.toolCallbackProvider(),
+                    mcpToolContext.systemPrompt()
+            );
         } else {
             // 普通聊天对话，类型为 TEXT
             messageType.set(MessageType.TEXT);
-            fluxResponse = chatService.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser);
+            fluxResponse = chatService.chat(
+                    chatId,
+                    model,
+                    prompt,
+                    chatDto.getAttachments(),
+                    currentUser,
+                    mcpToolContext.toolCallbackProvider(),
+                    mcpToolContext.systemPrompt()
+            );
         }
 
         // 在返回前捕获模型响应并保存到会话中
@@ -338,6 +346,13 @@ public class ChatController extends BaseController {
             return "请分析上传的附件内容。";
         }
         return "";
+    }
+
+    private String normalizeChatType(String type) {
+        if (!StringUtils.hasText(type) || LEGACY_MCP_AGENT_TYPE.equals(type)) {
+            return TYPE_ASK;
+        }
+        return type;
     }
 
     private Message createUserMessage(String content, List<ChatAttachment> attachments) {

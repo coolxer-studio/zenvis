@@ -1,5 +1,0 @@
-models:
-  - name: auto
-    description: "系统自动选择合适的模型"
-  - name: ${OPENAI_CHAT_MODEL}
-    description: "配置的 OpenAI 默认聊天模型"

@@ -204,6 +204,7 @@ services:
     environment:
       TZ: Asia/Shanghai
       MCP_BEARER_TOKEN: sk-zenvis-token
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
     ports:
       - "11001:11001"
     volumes:

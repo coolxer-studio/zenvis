@@ -10,7 +10,10 @@ import com.coolxer.model.system.dto.AnalysisTaskDto;
 import com.coolxer.model.system.dto.AnalysisTaskSearchDto;
 import com.coolxer.model.system.vo.AnalysisTaskQueueVo;
 import com.coolxer.model.system.vo.AnalysisTaskVo;
+import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.agent.nl2sql.service.LlmService;
+import com.coolxer.service.dih.mcp.AgentMcpToolService;
+import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.system.AnalysisTaskService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -48,6 +51,12 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
 
     @Autowired
     private LlmService llmService;
+
+    @Autowired
+    private AIBaseService aiBaseService;
+
+    @Autowired
+    private AgentMcpToolService agentMcpToolService;
 
     @Override
     public List<AnalysisTaskVo> findAll() {
@@ -243,12 +252,15 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     }
 
     private String callAiAnalyze(AnalysisTask analysisTask) {
-        String model = normalizeModel(analysisTask.getModel());
+        String model = aiBaseService.resolveChatModel(analysisTask.getModel(), false, false);
+        McpToolContext mcpToolContext = agentMcpToolService.resolve("agent_analysis");
         try {
             llmService.setModel(model);
+            llmService.setMcpToolContext(mcpToolContext);
             return llmService.callWithSystemPrompt(ANALYSIS_SYSTEM_PROMPT, buildAnalyzePrompt(analysisTask));
         } finally {
             llmService.clearModel();
+            llmService.clearMcpToolContext();
         }
     }
 
@@ -282,13 +294,6 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
 
     private static Integer defaultRunCount(Integer runCount) {
         return runCount == null ? 0 : runCount;
-    }
-
-    private static String normalizeModel(String model) {
-        if (StringUtils.isBlank(model) || "auto".equals(model) || "x-sage-v1".equals(model)) {
-            return null;
-        }
-        return model;
     }
 
     private static String blankToNull(String value) {

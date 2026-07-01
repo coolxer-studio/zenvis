@@ -36,19 +36,19 @@ public class LocalAiFallbackConfiguration {
     private static final String PLACEHOLDER_API_KEY = "sk-local-placeholder";
 
     private static final String LOCAL_AI_DISABLED_MESSAGE =
-            "本地未配置有效的 OPENAI_API_KEY，AI 对话暂不可用。请配置真实 OpenAI API Key 后重启服务。";
+            "AI 模型服务未配置完整，AI 对话暂不可用。请配置有效的 OPENAI_BASE_URL 和 OPENAI_API_KEY 后重试。";
 
     @Bean
     @Primary
-    @Conditional(LocalAiFallbackConfiguration.MissingOpenAiKeyCondition.class)
+    @Conditional(LocalAiFallbackConfiguration.MissingRequiredOpenAiConfigCondition.class)
     public ChatModel localFallbackChatModel() {
-        log.warn("Using local fallback ChatModel because spring.ai.openai.api-key is empty or placeholder.");
+        log.warn("Using local fallback ChatModel because spring.ai.openai.base-url or api-key is missing.");
         return new LocalFallbackChatModel();
     }
 
     @Bean
     @Primary
-    @Conditional(LocalAiFallbackConfiguration.EmbeddingDisabledOrMissingOpenAiKeyCondition.class)
+    @Conditional(LocalAiFallbackConfiguration.EmbeddingDisabledOrMissingRequiredOpenAiConfigCondition.class)
     public EmbeddingModel localFallbackEmbeddingModel(
             @Value("${spring.ai.openai.embedding.options.dimensions:1536}") Integer dimensions
     ) {
@@ -57,15 +57,15 @@ public class LocalAiFallbackConfiguration {
         return new LocalFallbackEmbeddingModel(embeddingDimensions);
     }
 
-    static class MissingOpenAiKeyCondition implements Condition {
+    static class MissingRequiredOpenAiConfigCondition implements Condition {
 
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            return isMissingOpenAiKey(context.getEnvironment());
+            return isMissingRequiredOpenAiConfig(context.getEnvironment());
         }
     }
 
-    static class EmbeddingDisabledOrMissingOpenAiKeyCondition implements Condition {
+    static class EmbeddingDisabledOrMissingRequiredOpenAiConfigCondition implements Condition {
 
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
@@ -73,13 +73,14 @@ public class LocalAiFallbackConfiguration {
             boolean embeddingEnabled = Boolean.parseBoolean(
                     environment.getProperty("app.ai.embedding.enabled", "false")
             );
-            return !embeddingEnabled || isMissingOpenAiKey(environment);
+            return !embeddingEnabled || isMissingRequiredOpenAiConfig(environment);
         }
     }
 
-    private static boolean isMissingOpenAiKey(Environment environment) {
+    private static boolean isMissingRequiredOpenAiConfig(Environment environment) {
+        String baseUrl = environment.getProperty("spring.ai.openai.base-url", "");
         String apiKey = environment.getProperty("spring.ai.openai.api-key", "");
-        return !StringUtils.hasText(apiKey) || PLACEHOLDER_API_KEY.equals(apiKey);
+        return !StringUtils.hasText(baseUrl) || !StringUtils.hasText(apiKey) || PLACEHOLDER_API_KEY.equals(apiKey);
     }
 
     private static class LocalFallbackChatModel implements ChatModel {

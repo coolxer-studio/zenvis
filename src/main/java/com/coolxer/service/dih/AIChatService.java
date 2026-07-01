@@ -134,10 +134,15 @@ public class AIChatService {
     }
 
     public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user) {
+        return chat(chatId, model, prompt, attachments, user, null, null);
+    }
+
+    public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                             ToolCallbackProvider toolCallbackProvider, String toolSystemPrompt) {
 
         log.debug("chat model is: {}", model);
 
-        if (chatAttachmentService.hasImageAttachment(attachments) && canUseNativeOpenAiStream()) {
+        if (toolCallbackProvider == null && chatAttachmentService.hasImageAttachment(attachments) && canUseNativeOpenAiStream()) {
             return nativeOpenAiChat(chatId, model, prompt, attachments, user, false);
         }
 
@@ -156,6 +161,13 @@ public class AIChatService {
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 );
+
+        if (StringUtils.hasText(toolSystemPrompt)) {
+            promptSpec = promptSpec.system(toolSystemPrompt);
+        }
+        if (toolCallbackProvider != null) {
+            promptSpec = promptSpec.toolCallbacks(toolCallbackProvider);
+        }
 
         if (supportsReasoningContent(model)) {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);
@@ -256,8 +268,15 @@ public class AIChatService {
     }
 
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user) {
+        return deepThinkingChat(chatId, model, prompt, attachments, user, null, null);
+    }
 
-        if ((supportsQwenReasoningStream(model) || chatAttachmentService.hasImageAttachment(attachments)) && canUseNativeOpenAiStream()) {
+    public Flux<String> deepThinkingChat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                                         ToolCallbackProvider toolCallbackProvider, String toolSystemPrompt) {
+
+        if (toolCallbackProvider == null
+                && (supportsQwenReasoningStream(model) || chatAttachmentService.hasImageAttachment(attachments))
+                && canUseNativeOpenAiStream()) {
             return nativeOpenAiChat(chatId, model, prompt, attachments, user, true);
         }
 
@@ -269,11 +288,15 @@ public class AIChatService {
 
         var promptSpec = chatClient.prompt()
                 .options(buildRuntimeOptions(model))
-                .system(deepThinkPromptTemplate.getTemplate())
+                .system(appendToolSystemPrompt(deepThinkPromptTemplate.getTemplate(), toolSystemPrompt))
                 .user(prompt)
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 );
+
+        if (toolCallbackProvider != null) {
+            promptSpec = promptSpec.toolCallbacks(toolCallbackProvider);
+        }
 
         promptSpec = promptSpec.advisors(reasoningContentAdvisor);
 
@@ -588,6 +611,16 @@ public class AIChatService {
             builder.model(model);
         }
         return builder.build();
+    }
+
+    private String appendToolSystemPrompt(String systemPrompt, String toolSystemPrompt) {
+        if (!StringUtils.hasText(toolSystemPrompt)) {
+            return systemPrompt;
+        }
+        if (!StringUtils.hasText(systemPrompt)) {
+            return toolSystemPrompt;
+        }
+        return systemPrompt + "\n\n" + toolSystemPrompt;
     }
 
     private boolean supportsReasoningContent(String model) {

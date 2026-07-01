@@ -7,6 +7,8 @@ import com.coolxer.service.dih.agent.dto.schema.SchemaDTO;
 import com.coolxer.service.dih.agent.nl2sql.service.RedisNl2sqlService;
 import com.coolxer.service.dih.agent.nl2sql.service.base.BaseSchemaService;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.mcp.AgentMcpToolService;
+import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.agent.nl2sql.util.SqlSafeValidator;
 import com.coolxer.service.dih.agent.nl2sql.util.SqlValidationResult;
 import com.coolxer.commons.enums.MessageType;
@@ -66,6 +68,7 @@ public class InspectionAgent {
     private final PromptTemplate systemPromptTemplate;
     private final ChatMemory chatMemory;
     private final SkillService skillService;
+    private final AgentMcpToolService agentMcpToolService;
 
     public InspectionAgent(@Qualifier("redisNl2sqlService") RedisNl2sqlService baseNl2SqlService,
                            @Qualifier("redisSchemaService") BaseSchemaService baseSchemaService,
@@ -73,7 +76,8 @@ public class InspectionAgent {
                            @Qualifier("llmService") LlmService llmService,
                            @Qualifier("agentInspectSystemPromptTemplate") PromptTemplate systemPromptTemplate,
                            @Qualifier("inspectionAgentChatMemory") ChatMemory chatMemory,
-                           SkillService skillService) {
+                           SkillService skillService,
+                           AgentMcpToolService agentMcpToolService) {
         this.baseNl2SqlService = baseNl2SqlService;
         this.baseSchemaService = baseSchemaService;
         this.eChartsConverter = eChartsConverter;
@@ -81,6 +85,7 @@ public class InspectionAgent {
         this.systemPromptTemplate = systemPromptTemplate;
         this.chatMemory = chatMemory;
         this.skillService = skillService;
+        this.agentMcpToolService = agentMcpToolService;
     }
 
     /**
@@ -150,9 +155,14 @@ public class InspectionAgent {
     }
 
     public ChatResponse chat(String query, String model, String chatId) {
+        return chat(query, model, chatId, agentMcpToolService.resolve("agent_inspect"));
+    }
+
+    public ChatResponse chat(String query, String model, String chatId, McpToolContext mcpToolContext) {
         if (model != null) {
             llmService.setModel(model);
         }
+        llmService.setMcpToolContext(mcpToolContext);
         try {
             // 获取对话历史，在整个 chat 流程中复用
             List<Message> conversationHistory = getConversationHistory(chatId);
@@ -260,6 +270,7 @@ public class InspectionAgent {
         return response;
         } finally {
             llmService.clearModel();
+            llmService.clearMcpToolContext();
         }
     }
 

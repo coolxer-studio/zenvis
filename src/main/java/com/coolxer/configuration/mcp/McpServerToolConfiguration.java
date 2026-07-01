@@ -1,7 +1,8 @@
 package com.coolxer.configuration.mcp;
 
-import com.coolxer.controller.system.AnalysisTaskMcpTool;
+import com.coolxer.controller.policy.ConfigMcpTool;
 import com.coolxer.controller.retrieval.RetrievalMcpTool;
+import com.coolxer.controller.system.AnalysisTaskMcpTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
@@ -20,15 +21,17 @@ public class McpServerToolConfiguration {
 
     @Bean
     public MethodToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool,
-                                                                    AnalysisTaskMcpTool analysisTaskMcpTool) {
+                                                                    AnalysisTaskMcpTool analysisTaskMcpTool,
+                                                                    ConfigMcpTool configMcpTool) {
         log.info("=== Creating MethodToolCallbackProvider for MCP tools ===");
 
         logToolMethods(RetrievalMcpTool.class);
         logToolMethods(AnalysisTaskMcpTool.class);
+        logToolMethods(ConfigMcpTool.class);
 
         // 创建 MethodToolCallbackProvider
         MethodToolCallbackProvider provider = MethodToolCallbackProvider.builder()
-                .toolObjects(retrievalMcpTool, analysisTaskMcpTool)
+                .toolObjects(retrievalMcpTool, analysisTaskMcpTool, configMcpTool)
                 .build();
 
         log.info("=== MethodToolCallbackProvider created successfully ===");

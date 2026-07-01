@@ -45,7 +45,7 @@ import ViewDrawer from './components/view-drawer.vue'
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  ArrowDown, ArrowUp, Connection, DataAnalysis, Document, Monitor, Operation, Tools
+  ArrowDown, ArrowUp, Connection, DataAnalysis, Document, Monitor, Operation
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -73,7 +73,6 @@ const mySuggestions = ref<Suggestion[]>([
   { type: 'agent_analysis', label: '研判分析', icon: DataAnalysis },
   { type: 'agent_dispose', label: '策略控制', icon: Operation },
   { type: 'agent_report', label: '报表制作', icon: Document },
-  { type: 'agent_mcp', label: 'MCP 工具', icon: Tools },
 ])
 
 </script>

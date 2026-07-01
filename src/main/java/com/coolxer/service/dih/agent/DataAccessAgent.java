@@ -18,8 +18,6 @@ public class DataAccessAgent {
 
     public static final String AGENT_TYPE = "agent_data_access";
 
-    public static final String REQUIRED_SKILL_ID = "data-access-agent";
-
     private final AIChatService chatService;
     private final SkillService skillService;
     private final PromptTemplate systemPromptTemplate;
@@ -55,7 +53,7 @@ public class DataAccessAgent {
 
     private String buildSystemPrompt(McpToolContext mcpToolContext) {
         String systemPrompt = systemPromptTemplate.getTemplate();
-        String skillPrompt = skillService.buildRequiredSkillPrompt(AGENT_TYPE, List.of(REQUIRED_SKILL_ID));
+        String skillPrompt = skillService.buildEnabledSkillPrompt(AGENT_TYPE);
         if (StringUtils.hasText(skillPrompt)) {
             systemPrompt = systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
         }

@@ -21,6 +21,8 @@ import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.FixedPromptResponseService;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.InspectionAgent;
+import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
+import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.utils.JacksonUtil;
@@ -92,6 +94,8 @@ public class ChatController extends BaseController {
     private ChatAttachmentService chatAttachmentService;
     @Autowired
     private AgentMcpToolService agentMcpToolService;
+    @Autowired
+    private SkillService skillService;
 
 
     /**
@@ -116,11 +120,9 @@ public class ChatController extends BaseController {
 
         String chatType = normalizeChatType(chatDto.getType());
 
-        // TODO 临时限制ask之外的不允许使用
         if (chatType != null && chatType.startsWith("agent")
-                && !DataAccessAgent.AGENT_TYPE.equals(chatType)
-                && !"agent_inspect".equals(chatType)) {
-            return errorResponse(eventStream, "对不起，当前智能体没有开通权限，请联系管理员！");
+                && (!skillService.isBuiltinAgentType(chatType) || !skillService.isBuiltinAgentEnabled(chatType))) {
+            return errorResponse(eventStream, "智能体已停用或不存在。");
         }
 
 
@@ -183,14 +185,17 @@ public class ChatController extends BaseController {
         if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
             fluxResponse = dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
-        } else if (fixedResponse.isPresent()) {
-            log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
-            messageType.set(MessageType.TEXT);
-            fluxResponse = Flux.just(fixedResponse.get());
         } else if ("agent_inspect".equals(chatType)) {
             ChatResponse chatResponse = inspectionAgent.chat(prompt, model, chatId, mcpToolContext);
             messageType.set(chatResponse.getType());
             fluxResponse = Flux.just(chatResponse.getContent());
+        } else if (isPlaceholderBuiltinAgent(chatType)) {
+            messageType.set(MessageType.TEXT);
+            fluxResponse = Flux.just(skillService.getBuiltinAgentPlaceholder(chatType));
+        } else if (fixedResponse.isPresent()) {
+            log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
+            messageType.set(MessageType.TEXT);
+            fluxResponse = Flux.just(fixedResponse.get());
         } else if (BooleanUtils.isTrue(chatDto.getDeepThink())) {
             // 普通深度思考对话，类型为 TEXT
             messageType.set(MessageType.TEXT);
@@ -333,6 +338,12 @@ public class ChatController extends BaseController {
             return Flux.just(toNdjson(ChatStreamEvent.error(message)));
         }
         return Flux.just(message);
+    }
+
+    private boolean isPlaceholderBuiltinAgent(String chatType) {
+        return BuiltinAgentSkillRegistry.AGENT_ANALYSIS.equals(chatType)
+                || BuiltinAgentSkillRegistry.AGENT_DISPOSE.equals(chatType)
+                || BuiltinAgentSkillRegistry.AGENT_REPORT.equals(chatType);
     }
 
     private String resolveUserMessage(ChatDto chatDto) {

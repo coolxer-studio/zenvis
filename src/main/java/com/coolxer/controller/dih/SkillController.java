@@ -4,9 +4,9 @@ import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.base.vo.SingleValueVo;
 import com.coolxer.model.dih.dto.SkillSearchDto;
+import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
-import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -39,6 +40,17 @@ public class SkillController {
             return ResponseWrap.success(skillService.getPageList(skillSearchDto));
         } catch (Exception e) {
             log.error("查询 Skill 列表失败", e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/agents")
+    @Operation(summary = "内置 Agent Skill 列表", description = "查询 DIH 内置智能体入口对应的 Skill 状态")
+    public ResponseWrap<List<AgentSkillVo>> agents(@RequestParam(value = "enabled", required = false) Boolean enabled) {
+        try {
+            return ResponseWrap.success(skillService.getBuiltinAgentSkills(enabled));
+        } catch (Exception e) {
+            log.error("查询内置 Agent Skill 列表失败", e);
             return ResponseWrap.fail(e);
         }
     }
@@ -91,9 +103,7 @@ public class SkillController {
     @Operation(summary = "Agent Skill Prompt", description = "查看指定 Agent 当前会加载的 Skill 提示词片段")
     public ResponseWrap<SingleValueVo> agentPrompt(@PathVariable("agentType") String agentType) {
         try {
-            String skillPrompt = DataAccessAgent.AGENT_TYPE.equals(agentType)
-                    ? skillService.buildRequiredSkillPrompt(agentType, List.of(DataAccessAgent.REQUIRED_SKILL_ID))
-                    : skillService.buildEnabledSkillPrompt(agentType);
+            String skillPrompt = skillService.buildEnabledSkillPrompt(agentType);
             return ResponseWrap.success(new SingleValueVo(skillPrompt));
         } catch (Exception e) {
             log.error("查询 Agent Skill Prompt 失败, agentType={}", agentType, e);

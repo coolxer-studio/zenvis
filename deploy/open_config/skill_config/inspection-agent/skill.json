@@ -1,16 +1,16 @@
 {
   "id": "inspection-agent",
-  "name": "巡检智能体基础能力",
-  "description": "为巡检智能体补充能力边界、回答风格和数据分析行为说明。",
+  "name": "智能巡检",
+  "description": "系统内置智能巡检智能体 Skill，占位能力后续补充。",
   "version": "1.0.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_inspect"
   ],
   "tags": [
-    "inspection",
-    "nl2sql",
-    "echarts"
+    "builtin",
+    "agent",
+    "inspection"
   ],
   "enabled": true,
   "entry": "SKILL.md"

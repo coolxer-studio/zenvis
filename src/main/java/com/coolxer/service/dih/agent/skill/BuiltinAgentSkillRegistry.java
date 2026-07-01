@@ -1,0 +1,80 @@
+package com.coolxer.service.dih.agent.skill;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * DIH 内置智能体与 Skill 的固定映射。
+ */
+public final class BuiltinAgentSkillRegistry {
+
+    public static final String AGENT_DATA_ACCESS = "agent_data_access";
+    public static final String AGENT_INSPECT = "agent_inspect";
+    public static final String AGENT_ANALYSIS = "agent_analysis";
+    public static final String AGENT_DISPOSE = "agent_dispose";
+    public static final String AGENT_REPORT = "agent_report";
+
+    private static final List<BuiltinAgentSkill> AGENT_SKILLS = List.of(
+            new BuiltinAgentSkill(
+                    "data-access-agent",
+                    AGENT_DATA_ACCESS,
+                    "数据接入",
+                    10,
+                    "数据接入智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+            ),
+            new BuiltinAgentSkill(
+                    "inspection-agent",
+                    AGENT_INSPECT,
+                    "智能巡检",
+                    20,
+                    "智能巡检智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+            ),
+            new BuiltinAgentSkill(
+                    "analysis-agent",
+                    AGENT_ANALYSIS,
+                    "研判分析",
+                    30,
+                    "研判分析智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+            ),
+            new BuiltinAgentSkill(
+                    "dispose-agent",
+                    AGENT_DISPOSE,
+                    "策略控制",
+                    40,
+                    "策略控制智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+            ),
+            new BuiltinAgentSkill(
+                    "report-agent",
+                    AGENT_REPORT,
+                    "报表制作",
+                    50,
+                    "报表制作智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+            )
+    );
+
+    private BuiltinAgentSkillRegistry() {
+    }
+
+    public static List<BuiltinAgentSkill> list() {
+        return AGENT_SKILLS;
+    }
+
+    public static Optional<BuiltinAgentSkill> findByAgentType(String agentType) {
+        return AGENT_SKILLS.stream()
+                .filter(agentSkill -> agentSkill.agentType().equals(agentType))
+                .findFirst();
+    }
+
+    public static boolean isBuiltinAgentType(String agentType) {
+        return findByAgentType(agentType).isPresent();
+    }
+
+    public record BuiltinAgentSkill(
+            String skillId,
+            String agentType,
+            String label,
+            int order,
+            String placeholderMessage
+    ) {
+    }
+}

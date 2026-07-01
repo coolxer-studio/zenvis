@@ -27,6 +27,18 @@ export interface SkillDetailVo extends SkillVo {
   content: string;
 }
 
+export interface AgentSkillVo {
+  skillId: string;
+  agentType: string;
+  label: string;
+  name?: string;
+  description?: string;
+  enabled: boolean;
+  order: number;
+  path?: string;
+  updateTime?: string;
+}
+
 export interface SkillSearchParams {
   keyword?: string;
   agentType?: string;
@@ -90,6 +102,10 @@ export const skillApi = {
 
   disable(id: string) {
     return request<SkillVo>(`${BASE_URL}/${encodeURIComponent(id)}/disable`, { method: "POST" });
+  },
+
+  agents(enabled?: boolean) {
+    return request<AgentSkillVo[]>(`${BASE_URL}/agents${buildQuery({ enabled })}`);
   },
 
   agentPrompt(agentType: string) {

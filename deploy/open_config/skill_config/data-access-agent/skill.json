@@ -1,17 +1,16 @@
 {
   "id": "data-access-agent",
-  "name": "数据接入智能体基础能力",
-  "description": "为数据接入智能体补充接入需求澄清、方案设计、字段映射、质量校验和上线运维说明。",
+  "name": "数据接入",
+  "description": "系统内置数据接入智能体 Skill，占位能力后续补充。",
   "version": "1.0.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_data_access"
   ],
   "tags": [
-    "data-access",
-    "etl",
-    "integration",
-    "visualization"
+    "builtin",
+    "agent",
+    "data-access"
   ],
   "enabled": true,
   "entry": "SKILL.md"

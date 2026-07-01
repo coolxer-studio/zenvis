@@ -1,0 +1,17 @@
+{
+  "id": "dispose-agent",
+  "name": "策略控制",
+  "description": "系统内置策略控制智能体 Skill，占位能力后续补充。",
+  "version": "1.0.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_dispose"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "dispose"
+  ],
+  "enabled": true,
+  "entry": "SKILL.md"
+}

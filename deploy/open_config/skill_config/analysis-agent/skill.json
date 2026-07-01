@@ -1,0 +1,17 @@
+{
+  "id": "analysis-agent",
+  "name": "研判分析",
+  "description": "系统内置研判分析智能体 Skill，占位能力后续补充。",
+  "version": "1.0.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_analysis"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "analysis"
+  ],
+  "enabled": true,
+  "entry": "SKILL.md"
+}

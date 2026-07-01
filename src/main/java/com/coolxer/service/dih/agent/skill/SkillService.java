@@ -3,6 +3,7 @@ package com.coolxer.service.dih.agent.skill;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.SkillSearchDto;
+import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.utils.WalkFileUtil;
@@ -49,6 +50,7 @@ public class SkillService {
     private static final String DEFAULT_ENTRY_FILE = "SKILL.md";
     private static final String DEFAULT_MANIFEST_FILE = "skill.json";
     private static final String PLUGIN_SKILL_ROOT_DIR = "plugins";
+    private static final String DEFAULT_PLUGIN_AGENT_TYPE = "ask";
     private static final long MAX_SKILL_CONTENT_BYTES = 200 * 1024L;
     private static final int MAX_PROMPT_CHARS = 8000;
     private static final Pattern SAFE_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$");
@@ -113,6 +115,36 @@ public class SkillService {
         int from = Math.min((page - 1) * perPage, rows.size());
         int to = Math.min(from + perPage, rows.size());
         return new PageRowsVo<>(rows.subList(from, to), rows.size());
+    }
+
+    /**
+     * 查询 DIH 内置智能体 Skill 入口列表。
+     */
+    public List<AgentSkillVo> getBuiltinAgentSkills(Boolean enabled) {
+        return BuiltinAgentSkillRegistry.list().stream()
+                .map(this::toAgentSkillVo)
+                .filter(agentSkill -> enabled == null
+                        || enabled.equals(Boolean.TRUE.equals(agentSkill.getEnabled())))
+                .sorted(Comparator.comparing(AgentSkillVo::getOrder))
+                .collect(Collectors.toList());
+    }
+
+    public boolean isBuiltinAgentType(String agentType) {
+        return BuiltinAgentSkillRegistry.isBuiltinAgentType(agentType);
+    }
+
+    public boolean isBuiltinAgentEnabled(String agentType) {
+        return BuiltinAgentSkillRegistry.findByAgentType(agentType)
+                .map(this::toAgentSkillVo)
+                .map(AgentSkillVo::getEnabled)
+                .map(Boolean.TRUE::equals)
+                .orElse(false);
+    }
+
+    public String getBuiltinAgentPlaceholder(String agentType) {
+        return BuiltinAgentSkillRegistry.findByAgentType(agentType)
+                .map(BuiltinAgentSkillRegistry.BuiltinAgentSkill::placeholderMessage)
+                .orElse("智能体能力正在建设中，当前 Skill 仅用于入口占位。");
     }
 
     /**
@@ -313,6 +345,7 @@ public class SkillService {
         try {
             Path manifestPath = resolveManifest(skillDir);
             SkillVo skill = readSkillManifest(manifestPath);
+            boolean pluginSkill = isPluginSkillDir(skillDir, root);
             if (StringUtils.isBlank(skill.getId())) {
                 skill.setId(skillDir.getFileName().toString());
             }
@@ -325,6 +358,9 @@ public class SkillService {
             }
             if (skill.getAgentTypes() == null) {
                 skill.setAgentTypes(new ArrayList<>());
+            }
+            if (pluginSkill && skill.getAgentTypes().isEmpty()) {
+                skill.setAgentTypes(new ArrayList<>(List.of(DEFAULT_PLUGIN_AGENT_TYPE)));
             }
             if (skill.getTags() == null) {
                 skill.setTags(new ArrayList<>());
@@ -344,6 +380,29 @@ public class SkillService {
         } catch (Exception e) {
             log.warn("加载 Skill 失败: {}", skillDir, e);
         }
+    }
+
+    private AgentSkillVo toAgentSkillVo(BuiltinAgentSkillRegistry.BuiltinAgentSkill builtinAgentSkill) {
+        SkillRecord record = skillCache.get(builtinAgentSkill.skillId());
+        SkillVo skill = record == null ? null : record.getSkill();
+        AgentSkillVo agentSkillVo = new AgentSkillVo();
+        agentSkillVo.setSkillId(builtinAgentSkill.skillId());
+        agentSkillVo.setAgentType(builtinAgentSkill.agentType());
+        agentSkillVo.setLabel(builtinAgentSkill.label());
+        agentSkillVo.setOrder(builtinAgentSkill.order());
+        agentSkillVo.setName(skill == null ? builtinAgentSkill.label() : skill.getName());
+        agentSkillVo.setDescription(skill == null ? builtinAgentSkill.placeholderMessage() : skill.getDescription());
+        agentSkillVo.setEnabled(skill != null && Boolean.TRUE.equals(skill.getEnabled()));
+        agentSkillVo.setPath(skill == null ? null : skill.getPath());
+        agentSkillVo.setUpdateTime(skill == null ? null : skill.getUpdateTime());
+        return agentSkillVo;
+    }
+
+    private boolean isPluginSkillDir(Path skillDir, Path root) {
+        Path relativePath = root.toAbsolutePath().normalize()
+                .relativize(skillDir.toAbsolutePath().normalize());
+        return relativePath.getNameCount() > 0
+                && PLUGIN_SKILL_ROOT_DIR.equals(relativePath.getName(0).toString());
     }
 
     private SkillVo readSkillManifest(Path manifestPath) throws IOException {

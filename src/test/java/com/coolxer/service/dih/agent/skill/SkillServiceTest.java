@@ -96,6 +96,38 @@ class SkillServiceTest {
         )).allSatisfy(agentType -> assertThat(service.isBuiltinAgentType(agentType)).isTrue());
     }
 
+    @Test
+    void builtinDataAccessSkillDocumentsCheckedMetadataAndVectumWorkflow() throws Exception {
+        Path repoSkill = Path.of("deploy/open_config/skill_config/data-access-agent");
+        writeSkill(
+                skillRoot.resolve("data-access-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS);
+
+        assertThat(prompt)
+                .contains("创建元数据配置")
+                .contains("添加 Vectum 数据推送服务")
+                .contains("元数据配置检查提醒")
+                .contains("数据推送配置检查提醒")
+                .contains("zenvis:notice")
+                .contains("policy_config_add")
+                .contains("policy_config_apply")
+                .contains("Vectum MCP")
+                .contains("Vector 仅作为 Vectum 任务配置")
+                .contains("toggleTask");
+        assertThat(prompt)
+                .doesNotContain("menu_create")
+                .doesNotContain("菜单 MCP")
+                .doesNotContain("amis")
+                .doesNotContain("可视化配置流程");
+    }
+
     private SkillService newSkillService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());

@@ -87,6 +87,11 @@ public class ChatMessagePartParser {
     }
 
     private ChatMessagePart parseSpecialFence(String info, String body) {
+        ChatMessagePart configPart = parseConfigFence(info, body);
+        if (configPart != null) {
+            return configPart;
+        }
+
         if (!"zenvis:notice".equals(info) && !"zenvis:confirm".equals(info)) {
             return null;
         }
@@ -111,6 +116,54 @@ public class ChatMessagePartParser {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private ChatMessagePart parseConfigFence(String info, String body) {
+        return switch (info) {
+            case "zenvis:low-code-page-config" -> configPart(
+                    body,
+                    "低代码页面配置",
+                    "json",
+                    "low-code-page",
+                    "<configIndex>_config/index.json",
+                    info
+            );
+            case "zenvis:low-code-app-config" -> configPart(
+                    body,
+                    "低代码应用配置",
+                    "json",
+                    "low-code-app",
+                    "<configIndex>_config/site.json",
+                    info
+            );
+            case "zenvis:html-page-config" -> configPart(
+                    body,
+                    "静态 HTML 页面配置",
+                    "html",
+                    "html-page",
+                    "html-page_config/<slug>.html",
+                    info
+            );
+            default -> null;
+        };
+    }
+
+    private ChatMessagePart configPart(String body,
+                                       String title,
+                                       String language,
+                                       String configKind,
+                                       String defaultFileName,
+                                       String fence) {
+        return part("config")
+                .title(title)
+                .language(language)
+                .content(body)
+                .metadata(Map.of(
+                        "configKind", configKind,
+                        "defaultFileName", defaultFileName,
+                        "fence", fence
+                ))
+                .build();
     }
 
     private void addMarkdownPart(List<ChatMessagePart> parts, String markdown) {

@@ -101,6 +101,17 @@ public class ConfigMcpTool {
     }
 
     /**
+     * 幂等创建配置类型根目录
+     */
+    @Tool(name = "policy_config_ensure_root", description = "幂等创建指定配置类型根目录，例如 visual-report 会创建 visual-report_config 目录")
+    public Boolean ensureRoot(@ToolParam(description = "配置类型，例如低代码配置索引 inspection-dashboard") String type) {
+        if (!configService.ensureRootPath(type)) {
+            throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR);
+        }
+        return true;
+    }
+
+    /**
      * 修改文件名
      */
     @Tool(name = "policy_config_rename", description = "重命名指定配置文件")

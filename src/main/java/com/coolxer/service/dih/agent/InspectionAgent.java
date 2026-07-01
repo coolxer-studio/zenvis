@@ -32,6 +32,7 @@ import org.springframework.util.StringUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.Locale;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,6 +52,20 @@ public class InspectionAgent {
 
     /** 从记忆中提取 SQL 的正则（DOTALL 使 . 匹配换行符） */
     private static final Pattern SQL_MEMORY_PATTERN = Pattern.compile("\\[SQL:\\s*(.+?)\\]", Pattern.DOTALL);
+
+    private static final List<String> CONFIG_SURFACE_KEYWORDS = List.of(
+            "低代码", "amis", "html 页面", "html页面", "静态 html", "静态html", "静态页面",
+            "可视化页面", "配置管理", "配置文件", "zenvis:low-code", "zenvis:html-page"
+    );
+
+    private static final List<String> CONFIG_MANAGED_RESOURCE_KEYWORDS = List.of(
+            "菜单", "看板", "dashboard", "menu"
+    );
+
+    private static final List<String> CONFIG_ACTION_KEYWORDS = List.of(
+            "生成", "创建", "添加", "加入", "发布", "保存", "写入", "应用", "配置", "落库",
+            "generate", "create", "add", "publish", "save", "apply"
+    );
 
     @Data
     @AllArgsConstructor
@@ -167,6 +182,10 @@ public class InspectionAgent {
             // 获取对话历史，在整个 chat 流程中复用
             List<Message> conversationHistory = getConversationHistory(chatId);
 
+            if (shouldUseSkillDrivenChat(query)) {
+                return handleSkillDrivenChat(query, chatId, conversationHistory);
+            }
+
             Nl2SqlContext ctx;
             try {
                 ctx = nl2sql(query, conversationHistory);
@@ -276,6 +295,70 @@ public class InspectionAgent {
 
 
     /**
+     * 将可视化配置、低代码页面、菜单和看板生成类请求交给带 Skill/MCP 工具的通用 LLM。
+     */
+    private boolean shouldUseSkillDrivenChat(String query) {
+        if (!StringUtils.hasText(query)) {
+            return false;
+        }
+        String normalized = query.toLowerCase(Locale.ROOT);
+        boolean explicitConfigSurface = CONFIG_SURFACE_KEYWORDS.stream().anyMatch(normalized::contains);
+        if (explicitConfigSurface) {
+            return true;
+        }
+        boolean managedResource = CONFIG_MANAGED_RESOURCE_KEYWORDS.stream().anyMatch(normalized::contains);
+        boolean action = CONFIG_ACTION_KEYWORDS.stream().anyMatch(normalized::contains);
+        return managedResource && action;
+    }
+
+    private ChatResponse handleSkillDrivenChat(String query, String chatId, List<Message> conversationHistory) {
+        try {
+            String systemPrompt = buildSkillAwareSystemPrompt();
+            String userPrompt = buildUserPromptWithHistory(query, conversationHistory);
+            String response = llmService.callWithSystemPrompt(systemPrompt, userPrompt);
+            ChatResponse chatResponse = ChatResponse.builder()
+                    .content(response)
+                    .type(MessageType.TEXT)
+                    .build();
+            saveToMemory(chatId, query, chatResponse);
+            return chatResponse;
+        } catch (Exception e) {
+            log.error("Failed to handle skill-driven inspection request", e);
+            return ChatResponse.builder()
+                    .content("生成失败，请重试")
+                    .type(MessageType.TEXT)
+                    .build();
+        }
+    }
+
+    private String buildSkillAwareSystemPrompt() {
+        String systemPrompt = systemPromptTemplate.getTemplate();
+        String skillPrompt = skillService.buildEnabledSkillPrompt("agent_inspect");
+        if (StringUtils.hasText(skillPrompt)) {
+            systemPrompt = systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
+        }
+        return systemPrompt;
+    }
+
+    private String buildUserPromptWithHistory(String query, List<Message> conversationHistory) {
+        if (conversationHistory == null || conversationHistory.isEmpty()) {
+            return query;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (Message msg : conversationHistory) {
+            org.springframework.ai.chat.messages.MessageType type = msg.getMessageType();
+            if (type == org.springframework.ai.chat.messages.MessageType.USER) {
+                sb.append(">用户：").append(msg.getText()).append("\n");
+            } else if (type == org.springframework.ai.chat.messages.MessageType.ASSISTANT) {
+                sb.append(">助理：").append(msg.getText()).append("\n");
+            }
+        }
+        sb.append("<最新>用户：").append(query);
+        return sb.toString();
+    }
+
+    /**
      * 处理非SQL查询意图（闲聊或意图不明确）
      */
     private ChatResponse handleNonSqlIntent(String originalQuery, IllegalArgumentException e, String chatId,
@@ -299,29 +382,10 @@ public class InspectionAgent {
      */
     private ChatResponse handleSmallTalk(String query, String chatId, List<Message> conversationHistory) {
         try {
-            String systemPrompt = systemPromptTemplate.getTemplate();
-            String skillPrompt = skillService.buildEnabledSkillPrompt("agent_inspect");
-            if (StringUtils.hasText(skillPrompt)) {
-                systemPrompt = systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
-            }
-
-            // 构建带对话上下文的用户 prompt
-            String userPrompt = query;
-            if (conversationHistory != null && !conversationHistory.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                for (Message msg : conversationHistory) {
-                    org.springframework.ai.chat.messages.MessageType type = msg.getMessageType();
-                    if (type == org.springframework.ai.chat.messages.MessageType.USER) {
-                        sb.append(">用户：").append(msg.getText()).append("\n");
-                    } else if (type == org.springframework.ai.chat.messages.MessageType.ASSISTANT) {
-                        sb.append(">助理：").append(msg.getText()).append("\n");
-                    }
-                }
-                sb.append("<最新>用户：").append(query);
-                userPrompt = sb.toString();
-            }
-
-            String response = llmService.callWithSystemPrompt(systemPrompt, userPrompt);
+            String response = llmService.callWithSystemPrompt(
+                    buildSkillAwareSystemPrompt(),
+                    buildUserPromptWithHistory(query, conversationHistory)
+            );
             ChatResponse chatResponse = ChatResponse.builder()
                     .content(response)
                     .type(MessageType.TEXT)

@@ -1,8 +1,8 @@
 {
   "id": "inspection-agent",
   "name": "智能巡检",
-  "description": "系统内置智能巡检智能体 Skill，占位能力后续补充。",
-  "version": "1.0.0",
+  "description": "系统内置智能巡检可视化 Skill，支持通过 Retrieval MCP 查询数据，生成 amis 低代码页面/应用配置或静态 HTML 页面，并按确认流程接入配置管理、菜单管理和看板管理。",
+  "version": "1.1.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_inspect"
@@ -10,7 +10,11 @@
   "tags": [
     "builtin",
     "agent",
-    "inspection"
+    "inspection",
+    "retrieval",
+    "visualization",
+    "amis",
+    "dashboard"
   ],
   "enabled": true,
   "entry": "SKILL.md"

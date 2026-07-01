@@ -57,6 +57,66 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("低代码页面配置围栏应解析为配置片段")
+    void parseLowCodePageConfigFence() {
+        String content = """
+                ```zenvis:low-code-page-config
+                {"type":"page","title":"巡检总览","body":[]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("低代码页面配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("{\"type\":\"page\",\"title\":\"巡检总览\",\"body\":[]}", parts.get(0).getContent());
+        assertEquals("low-code-page", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("<configIndex>_config/index.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("低代码应用配置围栏应解析为配置片段")
+    void parseLowCodeAppConfigFence() {
+        String content = """
+                ```zenvis:low-code-app-config
+                {"type":"app","brandName":"巡检应用","pages":[]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("低代码应用配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("low-code-app", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("<configIndex>_config/site.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("静态 HTML 配置围栏应解析为配置片段")
+    void parseHtmlPageConfigFence() {
+        String content = """
+                ```zenvis:html-page-config
+                <!DOCTYPE html>
+                <html lang="zh-CN"><body>巡检看板</body></html>
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("静态 HTML 页面配置", parts.get(0).getTitle());
+        assertEquals("html", parts.get(0).getLanguage());
+        assertEquals("<!DOCTYPE html>\n<html lang=\"zh-CN\"><body>巡检看板</body></html>", parts.get(0).getContent());
+        assertEquals("html-page", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("html-page_config/<slug>.html", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
     @DisplayName("think 标签应解析为思考片段并从正文中剥离")
     void parseThinkingTag() {
         List<ChatMessagePart> parts = parser.parse("<think>先分析问题\n再给结论</think>\n最终回答", MessageType.TEXT);

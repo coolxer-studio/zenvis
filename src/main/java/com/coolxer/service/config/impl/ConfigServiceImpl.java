@@ -251,6 +251,21 @@ public class ConfigServiceImpl implements ConfigService {
         }
     }
 
+    @Override
+    public boolean ensureRootPath(String type) {
+        try {
+            Path rootPath = Paths.get(configPath(type));
+            if (Files.exists(rootPath)) {
+                return Files.isDirectory(rootPath);
+            }
+            Files.createDirectories(rootPath);
+            return true;
+        } catch (IOException e) {
+            log.error("ensure config root path failed!", e);
+        }
+        return false;
+    }
+
     /**
      * 判断指定配置目录下是否存在名为 fileName 的文件。
      *

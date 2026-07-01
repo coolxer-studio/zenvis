@@ -128,6 +128,37 @@ class SkillServiceTest {
                 .doesNotContain("可视化配置流程");
     }
 
+    @Test
+    void builtinInspectionSkillDocumentsVisualizationWorkflow() throws Exception {
+        Path repoSkill = Path.of("deploy/open_config/skill_config/inspection-agent");
+        writeSkill(
+                skillRoot.resolve("inspection-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_INSPECT);
+
+        assertThat(prompt)
+                .contains("Retrieval MCP")
+                .contains("retrieval_list_display_entity")
+                .contains("retrieval_search")
+                .contains("entity_statistics")
+                .contains("amis")
+                .contains("zenvis:low-code-page-config")
+                .contains("zenvis:low-code-app-config")
+                .contains("zenvis:html-page-config")
+                .contains("policy_config_ensure_root")
+                .contains("policy_config_modify")
+                .contains("menu_create")
+                .contains("dashboard_create")
+                .contains("LOW_CODE_PAGE")
+                .contains("HTML_PAGE");
+    }
+
     private SkillService newSkillService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());

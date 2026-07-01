@@ -96,6 +96,13 @@ public interface ConfigService {
     boolean addRootPath(String type);
 
     /**
+     * 幂等创建配置根路径
+     *
+     * @param type
+     */
+    boolean ensureRootPath(String type);
+
+    /**
      * 判断文件是否存在
      *
      * @param type

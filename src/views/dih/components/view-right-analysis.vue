@@ -71,6 +71,38 @@
             </div>
           </div>
         </el-tab-pane>
+
+        <el-tab-pane label="数据推送服务" name="dataPushServices">
+          <div class="analysis-section">
+            <el-table :data="dataPushServices" stripe style="width: 100%">
+              <el-table-column prop="id" label="服务ID" min-width="120" />
+              <el-table-column prop="name" label="服务名称" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="target" label="推送目标" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="mode" label="推送方式" min-width="120" />
+              <el-table-column label="状态" min-width="100">
+                <template #default="scope">
+                  <el-tag :type="scope.row.statusType">{{ scope.row.status }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="数据分析任务" name="dataAnalysisTasks">
+          <div class="analysis-section">
+            <el-table :data="dataAnalysisTasks" stripe style="width: 100%">
+              <el-table-column prop="id" label="任务ID" min-width="120" />
+              <el-table-column prop="name" label="任务名称" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="type" label="分析类型" min-width="140" />
+              <el-table-column prop="schedule" label="调度周期" min-width="120" />
+              <el-table-column label="状态" min-width="100">
+                <template #default="scope">
+                  <el-tag :type="scope.row.statusType">{{ scope.row.status }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </div>
   </div>
@@ -105,6 +137,24 @@ interface SuggestedStrategy {
   content: string
   priority: string
   priorityType: TagType
+}
+
+interface DataPushService {
+  id: string
+  name: string
+  target: string
+  mode: string
+  status: string
+  statusType: TagType
+}
+
+interface DataAnalysisTask {
+  id: string
+  name: string
+  type: string
+  schedule: string
+  status: string
+  statusType: TagType
 }
 
 const activeTab = ref('goal')
@@ -181,6 +231,60 @@ const suggestedStrategies = ref<SuggestedStrategy[]>([
     content: '基于本次行为特征补充进程链、访问频次与情报命中规则。',
     priority: '中优先级',
     priorityType: 'warning'
+  }
+])
+
+const dataPushServices = ref<DataPushService[]>([
+  {
+    id: 'push-001',
+    name: '异常外联事件推送服务',
+    target: '安全运营平台',
+    mode: '实时推送',
+    status: '运行中',
+    statusType: 'success'
+  },
+  {
+    id: 'push-002',
+    name: '主机风险画像推送服务',
+    target: '资产风险中心',
+    mode: '定时推送',
+    status: '运行中',
+    statusType: 'success'
+  },
+  {
+    id: 'push-003',
+    name: '研判结果归档推送服务',
+    target: '事件归档库',
+    mode: '任务完成后推送',
+    status: '待执行',
+    statusType: 'info'
+  }
+])
+
+const dataAnalysisTasks = ref<DataAnalysisTask[]>([
+  {
+    id: 'task-001',
+    name: '异常外联聚合分析',
+    type: '行为关联',
+    schedule: '每小时',
+    status: '运行中',
+    statusType: 'success'
+  },
+  {
+    id: 'task-002',
+    name: '进程链路风险识别',
+    type: '链路研判',
+    schedule: '实时',
+    status: '运行中',
+    statusType: 'success'
+  },
+  {
+    id: 'task-003',
+    name: '情报命中复核任务',
+    type: '威胁情报',
+    schedule: '每日',
+    status: '待执行',
+    statusType: 'info'
   }
 ])
 </script>

@@ -6,15 +6,15 @@ import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
+import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.service.dih.ChatSessionService;
-import com.coolxer.utils.DateUtil;
+import com.coolxer.utils.JacksonUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,9 +27,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/dih/chat-session")
 public class ChatSessionController extends BaseController {
-
-    @Autowired
-    private ConfigurableApplicationContext context;
 
     @Autowired
     private ChatSessionService chatSessionService;
@@ -147,35 +144,28 @@ public class ChatSessionController extends BaseController {
                 chatSession = new ChatSession();
                 chatSession.setTitle("新建会话");
                 chatSession.setSessionId(sessionId);
-                chatSession.setType(type);
-                switch (type) {
-                    case "ask":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_DEFAULT, DateUtil.getCurrentDateTime()));
-                        break;
-                    case "agent_data_access":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_DATA_ACCESS, DateUtil.getCurrentDateTime()));
-                        break;
-                    case "agent_inspect":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_INSPECT, DateUtil.getCurrentDateTime()));
-                        break;
-                    case "agent_analysis":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_ANALYSIS, DateUtil.getCurrentDateTime()));
-                        break;
-                    case "agent_dispose":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_DISPOSE, DateUtil.getCurrentDateTime()));
-                        break;
-                    case "agent_report":
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_AGENT_REPORT, DateUtil.getCurrentDateTime()));
-                        break;
-                    default:
-                        chatSession.setMessages("[{\"sender\":\"ai\",\"content\":\"%s\",\"time\":\"%s\"}]".formatted(PROLOGUE_DEFAULT, DateUtil.getCurrentDateTime()));
-                        break;
-                }
+                chatSession.setType(normalizeType(type));
+                chatSession.setMessages(JacksonUtil.toJson(List.of(new Message("ai", resolvePrologue(chatSession.getType())))));
             }
             return ResponseWrap.success(new ChatSessionVo(chatSession));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
+    }
+
+    private String normalizeType(String type) {
+        return type == null || type.isBlank() ? "ask" : type;
+    }
+
+    private String resolvePrologue(String type) {
+        return switch (normalizeType(type)) {
+            case "agent_data_access" -> PROLOGUE_AGENT_DATA_ACCESS;
+            case "agent_inspect" -> PROLOGUE_AGENT_INSPECT;
+            case "agent_analysis" -> PROLOGUE_AGENT_ANALYSIS;
+            case "agent_dispose" -> PROLOGUE_AGENT_DISPOSE;
+            case "agent_report" -> PROLOGUE_AGENT_REPORT;
+            default -> PROLOGUE_DEFAULT;
+        };
     }
 
 }

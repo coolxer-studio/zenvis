@@ -224,7 +224,7 @@ public class BaseNl2SqlService {
 		logger.debug("Extracting evidences for query: {} with agentId: {}", query, agentId);
 		List<Document> evidenceDocuments;
 		if (agentId != null) {
-			evidenceDocuments = vectorStoreService.getDocumentsForAgent(agentId, query, "evidence");
+			evidenceDocuments = vectorStoreService.getDocumentsForAgent(query, "evidence", agentId);
 		}
 		else {
 			evidenceDocuments = vectorStoreService.getDocuments(query, "evidence");
@@ -263,7 +263,7 @@ public class BaseNl2SqlService {
 		logger.debug("Using {} keywords for schema selection", keywords != null ? keywords.size() : 0);
 		SchemaDTO schemaDTO;
 		if (agentId != null) {
-			schemaDTO = schemaService.mixRagForAgent(agentId, query, keywords);
+			schemaDTO = schemaService.mixRagForAgent(query, agentId, keywords);
 		}
 		else {
 			schemaDTO = schemaService.mixRag(query, keywords);

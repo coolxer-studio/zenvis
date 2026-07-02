@@ -162,7 +162,11 @@ public class McpController {
         try {
             return ResponseWrap.success(mcpClientService.callTool(callDto));
         } catch (Exception e) {
-            log.error("调用MCP工具失败, request={}", callDto, e);
+            log.error("调用MCP工具失败, serverId={}, serverCode={}, tool={}",
+                    callDto == null ? null : callDto.getServerId(),
+                    callDto == null ? null : callDto.getServerCode(),
+                    callDto == null ? null : callDto.getName(),
+                    e);
             return ResponseWrap.fail(e);
         }
     }

@@ -32,6 +32,15 @@ public interface ChatSessionRepository extends BaseRepository<ChatSession, Integ
     Optional<ChatSession> findBySessionId(String sessionId);
 
     /**
+     * 根据会话id和创建者查询会话。
+     *
+     * @param sessionId 会话id
+     * @param createBy 创建者
+     * @return 会话对象
+     */
+    Optional<ChatSession> findBySessionIdAndCreateBy(String sessionId, Integer createBy);
+
+    /**
      * 查询用户置顶的会话
      *
      * @param createBy
@@ -50,11 +59,13 @@ public interface ChatSessionRepository extends BaseRepository<ChatSession, Integ
     @Query(nativeQuery = true,
             value = "SELECT a.* FROM " + MysqlFinalTableName.T_AI_CHAT_SESSION + " a WHERE " +
                     "(:title IS NULL OR a.title like concat('%',:title,'%')) AND " +
+                    "(:type IS NULL OR a.type =:type) AND " +
                     "a.create_by =:createBy " +
-                    "ORDER BY a.update_time DESC",
+            "ORDER BY a.update_time DESC",
             countQuery = "SELECT count(*) FROM " + MysqlFinalTableName.T_AI_CHAT_SESSION + " a WHERE " +
                     "(:title IS NULL OR a.title like concat('%',:title,'%')) AND " +
+                    "(:type IS NULL OR a.type =:type) AND " +
                     "a.create_by =:createBy ")
-    Page<ChatSession> findByPage(Pageable pageable, @Param("title") String title, @Param("createBy") Integer createBy);
+    Page<ChatSession> findByPage(Pageable pageable, @Param("title") String title, @Param("type") String type, @Param("createBy") Integer createBy);
 
 }

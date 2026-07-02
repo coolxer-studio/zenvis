@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class LlmLogHelper {
 
     private static final AtomicLong REQUEST_SEQUENCE = new AtomicLong();
+    private static final int TEXT_PREVIEW_CHARS = 160;
 
     private LlmLogHelper() {
     }
@@ -156,6 +157,30 @@ public final class LlmLogHelper {
         if ("url".equalsIgnoreCase(key) && value.startsWith("data:image/")) {
             return "<image-data-uri length=" + value.length() + ">";
         }
+        if (isTextPayloadKey(key)) {
+            return summarizeText(value);
+        }
         return value;
+    }
+
+    private static boolean isTextPayloadKey(String key) {
+        String normalizedKey = key == null ? "" : key.toLowerCase();
+        return normalizedKey.isBlank()
+                || normalizedKey.contains("prompt")
+                || normalizedKey.contains("content")
+                || normalizedKey.contains("response")
+                || normalizedKey.contains("result")
+                || normalizedKey.contains("message");
+    }
+
+    private static String summarizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String preview = value.replaceAll("\\s+", " ").trim();
+        if (preview.length() > TEXT_PREVIEW_CHARS) {
+            preview = preview.substring(0, TEXT_PREVIEW_CHARS) + "...";
+        }
+        return "<text length=" + value.length() + " preview=\"" + preview + "\">";
     }
 }

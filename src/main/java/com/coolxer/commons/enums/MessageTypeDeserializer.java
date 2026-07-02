@@ -24,7 +24,11 @@ public class MessageTypeDeserializer extends JsonDeserializer<MessageType> {
             return MessageType.valueOf(value.toUpperCase());
         } catch (IllegalArgumentException e) {
             // 如果不匹配，尝试通过 code 匹配（旧数据的小写字符串）
-            return MessageType.fromCode(value);
+            try {
+                return MessageType.fromCode(value);
+            } catch (IllegalArgumentException ignored) {
+                return MessageType.TEXT;
+            }
         }
     }
 }

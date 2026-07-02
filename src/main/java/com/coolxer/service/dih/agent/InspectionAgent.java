@@ -228,6 +228,15 @@ public class InspectionAgent {
                         sql = baseNl2SqlService.generateSql(ctx.getEvidences(), ctx.getQuery(),
                                 ctx.getSchemaDTO(), sql, errorMsg);
                         log.info("SQL retry #{} generated: {}", attempt + 1, sql);
+                        SqlValidationResult retryValidationResult = SqlSafeValidator.validate(sql);
+                        if (!retryValidationResult.isValid()) {
+                            log.warn("SQL retry #{} 安全校验未通过，拒绝执行。原因: {}，SQL: {}",
+                                    attempt + 1, retryValidationResult.getRejectionReason(), sql);
+                            return ChatResponse.builder()
+                                    .content("生成的SQL语句未通过安全校验: " + retryValidationResult.getRejectionReason())
+                                    .type(MessageType.TEXT)
+                                    .build();
+                        }
                     } catch (Exception retryEx) {
                         log.error("SQL retry generation failed", retryEx);
                         break;

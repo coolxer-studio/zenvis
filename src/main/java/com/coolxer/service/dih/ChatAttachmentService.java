@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * 聊天附件上传与模型上下文读取。
@@ -32,9 +34,13 @@ public class ChatAttachmentService {
 
     private static final long MAX_UPLOAD_BYTES = 30L * 1024L * 1024L;
     private static final int MAX_CONTEXT_CHARS_PER_FILE = 80_000;
+    private static final int MAX_CONTEXT_CHARS_TOTAL = 160_000;
     private static final String KIND_IMAGE = "image";
     private static final String KIND_TEXT = "text";
     private static final String KIND_FILE = "file";
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    );
     private static final Set<String> TEXT_EXTENSIONS = Set.of(
             "txt", "md", "markdown", "json", "jsonl", "csv", "tsv", "sql", "log",
             "xml", "yaml", "yml", "ini", "conf", "properties", "java", "js", "ts",
@@ -42,6 +48,9 @@ public class ChatAttachmentService {
             "bat", "ps1", "html", "css", "scss", "less"
     );
     private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg", "jpeg", "webp", "gif", "bmp");
+    private static final Set<String> IMAGE_CONTENT_TYPES = Set.of(
+            "image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"
+    );
 
     private final CustomWebConfig customWebConfig;
 
@@ -68,14 +77,14 @@ public class ChatAttachmentService {
         }
         file.transferTo(targetPath);
 
-        boolean imageAttachment = isImageAttachment(fileName, file.getContentType());
+        boolean imageAttachment = isImageAttachment(fileName, file.getContentType()) && isSupportedImageFile(targetPath);
         boolean textAttachment = isTextAttachment(fileName, file.getContentType());
         String kind = imageAttachment ? KIND_IMAGE : textAttachment ? KIND_TEXT : KIND_FILE;
         return ChatAttachment.builder()
                 .fileId(fileId)
                 .fileName(fileName)
                 .fileSize(file.getSize())
-                .contentType(file.getContentType())
+                .contentType(imageAttachment ? detectContentType(targetPath) : file.getContentType())
                 .kind(kind)
                 .fileUrl("/api/v1/dih/upload/" + fileId + "/preview")
                 .parseStatus(imageAttachment ? "image" : textAttachment ? "readable" : "unsupported")
@@ -93,6 +102,7 @@ public class ChatAttachmentService {
         builder.append("\n\n---\n以下是用户本轮消息上传的附件内容，请结合这些附件回答。");
 
         int index = 1;
+        int remainingContextChars = MAX_CONTEXT_CHARS_TOTAL;
         for (ChatAttachment attachment : attachments) {
             builder.append("\n\n[附件 ").append(index++).append("] ")
                     .append(safeText(attachment.getFileName(), "未命名文件"));
@@ -103,8 +113,14 @@ public class ChatAttachmentService {
                 builder.append("，类型 ").append(attachment.getContentType());
             }
 
-            String textContent = readAttachmentText(attachment, user);
+            if (remainingContextChars <= 0) {
+                builder.append("\n附件文本总长度已超过 ").append(MAX_CONTEXT_CHARS_TOTAL).append(" 个字符，后续附件内容未写入模型上下文。");
+                continue;
+            }
+
+            String textContent = readAttachmentText(attachment, user, Math.min(MAX_CONTEXT_CHARS_PER_FILE, remainingContextChars));
             if (StringUtils.hasText(textContent)) {
+                remainingContextChars -= Math.min(textContent.length(), remainingContextChars);
                 builder.append("\n```").append(extensionOf(attachment.getFileName())).append("\n")
                         .append(textContent)
                         .append("\n```");
@@ -137,6 +153,9 @@ public class ChatAttachmentService {
         if (!StringUtils.hasText(fileId)) {
             return Optional.empty();
         }
+        if (!isValidFileId(fileId)) {
+            return Optional.empty();
+        }
         try {
             return Optional.ofNullable(resolveStoredFile(fileId, user));
         } catch (IOException e) {
@@ -145,19 +164,21 @@ public class ChatAttachmentService {
     }
 
     public String detectContentType(Path filePath) {
+        Optional<String> imageContentType = detectImageContentType(filePath);
+        if (imageContentType.isPresent()) {
+            return imageContentType.get();
+        }
         try {
             String detected = Files.probeContentType(filePath);
-            if (StringUtils.hasText(detected)) {
-                return detected;
+            if (isSupportedImageContentType(detected)) {
+                return detected.toLowerCase(Locale.ROOT);
             }
         } catch (IOException ignored) {
         }
-        return isImageAttachment(filePath.getFileName().toString(), null)
-                ? "image/" + normalizeImageExtension(extensionOf(filePath.getFileName().toString()))
-                : "application/octet-stream";
+        return "application/octet-stream";
     }
 
-    private String readAttachmentText(ChatAttachment attachment, User user) {
+    private String readAttachmentText(ChatAttachment attachment, User user, int maxChars) {
         if (attachment == null || !StringUtils.hasText(attachment.getFileId())) {
             return "";
         }
@@ -172,7 +193,7 @@ public class ChatAttachmentService {
             if (filePath == null || !Files.isRegularFile(filePath)) {
                 return "";
             }
-            return readTextLimit(filePath, MAX_CONTEXT_CHARS_PER_FILE);
+            return readTextLimit(filePath, maxChars);
         } catch (Exception e) {
             return "";
         }
@@ -182,6 +203,9 @@ public class ChatAttachmentService {
         try {
             Path filePath = resolveStoredFile(attachment.getFileId(), user);
             if (filePath == null || !Files.isRegularFile(filePath)) {
+                return Optional.empty();
+            }
+            if (detectImageContentType(filePath).isEmpty()) {
                 return Optional.empty();
             }
             String dataUri = ImageDataUriUtil.toDataUri(filePath.toFile());
@@ -227,6 +251,9 @@ public class ChatAttachmentService {
     }
 
     private Path resolveStoredFile(String fileId, User user) throws IOException {
+        if (!isValidFileId(fileId)) {
+            return null;
+        }
         Path uploadRoot = uploadRoot(user);
         if (!Files.isDirectory(uploadRoot)) {
             return null;
@@ -269,9 +296,6 @@ public class ChatAttachmentService {
         if (attachment == null) {
             return false;
         }
-        if (KIND_IMAGE.equals(attachment.getKind())) {
-            return true;
-        }
         return isImageAttachment(attachment.getFileName(), attachment.getContentType());
     }
 
@@ -280,7 +304,7 @@ public class ChatAttachmentService {
         if (IMAGE_EXTENSIONS.contains(extension)) {
             return true;
         }
-        return StringUtils.hasText(contentType) && contentType.toLowerCase(Locale.ROOT).startsWith("image/");
+        return isSupportedImageContentType(contentType);
     }
 
     private String uploadMessage(String kind) {
@@ -316,14 +340,74 @@ public class ChatAttachmentService {
         return fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
     }
 
-    private String normalizeImageExtension(String extension) {
-        if ("jpg".equals(extension)) {
-            return "jpeg";
-        }
-        return StringUtils.hasText(extension) ? extension : "png";
-    }
-
     private String safeText(String value, String fallback) {
         return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private boolean isValidFileId(String fileId) {
+        return StringUtils.hasText(fileId) && UUID_PATTERN.matcher(fileId).matches();
+    }
+
+    private boolean isSupportedImageContentType(String contentType) {
+        return StringUtils.hasText(contentType)
+                && IMAGE_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean isSupportedImageFile(Path filePath) {
+        return detectImageContentType(filePath).isPresent();
+    }
+
+    private Optional<String> detectImageContentType(Path filePath) {
+        if (filePath == null || !Files.isRegularFile(filePath)) {
+            return Optional.empty();
+        }
+        byte[] header = new byte[12];
+        int read;
+        try (InputStream inputStream = Files.newInputStream(filePath)) {
+            read = inputStream.read(header);
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+        if (read >= 8
+                && (header[0] & 0xFF) == 0x89
+                && header[1] == 0x50
+                && header[2] == 0x4E
+                && header[3] == 0x47
+                && header[4] == 0x0D
+                && header[5] == 0x0A
+                && header[6] == 0x1A
+                && header[7] == 0x0A) {
+            return Optional.of("image/png");
+        }
+        if (read >= 3
+                && (header[0] & 0xFF) == 0xFF
+                && (header[1] & 0xFF) == 0xD8
+                && (header[2] & 0xFF) == 0xFF) {
+            return Optional.of("image/jpeg");
+        }
+        if (read >= 6
+                && header[0] == 'G'
+                && header[1] == 'I'
+                && header[2] == 'F'
+                && header[3] == '8'
+                && (header[4] == '7' || header[4] == '9')
+                && header[5] == 'a') {
+            return Optional.of("image/gif");
+        }
+        if (read >= 12
+                && header[0] == 'R'
+                && header[1] == 'I'
+                && header[2] == 'F'
+                && header[3] == 'F'
+                && header[8] == 'W'
+                && header[9] == 'E'
+                && header[10] == 'B'
+                && header[11] == 'P') {
+            return Optional.of("image/webp");
+        }
+        if (read >= 2 && header[0] == 'B' && header[1] == 'M') {
+            return Optional.of("image/bmp");
+        }
+        return Optional.empty();
     }
 }

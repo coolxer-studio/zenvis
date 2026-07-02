@@ -24,6 +24,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -50,7 +51,7 @@ public abstract class BaseVectorStoreService {
 	 * 获取嵌入向量（Double）
 	 */
 	public List<Double> embedDouble(String text) {
-		if (!isEmbeddingEnabled()) {
+		if (!isEmbeddingEnabled() || getEmbeddingModel() == null) {
 			return new ArrayList<>();
 		}
 		float[] embedding = getEmbeddingModel().embed(text);
@@ -61,7 +62,7 @@ public abstract class BaseVectorStoreService {
 	 * 获取嵌入向量（Float）
 	 */
 	public List<Float> embedFloat(String text) {
-		if (!isEmbeddingEnabled()) {
+		if (!isEmbeddingEnabled() || getEmbeddingModel() == null) {
 			return new ArrayList<>();
 		}
 		float[] embedding = getEmbeddingModel().embed(text);
@@ -100,7 +101,22 @@ public abstract class BaseVectorStoreService {
 	 * 获取文档（Agent）
 	 */
 	public List<Document> getDocumentsForAgent(String query, String vectorType, String agentId) {
-		return getDocuments(query, vectorType);
+		return filterDocumentsForAgent(getDocuments(query, vectorType), agentId);
+	}
+
+	/**
+	 * 兼容旧数据：无 agentId 元数据的文档仍可召回；带 agentId 的文档必须匹配当前 Agent。
+	 */
+	public List<Document> filterDocumentsForAgent(List<Document> documents, String agentId) {
+		if (documents == null || documents.isEmpty() || agentId == null || agentId.isBlank()) {
+			return documents == null ? new ArrayList<>() : documents;
+		}
+		return documents.stream()
+				.filter(document -> {
+					Object documentAgentId = document.getMetadata().get("agentId");
+					return documentAgentId == null || Objects.equals(String.valueOf(documentAgentId), agentId);
+				})
+				.collect(Collectors.toList());
 	}
 
 	/**

@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,7 +47,7 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
     @Qualifier("redisVectorStoreForAgent")
     private RedisVectorStore redisVectorStore;
 
-    @Autowired
+    @Autowired(required = false)
     private EmbeddingModel embeddingModel;
 
     @Autowired
@@ -308,14 +309,15 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
 
     public Document convertToDocument(TableInfoBO tableInfoBO, ColumnInfoBO columnInfoBO) {
         String text = Optional.ofNullable(columnInfoBO.getDescription()).orElse(columnInfoBO.getName());
-        Map<String, Object> metadata = Map.of("name", columnInfoBO.getName(),
-                "tableName", tableInfoBO.getName(),
-                "description", Optional.ofNullable(columnInfoBO.getDescription()).orElse(""),
-                "type", columnInfoBO.getType(),
-                "primary", columnInfoBO.isPrimary(),
-                "notnull", columnInfoBO.isNotnull(),
-                "vectorType", "column",
-                "source", "clickhouse");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("name", columnInfoBO.getName());
+        metadata.put("tableName", tableInfoBO.getName());
+        metadata.put("description", Optional.ofNullable(columnInfoBO.getDescription()).orElse(""));
+        metadata.put("type", columnInfoBO.getType());
+        metadata.put("primary", columnInfoBO.isPrimary());
+        metadata.put("notnull", columnInfoBO.isNotnull());
+        metadata.put("vectorType", "column");
+        metadata.put("source", "clickhouse");
         if (columnInfoBO.getSamples() != null) {
             metadata.put("samples", columnInfoBO.getSamples());
         }
@@ -376,6 +378,10 @@ public class RedisVectorManagementService extends BaseVectorStoreService {
     private boolean skipEmbeddingOperation(String operation) {
         if (!embeddingProperties.isEnabled()) {
             log.info("Skip vector store operation {} because app.ai.embedding.enabled=false.", operation);
+            return true;
+        }
+        if (embeddingModel == null) {
+            log.warn("Skip vector store operation {} because embedding model is not available.", operation);
             return true;
         }
         if (redisVectorStore == null) {

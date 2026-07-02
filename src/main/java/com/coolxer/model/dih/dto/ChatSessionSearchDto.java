@@ -16,4 +16,9 @@ public class ChatSessionSearchDto extends SortPageDto {
      */
     private String title;
 
+    /**
+     * 会话类型
+     */
+    private String type;
+
 }

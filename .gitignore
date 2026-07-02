@@ -40,3 +40,7 @@ build/
 .clinerules
 .claude
 decompiled-sources
+config/local-secrets.properties
+.env
+.env.*
+!.env.example

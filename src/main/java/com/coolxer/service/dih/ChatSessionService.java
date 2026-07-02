@@ -6,6 +6,7 @@ import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
+import com.coolxer.model.dih.Message;
 
 import java.util.List;
 
@@ -78,5 +79,15 @@ public interface ChatSessionService {
      * @return 会话列表
      */
     ChatSession getChatSessionBySessionId(String chatId, User currentUser);
+
+    /**
+     * 将消息追加到会话；会话不存在时按默认信息创建。
+     */
+    ChatSession appendMessage(String chatId, ChatSessionDto createDefaults, Message message, User currentUser);
+
+    /**
+     * 将消息追加到已有会话。
+     */
+    ChatSession appendMessage(ChatSession chatSession, Message message, User currentUser);
 
 }

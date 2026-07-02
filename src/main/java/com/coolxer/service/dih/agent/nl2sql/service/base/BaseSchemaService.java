@@ -69,7 +69,14 @@ public abstract class BaseSchemaService {
 	 * Agent 混合 RAG 检索
 	 */
 	public SchemaDTO mixRagForAgent(String query, String agentId, List<String> keywords) {
-		return mixRag(query, keywords);
+		SchemaDTO schemaDTO = new SchemaDTO();
+		extractDatabaseName(schemaDTO);
+		buildSchemaFromDocuments(
+				getColumnDocumentsByKeywordsForAgent(agentId, keywords),
+				getTableDocumentsForAgent(query, agentId),
+				schemaDTO
+		);
+		return schemaDTO;
 	}
 
 	/**
@@ -109,7 +116,7 @@ public abstract class BaseSchemaService {
 	 * Agent 获取表文档
 	 */
 	public List<Document> getTableDocumentsForAgent(String query, String agentId) {
-		return getTableDocuments(query);
+		return vectorStoreService.filterDocumentsForAgent(getTableDocuments(query), agentId);
 	}
 
 	/**
@@ -138,8 +145,14 @@ public abstract class BaseSchemaService {
 	/**
 	 * Agent 按关键词获取列文档
 	 */
-	public List<List<Document>> getColumnDocumentsByKeywordsForAgent(String query, List<String> keywords) {
-		return getColumnDocumentsByKeywords(keywords);
+	public List<List<Document>> getColumnDocumentsByKeywordsForAgent(String agentId, List<String> keywords) {
+		List<List<Document>> documentsByKeywords = getColumnDocumentsByKeywords(keywords);
+		if (documentsByKeywords == null || documentsByKeywords.isEmpty()) {
+			return documentsByKeywords;
+		}
+		return documentsByKeywords.stream()
+				.map(documents -> vectorStoreService.filterDocumentsForAgent(documents, agentId))
+				.collect(Collectors.toList());
 	}
 
 	/**

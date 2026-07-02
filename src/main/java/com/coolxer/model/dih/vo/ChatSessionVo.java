@@ -7,11 +7,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+@Slf4j
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -72,13 +76,26 @@ public class ChatSessionVo implements Serializable {
         this.sessionId = chatSession.getSessionId();
         this.title = chatSession.getTitle();
         this.type = chatSession.getType();
-        this.messageList = JacksonUtil.toList(chatSession.getMessages(), new TypeReference<List<Message>>() {
-        });
+        this.messageList = parseMessages(chatSession.getMessages());
         this.extraData = chatSession.getExtraData();
         this.deepThink = chatSession.getDeepThink();
         this.onlineSearch = chatSession.getOnlineSearch();
         this.pin = chatSession.getPin();
         this.updateTime = chatSession.getUpdateTime();
+    }
+
+    private static List<Message> parseMessages(String messages) {
+        if (StringUtils.isBlank(messages)) {
+            return new ArrayList<>();
+        }
+        try {
+            List<Message> parsed = JacksonUtil.toList(messages, new TypeReference<List<Message>>() {
+            });
+            return parsed == null ? new ArrayList<>() : parsed;
+        } catch (Exception e) {
+            log.warn("会话消息JSON解析失败，返回空消息列表。", e);
+            return new ArrayList<>();
+        }
     }
 
 }

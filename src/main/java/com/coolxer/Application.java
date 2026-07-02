@@ -21,6 +21,9 @@ import org.springframework.web.client.RestTemplate;
 @SpringBootApplication(
         exclude = {
                 DataSourceAutoConfiguration.class
+        },
+        excludeName = {
+                "org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration"
         }
 )
 public class Application {

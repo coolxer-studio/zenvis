@@ -1,10 +1,15 @@
 package com.coolxer.model.dih.vo;
 
 import com.coolxer.dao.mysql.entity.McpServerConfig;
+import com.coolxer.configuration.JacksonConfig;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Data
 public class McpServerVo implements Serializable {
@@ -22,6 +27,8 @@ public class McpServerVo implements Serializable {
     private String sseEndpoint;
 
     private String headers;
+
+    private List<String> headerNames;
 
     private Boolean enabled;
 
@@ -55,7 +62,7 @@ public class McpServerVo implements Serializable {
         this.description = config.getDescription();
         this.baseUrl = config.getBaseUrl();
         this.sseEndpoint = config.getSseEndpoint();
-        this.headers = config.getHeaders();
+        this.headerNames = resolveHeaderNames(config.getHeaders());
         this.enabled = config.getEnabled();
         this.requestTimeoutSeconds = config.getRequestTimeoutSeconds();
         this.connectTimeoutSeconds = config.getConnectTimeoutSeconds();
@@ -65,5 +72,15 @@ public class McpServerVo implements Serializable {
         this.toolCount = toolCount;
         this.createTime = config.getCreateTime();
         this.updateTime = config.getUpdateTime();
+    }
+
+    private static List<String> resolveHeaderNames(String headers) {
+        try {
+            Map<String, Object> parsed = JacksonConfig.OBJECT_MAPPER.readValue(headers, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
+            return parsed.keySet().stream().toList();
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 }

@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,8 +40,13 @@ public class DihController {
     @Operation(summary = "补全建议", description = "补全建议")
     public ResponseWrap<String> suggest(@RequestBody SuggestDto suggestDto) {
         try {
+            if (suggestDto == null || !StringUtils.hasText(suggestDto.getCurrentLine()) || suggestDto.getCurrentLine().length() < 2) {
+                return ResponseWrap.success("AI暂无可用建议");
+            }
             String currentLine = suggestDto.getCurrentLine().substring(0, suggestDto.getCurrentLine().length() - 2);
-            String context = suggestDto.getContent().replace(suggestDto.getCurrentLine(), currentLine);
+            String context = StringUtils.hasText(suggestDto.getContent())
+                    ? suggestDto.getContent().replace(suggestDto.getCurrentLine(), currentLine)
+                    : currentLine;
             String prompt = "上下文：%s\n当前行：%s\n".formatted(context, currentLine);
             String suggest = completeService.complete(prompt);
 //            String prefixContent = context.substring(0, context.lastIndexOf(currentLine));
@@ -48,7 +54,7 @@ public class DihController {
 //            String suggest = completeService.completeCode(prefixContent, suffixContent);
             return ResponseWrap.success(suggest);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.warn("生成补全建议失败: {}", e.getMessage(), e);
         }
         return ResponseWrap.success("AI暂无可用建议");
     }

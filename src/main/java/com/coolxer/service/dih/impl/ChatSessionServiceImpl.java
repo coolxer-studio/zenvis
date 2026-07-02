@@ -8,8 +8,11 @@ import com.coolxer.dao.mysql.repository.ChatSessionRepository;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
+import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.utils.JacksonUtil;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,10 +20,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -49,10 +54,14 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     }
 
     @Override
+    @Transactional
     public Boolean update(Long id, ChatSessionDto chatSessionDto, User currentUser) {
         try {
+            if (currentUser == null) {
+                throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+            }
             Optional<ChatSession> optionalChatSession = chatSessionRepository.findById(id);
-            if (optionalChatSession.isPresent() && optionalChatSession.get().getCreateBy() == currentUser.getId()) {
+            if (optionalChatSession.isPresent() && Objects.equals(optionalChatSession.get().getCreateBy(), currentUser.getId())) {
                 ChatSession chatSession = optionalChatSession.get();
                 chatSession.updateFromDto(chatSessionDto);
                 chatSessionRepository.save(chatSession);
@@ -61,6 +70,8 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                 // 不支持删除
                 throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
             }
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("更新对象失败, id: {}", id, e);
             return false;
@@ -71,7 +82,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     public void delete(Long id, User currentUser) {
         ChatSession chatSession = chatSessionRepository.findById(id).orElse(null);
         if (chatSession != null) {
-            if (chatSession.getCreateBy() != currentUser.getId()) {
+            if (currentUser == null || !Objects.equals(chatSession.getCreateBy(), currentUser.getId())) {
                 // 不支持删除
                 throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
             } else {
@@ -91,7 +102,8 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     public ChatSessionVo info(Long id, User currentUser) {
         try {
             Optional<ChatSession> optionalChatSession = chatSessionRepository.findById(id);
-            if (optionalChatSession.isPresent() && optionalChatSession.get().getCreateBy() != currentUser.getId()) {
+            if (optionalChatSession.isPresent()
+                    && (currentUser == null || !Objects.equals(optionalChatSession.get().getCreateBy(), currentUser.getId()))) {
                 return null;
             }
             return optionalChatSession.map(ChatSessionVo::new).orElse(null);
@@ -117,7 +129,9 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         try {
             Pageable pageable = PageRequest.of(chatSessionSearchDto.getPage() - 1, chatSessionSearchDto.getPerPage());
             Page<ChatSession> byPage;
-            byPage = chatSessionRepository.findByPage(pageable, chatSessionSearchDto.getTitle(), currentUser.getId());
+            byPage = chatSessionRepository.findByPage(pageable, chatSessionSearchDto.getTitle(),
+                    StringUtils.isBlank(chatSessionSearchDto.getType()) ? null : chatSessionSearchDto.getType(),
+                    currentUser.getId());
             return new PageRowsVo<>(
                     byPage.getContent().stream().map(ChatSessionVo::new).toList(),
                     byPage.getTotalElements()
@@ -130,16 +144,66 @@ public class ChatSessionServiceImpl implements ChatSessionService {
 
     @Override
     public ChatSession getChatSessionBySessionId(String chatId, User currentUser) {
-        Optional<ChatSession> optionalChatSession = chatSessionRepository.findBySessionId(chatId);
-        if (optionalChatSession.isPresent() && optionalChatSession.get().getCreateBy() == currentUser.getId()) {
-            return optionalChatSession.get();
+        if (StringUtils.isBlank(chatId) || currentUser == null) {
+            return null;
         }
-        return null;
+        return chatSessionRepository.findBySessionIdAndCreateBy(chatId, currentUser.getId()).orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public ChatSession appendMessage(String chatId, ChatSessionDto createDefaults, Message message, User currentUser) {
+        if (currentUser == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        if (StringUtils.isBlank(chatId) || message == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        ChatSession chatSession = getChatSessionBySessionId(chatId, currentUser);
+        if (chatSession == null) {
+            ChatSessionDto defaults = createDefaults == null ? new ChatSessionDto() : createDefaults;
+            defaults.setSessionId(chatId);
+            defaults.setMessages(JacksonUtil.toJson(List.of(message)));
+            if (StringUtils.isBlank(defaults.getTitle())) {
+                defaults.setTitle(StringUtils.defaultIfBlank(message.getContent(), "新建会话"));
+            }
+            return create(defaults, currentUser);
+        }
+        return appendMessage(chatSession, message, currentUser);
+    }
+
+    @Override
+    @Transactional
+    public ChatSession appendMessage(ChatSession chatSession, Message message, User currentUser) {
+        if (chatSession == null || message == null) {
+            return chatSession;
+        }
+        if (currentUser == null || !Objects.equals(chatSession.getCreateBy(), currentUser.getId())) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        List<Message> messages = parseMessages(chatSession.getMessages());
+        messages.add(message);
+        chatSession.setMessages(JacksonUtil.toJson(messages));
+        return chatSessionRepository.save(chatSession);
     }
 
     private static void checkCreateOrUpdate(ChatSessionDto chatSessionDto) {
         if (StringUtils.isEmpty(chatSessionDto.getTitle()) || StringUtils.isEmpty(chatSessionDto.getMessages())) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+    }
+
+    private List<Message> parseMessages(String rawMessages) {
+        if (StringUtils.isBlank(rawMessages)) {
+            return new ArrayList<>();
+        }
+        try {
+            List<Message> messages = JacksonUtil.toList(rawMessages, new TypeReference<List<Message>>() {
+            });
+            return messages == null ? new ArrayList<>() : new ArrayList<>(messages);
+        } catch (Exception e) {
+            log.warn("会话消息JSON解析失败，将使用空消息列表继续追加。", e);
+            return new ArrayList<>();
         }
     }
 

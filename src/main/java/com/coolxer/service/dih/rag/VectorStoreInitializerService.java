@@ -190,7 +190,7 @@ public class VectorStoreInitializerService {
                 logger.warn("docPath not Found {}", docPath);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.warn("Failed to load markdown documents from {}", docPath, e);
         }
         return Collections.emptyList();
     }

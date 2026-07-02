@@ -19,6 +19,7 @@ import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.ChatMessagePartParser;
 import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.FixedPromptResponseService;
+import com.coolxer.service.dih.agent.AnalysisAgent;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.InspectionAgent;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
@@ -84,6 +85,8 @@ public class ChatController extends BaseController {
     private ChatSessionService chatSessionService;
     @Autowired
     private FixedPromptResponseService fixedPromptResponseService;
+    @Autowired
+    private AnalysisAgent analysisAgent;
     @Autowired
     private DataAccessAgent dataAccessAgent;
     @Autowired
@@ -185,6 +188,9 @@ public class ChatController extends BaseController {
         if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
             fluxResponse = dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
+        } else if (AnalysisAgent.AGENT_TYPE.equals(chatType)) {
+            messageType.set(MessageType.TEXT);
+            fluxResponse = analysisAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         } else if ("agent_inspect".equals(chatType)) {
             ChatResponse chatResponse = inspectionAgent.chat(prompt, model, chatId, mcpToolContext);
             messageType.set(chatResponse.getType());
@@ -341,8 +347,7 @@ public class ChatController extends BaseController {
     }
 
     private boolean isPlaceholderBuiltinAgent(String chatType) {
-        return BuiltinAgentSkillRegistry.AGENT_ANALYSIS.equals(chatType)
-                || BuiltinAgentSkillRegistry.AGENT_DISPOSE.equals(chatType)
+        return BuiltinAgentSkillRegistry.AGENT_DISPOSE.equals(chatType)
                 || BuiltinAgentSkillRegistry.AGENT_REPORT.equals(chatType);
     }
 

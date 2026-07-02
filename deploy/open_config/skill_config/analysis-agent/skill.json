@@ -1,8 +1,8 @@
 {
   "id": "analysis-agent",
   "name": "研判分析",
-  "description": "系统内置研判分析智能体 Skill，占位能力后续补充。",
-  "version": "1.0.0",
+  "description": "系统内置研判分析智能体 Skill，支持一次性研判分析、持续分析任务创建、Retrieval MCP 证据查询、PushTask 数据推送服务和 AI 分析任务编排。",
+  "version": "1.1.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_analysis"
@@ -10,7 +10,11 @@
   "tags": [
     "builtin",
     "agent",
-    "analysis"
+    "analysis",
+    "retrieval",
+    "continuous-analysis",
+    "push-task",
+    "analysis-task"
   ],
   "enabled": true,
   "entry": "SKILL.md"

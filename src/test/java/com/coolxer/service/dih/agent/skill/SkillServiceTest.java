@@ -159,6 +159,37 @@ class SkillServiceTest {
                 .contains("HTML_PAGE");
     }
 
+    @Test
+    void builtinAnalysisSkillDocumentsDirectAndContinuousWorkflow() throws Exception {
+        Path repoSkill = Path.of("deploy/open_config/skill_config/analysis-agent");
+        writeSkill(
+                skillRoot.resolve("analysis-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+
+        assertThat(prompt)
+                .contains("一次性研判分析")
+                .contains("持续分析任务")
+                .contains("Retrieval MCP")
+                .contains("retrieval_list_display_entity")
+                .contains("retrieval_search")
+                .contains("entity_statistics")
+                .contains("analysis.start")
+                .contains("analysis.create_continuous_task")
+                .contains("zenvis:continuous-analysis-task-config")
+                .contains("zenvis:disposal-strategy-config")
+                .contains("push_task_create_and_start")
+                .contains("push_task_list_by_source_mark")
+                .contains("analysis_task_create")
+                .contains("analysis_task_queue_status");
+    }
+
     private SkillService newSkillService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());

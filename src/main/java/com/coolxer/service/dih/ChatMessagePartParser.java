@@ -144,6 +144,22 @@ public class ChatMessagePartParser {
                     "html-page_config/<slug>.html",
                     info
             );
+            case "zenvis:continuous-analysis-task-config" -> configPart(
+                    body,
+                    "持续分析任务配置",
+                    "json",
+                    "continuous-analysis-task",
+                    "continuous-analysis-task.json",
+                    info
+            );
+            case "zenvis:disposal-strategy-config" -> configPart(
+                    body,
+                    "处置策略配置",
+                    "json",
+                    "disposal-strategy",
+                    "analysis-disposal-strategy.json",
+                    info
+            );
             default -> null;
         };
     }

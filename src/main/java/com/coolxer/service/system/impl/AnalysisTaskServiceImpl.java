@@ -11,6 +11,8 @@ import com.coolxer.model.system.dto.AnalysisTaskSearchDto;
 import com.coolxer.model.system.vo.AnalysisTaskQueueVo;
 import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
+import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
+import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.agent.nl2sql.service.LlmService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -57,6 +59,9 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
 
     @Autowired
     private AgentMcpToolService agentMcpToolService;
+
+    @Autowired
+    private SkillService skillService;
 
     @Override
     public List<AnalysisTaskVo> findAll() {
@@ -257,11 +262,19 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         try {
             llmService.setModel(model);
             llmService.setMcpToolContext(mcpToolContext);
-            return llmService.callWithSystemPrompt(ANALYSIS_SYSTEM_PROMPT, buildAnalyzePrompt(analysisTask));
+            return llmService.callWithSystemPrompt(buildAnalysisSystemPrompt(), buildAnalyzePrompt(analysisTask));
         } finally {
             llmService.clearModel();
             llmService.clearMcpToolContext();
         }
+    }
+
+    private String buildAnalysisSystemPrompt() {
+        String skillPrompt = skillService.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        if (StringUtils.isBlank(skillPrompt)) {
+            return ANALYSIS_SYSTEM_PROMPT;
+        }
+        return ANALYSIS_SYSTEM_PROMPT + "\n\n【已加载 Skill】\n" + skillPrompt;
     }
 
     private String buildAnalyzePrompt(AnalysisTask analysisTask) {

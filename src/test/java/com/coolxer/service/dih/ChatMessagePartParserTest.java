@@ -117,6 +117,44 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("持续分析任务配置围栏应解析为配置片段")
+    void parseContinuousAnalysisTaskConfigFence() {
+        String content = """
+                ```zenvis:continuous-analysis-task-config
+                {"matchRule":{},"pushTask":{},"analysisTask":{}}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("持续分析任务配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("continuous-analysis-task", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("continuous-analysis-task.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("处置策略配置围栏应解析为配置片段")
+    void parseDisposalStrategyConfigFence() {
+        String content = """
+                ```zenvis:disposal-strategy-config
+                {"disposalObject":{},"disposalMethod":{}}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("处置策略配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("disposal-strategy", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("analysis-disposal-strategy.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
     @DisplayName("think 标签应解析为思考片段并从正文中剥离")
     void parseThinkingTag() {
         List<ChatMessagePart> parts = parser.parse("<think>先分析问题\n再给结论</think>\n最终回答", MessageType.TEXT);

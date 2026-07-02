@@ -149,7 +149,7 @@
           </el-tooltip>
 
           <el-tooltip content="发送" placement="top">
-            <el-button class="action-btn send-btn" :disabled="!canSendMessage" @click="sendMessage">
+  <el-button class="action-btn send-btn" :disabled="!canSendMessage" @click="sendMessage">
               <el-icon>
                 <Position />
               </el-icon>
@@ -174,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   ArrowDown, Close, Loading, Monitor, Paperclip, Position, Opportunity
 } from '@element-plus/icons-vue'
@@ -185,7 +185,7 @@ import { generateUUID } from '@/utils/util-common'
 import {getCurrentFormattedDate} from '@/utils/util-time'
 import { withBaseUrl } from '@/utils/url';
 import ChatMessageRenderer from './chat-message-renderer.vue';
-import type { ChatAttachment, ChatMessage, ChatMessagePart } from '@/types/type-dih';
+import type { ChatAttachment, ChatMessage, ChatMessagePart, ChatSession } from '@/types/type-dih';
 
 const router = useRouter();
 
@@ -234,6 +234,10 @@ type SendMessageOptions = {
   content?: string;
 };
 
+const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
+const MAX_FILES_PER_PICK = 10;
+const UPLOAD_CONCURRENCY = 3;
+
 const props = defineProps<Props>()
 
 // 添加深度思考状态
@@ -249,8 +253,12 @@ interface SelectData {
 const inputMessage = ref('')
 const pendingAttachments = ref<ChatAttachment[]>([])
 const isUploadingAttachment = ref(false)
+const isStreamingResponse = ref(false)
+const currentChatAbortController = ref<AbortController | null>(null)
 const canSendMessage = computed(() => {
-  return !isUploadingAttachment.value && (inputMessage.value.trim().length > 0 || pendingAttachments.value.length > 0)
+  return !isUploadingAttachment.value
+    && !isStreamingResponse.value
+    && (inputMessage.value.trim().length > 0 || pendingAttachments.value.length > 0)
 })
 
 const AUTO_CONFIRM_ACTIONS = new Set([
@@ -455,7 +463,7 @@ const isImageAttachment = (attachment: ChatAttachment) => {
   const contentType = attachment.content_type || attachment.contentType || '';
   const fileName = attachmentFileName(attachment).toLowerCase();
   return attachment.kind === 'image'
-    || contentType.startsWith('image/')
+    || ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'].includes(contentType.toLowerCase())
     || /\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName);
 };
 
@@ -474,6 +482,10 @@ const openAttachmentPreview = (attachment: ChatAttachment) => {
 const removePendingAttachment = (index: number) => {
   pendingAttachments.value.splice(index, 1);
 };
+
+onUnmounted(() => {
+  currentChatAbortController.value?.abort();
+});
 
 const createDeepThinkingStreamingParts = (content: string): ChatMessagePart[] => {
   const parts: ChatMessagePart[] = [createThinkingPart('running')];
@@ -706,7 +718,7 @@ const insertLineBreak = () => {
 const sendMessage = async (options: SendMessageOptions = {}) => {
   const explicitMessage = options.content?.trim();
   const canSend = explicitMessage
-    ? !isUploadingAttachment.value
+    ? !isUploadingAttachment.value && !isStreamingResponse.value
     : canSendMessage.value;
 
   if (canSend) {
@@ -739,6 +751,10 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
     scrollToBottom();
 
     
+    const abortController = new AbortController();
+    currentChatAbortController.value = abortController;
+    isStreamingResponse.value = true;
+
     try {
       let accumulatedContent = '';
       const streamOk = await DihService.chatEvents({
@@ -781,16 +797,18 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
 
         if (event.event === 'error') {
           messages.value[aiMessageIndex].loading = false;
+          messages.value[aiMessageIndex].isError = true;
           messages.value[aiMessageIndex].content = typeof event.message === 'string'
             ? event.message
             : '抱歉，回复失败，请稍后重试~';
           await nextTick();
           scrollToBottom();
         }
-      });
+      }, { signal: abortController.signal });
 
       if (!streamOk) {
         messages.value[aiMessageIndex].loading = false;
+        messages.value[aiMessageIndex].isError = true;
         messages.value[aiMessageIndex].content = '抱歉，回复失败，请稍后重试~';
         return;
       }
@@ -799,24 +817,39 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
       const isNewChat = router.currentRoute.value.query.createSession;
       // 如果是新聊天且至少有一条完整的消息交互，则添加到聊天列表
       if (isNewChat && messages.value.length >= 2) {
+        let createdSession: ChatSession | null = null;
+        try {
+          createdSession = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
+        } catch (error) {
+          console.warn('获取新会话真实ID失败，将使用sessionId作为临时ID:', error);
+        }
         // 创建新的聊天记录项
         const newChatItem = {
-          id: chatSessionId.value,
-          type: chatSessionType.value,
-          sessionId: chatSessionId.value,
-          title: displayMessage.substring(0, 20) + (displayMessage.length > 20 ? '...' : ''), // 使用前20个字符作为标题
-          pin: false
+          id: createdSession?.id || chatSessionId.value,
+          type: createdSession?.type || chatSessionType.value,
+          sessionId: createdSession?.sessionId || chatSessionId.value,
+          title: createdSession?.title || `${displayMessage.substring(0, 20)}${displayMessage.length > 20 ? '...' : ''}`,
+          pin: createdSession?.pin || false,
         };
         // 触发事件通知父组件添加新的聊天项
         // 这里可以通过emit或者其他方式通知view-left组件
         window.dispatchEvent(new CustomEvent('newChatCreated', { 
           detail: { chatItem: newChatItem } 
         }));
+        const nextQuery = { ...router.currentRoute.value.query };
+        delete nextQuery.createSession;
+        router.replace({ name: 'service-dih', query: nextQuery });
       }
     } catch (error) {
       console.error('聊天接口调用失败:', error);
       messages.value[aiMessageIndex].loading = false;
+      messages.value[aiMessageIndex].isError = true;
       messages.value[aiMessageIndex].content = '抱歉，回复失败，请稍后重试~';
+    } finally {
+      if (currentChatAbortController.value === abortController) {
+        currentChatAbortController.value = null;
+      }
+      isStreamingResponse.value = false;
     }
   }
 }
@@ -863,6 +896,29 @@ const handleModelCommand = (command: string) => {
 
 
 // 上传文件
+const validateFilesBeforeUpload = (files: File[]) => {
+  const selectedFiles = files.slice(0, MAX_FILES_PER_PICK);
+  if (files.length > MAX_FILES_PER_PICK) {
+    ElMessage.warning(`单次最多选择 ${MAX_FILES_PER_PICK} 个附件，已自动忽略多余文件`);
+  }
+  const validFiles = selectedFiles.filter(file => file.size <= MAX_UPLOAD_BYTES);
+  const oversizedFiles = selectedFiles.filter(file => file.size > MAX_UPLOAD_BYTES);
+  if (oversizedFiles.length) {
+    ElMessage.error(`已忽略 ${oversizedFiles.length} 个超过 30MB 的附件`);
+  }
+  return validFiles;
+};
+
+const uploadFilesWithConcurrency = async (files: File[]) => {
+  const attachments: ChatAttachment[] = [];
+  for (let index = 0; index < files.length; index += UPLOAD_CONCURRENCY) {
+    const batch = files.slice(index, index + UPLOAD_CONCURRENCY);
+    const batchAttachments = await Promise.all(batch.map(file => DihService.uploadFile(file)));
+    attachments.push(...batchAttachments);
+  }
+  return attachments;
+};
+
 const uploadFile = () => {
   if (isUploadingAttachment.value) {
     return;
@@ -875,13 +931,17 @@ const uploadFile = () => {
   fileInput.onchange = async (event) => {
     const target = event.target as HTMLInputElement;
     if (target.files && target.files.length > 0) {
-      const files = Array.from(target.files);
+      const files = validateFilesBeforeUpload(Array.from(target.files));
+      if (!files.length) {
+        if (fileInput.parentNode) {
+          document.body.removeChild(fileInput);
+        }
+        return;
+      }
       isUploadingAttachment.value = true;
       try {
-        for (const file of files) {
-          const attachment = await DihService.uploadFile(file);
-          pendingAttachments.value.push(attachment);
-        }
+        const attachments = await uploadFilesWithConcurrency(files);
+        pendingAttachments.value.push(...attachments);
         ElMessage.success(files.length > 1 ? `已添加 ${files.length} 个附件` : `已添加附件「${files[0].name}」`);
       } catch (err) {
         console.error('文件上传失败', err);

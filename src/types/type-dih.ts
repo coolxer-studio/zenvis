@@ -147,7 +147,8 @@ export type ChatActionDecisionParams = {
 // 聊天会话分页列表参数
 export type ChatSessionPageParams = {
   page?: number;
-  size?: number;
+  per_page?: number;
+  perPage?: number;
   type?: string;
   keyword?: string;
 };

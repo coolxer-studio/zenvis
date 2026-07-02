@@ -107,7 +107,7 @@ const chatHistory = ref<ChatSession[]>([])
 // 分页参数
 const pageParams = ref({
   page: 1,
-  size: 10
+  per_page: 10
 })
 
 // 是否还有更多数据
@@ -127,7 +127,7 @@ const loadChatHistory = async () => {
   try {
     const historyChatList = await DihService.getChatSessionPageList({
       page: pageParams.value.page,
-      size: pageParams.value.size
+      per_page: pageParams.value.per_page
     })
     // 如果是第一页，直接赋值；否则追加到现有数据
     if (pageParams.value.page === 1) {
@@ -136,7 +136,7 @@ const loadChatHistory = async () => {
       chatHistory.value = [...chatHistory.value, ...historyChatList]
     }
     // 判断是否还有更多数据
-    hasMore.value = historyChatList.length === pageParams.value.size
+    hasMore.value = historyChatList.length === pageParams.value.per_page
   } catch (error) {
     console.error('获取聊天历史数据失败:', error)
   }
@@ -352,7 +352,7 @@ const handleNewChatCreated = (event: CustomEvent) => {
   // 将新的聊天项添加到聊天历史列表的开头
   console.log(chatItem);
   // 判断是否已经存在
-  if (chatHistory.value.some(item => item.id === chatItem.id)) {
+  if (chatHistory.value.some(item => item.id === chatItem.id || item.sessionId === chatItem.sessionId)) {
     return;
   }
   // 不存在添加进去
@@ -508,7 +508,6 @@ const handleNewChatCreated = (event: CustomEvent) => {
   text-decoration: underline;
 }
 </style>
-
 
 
 

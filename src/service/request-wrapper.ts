@@ -9,6 +9,7 @@ type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 const requestClient = axios.create({
   timeout: 60000,
   baseURL: import.meta.env.VITE_BASE_URL || '/',
+  withCredentials: true,
 });
 
 requestClient.interceptors.request.use(

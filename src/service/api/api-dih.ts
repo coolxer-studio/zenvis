@@ -76,6 +76,18 @@ const normalizeStreamEvent = (event: any): ChatStreamEvent => {
   };
 };
 
+const parseStreamLine = (line: string): ChatStreamEvent => {
+  try {
+    return normalizeStreamEvent(JSON.parse(line));
+  } catch (error) {
+    console.error('聊天事件解析失败:', error, line);
+    return {
+      event: 'error',
+      message: '聊天响应解析失败，请稍后重试~',
+    };
+  }
+};
+
 const normalizeSkill = (item: any): SkillVo => ({
   id: item?.id || '',
   name: item?.name || '',
@@ -136,6 +148,7 @@ export class DihService {
         headers: {
           'Content-Type': 'application/json;charset=UTF-8',
         },
+        credentials: 'include',
         body: JSON.stringify(params),
       });
 
@@ -153,6 +166,7 @@ export class DihService {
   static async chatEvents(
     params: ChatParams,
     onEvent: (event: ChatStreamEvent) => void | Promise<void>,
+    options: { signal?: AbortSignal } = {},
   ): Promise<boolean> {
     try {
       const response = await fetch(withBaseUrl(`${prefix}/chat`), {
@@ -160,6 +174,8 @@ export class DihService {
         headers: {
           'Content-Type': 'application/json;charset=UTF-8',
         },
+        credentials: 'include',
+        signal: options.signal,
         body: JSON.stringify({
           ...params,
           response_format: 'events',
@@ -183,7 +199,7 @@ export class DihService {
           for (const line of lines) {
             const trimmedLine = line.trim();
             if (!trimmedLine) continue;
-            await onEvent(normalizeStreamEvent(JSON.parse(trimmedLine)));
+            await onEvent(parseStreamLine(trimmedLine));
           }
         }
         if (done) {
@@ -193,7 +209,7 @@ export class DihService {
 
       const lastLine = buffer.trim();
       if (lastLine) {
-        await onEvent(normalizeStreamEvent(JSON.parse(lastLine)));
+        await onEvent(parseStreamLine(lastLine));
       }
 
       return true;
@@ -247,7 +263,12 @@ export class DihService {
   }
 
   static async getChatSessionPageList(params: ChatSessionPageParams): Promise<ChatSession[]> {
-    const response = await request<{ rows: object[] }>(`${prefixChatSession}/list`, params, 'GET');
+    const requestParams = {
+      ...params,
+      per_page: params.per_page ?? params.perPage ?? 10,
+      perPage: params.perPage ?? params.per_page ?? 10,
+    };
+    const response = await request<{ rows: object[] }>(`${prefixChatSession}/list`, requestParams, 'GET');
     // 返回ChatSession[]对象
     return response.rows.map((item) => ({
       id: (item as any).id || '',

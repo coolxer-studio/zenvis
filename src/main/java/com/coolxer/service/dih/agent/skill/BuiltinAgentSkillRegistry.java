@@ -48,7 +48,7 @@ public final class BuiltinAgentSkillRegistry {
                     AGENT_REPORT,
                     "报表制作",
                     50,
-                    "报表制作智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+                    "报表制作智能体可汇总各类智能体分析结果生成文档，并支持自然语言持续修改。"
             )
     );
 

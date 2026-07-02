@@ -212,6 +212,48 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("报表文档围栏应解析为配置片段")
+    void parseReportDocumentConfigFence() {
+        String content = """
+                ```zenvis:report-document-config
+                # 巡检研判报告
+
+                ## 摘要
+
+                本次发现高危风险。
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("报表文档", parts.get(0).getTitle());
+        assertEquals("markdown", parts.get(0).getLanguage());
+        assertEquals("report-document", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("report.md", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("HTML 报表文档围栏应识别为 HTML")
+    void parseHtmlReportDocumentConfigFence() {
+        String content = """
+                ```zenvis:report-document-config
+                <!DOCTYPE html>
+                <html lang="zh-CN"><body>报告</body></html>
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("报表文档", parts.get(0).getTitle());
+        assertEquals("html", parts.get(0).getLanguage());
+        assertEquals("report-document", parts.get(0).getMetadata().get("configKind"));
+    }
+
+    @Test
     @DisplayName("think 标签应解析为思考片段并从正文中剥离")
     void parseThinkingTag() {
         List<ChatMessagePart> parts = parser.parse("<think>先分析问题\n再给结论</think>\n最终回答", MessageType.TEXT);

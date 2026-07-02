@@ -184,8 +184,24 @@ public class ChatMessagePartParser {
                     "punish_config/<stable-name>.json",
                     info
             );
+            case "zenvis:report-document-config" -> configPart(
+                    body,
+                    "报表文档",
+                    detectReportLanguage(body),
+                    "report-document",
+                    "report.md",
+                    info
+            );
             default -> null;
         };
+    }
+
+    private String detectReportLanguage(String body) {
+        String trimmed = body == null ? "" : body.stripLeading().toLowerCase();
+        if (trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html")) {
+            return "html";
+        }
+        return "markdown";
     }
 
     private ChatMessagePart configPart(String body,

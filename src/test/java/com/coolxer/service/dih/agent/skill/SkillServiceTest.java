@@ -223,6 +223,34 @@ class SkillServiceTest {
                 .contains("回滚建议");
     }
 
+    @Test
+    void builtinReportSkillDocumentsReportDraftAndEditingWorkflow() throws Exception {
+        Path repoSkill = Path.of("deploy/open_config/skill_config/report-agent");
+        writeSkill(
+                skillRoot.resolve("report-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_REPORT);
+
+        assertThat(prompt)
+                .contains("报表制作智能体")
+                .contains("新建报表")
+                .contains("修改报表")
+                .contains("汇总多智能体结果")
+                .contains("retrieval_search")
+                .contains("retrieval_msg_trend")
+                .contains("analysis_task_view")
+                .contains("zenvis:report-document-config")
+                .contains("证据记录与查询结果")
+                .contains("自然语言修改")
+                .contains("不要为了写报表调用写入、删除、创建或执行类工具");
+    }
+
     private SkillService newSkillService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());

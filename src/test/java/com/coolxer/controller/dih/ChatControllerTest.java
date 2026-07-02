@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatControllerTest {
 
     @Test
-    void disposeAgentDoesNotUsePlaceholderRoute() {
+    void implementedBuiltinAgentsDoNotUsePlaceholderRoute() {
         ChatController controller = new ChatController();
 
         Boolean disposePlaceholder = ReflectionTestUtils.invokeMethod(
@@ -24,6 +24,6 @@ class ChatControllerTest {
         );
 
         assertThat(disposePlaceholder).isFalse();
-        assertThat(reportPlaceholder).isTrue();
+        assertThat(reportPlaceholder).isFalse();
     }
 }

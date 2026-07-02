@@ -1,8 +1,8 @@
 {
   "id": "report-agent",
   "name": "报表制作",
-  "description": "系统内置报表制作智能体 Skill，占位能力后续补充。",
-  "version": "1.0.0",
+  "description": "汇总各类智能体分析结果生成专业报表文档，并支持通过自然语言持续修改、润色、补充和重组文档内容。",
+  "version": "1.1.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_report"
@@ -10,7 +10,10 @@
   "tags": [
     "builtin",
     "agent",
-    "report"
+    "report",
+    "document",
+    "summary",
+    "editing"
   ],
   "enabled": true,
   "entry": "SKILL.md"

@@ -155,6 +155,63 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("采集策略配置围栏应解析为配置片段")
+    void parseCollectionPolicyConfigFence() {
+        String content = """
+                ```zenvis:collection-policy-config
+                {"runtimeConfig":{"process":["frpc"]}}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("采集策略配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("collection-policy", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("checker_config/{host|android|ios|h5|wechat}.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("标记评分策略配置围栏应解析为配置片段")
+    void parseTaggingPolicyConfigFence() {
+        String content = """
+                ```zenvis:tagging-policy-config
+                [{"name":"高危评分","score_rules":[]}]
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("标记评分策略配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("tagging-policy", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("rating_config/rating_rule.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("生产处置策略配置围栏应解析为配置片段")
+    void parseDisposalPolicyConfigFence() {
+        String content = """
+                ```zenvis:disposal-policy-config
+                [{"tag":"webshell","sourceRegex":".*","action":{"type":1,"title":"阻断","message":"阻断风险源"}}]
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("处置策略配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("disposal-policy", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("punish_config/<stable-name>.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
     @DisplayName("think 标签应解析为思考片段并从正文中剥离")
     void parseThinkingTag() {
         List<ChatMessagePart> parts = parser.parse("<think>先分析问题\n再给结论</think>\n最终回答", MessageType.TEXT);

@@ -160,6 +160,30 @@ public class ChatMessagePartParser {
                     "analysis-disposal-strategy.json",
                     info
             );
+            case "zenvis:collection-policy-config" -> configPart(
+                    body,
+                    "采集策略配置",
+                    "json",
+                    "collection-policy",
+                    "checker_config/{host|android|ios|h5|wechat}.json",
+                    info
+            );
+            case "zenvis:tagging-policy-config" -> configPart(
+                    body,
+                    "标记评分策略配置",
+                    "json",
+                    "tagging-policy",
+                    "rating_config/rating_rule.json",
+                    info
+            );
+            case "zenvis:disposal-policy-config" -> configPart(
+                    body,
+                    "处置策略配置",
+                    "json",
+                    "disposal-policy",
+                    "punish_config/<stable-name>.json",
+                    info
+            );
             default -> null;
         };
     }

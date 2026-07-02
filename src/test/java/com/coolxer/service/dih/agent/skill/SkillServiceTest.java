@@ -190,6 +190,39 @@ class SkillServiceTest {
                 .contains("analysis_task_queue_status");
     }
 
+    @Test
+    void builtinDisposeSkillDocumentsPolicyWorkflow() throws Exception {
+        Path repoSkill = Path.of("deploy/open_config/skill_config/dispose-agent");
+        writeSkill(
+                skillRoot.resolve("dispose-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DISPOSE);
+
+        assertThat(prompt)
+                .contains("采集/检测策略")
+                .contains("标记/评分策略")
+                .contains("处置策略")
+                .contains("policy_config_schema")
+                .contains("policy_config_tree")
+                .contains("policy_config_read")
+                .contains("policy_config_validate")
+                .contains("policy_config_simulate")
+                .contains("policy_config_ensure_root")
+                .contains("policy_config_apply")
+                .contains("zenvis:collection-policy-config")
+                .contains("zenvis:tagging-policy-config")
+                .contains("zenvis:disposal-policy-config")
+                .contains("policy.apply_to_production")
+                .contains("需求映射")
+                .contains("回滚建议");
+    }
+
     private SkillService newSkillService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());

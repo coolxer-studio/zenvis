@@ -1,6 +1,7 @@
 package com.coolxer.configuration.mcp;
 
 import com.coolxer.controller.policy.ConfigMcpTool;
+import com.coolxer.controller.policy.PolicyConfigValidationMcpTool;
 import com.coolxer.controller.retrieval.RetrievalMcpTool;
 import com.coolxer.controller.system.AnalysisTaskMcpTool;
 import com.coolxer.controller.system.DashboardMcpTool;
@@ -27,6 +28,7 @@ public class McpServerToolConfiguration {
                                                                     AnalysisTaskMcpTool analysisTaskMcpTool,
                                                                     PushTaskMcpTool pushTaskMcpTool,
                                                                     ConfigMcpTool configMcpTool,
+                                                                    PolicyConfigValidationMcpTool policyConfigValidationMcpTool,
                                                                     MenuMcpTool menuMcpTool,
                                                                     DashboardMcpTool dashboardMcpTool) {
         log.info("=== Creating MethodToolCallbackProvider for MCP tools ===");
@@ -35,12 +37,14 @@ public class McpServerToolConfiguration {
         logToolMethods(AnalysisTaskMcpTool.class);
         logToolMethods(PushTaskMcpTool.class);
         logToolMethods(ConfigMcpTool.class);
+        logToolMethods(PolicyConfigValidationMcpTool.class);
         logToolMethods(MenuMcpTool.class);
         logToolMethods(DashboardMcpTool.class);
 
         // 创建 MethodToolCallbackProvider
         MethodToolCallbackProvider provider = MethodToolCallbackProvider.builder()
-                .toolObjects(retrievalMcpTool, analysisTaskMcpTool, pushTaskMcpTool, configMcpTool, menuMcpTool, dashboardMcpTool)
+                .toolObjects(retrievalMcpTool, analysisTaskMcpTool, pushTaskMcpTool, configMcpTool,
+                        policyConfigValidationMcpTool, menuMcpTool, dashboardMcpTool)
                 .build();
 
         log.info("=== MethodToolCallbackProvider created successfully ===");

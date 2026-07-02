@@ -41,7 +41,7 @@ public final class BuiltinAgentSkillRegistry {
                     AGENT_DISPOSE,
                     "策略控制",
                     40,
-                    "策略控制智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+                    "策略控制智能体可生成采集、标记评分和处置策略，并通过配置管理 MCP 完成受控发布。"
             ),
             new BuiltinAgentSkill(
                     "report-agent",

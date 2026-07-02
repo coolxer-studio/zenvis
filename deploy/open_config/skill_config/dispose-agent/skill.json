@@ -1,8 +1,8 @@
 {
   "id": "dispose-agent",
   "name": "策略控制",
-  "description": "系统内置策略控制智能体 Skill，占位能力后续补充。",
-  "version": "1.0.0",
+  "description": "根据客户需求和系统配置规范生成采集、标记评分和处置策略，完成解释、校验、模拟，并在确认后写入生产配置。",
+  "version": "1.1.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_dispose"
@@ -10,7 +10,10 @@
   "tags": [
     "builtin",
     "agent",
-    "dispose"
+    "dispose",
+    "policy",
+    "validation",
+    "simulation"
   ],
   "enabled": true,
   "entry": "SKILL.md"

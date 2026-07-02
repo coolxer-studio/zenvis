@@ -230,6 +230,10 @@ interface Props {
   chatSessionType?: string
 }
 
+type SendMessageOptions = {
+  content?: string;
+};
+
 const props = defineProps<Props>()
 
 // 添加深度思考状态
@@ -248,6 +252,12 @@ const isUploadingAttachment = ref(false)
 const canSendMessage = computed(() => {
   return !isUploadingAttachment.value && (inputMessage.value.trim().length > 0 || pendingAttachments.value.length > 0)
 })
+
+const AUTO_CONFIRM_ACTIONS = new Set([
+  'analysis.start',
+  'analysis.create_continuous_task',
+  'policy.apply_to_production',
+])
 
 // 添加一个变量来跟踪Enter按键次数
 const enterPressCount = ref(0)
@@ -693,14 +703,21 @@ const insertLineBreak = () => {
 }
 
 // 发送消息
-const sendMessage = async () => {
-  if (canSendMessage.value) {
+const sendMessage = async (options: SendMessageOptions = {}) => {
+  const explicitMessage = options.content?.trim();
+  const canSend = explicitMessage
+    ? !isUploadingAttachment.value
+    : canSendMessage.value;
+
+  if (canSend) {
     // 清空输入框 
-    const sendMessage = inputMessage.value.trim();
-    const messageAttachments = pendingAttachments.value.slice();
+    const sendMessage = explicitMessage || inputMessage.value.trim();
+    const messageAttachments = explicitMessage ? [] : pendingAttachments.value.slice();
     const displayMessage = sendMessage || '请分析上传的附件内容。';
-    inputMessage.value = ''
-    pendingAttachments.value = []
+    if (!explicitMessage) {
+      inputMessage.value = ''
+      pendingAttachments.value = []
+    }
     // 添加用户消息
     messages.value.push({
       sender: 'user',
@@ -803,6 +820,21 @@ const sendMessage = async () => {
     }
   }
 }
+
+const confirmAction = (part: ChatMessagePart) => {
+  const action = part.metadata?.action;
+  return typeof action === 'string' ? action : '';
+};
+
+const autoConfirmMessage = (action: string) => {
+  if (action === 'analysis.create_continuous_task') {
+    return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与 AI 分析任务。';
+  }
+  if (action === 'policy.apply_to_production') {
+    return '我已确认更新生产策略配置，请根据上一条确认卡、模拟测试结果和配置块，通过配置管理 MCP 写入系统配置。';
+  }
+  return '我已确认研判分析方案，请根据上一条确认卡开始执行一次性研判分析。';
+};
 
 // 切换任务折叠状态
 const toggleTask = (index: number) => {
@@ -931,6 +963,11 @@ const handleActionDecision = async (
     });
     payload.part.status = payload.decision;
     ElMessage.success(payload.decision === 'approved' ? '已确认执行' : '已取消操作');
+    const action = confirmAction(payload.part);
+    if (payload.decision === 'approved' && AUTO_CONFIRM_ACTIONS.has(action)) {
+      await nextTick();
+      await sendMessage({ content: autoConfirmMessage(action) });
+    }
   } catch (error) {
     console.error('记录确认结果失败:', error);
   }

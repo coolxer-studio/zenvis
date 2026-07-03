@@ -101,10 +101,22 @@ class WhereExpressionParser {
         if (matchKeyword("like")) {
             return criteria(field, "match", List.of(normalizeLikeValue(parseValue())));
         }
+        if (matchKeyword("is")) {
+            if (matchKeyword("not")) {
+                expectNullKeyword();
+                return criteria(field, "isnotnull", List.of());
+            }
+            expectNullKeyword();
+            return criteria(field, "isnull", List.of());
+        }
 
         Token operatorToken = peek();
         if (operatorToken.type() == TokenType.IDENT) {
             String operator = operatorToken.text().toLowerCase(Locale.ROOT);
+            if (List.of("isnull", "isnotnull").contains(operator)) {
+                position++;
+                return criteria(field, operator, List.of());
+            }
             if (List.of("equal", "notequal", "match", "contains", "greatthan", "lessthan", "greatequalthan", "lessequalthan").contains(operator)) {
                 position++;
                 return criteria(field, "contains".equals(operator) ? "match" : operator, List.of(parseValue()));
@@ -115,6 +127,12 @@ class WhereExpressionParser {
             return criteria(field, OPERATOR_MAP.get(operatorToken.text()), List.of(parseValue()));
         }
         throw invalid("高级where表达式操作符不正确");
+    }
+
+    private void expectNullKeyword() {
+        if (!matchKeyword("null")) {
+            throw invalid("is操作符仅支持null判断");
+        }
     }
 
     private String parseBetweenSecondValue() {

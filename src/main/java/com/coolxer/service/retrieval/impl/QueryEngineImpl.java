@@ -412,9 +412,12 @@ public class QueryEngineImpl implements QueryEngine {
     private String buildCriteriaSql(ColumnCriteria columnCriteria) {
         String columnName = requireIdentifier(columnCriteria.getColumnName(), "字段名");
         String operatorName = columnCriteria.getOperatorName();
-        List<String> valueList = columnCriteria.getValueList();
+        List<String> valueList = columnCriteria.getValueList() == null ? Collections.emptyList() : columnCriteria.getValueList();
         if (StringUtils.isNotBlank(columnCriteria.getRetrievalType())) {
             valueList = valueList.stream().map(value -> convertValueList(value, columnCriteria.getRetrievalType())).toList();
+        }
+        if (isNullOperator(operatorName)) {
+            return buildNullCriteriaSql(columnName, operatorName, columnCriteria.getColumnType());
         }
         if (CollectionUtils.isEmpty(valueList)) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索条件值不能为空");
@@ -436,6 +439,27 @@ public class QueryEngineImpl implements QueryEngine {
                     .map(value -> formatSingleValue(value, columnCriteria.getColumnType(), columnCriteria.getRetrievalType())).toList(), ",") + ")";
             default -> throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "不支持的检索操作符: " + operatorName);
         };
+    }
+
+    private boolean isNullOperator(String operatorName) {
+        return "isnull".equals(operatorName) || "isnotnull".equals(operatorName);
+    }
+
+    private String buildNullCriteriaSql(String columnName, String operatorName, String columnType) {
+        boolean checksEmptyValue = isArrayType(columnType) || isStringType(columnType);
+        if ("isnull".equals(operatorName)) {
+            if (checksEmptyValue) {
+                return "(" + columnName + " is null or length(" + columnName + ") = 0)";
+            }
+            return columnName + " is null";
+        }
+        if ("isnotnull".equals(operatorName)) {
+            if (checksEmptyValue) {
+                return "(" + columnName + " is not null and length(" + columnName + ") > 0)";
+            }
+            return columnName + " is not null";
+        }
+        throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "不支持的检索操作符: " + operatorName);
     }
 
     private String buildCriteriaExpressionSql(ColumnCriteriaExpression expression) {
@@ -516,6 +540,10 @@ public class QueryEngineImpl implements QueryEngine {
                 || lowerType.contains("float")
                 || lowerType.contains("decimal")
                 || lowerType.contains("double");
+    }
+
+    private boolean isStringType(String columnType) {
+        return StringUtils.containsIgnoreCase(columnType, "String");
     }
 
     private boolean isArrayType(String columnType) {

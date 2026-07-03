@@ -18,10 +18,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Service
@@ -30,6 +35,22 @@ public class MetaDataServiceImpl implements MetaDataService {
 
     private static MetaData metaData;
     private static Map<String, Map<String, Object>> metaDataMap;
+
+    private static final Map<String, String> DEFAULT_OPERATOR_LABEL_MAP = new LinkedHashMap<>();
+
+    static {
+        DEFAULT_OPERATOR_LABEL_MAP.put("equal", "等于");
+        DEFAULT_OPERATOR_LABEL_MAP.put("notequal", "不等于");
+        DEFAULT_OPERATOR_LABEL_MAP.put("isnull", "为空");
+        DEFAULT_OPERATOR_LABEL_MAP.put("isnotnull", "不为空");
+        DEFAULT_OPERATOR_LABEL_MAP.put("match", "模糊匹配");
+        DEFAULT_OPERATOR_LABEL_MAP.put("greatthan", "大于");
+        DEFAULT_OPERATOR_LABEL_MAP.put("greatequalthan", "大于等于");
+        DEFAULT_OPERATOR_LABEL_MAP.put("lessthan", "小于");
+        DEFAULT_OPERATOR_LABEL_MAP.put("lessequalthan", "小于等于");
+        DEFAULT_OPERATOR_LABEL_MAP.put("between", "之间");
+        DEFAULT_OPERATOR_LABEL_MAP.put("in", "包含");
+    }
 
     @Autowired
     private CustomWebConfig customWebConfig;
@@ -53,6 +74,7 @@ public class MetaDataServiceImpl implements MetaDataService {
                             metaData.merge(metaDataTmp);
                         });
             }
+            supplementOperators(metaData);
             MetaDataServiceImpl.metaData = metaData;
             Map<String, Map<String, Object>> metaDataMap = new HashMap<>();
             Map<String, Object> entityMap = new HashMap<>();
@@ -72,6 +94,65 @@ public class MetaDataServiceImpl implements MetaDataService {
             log.error("read meta.json fail, {}", ex);
         }
         return null;
+    }
+
+    private void supplementOperators(MetaData metaData) {
+        if (metaData == null) {
+            return;
+        }
+        supplementOperatorDefinitions(metaData);
+        metaData.getAttribute().forEach(this::supplementAttributeOperators);
+    }
+
+    private void supplementOperatorDefinitions(MetaData metaData) {
+        Set<String> operatorNames = new LinkedHashSet<>();
+        metaData.getOperator().forEach(operator -> operatorNames.add(operator.getName()));
+        DEFAULT_OPERATOR_LABEL_MAP.forEach((name, label) -> {
+            if (!operatorNames.contains(name)) {
+                DataOperator dataOperator = new DataOperator();
+                dataOperator.setName(name);
+                dataOperator.setLabel(label);
+                metaData.getOperator().add(dataOperator);
+            }
+        });
+    }
+
+    private void supplementAttributeOperators(DataAttribute attribute) {
+        List<String> operators = new ArrayList<>();
+        if (attribute.getOperators() != null) {
+            operators.addAll(attribute.getOperators());
+        }
+        defaultOperatorsFor(attribute).forEach(operator -> {
+            if (!operators.contains(operator)) {
+                operators.add(operator);
+            }
+        });
+        attribute.setOperators(operators);
+    }
+
+    private List<String> defaultOperatorsFor(DataAttribute attribute) {
+        String columnType = StringUtils.defaultString(attribute.getColumnType()).toLowerCase(Locale.ROOT);
+        String retrievalType = StringUtils.defaultString(attribute.getRetrievalType()).toLowerCase(Locale.ROOT);
+        if (columnType.startsWith("array")) {
+            return List.of("equal", "notequal", "isnull", "isnotnull", "in", "match");
+        }
+        if ("date".equals(retrievalType) || columnType.startsWith("date")) {
+            return List.of("equal", "notequal", "isnull", "isnotnull", "greatthan", "greatequalthan", "lessthan", "lessequalthan", "between");
+        }
+        if (isNumberType(columnType)) {
+            return List.of("equal", "notequal", "isnull", "isnotnull", "in", "greatthan", "greatequalthan", "lessthan", "lessequalthan", "between");
+        }
+        if (columnType.contains("string") || StringUtils.isBlank(columnType)) {
+            return List.of("equal", "notequal", "isnull", "isnotnull", "in", "match");
+        }
+        return List.of("equal", "notequal", "isnull", "isnotnull", "in");
+    }
+
+    private boolean isNumberType(String columnType) {
+        return columnType.startsWith("int")
+                || columnType.startsWith("uint")
+                || columnType.startsWith("float")
+                || columnType.startsWith("decimal");
     }
 
     private String attributeMapKey(String entity, String attribute) {

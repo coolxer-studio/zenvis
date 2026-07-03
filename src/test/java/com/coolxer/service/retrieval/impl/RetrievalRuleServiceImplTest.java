@@ -111,6 +111,22 @@ class RetrievalRuleServiceImplTest {
     }
 
     @Test
+    void generateRetrievalRuleSupportsAdvancedNullOperators() {
+        RetrievalRuleServiceImpl retrievalRuleService = service();
+
+        RetrievalRequestDto request = new RetrievalRequestDto();
+        request.setEntity("asset");
+        request.setSql("ip is not null");
+        request.setDisplayList(List.of(display("asset", "ip")));
+
+        RetrievalRule rule = retrievalRuleService.generateRetrievalRule(request);
+
+        assertThat(rule.getRetrievalCriteria()).hasSize(1);
+        assertThat(rule.getRetrievalCriteria().get(0).getOperator().getName()).isEqualTo("isnotnull");
+        assertThat(rule.getRetrievalCriteria().get(0).getValueList()).isEmpty();
+    }
+
+    @Test
     void compactAdvancedRuleForPersistenceDropsExpandedExpressionAndCanHydrate() {
         RetrievalRuleServiceImpl retrievalRuleService = service();
 
@@ -159,6 +175,50 @@ class RetrievalRuleServiceImplTest {
         assertThat(hydratedRule.getRetrievalCriteria()).hasSize(1);
         assertThat(hydratedRule.getRetrievalCriteria().get(0).getEntity().getTableName()).isEqualTo("asset_table");
         assertThat(hydratedRule.getRetrievalCriteria().get(0).getAttribute().getColumnName()).isEqualTo("src_ip");
+    }
+
+    @Test
+    void generateRetrievalRuleKeepsNormalCriteriaOrLogic() {
+        RetrievalRuleServiceImpl retrievalRuleService = service();
+
+        RetrievalRequestDto request = new RetrievalRequestDto();
+        request.setEntity("asset");
+        request.setCriteriaLogic("or");
+        RequestCriteriaDto ipCondition = new RequestCriteriaDto();
+        ipCondition.setAttribute("ip");
+        ipCondition.setOperator("equal");
+        ipCondition.setValueList(List.of("10.0.0.1"));
+        RequestCriteriaDto moduleCondition = new RequestCriteriaDto();
+        moduleCondition.setAttribute("module_type_name");
+        moduleCondition.setOperator("match");
+        moduleCondition.setValueList(List.of("网站攻击"));
+        request.setCriteriaList(List.of(ipCondition, moduleCondition));
+        request.setDisplayList(List.of(display("asset", "ip")));
+
+        RetrievalRule rule = retrievalRuleService.generateRetrievalRule(request);
+
+        assertThat(rule.getCriteriaLogic()).isEqualTo("or");
+        assertThat(rule.getRetrievalCriteria()).hasSize(2);
+    }
+
+    @Test
+    void generateRetrievalRuleKeepsNormalNullOperatorWithoutValue() {
+        RetrievalRuleServiceImpl retrievalRuleService = service();
+
+        RetrievalRequestDto request = new RetrievalRequestDto();
+        request.setEntity("asset");
+        RequestCriteriaDto condition = new RequestCriteriaDto();
+        condition.setAttribute("ip");
+        condition.setOperator("isnull");
+        condition.setValueList(List.of());
+        request.setCriteriaList(List.of(condition));
+        request.setDisplayList(List.of(display("asset", "ip")));
+
+        RetrievalRule rule = retrievalRuleService.generateRetrievalRule(request);
+
+        assertThat(rule.getRetrievalCriteria()).hasSize(1);
+        assertThat(rule.getRetrievalCriteria().get(0).getOperator().getName()).isEqualTo("isnull");
+        assertThat(rule.getRetrievalCriteria().get(0).getValueList()).isEmpty();
     }
 
     @Test
@@ -254,7 +314,7 @@ class RetrievalRuleServiceImplTest {
         @Override
         public DataAttribute getDataAttributeByName(String entity, String attribute) {
             if ("asset".equals(entity) && "ip".equals(attribute)) {
-                return attribute("ip", "src_ip", "String", List.of("equal", "in", "match"));
+                return attribute("ip", "src_ip", "String", List.of("equal", "in", "match", "isnull", "isnotnull"));
             }
             if ("asset".equals(entity) && "module_type_name".equals(attribute)) {
                 return attribute("module_type_name", "module_type_name", "String", List.of("match"));
@@ -282,7 +342,7 @@ class RetrievalRuleServiceImplTest {
 
         @Override
         public DataOperator getDataOperatorByName(String name) {
-            return List.of("equal", "notequal", "in", "match", "between", "greatthan", "lessthan", "greatequalthan", "lessequalthan").contains(name) ? operator(name) : null;
+            return List.of("equal", "notequal", "in", "match", "between", "greatthan", "lessthan", "greatequalthan", "lessequalthan", "isnull", "isnotnull").contains(name) ? operator(name) : null;
         }
     }
 }

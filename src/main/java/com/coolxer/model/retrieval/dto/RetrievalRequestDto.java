@@ -18,6 +18,8 @@ public class RetrievalRequestDto {
 
     private List<RequestCriteriaDto> criteriaList;
 
+    private String criteriaLogic;
+
     private List<RequestDisplayDto> displayList;
 
     private String token;

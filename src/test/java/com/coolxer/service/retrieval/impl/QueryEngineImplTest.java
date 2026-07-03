@@ -28,6 +28,31 @@ class QueryEngineImplTest {
     }
 
     @Test
+    void buildCriteriaSqlSupportsValuelessNullOperators() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+
+        String stringNullSql = ReflectionTestUtils.invokeMethod(
+                queryEngine,
+                "buildCriteriaSql",
+                criteria("attack_type_name", "String", "isnull", List.of())
+        );
+        String numberNotNullSql = ReflectionTestUtils.invokeMethod(
+                queryEngine,
+                "buildCriteriaSql",
+                criteria("linkage_status", "Int32", "isnotnull", List.of())
+        );
+        String arrayNotNullSql = ReflectionTestUtils.invokeMethod(
+                queryEngine,
+                "buildCriteriaSql",
+                criteria("tags", "Array(String)", "isnotnull", List.of())
+        );
+
+        assertThat(stringNullSql).isEqualTo("(attack_type_name is null or length(attack_type_name) = 0)");
+        assertThat(numberNotNullSql).isEqualTo("linkage_status is not null");
+        assertThat(arrayNotNullSql).isEqualTo("(tags is not null and length(tags) > 0)");
+    }
+
+    @Test
     void buildPageKeepsSafeSortAndRejectsUnsafeSortIdentifier() {
         QueryEngineImpl queryEngine = new QueryEngineImpl();
 
@@ -69,11 +94,15 @@ class QueryEngineImplTest {
     }
 
     private ColumnCriteria criteria(String column, String columnType, String operator, String value) {
+        return criteria(column, columnType, operator, List.of(value));
+    }
+
+    private ColumnCriteria criteria(String column, String columnType, String operator, List<String> valueList) {
         ColumnCriteria criteria = new ColumnCriteria();
         criteria.setColumnName(column);
         criteria.setColumnType(columnType);
         criteria.setOperatorName(operator);
-        criteria.setValueList(List.of(value));
+        criteria.setValueList(valueList);
         return criteria;
     }
 

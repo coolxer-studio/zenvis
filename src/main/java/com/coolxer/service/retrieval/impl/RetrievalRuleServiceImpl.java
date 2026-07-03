@@ -157,7 +157,7 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         } else {
             List<RetrievalCriteria> retrievalCriteriaList = generateRetrievalCriteriaList(retrievalRequestDTO);
             retrievalRule.setRetrievalCriteria(retrievalCriteriaList);
-            retrievalRule.setCriteriaLogic("and");
+            retrievalRule.setCriteriaLogic(normalizeLogic(retrievalRequestDTO.getCriteriaLogic()));
         }
 
         List<DisplayAttribute> displayAttributeList = generateDisplayColumnList(retrievalRequestDTO);
@@ -518,6 +518,11 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
                 .filter(StringUtils::isNotBlank)
                 .toList();
         switch (operator) {
+            case "isnull", "isnotnull" -> {
+                if (!normalized.isEmpty()) {
+                    throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), operator + "操作符不需要值");
+                }
+            }
             case "between" -> {
                 if (normalized.size() != 2) {
                     throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "between操作符需要两个值");

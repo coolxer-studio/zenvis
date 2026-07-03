@@ -2,6 +2,8 @@ package com.coolxer.service.retrieval.impl;
 
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.MetaData;
+import com.coolxer.model.retrieval.vo.DataAttributeVo;
+import com.coolxer.utils.JacksonUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -29,6 +31,35 @@ class MetaDataServiceImplTest {
         assertThat(dateAttribute.getOperators()).containsExactly(
                 "equal", "notequal", "isnull", "isnotnull", "greatthan", "greatequalthan", "lessthan", "lessequalthan", "between");
         assertThat(arrayAttribute.getOperators()).containsExactly("equal", "notequal", "isnull", "isnotnull", "in", "match");
+    }
+
+    @Test
+    void readsAutoCompleteFlagFromSnakeCaseMeta() {
+        MetaData metaData = JacksonUtil.toObject("""
+                {
+                  "attribute": [
+                    {
+                      "entity": "asset",
+                      "name": "device_name",
+                      "column_type": "String",
+                      "operators": ["equal"],
+                      "auto_complete": true
+                    }
+                  ]
+                }
+                """, MetaData.class);
+
+        assertThat(metaData.getAttribute()).hasSize(1);
+        assertThat(metaData.getAttribute().get(0).isAutoComplete()).isTrue();
+    }
+
+    @Test
+    void serializesDataAttributeVoAutoCompleteAsSnakeCase() {
+        DataAttributeVo dataAttributeVo = new DataAttributeVo();
+        dataAttributeVo.setName("device_name");
+        dataAttributeVo.setAutoComplete(true);
+
+        assertThat(JacksonUtil.toMap(dataAttributeVo)).containsEntry("auto_complete", true);
     }
 
     private DataAttribute attribute(String name, String columnType, String retrievalType, List<String> operators) {

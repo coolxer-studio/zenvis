@@ -17,6 +17,8 @@ public class DataAttributeVo {
 
     private boolean aggregateLink;
 
+    private boolean autoComplete;
+
     private List<OperatorVo> operatorList;
 
 }

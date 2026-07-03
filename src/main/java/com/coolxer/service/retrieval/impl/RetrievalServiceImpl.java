@@ -187,6 +187,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         dataAttributeVo.setLabel(dataAttribute.getLabel());
         dataAttributeVo.setDescription(dataAttribute.getDescription());
         dataAttributeVo.setAggregateLink(dataAttribute.isAggregateLink());
+        dataAttributeVo.setAutoComplete(dataAttribute.isAutoComplete());
         if (Objects.nonNull(dataAttribute.getRetrievalType())) {
             dataAttributeVo.setRetrievalType(dataAttribute.getRetrievalType());
         }

@@ -82,6 +82,11 @@ public class DataAttribute {
     private boolean mustCandidate;
 
     /**
+     * 标识该属性是否启用输入自动补全
+     */
+    private boolean autoComplete;
+
+    /**
      * 属性字典映射关系
      */
     private Map<String, Object> mapping;

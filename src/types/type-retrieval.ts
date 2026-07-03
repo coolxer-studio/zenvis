@@ -59,10 +59,19 @@ export type TAttributeListResponse = {
   retrieval_type?: string;
   display_type?: string;
   aggregate_link?: boolean;
+  auto_complete?: boolean;
 };
 export type OperatorItem = {
   name: string;
   label: string;
+};
+
+export type AutoCompleteOption = {
+  label: string;
+  value: string;
+};
+export type AutoCompleteResponse = {
+  options: AutoCompleteOption[];
 };
 
 // 候选值响应

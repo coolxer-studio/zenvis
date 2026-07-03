@@ -11,6 +11,7 @@ import {
   DeleteRuleParams,
   DeleteRuleResponse,
   RetrievalSearchRequest,
+  AutoCompleteResponse,
 } from "@/types/type-retrieval";
 import { listResponse } from "@/types/type-public";
 
@@ -27,6 +28,12 @@ export class RetrievalService {
 
   static async getCandidate(params: { entity?: string; attribute?: string; text?: string }): Promise<CandidateResponse> {
     return request<CandidateResponse>(`${prefix}/candidate/list`, params, 'GET');
+  }
+
+  static async autoComplete(params: { entity: string; attribute: string; term?: string }): Promise<AutoCompleteResponse> {
+    const { entity, attribute, term } = params;
+    const url = `/api/v1/entity/${encodeURIComponent(entity)}/${encodeURIComponent(attribute)}/auto-complete`;
+    return request<AutoCompleteResponse>(url, { term }, 'GET', { silent: true });
   }
 
   static async getDisplayEntity(): Promise<DisplayEntityResponse> {

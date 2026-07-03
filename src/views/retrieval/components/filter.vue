@@ -138,7 +138,19 @@
                         class="form-date-picker"/>
                     </template>
                     <template v-else>
+                      <el-autocomplete
+                        v-if="shouldUseAutoComplete(item as TAttributeListResponse)"
+                        v-model="criteriaObject[(item as any).name + 'Value']"
+                        :fetch-suggestions="(queryString, callback) => fetchAutoCompleteSuggestions(item as TAttributeListResponse, queryString, callback)"
+                        placeholder="请输入值"
+                        class="form-input"
+                        value-key="label"
+                        :trigger-on-focus="false"
+                        clearable
+                        @select="(option) => handleAutoCompleteSelect(item as TAttributeListResponse, option)"
+                      />
                       <el-input
+                        v-else
                         v-model="criteriaObject[(item as any).name + 'Value']"
                         placeholder="请输入值"
                         class="form-input"
@@ -171,10 +183,12 @@
     RetrievalSearchRequest,
     SelectAttributeItem,
     RetrievalLogic,
+    AutoCompleteOption,
   } from "@/types/type-retrieval";
   import { RetrievalService } from '@/service/api';
   import {ElMessage} from 'element-plus';
   import dayjs, {Dayjs} from 'dayjs';
+  import { debounce } from 'lodash-es';
   const props = defineProps({
     activeRule: {
       type: Number,
@@ -235,6 +249,18 @@
   const filterKeySelected = ref<string[]>(filter.filterKeySelected || [])
   const filterSelected = ref<TAttributeListResponse[]>(filter.filterSelected || [])
   const filterKeySelectedCopy = ref<string[]>(filter.filterKeySelected || [])
+  type AutoCompleteCallback = (items: AutoCompleteOption[]) => void
+  type AutoCompleteFetcher = (queryString: string, callback: AutoCompleteCallback) => void
+  const singleValueAutoCompleteOperators = [
+    'equal',
+    'notequal',
+    'match',
+    'greatthan',
+    'lessthan',
+    'greatequalthan',
+    'lessequalthan',
+  ]
+  const autoCompleteFetchers = new Map<string, AutoCompleteFetcher>()
   const disabledDate = (current: Dayjs) => {
     return current && current >= dayjs().endOf('day');
   };
@@ -295,6 +321,51 @@
   }
   const isValuelessOperator = (operator?: string): boolean => {
     return operator === 'isnull' || operator === 'isnotnull'
+  }
+  const isSingleValueAutoCompleteOperator = (operator?: string): boolean => {
+    return singleValueAutoCompleteOperators.includes(operator || '')
+  }
+  const shouldUseAutoComplete = (item: TAttributeListResponse): boolean => {
+    return Boolean(
+      item.auto_complete &&
+      entitySelected.value &&
+      isSingleValueAutoCompleteOperator(criteriaObject.value[item.name + 'Operator'])
+    )
+  }
+  const getAutoCompleteFetcher = (item: TAttributeListResponse): AutoCompleteFetcher => {
+    const key = `${entitySelected.value || ''}:${item.name}`
+    const existing = autoCompleteFetchers.get(key)
+    if (existing) {
+      return existing
+    }
+    const fetcher = debounce((queryString: string, callback: AutoCompleteCallback) => {
+      const term = queryString.trim()
+      if (!entitySelected.value || !term) {
+        callback([])
+        return
+      }
+      RetrievalService.autoComplete({
+        entity: entitySelected.value,
+        attribute: item.name,
+        term,
+      }).then((res) => {
+        callback(res.options || [])
+      }).catch(() => {
+        callback([])
+      })
+    }, 250) as AutoCompleteFetcher
+    autoCompleteFetchers.set(key, fetcher)
+    return fetcher
+  }
+  const fetchAutoCompleteSuggestions = (
+    item: TAttributeListResponse,
+    queryString: string,
+    callback: AutoCompleteCallback,
+  ) => {
+    getAutoCompleteFetcher(item)(queryString, callback)
+  }
+  const handleAutoCompleteSelect = (item: TAttributeListResponse, option: AutoCompleteOption) => {
+    criteriaObject.value[item.name + 'Value'] = option.value
   }
   const handleOperatorChange = (item: TAttributeListResponse) => {
     if (isValuelessOperator(criteriaObject.value[item.name + 'Operator'])) {
@@ -586,6 +657,7 @@
     })
   }
   const handleChangeEntity = (val) => {
+    autoCompleteFetchers.clear()
     getAttributeList(val)
     filterSelected.value = []
     filterKeySelected.value = []
@@ -664,6 +736,7 @@
 
   onBeforeUnmount(() => {
     document.removeEventListener('click', handleDocumentClick)
+    autoCompleteFetchers.clear()
   })
 </script>
 <style lang="scss" scoped>

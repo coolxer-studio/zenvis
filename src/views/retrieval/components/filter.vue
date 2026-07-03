@@ -70,13 +70,22 @@
       </el-col>
     </el-row>
     <div v-if="!senior">
+      <div class="condition-logic-bar" v-if="filterSelected.length > 1">
+        <span class="condition-logic-label">关系：</span>
+        <el-segmented
+          v-model="criteriaLogic"
+          :options="criteriaLogicOptions"
+          size="small"
+          @change="handleCriteriaLogicChange"
+        />
+      </div>
       <div class="add-filter" v-for="(item, index) in filterSelected">
         <el-popover :visible="criteriaObject[(item as any).name + 'Visible']" placement="bottom-start" trigger="manual">
           <template #reference>
             <div class="filter-tag" @click.stop="togglePopover(item)">
               <span class="tag-label">{{(item as any).label}}</span>
-              <span class="tag-operator">{{criteriaObject[(item as any).name + 'Operator'] == '==' ? '等于' : criteriaObject[(item as any).name + 'Operator'] == 'contains' ? '包含' : criteriaObject[(item as any).name + 'Operator']}}</span>
-              <span class="tag-value">{{criteriaObject[(item as any).name + 'Value'] ? (criteriaObject[(item as any).name + 'Value'] + '').substring(0, 10) : ''}}</span>
+              <span class="tag-operator">{{getSelectedOperatorLabel(item as TAttributeListResponse)}}</span>
+              <span class="tag-value" v-if="!isValuelessOperator(criteriaObject[(item as any).name + 'Operator'])">{{criteriaObject[(item as any).name + 'Value'] ? (criteriaObject[(item as any).name + 'Value'] + '').substring(0, 10) : ''}}</span>
               <el-icon v-if="!criteriaObject[(item as any).name + 'Visible'] == false" class="tag-arrow"><ArrowUp /></el-icon>
               <el-icon v-else class="tag-arrow"><ArrowDown /></el-icon>
               <el-icon class="tag-close" @click.stop="deleteFilter(index, item)"><Close /></el-icon>
@@ -92,11 +101,12 @@
                     v-model="criteriaObject[(item as any).name + 'Operator']"
                     placeholder="请选择操作符"
                     class="form-select"
+                    @change="handleOperatorChange(item as TAttributeListResponse)"
                   >
                     <el-option v-for="item1 in (item as any).operator_list" :value="(item1 as any).name" :label="(item1 as any).label"></el-option>
                   </el-select>
                 </div>
-                <div class="form-item value-item" v-show="criteriaObject[(item as any).name + 'Operator']">
+                <div class="form-item value-item" v-show="criteriaObject[(item as any).name + 'Operator'] && !isValuelessOperator(criteriaObject[(item as any).name + 'Operator'])">
                   <template v-if="criteriaObject[(item as any).name + 'Operator'] == 'between'">
                     <template v-if="item.retrieval_type == 'date'">
                       <el-date-picker
@@ -160,6 +170,7 @@
     TAttributeListResponse,
     RetrievalSearchRequest,
     SelectAttributeItem,
+    RetrievalLogic,
   } from "@/types/type-retrieval";
   import { RetrievalService } from '@/service/api';
   import {ElMessage} from 'element-plus';
@@ -208,6 +219,11 @@
   const criteriaList = ref<TCriteriaList[]>()
   const criteriaObject = ref<object>(filter.criteriaObject || {})
   const senior = ref<boolean>(false)
+  const criteriaLogic = ref<Exclude<RetrievalLogic, 'expression'>>(filter.criteriaLogic === 'or' ? 'or' : 'and')
+  const criteriaLogicOptions = [
+    { label: 'AND', value: 'and' },
+    { label: 'OR', value: 'or' },
+  ]
   const moreSearch = ref<string>('')
   const inputSearch = ref<string>('')
   const sql = ref<string>('')
@@ -277,12 +293,24 @@
       closeMoreFilter()
     }
   }
+  const isValuelessOperator = (operator?: string): boolean => {
+    return operator === 'isnull' || operator === 'isnotnull'
+  }
+  const handleOperatorChange = (item: TAttributeListResponse) => {
+    if (isValuelessOperator(criteriaObject.value[item.name + 'Operator'])) {
+      delete criteriaObject.value[item.name + 'Value']
+      delete criteriaObject.value[item.name + 'Value1']
+    }
+  }
   const hasCriteriaValue = (item: TAttributeListResponse): boolean => {
     const operator = criteriaObject.value[item.name + 'Operator']
     const value = criteriaObject.value[item.name + 'Value']
     const value1 = criteriaObject.value[item.name + 'Value1']
     if (!operator) {
       return false
+    }
+    if (isValuelessOperator(operator)) {
+      return true
     }
     if (operator === 'between') {
       if (item.retrieval_type === 'date') {
@@ -292,19 +320,48 @@
     }
     return Boolean(value)
   }
+  const getSelectedOperatorLabel = (item: TAttributeListResponse): string => {
+    const operatorName = criteriaObject.value[item.name + 'Operator']
+    const operator = item.operator_list?.find((operatorItem) => operatorItem.name === operatorName)
+    if (operator) {
+      return operator.label
+    }
+    if (operatorName === '==') {
+      return '等于'
+    }
+    if (operatorName === 'contains') {
+      return '包含'
+    }
+    return operatorName || ''
+  }
+  const hasCompleteSelectedCriteria = (): boolean => {
+    return filterKeySelected.value.every((key) => {
+      const item = AttributeListData.value.find(attribute => attribute.name === key)
+      return Boolean(item && hasCriteriaValue(item))
+    })
+  }
+  const handleCriteriaLogicChange = () => {
+    if (filterKeySelected.value.length && hasCompleteSelectedCriteria()) {
+      sendQuery1()
+    }
+  }
   const getQueryData = (): RetrievalSearchRequest => {
     const queryData: RetrievalSearchRequest = {
       entity: entitySelected.value,
       criteria_list: [] as any,
+      criteria_logic: criteriaLogic.value,
       type: 'normal'
     }
     filterSelected.value.map((e: TAttributeListResponse) => {
       if (hasCriteriaValue(e)) {
         let arr = [] as any
-        if (criteriaObject.value[e.name + 'Operator'] != 'between' && e.retrieval_type != 'date') {
+        if (isValuelessOperator(criteriaObject.value[e.name + 'Operator'])) {
+          arr = []
+        }
+        if (!isValuelessOperator(criteriaObject.value[e.name + 'Operator']) && criteriaObject.value[e.name + 'Operator'] != 'between' && e.retrieval_type != 'date') {
           arr = criteriaObject.value[e.name + 'Value'].split('\n')
         }
-        if (criteriaObject.value[e.name + 'Operator'] != 'between' && e.retrieval_type == 'date') {
+        if (!isValuelessOperator(criteriaObject.value[e.name + 'Operator']) && criteriaObject.value[e.name + 'Operator'] != 'between' && e.retrieval_type == 'date') {
           arr.push(dayjs(criteriaObject.value[e.name + 'Value']).format('YYYY-MM-DD HH:mm:ss'))
         }
         if (criteriaObject.value[e.name + 'Operator'] == 'between' && e.retrieval_type != 'date') {
@@ -352,6 +409,10 @@
         return `${condition.attribute} in (${values.map(serializeAdvancedValue).join(', ')})`
       case 'match':
         return `${condition.attribute} like ${serializeAdvancedValue(values[0] || '')}`
+      case 'isnull':
+        return `${condition.attribute} is null`
+      case 'isnotnull':
+        return `${condition.attribute} is not null`
       default:
         return `${condition.attribute} = ${serializeAdvancedValue(values[0] || '')}`
     }
@@ -427,7 +488,10 @@
           operatorLabel = e.label
         }
       })
-      if (criteriaObject.value[obj.name + 'Operator'] == 'between') {
+      if (isValuelessOperator(criteriaObject.value[obj.name + 'Operator'])) {
+        criteriaObject.value[obj.name + 'Title'] = obj.label + ' ' + operatorLabel
+        criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + operatorLabel
+      } else if (criteriaObject.value[obj.name + 'Operator'] == 'between') {
         if (obj.retrieval_type == 'date') {
           criteriaObject.value[obj.name + 'Title'] = obj.label + '介于' + dayjs(criteriaObject.value[obj.name + 'Value'][0]).format('YYYY-MM-DD HH:mm:ss') + '、' + dayjs(criteriaObject.value[obj.name + 'Value'][1]).format('YYYY-MM-DD HH:mm:ss') + operatorLabel
           criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + '介于' + ' <span style="color: #42ac66">' + dayjs(criteriaObject.value[obj.name + 'Value'][0]).format('YYYY-MM-DD HH:mm:ss') + '、' + dayjs(criteriaObject.value[obj.name + 'Value'][1]).format('YYYY-MM-DD HH:mm:ss') + operatorLabel + '</span>'
@@ -462,24 +526,13 @@
     RetrievalService.getAttribute(params).then((res: AttributeResponse) => {
       AttributeListData.value = res.attribute_list
       AttributeListDataCopy.value = res.attribute_list
+      criteriaLogic.value = res.criteria_logic === 'or' ? 'or' : 'and'
       if (res.select_attribute_list && res.select_attribute_list.length && res.attribute_list && res.attribute_list.length) {
         filterSelected.value = []
         filterKeySelected.value = []
         if (res.criteria_logic === 'expression' && res.sql) {
           senior.value = true
           sql.value = res.sql
-          return
-        }
-        if (res.criteria_logic === 'or') {
-          senior.value = true
-          sql.value = serializeWhereExpression({
-            logic: 'or',
-            conditions: res.select_attribute_list.map((e: SelectAttributeItem) => ({
-              attribute: e.name,
-              operator: e.operator_name || 'equal',
-              value_list: e.value_list || [],
-            })),
-          })
           return
         }
         senior.value = false
@@ -496,7 +549,12 @@
                   operatorLabel = e.label
                 }
               })
-              if (criteriaObject.value[a.name + 'Operator'] == 'between') {
+              if (isValuelessOperator(criteriaObject.value[a.name + 'Operator'])) {
+                delete criteriaObject.value[a.name + 'Value']
+                delete criteriaObject.value[a.name + 'Value1']
+                criteriaObject.value[a.name + 'Title'] = a.label + ' ' + operatorLabel
+                criteriaObject.value[a.name + 'AllName'] = '<span style="color: #3988ff">' + a.label + '</span> ' + operatorLabel
+              } else if (criteriaObject.value[a.name + 'Operator'] == 'between') {
                 if (a.retrieval_type == 'date') {
                   criteriaObject.value[a.name + 'Value'] = valueList
                   criteriaObject.value[a.name + 'Title'] = a.label + '介于' + criteriaObject.value[a.name + 'Value'][0] + '、' + criteriaObject.value[a.name + 'Value'][1] + operatorLabel
@@ -533,6 +591,7 @@
     filterKeySelected.value = []
     filterKeySelectedCopy.value = []
     criteriaObject.value = {}
+    criteriaLogic.value = 'and'
     sql.value = ''
     sendQuery()
     if (ruleId.value) {
@@ -581,6 +640,7 @@
       filterKeySelected.value = []
       filterKeySelectedCopy.value = []
       criteriaObject.value = {}
+      criteriaLogic.value = 'and'
       getEntityList()
     }
   )
@@ -660,6 +720,20 @@
   .option{
     color: #3988ff;
     cursor: pointer;
+  }
+  .condition-logic-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    margin-right: 16px;
+    height: 32px;
+    vertical-align: top;
+  }
+  .condition-logic-label {
+    color: #606266;
+    font-size: 14px;
+    white-space: nowrap;
   }
   .cur-po{
     cursor: pointer;

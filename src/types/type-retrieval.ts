@@ -22,6 +22,7 @@ export type RetrievalSearchRequest = {
   type?: 'normal' | 'advanced';
   entity?: string;
   criteria_list?: TCriteriaList[];
+  criteria_logic?: RetrievalLogic;
   sql?: string;
   display_list?: RetrievalDisplay[];
   rule_name?: string;

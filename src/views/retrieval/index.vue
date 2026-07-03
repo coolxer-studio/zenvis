@@ -77,7 +77,7 @@
   import {listResponse, TDynamicTableParams, TPagination, TTable} from "@/types/type-public";
   import { RetrievalService } from '@/service/api';
   import { merge } from 'lodash-es';
-  import {EntityResponse} from "@/types/type-retrieval";
+  import {EntityResponse, RetrievalSearchRequest} from "@/types/type-retrieval";
   import {ElMessage, ElMessageBox} from "element-plus";
   import type { FormInstance, FormRules } from 'element-plus';
   import {getContainer} from "@/types/type-modal";
@@ -149,8 +149,8 @@
       showQuickJumper: true,
     },
   });
-  const currentFilter = ref<object>()
-  const currentSorter = ref<object>()
+  const currentFilter = ref<RetrievalSearchRequest>()
+  const currentSorter = ref<Pick<RetrievalSearchRequest, 'sort_by' | 'order'>>()
   const deviceData = ref<object>({})
   interface ICol {
     entity: string;
@@ -170,6 +170,7 @@
     currentCol.entity = val.entity
     currentCol.attributeList = val.attributeList
     tableState.selectedCol = val.attributeList
+    getData(currentFilter.value)
 
     /*currentCol.value.entity = val.state.entity as string
     currentCol.value.displayCol = val.col.map((e) => {
@@ -311,20 +312,31 @@
   }
   const onChange = ({ pagination, sorter }: { pagination: TPagination, sorter: any }): void => {
     merge(tableState.pagination, pagination);
-    if (sorter) {
-      currentSorter.value = {sort_by: sorter.field, order: (sorter.order == 'ascend' ? 'asc' : 'desc')}
+    if (sorter?.prop || sorter?.field) {
+      const sortField = sorter.prop || sorter.field
+      if (sorter.order) {
+        currentSorter.value = {
+          sort_by: sortField,
+          order: sorter.order === 'ascending' || sorter.order === 'ascend' ? 'asc' : 'desc',
+        }
+      } else {
+        currentSorter.value = undefined
+      }
     }
     getData(currentFilter.value)
 };
-  const getQuery = (params) => {
+  const getQuery = (params: RetrievalSearchRequest) => {
     currentFilter.value = params
   }
-  const getQueryAndData = (params) => {
+  const getQueryAndData = (params: RetrievalSearchRequest) => {
     currentFilter.value = params
     tableState.pagination.current = 1
     getData(currentFilter.value)
   }
- const getData = (params) => {
+ const getData = (params?: RetrievalSearchRequest) => {
+   if (!params?.entity || !currentCol.attributeList.length) {
+     return
+   }
    const pageParams = {
      size: tableState.pagination.pageSize,
      page: tableState.pagination.current,

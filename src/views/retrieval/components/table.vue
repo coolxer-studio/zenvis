@@ -1,6 +1,6 @@
 <template>
   <div style="position: relative">
-    <el-popover :visible="colShow" placement="bottom-end" :popper-options="{ modifiers: [{ name: 'preventOverflow', options: { boundary: 'viewport' } }] }">
+    <el-popover :visible="colShow" placement="bottom-end" :width="240" :popper-options="{ modifiers: [{ name: 'preventOverflow', options: { boundary: 'viewport' } }] }">
       <template #reference>
         <div style="cursor: pointer;position: absolute;top: -40px;right: 0" @click.stop="colShow = !colShow">列
           <el-icon v-if="colShow"><ArrowUp /></el-icon>
@@ -42,6 +42,7 @@
       :loading="state.loading"
       :key="tableKey"
       border
+      @sort-change="handleSortChange"
     >
       <template v-for="(item, index) in state.selectedCol" :key="item.dataIndex">
         <el-table-column
@@ -49,12 +50,13 @@
           :label="item.title"
           :min-width="getMinWidth(item.title)"
           :fixed="item.fixed"
+          sortable="custom"
         >
           <template #header>
             <div class="header-cell">
-              <span>{{ item.title }}</span>
-              <el-dropdown trigger="click">
-                <el-button type="text" size="small">
+              <span class="header-title">{{ item.title }}</span>
+              <el-dropdown class="header-menu" trigger="click">
+                <el-button class="header-menu-btn" type="text" size="small">
                   <el-icon><ArrowDown /></el-icon>
                 </el-button>
                 <template #dropdown>
@@ -220,6 +222,7 @@ const onSearch = () => {
     })
 
     emit('on-display', toRaw({entity: props.state?.entity, attributeList: displayCol}));
+    colShow.value = false
   }
   const goAggregate = (field: string, value: unknown) => {
     const query = new URLSearchParams({
@@ -299,8 +302,45 @@ const onSearch = () => {
   }
   .header-cell {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .header-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .header-menu {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+  }
+  .header-menu-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  :deep(.el-table__header-wrapper th .cell) {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    min-width: 0;
+    line-height: 20px;
+    white-space: nowrap;
+  }
+  :deep(.el-table__header-wrapper th .cell .caret-wrapper) {
+    flex: 0 0 auto;
+    margin-left: 2px;
+    vertical-align: middle;
   }
   .more-filter{
     border-radius: 5px;

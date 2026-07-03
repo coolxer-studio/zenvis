@@ -10,6 +10,7 @@ import {
   RuleDetailResponse,
   DeleteRuleParams,
   DeleteRuleResponse,
+  RetrievalSearchRequest,
 } from "@/types/type-retrieval";
 import { listResponse } from "@/types/type-public";
 
@@ -24,7 +25,7 @@ export class RetrievalService {
     return request<AttributeResponse>(`${prefix}/attribute/list`, params, 'GET');
   }
 
-  static async getCandidate(params: { entity?: string; attribute?: string }): Promise<CandidateResponse> {
+  static async getCandidate(params: { entity?: string; attribute?: string; text?: string }): Promise<CandidateResponse> {
     return request<CandidateResponse>(`${prefix}/candidate/list`, params, 'GET');
   }
 
@@ -36,7 +37,7 @@ export class RetrievalService {
     return request<DisplayAttributeResponse>(`${prefix}/display/attribute/list`, '', 'GET');
   }
 
-  static async getListByCriteria(params: { criteria_id?: string; page?: number; size?: number }): Promise<listResponse<any>> {
+  static async getListByCriteria(params: RetrievalSearchRequest): Promise<listResponse<Record<string, unknown>>> {
     return request<listResponse<any>>(`${prefix}/do`, params);
   }
 

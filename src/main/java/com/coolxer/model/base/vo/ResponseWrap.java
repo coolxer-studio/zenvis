@@ -3,6 +3,7 @@ package com.coolxer.model.base.vo;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -10,22 +11,26 @@ import lombok.Data;
  * 请求返回结果模型
  */
 @Data
+@Schema(description = "ZenVis 统一业务响应。HTTP 200 不代表业务成功，业务成功以 status=0 为准。")
 public class ResponseWrap<T> {
 
 
     /**
      * 响应结果代码
      */
+    @Schema(description = "业务状态码，0 表示成功，101 表示需要重新登录", example = "0")
     private Integer status;
 
     /**
      * 提示消息(msg 是 message 的缩写，使用缩写是为了兼容原来的代码)
      */
+    @Schema(description = "业务提示消息", example = "请求成功")
     private String msg;
 
     /**
      * 数据
      */
+    @Schema(description = "接口业务数据")
     private T data;
 
     public ResponseWrap() {

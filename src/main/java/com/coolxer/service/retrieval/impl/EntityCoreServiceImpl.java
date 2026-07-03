@@ -110,7 +110,7 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             List<DataAttribute> dataAttributes = metaDataService.getAllDataAttributeByEntity(dataEntity);
             // searchMapDto 提取pageable 参数
             int page = Integer.parseInt(searchMapDto.remove("page").toString());
-            int perPage = Integer.parseInt(searchMapDto.remove("perPage").toString());
+            int perPage = Integer.parseInt(removeCompatibleParam(searchMapDto, "perPage", "per_page").toString());
             String orderBy = searchMapDto.containsKey("orderBy") ? searchMapDto.remove("orderBy").toString() : null;
             String orderDir = searchMapDto.containsKey("orderDir") ? searchMapDto.remove("orderDir").toString() : null;
             RetrievalPageable pageable = new RetrievalPageable(page, perPage, orderBy, orderDir);
@@ -118,6 +118,12 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             return new PageRowsVo<>((List<Map<String, Object>>) byPage.get("data"), ((BigDecimal) byPage.get("total")).longValue());
         }
         return null;
+    }
+
+    private Object removeCompatibleParam(Map<String, Object> params, String primaryKey, String compatibleKey) {
+        Object primaryValue = params.remove(primaryKey);
+        Object compatibleValue = params.remove(compatibleKey);
+        return primaryValue != null ? primaryValue : compatibleValue;
     }
 
     @Override

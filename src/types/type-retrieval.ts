@@ -59,21 +59,6 @@ export type DisplayAttributeResponse = {
   attribute_list: DisplayAttributeItem[];
 };
 
-// 检索条件参数
-export type CriteriaParams = {
-  entity?: string;
-  criteria_list?: TCriteriaList[];
-  attribute_list?: string[];
-  [key: string]: unknown;
-};
-
-// 检索条件响应
-export type CriteriaResponse = {
-  success: boolean;
-  criteria_id?: string;
-  message?: string;
-};
-
 // 规则参数
 export type RuleParams = {
   name?: string;

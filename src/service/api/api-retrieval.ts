@@ -5,8 +5,6 @@ import {
   CandidateResponse,
   DisplayEntityResponse,
   DisplayAttributeResponse,
-  CriteriaParams,
-  CriteriaResponse,
   RuleParams,
   RuleResponse,
   RuleDetailResponse,
@@ -36,10 +34,6 @@ export class RetrievalService {
 
   static async getDisplayAttribute(): Promise<DisplayAttributeResponse> {
     return request<DisplayAttributeResponse>(`${prefix}/display/attribute/list`, '', 'GET');
-  }
-
-  static async criteria(params: CriteriaParams): Promise<CriteriaResponse> {
-    return request<CriteriaResponse>(`${prefix}/criteria`, params);
   }
 
   static async getListByCriteria(params: { criteria_id?: string; page?: number; size?: number }): Promise<listResponse<any>> {

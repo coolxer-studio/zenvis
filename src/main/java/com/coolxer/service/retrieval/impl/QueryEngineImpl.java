@@ -1,7 +1,10 @@
 package com.coolxer.service.retrieval.impl;
 
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.query.ColumnCriteria;
+import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
 import com.coolxer.model.retrieval.query.DataQuery;
 import com.coolxer.model.retrieval.query.DisplayColumn;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
@@ -25,10 +28,15 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
 public class QueryEngineImpl implements QueryEngine {
+
+    private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?");
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     /**
      * entityManager实现原生查询，unitName是通过clickHouseEntityManagerFactoryBean注入时候指定的名字
@@ -38,34 +46,50 @@ public class QueryEngineImpl implements QueryEngine {
 
     @Transactional
     public void save(String tableName, List<String> columnList, List<String> valueList) {
+        String safeTableName = requireIdentifier(tableName, "表名");
+        List<String> safeColumnList = columnList.stream()
+                .map(column -> requireIdentifier(column, "字段名"))
+                .toList();
         // 构建插入SQL
-        String insertSql = "insert into " + tableName + " (" + StringUtils.join(columnList, ",") + ") values (" + StringUtils.join(valueList, ",") + ")";
+        String insertSql = "insert into " + safeTableName + " (" + StringUtils.join(safeColumnList, ",") + ") values (" + StringUtils.join(valueList, ",") + ")";
         Query query = entityManager.createNativeQuery(insertSql);
         query.executeUpdate();
     }
 
     @Transactional
     public void update(String tableName, Map<String, String> mapData, String keyColumn, String keyValue) {
+        String safeTableName = requireIdentifier(tableName, "表名");
+        String safeKeyColumn = requireIdentifier(keyColumn, "字段名");
         // 构建更新SQL
-        List<String> setList = mapData.entrySet().stream().map(entry -> entry.getKey() + " = " + entry.getValue()).toList();
-        String updateSql = "update " + tableName + " set " +
+        List<String> setList = mapData.entrySet().stream()
+                .map(entry -> requireIdentifier(entry.getKey(), "字段名") + " = " + entry.getValue())
+                .toList();
+        if (setList.isEmpty()) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "更新字段不能为空");
+        }
+        String updateSql = "update " + safeTableName + " set " +
                 StringUtils.join(setList, " , ")
-                + " where " + keyColumn + " = " + "'%s'".formatted(keyValue);
+                + " where " + safeKeyColumn + " = " + quote(keyValue);
         Query query = entityManager.createNativeQuery(updateSql);
         query.executeUpdate();
     }
 
     @Transactional
     public void delete(String tableName, String keyColumn, String keyValue) {
-        String deleteSql = "delete from " + tableName + " where " + keyColumn + " = " + "'%s'".formatted(keyValue);
+        String deleteSql = "delete from " + requireIdentifier(tableName, "表名") +
+                " where " + requireIdentifier(keyColumn, "字段名") + " = " + quote(keyValue);
         Query query = entityManager.createNativeQuery(deleteSql);
         query.executeUpdate();
     }
 
     @Transactional
     public void deleteIn(String tableName, String keyColumn, List<String> keyValueList) {
-        String deleteSql = "delete from " + tableName +
-                " where " + keyColumn + " in (" + StringUtils.join("'%s'".formatted(keyValueList), ",") + ")";
+        if (CollectionUtils.isEmpty(keyValueList)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "删除ID不能为空");
+        }
+        String deleteSql = "delete from " + requireIdentifier(tableName, "表名") +
+                " where " + requireIdentifier(keyColumn, "字段名") + " in (" +
+                StringUtils.join(keyValueList.stream().map(this::quote).toList(), ",") + ")";
         Query query = entityManager.createNativeQuery(deleteSql);
         query.executeUpdate();
     }
@@ -77,7 +101,7 @@ public class QueryEngineImpl implements QueryEngine {
         List<String> columnList = displayColumnList.stream().map(DisplayColumn::getColumnName).toList();
         String columnSelectSql = StringUtils.join(selectColumnList, ",");
 
-        String selectSql = "select " + columnSelectSql + " from " + tableName + " where id = " + "'%s'".formatted(id);
+        String selectSql = "select " + columnSelectSql + " from " + requireIdentifier(tableName, "表名") + " where id = " + quote(id);
         Query query = entityManager.createNativeQuery(selectSql);
         // 执行查询
         List<Object[]> result = query.getResultList();
@@ -100,7 +124,7 @@ public class QueryEngineImpl implements QueryEngine {
         String whereClause = " where 1=1";
         if (MapUtils.isNotEmpty(searchMap)) {
             whereClause = " where " + searchMap.entrySet().stream()
-                    .map(entry -> entry.getKey() + " = " + entry.getValue())
+                    .map(entry -> requireIdentifier(entry.getKey(), "字段名") + " = " + formatSearchValue(entry.getValue()))
                     .collect(Collectors.joining(" and "));
         }
         return queryCount(tableName, whereClause);
@@ -111,7 +135,7 @@ public class QueryEngineImpl implements QueryEngine {
         String whereClause = " where 1=1";
         if (MapUtils.isNotEmpty(searchMap)) {
             whereClause = " where " + searchMap.entrySet().stream()
-                    .map(entry -> entry.getKey() + " = " + entry.getValue())
+                    .map(entry -> requireIdentifier(entry.getKey(), "字段名") + " = " + formatSearchValue(entry.getValue()))
                     .collect(Collectors.joining(" and "));
         }
         // 补充时间条件
@@ -122,7 +146,9 @@ public class QueryEngineImpl implements QueryEngine {
     @Override
     @Transactional
     public Map<String, Object> countByDateOfWeek(String tableName, String timeField) {
-        String countSql = "SELECT toStartOfDay(insert_time) AS group_key, COUNT(*) AS count FROM " + tableName + " WHERE " + timeField + " >= today() - INTERVAL 1 WEEK GROUP BY toStartOfDay(" + timeField + ") ORDER BY group_key";
+        String safeTimeField = requireIdentifier(timeField, "字段名");
+        String countSql = "SELECT toStartOfDay(" + safeTimeField + ") AS group_key, COUNT(*) AS count FROM " +
+                requireIdentifier(tableName, "表名") + " WHERE " + safeTimeField + " >= today() - INTERVAL 1 WEEK GROUP BY toStartOfDay(" + safeTimeField + ") ORDER BY group_key";
         Query query = entityManager.createNativeQuery(countSql);
         // 执行查询
         Map<String, Object> resultMap = new HashMap<>();
@@ -140,7 +166,9 @@ public class QueryEngineImpl implements QueryEngine {
     @Override
     @Transactional
     public Map<String, Object> countByField(String tableName, String field) {
-        String countSql = "select " + field + " as group_key, count(*) as count from " + tableName + " GROUP BY " + field;
+        String safeField = requireIdentifier(field, "字段名");
+        String countSql = "select " + safeField + " as group_key, count(*) as count from " +
+                requireIdentifier(tableName, "表名") + " GROUP BY " + safeField;
         Query query = entityManager.createNativeQuery(countSql);
         // 执行查询
         Map<String, Object> resultMap = new HashMap<>();
@@ -158,23 +186,23 @@ public class QueryEngineImpl implements QueryEngine {
     public Map<String, Object> findByPage(String tableName, Map<String, Object> searchMap, RetrievalPageable pageable, List<DataAttribute> dataAttributes) {
         List<DisplayColumn> displayColumnList = dataAttributes.stream().map(attribute -> new DisplayColumn().fromDisplayColumn(attribute)).toList();
         List<String> selectColumnList = displayColumnList.stream().map(this::convertDisplayColumn).toList();
-        List<String> columnList = displayColumnList.stream().map(DisplayColumn::getColumnName).toList();
         String columnSelectSql = StringUtils.join(selectColumnList, ",");
         // 获取有效的查询参数
-        Map<String, DisplayColumn> displayColumnMap = displayColumnList.stream().collect(Collectors.toMap(DisplayColumn::getColumnName, column -> column));
+        Map<String, DataAttribute> attributeMap = dataAttributes.stream()
+                .collect(Collectors.toMap(DataAttribute::getName, attribute -> attribute, (first, second) -> first));
+        Map<String, DataAttribute> columnMap = dataAttributes.stream()
+                .collect(Collectors.toMap(DataAttribute::getColumnName, attribute -> attribute, (first, second) -> first));
         List<String> validSearchItemList = searchMap.entrySet().stream()
-                .filter(entry -> columnList.contains(entry.getKey()) &&
-                        entry.getValue() != null &&
-                        StringUtils.isNotEmpty(entry.getValue().toString()))
+                .filter(entry -> entry.getValue() != null && StringUtils.isNotEmpty(entry.getValue().toString()))
+                .filter(entry -> attributeMap.containsKey(entry.getKey()) || columnMap.containsKey(entry.getKey()))
                 .map(entry -> {
-                    // 不同类型的where语法也不一样，先适配array：has(label, :label))
-                    String key = entry.getKey();
+                    DataAttribute dataAttribute = attributeMap.getOrDefault(entry.getKey(), columnMap.get(entry.getKey()));
                     Object value = entry.getValue();
-                    DisplayColumn displayColumn = displayColumnMap.get(entry.getKey());
-                    if (displayColumn.getColumnType() != null && displayColumn.getColumnType().startsWith("Array")) {
-                        return " has(%s, '%s') ".formatted(key, value);
+                    String columnName = requireIdentifier(dataAttribute.getColumnName(), "字段名");
+                    if (isArrayType(dataAttribute.getColumnType())) {
+                        return " has(%s, %s) ".formatted(columnName, formatSingleValue(value.toString(), dataAttribute.getColumnType(), null));
                     } else {
-                        return " %s = '%s' ".formatted(key, value);
+                        return " %s = %s ".formatted(columnName, formatSingleValue(value.toString(), dataAttribute.getColumnType(), null));
                     }
                 })
                 .toList();
@@ -183,7 +211,7 @@ public class QueryEngineImpl implements QueryEngine {
             whereClause = " where " + validSearchItemList.stream().collect(Collectors.joining(" and "));
         }
         String pageClause = buildPage(pageable);
-        String querySql = "select " + columnSelectSql + " from " + tableName + whereClause + pageClause;
+        String querySql = "select " + columnSelectSql + " from " + requireIdentifier(tableName, "表名") + whereClause + pageClause;
         log.info("get sql {}", querySql);
         Map<String, Object> resultMap = new HashMap<>();
         resultMap.put("total", queryCount(tableName, whereClause));
@@ -193,7 +221,8 @@ public class QueryEngineImpl implements QueryEngine {
 
     @Transactional
     public List<String> getDistinct(String tableName, String attribute) {
-        String selectSql = "select DISTINCT " + attribute + " from " + tableName;
+        String selectSql = "select DISTINCT " + requireIdentifier(attribute, "字段名") + " from " +
+                requireIdentifier(tableName, "表名") + " limit 50";
         Query query = entityManager.createNativeQuery(selectSql);
         // 执行查询
         List<String> resultList = new ArrayList<>();
@@ -206,7 +235,9 @@ public class QueryEngineImpl implements QueryEngine {
 
     @Transactional
     public List<String> getDistinctForArray(String tableName, String attribute) {
-        String selectSql = "select DISTINCT arrayJoin(%s) from %s WHERE %s IS NOT NULL AND %s != []".formatted(attribute, tableName, attribute, attribute);
+        String safeAttribute = requireIdentifier(attribute, "字段名");
+        String selectSql = "select DISTINCT arrayJoin(%s) from %s WHERE %s IS NOT NULL AND %s != [] limit 50"
+                .formatted(safeAttribute, requireIdentifier(tableName, "表名"), safeAttribute, safeAttribute);
         Query query = entityManager.createNativeQuery(selectSql);
         // 执行查询
         List<String> resultList = new ArrayList<>();
@@ -219,7 +250,9 @@ public class QueryEngineImpl implements QueryEngine {
 
     @Transactional
     public List<String> getLike(String tableName, String attribute, String searchTerm) {
-        String selectSql = "select DISTINCT " + attribute + " from " + tableName + " where " + attribute + " like '%" + searchTerm + "%'";
+        String safeAttribute = requireIdentifier(attribute, "字段名");
+        String selectSql = "select DISTINCT " + safeAttribute + " from " + requireIdentifier(tableName, "表名") +
+                " where " + safeAttribute + " like " + likeQuote(searchTerm) + " limit 50";
         Query query = entityManager.createNativeQuery(selectSql);
         // 执行查询
         List<String> resultList = new ArrayList<>();
@@ -233,18 +266,20 @@ public class QueryEngineImpl implements QueryEngine {
     @Override
     public Map<String, Object> queryWithRetrieval(DataQuery dataQuery, RetrievalPageable pageable) {
 
-        String tableName = dataQuery.getTableName();
+        String tableName = requireIdentifier(dataQuery.getTableName(), "表名");
         List<ColumnCriteria> columnCriteria = dataQuery.getColumnCriteria();
         String whereClause = "";
         String sql = dataQuery.getSql();
-        if (StringUtils.isNotBlank(sql) && sqlValidate(sql)) {
-            whereClause += " where " + dataQuery.getSql();
+        if (StringUtils.isNotBlank(sql)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "自由SQL检索已禁用，请使用受限where表达式");
+        } else if (Objects.nonNull(dataQuery.getCriteriaExpression())) {
+            whereClause += " where " + buildCriteriaExpressionSql(dataQuery.getCriteriaExpression());
         } else if (CollectionUtils.isNotEmpty(columnCriteria)) {
+            String logic = normalizeLogic(dataQuery.getCriteriaLogic());
             whereClause += " where " + columnCriteria.stream().map(this::buildCriteriaSql)
-                    .collect(Collectors.joining(" and "));
+                    .collect(Collectors.joining(" " + logic + " "));
         }
         String pageClause = buildPage(pageable);
-        List<String> displayColumnList = dataQuery.getDisplayColumnList().stream().map(DisplayColumn::getColumnName).toList();
         List<String> selectColumnList = dataQuery.getDisplayColumnList().stream().map(this::convertDisplayColumnWithAs).toList();
 
         String columnSelectSql = StringUtils.join(selectColumnList, ",");
@@ -262,7 +297,8 @@ public class QueryEngineImpl implements QueryEngine {
         if (StringUtils.isNotEmpty(whereClause)) {
             whereClause += " and length(agenda_tags) > 0";
         }
-        String sql = "select arrayStringConcat(groupArray(arrayStringConcat(agenda_tags,',')),',') as agenda_tags_array from " + tableName + " ";
+        String sql = "select arrayStringConcat(groupArray(arrayStringConcat(agenda_tags,',')),',') as agenda_tags_array from " +
+                requireIdentifier(tableName, "表名") + " ";
         String querySql = sql + whereClause;
         Query query = entityManager.createNativeQuery(querySql);
         // 执行查询
@@ -279,7 +315,7 @@ public class QueryEngineImpl implements QueryEngine {
     @Override
     public List<Map<String, Object>> countTypeByHourWithWhereClause(String tableName, String whereClause) {
         String querySql = "select count(*) as msg_count, fact_type as group_key, toHour(server_time) as time from " +
-                tableName +
+                requireIdentifier(tableName, "表名") +
                 " " +
                 whereClause +
                 " group by fact_type ,time order by fact_type ,time";
@@ -289,7 +325,7 @@ public class QueryEngineImpl implements QueryEngine {
     @Override
     public List<Map<String, Object>> countTypeByDayWithWhereClause(String tableName, String whereClause) {
         String querySql = "select count(*) as msg_count, fact_type as group_key, toDate(server_time) as time from " +
-                tableName +
+                requireIdentifier(tableName, "表名") +
                 " " +
                 whereClause +
                 " group by fact_type ,time order by fact_type ,time";
@@ -318,7 +354,7 @@ public class QueryEngineImpl implements QueryEngine {
 
     @Transactional
     private BigDecimal queryCount(String tableName, String whereClause) {
-        String countSql = "select count(*) from " + tableName + whereClause;
+        String countSql = "select count(*) from " + requireIdentifier(tableName, "表名") + whereClause;
         BigDecimal total = BigDecimal.valueOf(0);
         Query query = entityManager.createNativeQuery(countSql);
         // 执行查询
@@ -329,27 +365,12 @@ public class QueryEngineImpl implements QueryEngine {
         return total;
     }
 
-    private boolean sqlValidate(String sql) {
-        String s = sql.toLowerCase();//统一转为小写
-        String badStr =
-                "select|update|and|or|delete|insert|truncate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute|table|" +
-                        "char|declare|sitename|xp_cmdshell|like|from|grant|use|group_concat|column_name|" +
-                        "information_schema.columns|table_schema|union|where|order|by|" +
-                        "'\\*|\\;|\\-|\\--|\\+|\\,|\\//|\\/|\\%|\\#";//过滤掉的sql关键字，特殊字符前面需要加\\进行转义
-        //使用正则表达式进行匹配
-        boolean res = s.matches(badStr);
-        if (res) {
-            log.error("sql inject {}", sql);
-        }
-        return !res;
-    }
-
     private String convertDisplayColumnWithAs(DisplayColumn displayColumn) {
-        String columnName = displayColumn.getDisplayName();
-        String displayName = displayColumn.getDisplayName();
+        String columnName = requireIdentifier(displayColumn.getColumnName(), "字段名");
+        String displayName = requireIdentifier(displayColumn.getDisplayName(), "字段别名");
         String displayType = displayColumn.getDisplayType();
         if (StringUtils.isBlank(displayType)) {
-            return displayColumn.getDisplayName();
+            return columnName + " as " + displayName;
         }
         return switch (displayType) {
             case "json" -> "toJSONString(" + columnName + ") as " + displayName;
@@ -359,10 +380,10 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     private String convertDisplayColumn(DisplayColumn displayColumn) {
-        String columnName = displayColumn.getDisplayName();
+        String columnName = requireIdentifier(displayColumn.getColumnName(), "字段名");
         String displayType = displayColumn.getDisplayType();
         if (StringUtils.isBlank(displayType)) {
-            return displayColumn.getDisplayName();
+            return columnName;
         }
         return switch (displayType) {
             case "json" -> "toJSONString(" + columnName + ")";
@@ -372,39 +393,65 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     private String buildPage(RetrievalPageable pageable) {
-        int page = Objects.nonNull(pageable.getPage()) ? pageable.getPage() : 1;
-        int size = Objects.nonNull(pageable.getSize()) ? pageable.getSize() : 10;
+        int page = pageable != null && Objects.nonNull(pageable.getPage()) ? pageable.getPage() : 1;
+        int size = pageable != null && Objects.nonNull(pageable.getSize()) ? pageable.getSize() : DEFAULT_PAGE_SIZE;
+        page = Math.max(page, 1);
+        size = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
 
         String pageStr = "";
-        if (Objects.nonNull(pageable.getSortBy())) {
+        if (pageable != null && StringUtils.isNotBlank(pageable.getSortBy())) {
             String sortBy = pageable.getSortBy();
             String order = pageable.getOrder();
             String orderStr = StringUtils.equalsIgnoreCase(order, "asc") ? "asc" : "desc";
-            pageStr = " order by " + sortBy + " " + orderStr;
+            pageStr = " order by " + requireIdentifier(sortBy, "排序字段") + " " + orderStr;
         }
         pageStr += " limit " + (page - 1) * size + "," + size;
         return pageStr;
     }
 
     private String buildCriteriaSql(ColumnCriteria columnCriteria) {
-        String columnName = columnCriteria.getColumnName();
+        String columnName = requireIdentifier(columnCriteria.getColumnName(), "字段名");
         String operatorName = columnCriteria.getOperatorName();
         List<String> valueList = columnCriteria.getValueList();
         if (StringUtils.isNotBlank(columnCriteria.getRetrievalType())) {
-            valueList = valueList.stream().filter(this::sqlValidate).map(value -> convertValueList(value, columnCriteria.getRetrievalType())).toList();
+            valueList = valueList.stream().map(value -> convertValueList(value, columnCriteria.getRetrievalType())).toList();
+        }
+        if (CollectionUtils.isEmpty(valueList)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索条件值不能为空");
+        }
+        if (isArrayType(columnCriteria.getColumnType())) {
+            return buildArrayCriteriaSql(columnName, operatorName, valueList, columnCriteria.getColumnType());
         }
         return switch (operatorName) {
-            case "equal" -> columnName + " = " + addQuote(valueList.get(0));
-            case "notequal" -> columnName + " != " + addQuote(valueList.get(0));
-            case "match" -> columnName + " like " + addLikeQuote(valueList.get(0));
-            case "greatthan" -> columnName + " > " + valueList.get(0);
-            case "lessthan" -> columnName + " < " + valueList.get(0);
-            case "greatequalthan" -> columnName + " >= " + valueList.get(0);
-            case "lessequalthan" -> columnName + " <= " + valueList.get(0);
-            case "between" -> columnName + " between " + valueList.get(0) + " and " + valueList.get(1);
-            case "in" -> columnName + " in " + "(" + StringUtils.join(valueList.stream().map(this::addQuote).toList(), ",") + ")";
-            default -> null;
+            case "equal" -> columnName + " = " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "notequal" -> columnName + " != " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "match" -> columnName + " like " + likeQuote(valueList.get(0));
+            case "greatthan" -> columnName + " > " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "lessthan" -> columnName + " < " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "greatequalthan" -> columnName + " >= " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "lessequalthan" -> columnName + " <= " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "between" -> columnName + " between " + formatSingleValue(valueList.get(0), columnCriteria.getColumnType(), columnCriteria.getRetrievalType()) +
+                    " and " + formatSingleValue(valueList.get(1), columnCriteria.getColumnType(), columnCriteria.getRetrievalType());
+            case "in" -> columnName + " in " + "(" + StringUtils.join(valueList.stream()
+                    .map(value -> formatSingleValue(value, columnCriteria.getColumnType(), columnCriteria.getRetrievalType())).toList(), ",") + ")";
+            default -> throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "不支持的检索操作符: " + operatorName);
         };
+    }
+
+    private String buildCriteriaExpressionSql(ColumnCriteriaExpression expression) {
+        if (expression == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索条件不能为空");
+        }
+        if ("condition".equals(expression.getType())) {
+            return buildCriteriaSql(expression.getCriteria());
+        }
+        if (!"group".equals(expression.getType()) || CollectionUtils.isEmpty(expression.getChildren())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索条件不能为空");
+        }
+        String logic = normalizeLogic(expression.getLogic());
+        return "(" + expression.getChildren().stream()
+                .map(this::buildCriteriaExpressionSql)
+                .collect(Collectors.joining(" " + logic + " ")) + ")";
     }
 
     private String convertValueList(String origin, String retrievalType) {
@@ -413,16 +460,81 @@ public class QueryEngineImpl implements QueryEngine {
                 long epoch = LocalDateTime.parse(origin, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).toEpochSecond(ZoneOffset.UTC) * 1000;
                 return Long.toString(epoch);
             default:
-                return null;
+                return origin;
         }
     }
 
-    private String addQuote(String name) {
-        return "'" + name + "'";
+    private String buildArrayCriteriaSql(String columnName, String operatorName, List<String> valueList, String columnType) {
+        return switch (operatorName) {
+            case "equal" -> "has(" + columnName + ", " + formatSingleValue(valueList.get(0), columnType, null) + ")";
+            case "notequal" -> "not has(" + columnName + ", " + formatSingleValue(valueList.get(0), columnType, null) + ")";
+            case "in" -> "hasAny(" + columnName + ", [" + StringUtils.join(valueList.stream()
+                    .map(value -> formatSingleValue(value, columnType, null)).toList(), ",") + "])";
+            case "match" -> "arrayStringConcat(" + columnName + ", ',') like " + likeQuote(valueList.get(0));
+            default -> throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "数组字段不支持当前操作符: " + operatorName);
+        };
     }
 
-    private String addLikeQuote(String name) {
-        return "'%" + name + "%'";
+    private String normalizeLogic(String logic) {
+        return StringUtils.equalsIgnoreCase(logic, "or") ? "or" : "and";
+    }
+
+    private String requireIdentifier(String identifier, String fieldLabel) {
+        if (StringUtils.isBlank(identifier) || !IDENTIFIER_PATTERN.matcher(identifier).matches()) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), fieldLabel + "不合法: " + identifier);
+        }
+        return identifier;
+    }
+
+    private String formatSearchValue(Object value) {
+        if (value instanceof Number || value instanceof Boolean) {
+            return value.toString();
+        }
+        return quote(String.valueOf(value));
+    }
+
+    private String formatSingleValue(String value, String columnType, String retrievalType) {
+        if (StringUtils.equalsIgnoreCase(retrievalType, "date") || isNumericType(columnType)) {
+            return requireNumberLiteral(value);
+        }
+        return quote(value);
+    }
+
+    private String requireNumberLiteral(String value) {
+        if (StringUtils.isBlank(value) || !value.matches("-?\\d+(\\.\\d+)?")) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "数值条件不合法: " + value);
+        }
+        return value;
+    }
+
+    private boolean isNumericType(String columnType) {
+        if (StringUtils.isBlank(columnType)) {
+            return false;
+        }
+        String lowerType = columnType.toLowerCase(Locale.ROOT);
+        return lowerType.contains("int")
+                || lowerType.contains("float")
+                || lowerType.contains("decimal")
+                || lowerType.contains("double");
+    }
+
+    private boolean isArrayType(String columnType) {
+        return StringUtils.startsWithIgnoreCase(columnType, "Array");
+    }
+
+    private String quote(String value) {
+        return "'" + StringUtils.defaultString(value).replace("'", "''") + "'";
+    }
+
+    private String likeQuote(String value) {
+        return quote("%" + escapeLikeValue(value) + "%");
+    }
+
+    private String escapeLikeValue(String value) {
+        return StringUtils.defaultString(value)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     @Transactional
@@ -430,13 +542,14 @@ public class QueryEngineImpl implements QueryEngine {
         List<Map<String, Object>> resultMapList = new ArrayList<>();
         Query query = entityManager.createNativeQuery(sql);
         // 执行查询
-        List<Object[]> result = query.getResultList();
+        List<?> result = query.getResultList();
         result.forEach(row -> {
+            Object[] rowValues = columnList.size() == 1 ? new Object[]{row} : (Object[]) row;
             Map<String, Object> resultMap = new HashMap<>();
             for (int i = 0; i < columnList.size(); i++) {
                 DisplayColumn displayColumn = columnList.get(i);
                 if ("json".equals(displayColumn.getDisplayType())) {
-                    String jsonString = row[i].toString();
+                    String jsonString = rowValues[i].toString();
                     if (jsonString.startsWith("[") && jsonString.endsWith("]")) {
                         List<Object> jsonList = JacksonUtil.toList(jsonString, new TypeReference<List<Object>>() {
                         });
@@ -447,7 +560,7 @@ public class QueryEngineImpl implements QueryEngine {
                         resultMap.put(displayColumn.getDisplayName(), jsonMap);
                     }
                 } else {
-                    resultMap.put(displayColumn.getDisplayName(), row[i]);
+                    resultMap.put(displayColumn.getDisplayName(), rowValues[i]);
                 }
             }
             resultMapList.add(resultMap);

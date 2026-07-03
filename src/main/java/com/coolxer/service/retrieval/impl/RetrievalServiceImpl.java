@@ -13,9 +13,11 @@ import com.coolxer.model.retrieval.rule.RetrievalRule;
 import com.coolxer.model.retrieval.vo.*;
 import com.coolxer.service.retrieval.DataQueryService;
 import com.coolxer.service.retrieval.MetaDataService;
+import com.coolxer.service.retrieval.QueryEngine;
 import com.coolxer.service.retrieval.RetrievalRuleService;
 import com.coolxer.service.retrieval.RetrievalService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,9 @@ public class RetrievalServiceImpl implements RetrievalService {
 
     @Autowired
     MetaDataService metaDataService;
+
+    @Autowired
+    QueryEngine queryEngine;
 
     @Override
     public DataListVo retrievalByCriteria(RetrievalRequestDto retrievalRequestDto) {
@@ -134,8 +139,7 @@ public class RetrievalServiceImpl implements RetrievalService {
             dataEntityResultVo.setSelectedEntity(selectedEntityList);
         } else {
             RetrievalRule retrievalRule = retrievalRuleService.getRuleById(ruleId);
-            Set<String> entitySet = retrievalRule.getRetrievalCriteria().stream()
-                    .map(RetrievalCriteria::getEntity)
+            Set<String> entitySet = selectedEntities(retrievalRule).stream()
                     .map(DataEntity::getName).collect(Collectors.toSet());
             dataEntityResultVo.setSelectedEntity(List.copyOf(entitySet));
         }
@@ -156,9 +160,11 @@ public class RetrievalServiceImpl implements RetrievalService {
         DataAttributeResultVo dataAttributeResultVo = new DataAttributeResultVo();
         if (Objects.nonNull(ruleId)) {
             RetrievalRule retrievalRule = retrievalRuleService.getRuleById(ruleId);
-            DataEntity dataEntity = retrievalRule.getRetrievalCriteria().get(0).getEntity();
+            DataEntity dataEntity = resolveRuleEntity(retrievalRule);
             dataAttributeResultVo.setAttributeList(generateDataAttributeVoList(dataEntity));
             dataAttributeResultVo.setSelectAttributeList(generateSelectAttributeVoList(retrievalRule));
+            dataAttributeResultVo.setCriteriaLogic(StringUtils.defaultIfBlank(retrievalRule.getCriteriaLogic(), "and"));
+            dataAttributeResultVo.setSql(retrievalRule.getWhereExpression());
             dataAttributeResultVo.setEntity(dataEntity.getName());
         } else if (StringUtils.isNotBlank(entity)) {
             DataEntity dataEntity = metaDataService.getDataEntityByName(entity);
@@ -220,7 +226,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         DataAttributeResultVo dataAttributeResultVo = new DataAttributeResultVo();
         if (Objects.nonNull(ruleId)) {
             RetrievalRule retrievalRule = retrievalRuleService.getRuleById(ruleId);
-            DataEntity dataEntity = retrievalRule.getRetrievalCriteria().get(0).getEntity();
+            DataEntity dataEntity = resolveRuleEntity(retrievalRule);
             dataAttributeResultVo.setAttributeList(generateDataAttributeVoList(dataEntity));
             dataAttributeResultVo.setSelectAttributeList(generateSelectAttributeVoListForDisplayByRule(retrievalRule));
             dataAttributeResultVo.setEntity(dataEntity.getName());
@@ -237,6 +243,10 @@ public class RetrievalServiceImpl implements RetrievalService {
 
     private List<SelectAttributeVo> generateSelectAttributeVoListForDisplayByRule(RetrievalRule retrievalRule) {
         List<SelectAttributeVo> selectAttributeVoList = new ArrayList<>();
+        if (CollectionUtils.isEmpty(retrievalRule.getDisplayAttributes())
+                || CollectionUtils.isEmpty(retrievalRule.getDisplayAttributes().get(0).getAttributeList())) {
+            return generateSelectAttributeVoListForDisplayByDefault(resolveRuleEntity(retrievalRule));
+        }
         retrievalRule.getDisplayAttributes().get(0).getAttributeList().forEach(attribute -> {
             SelectAttributeVo selectAttributeVo = new SelectAttributeVo();
             selectAttributeVo.setName(attribute.getName());
@@ -269,7 +279,49 @@ public class RetrievalServiceImpl implements RetrievalService {
 
     @Override
     public DataListVo listCandidate(Integer attributeId, String text) {
-        return null;
+        throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "attributeId候选值查询暂不支持，请使用entity和attribute");
+    }
+
+    @Override
+    public DataListVo<String> listCandidate(String entity, String attribute, String text) {
+        DataEntity dataEntity = metaDataService.getDataEntityByName(entity);
+        if (dataEntity == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "实体不存在: " + entity);
+        }
+        DataAttribute dataAttribute = metaDataService.getDataAttributeByName(entity, attribute);
+        if (dataAttribute == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "字段不存在: " + attribute);
+        }
+        List<String> candidateList;
+        if (StringUtils.isNotBlank(text)) {
+            candidateList = queryEngine.getLike(dataEntity.getTableName(), dataAttribute.getColumnName(), text);
+        } else if (StringUtils.startsWithIgnoreCase(dataAttribute.getColumnType(), "Array")) {
+            candidateList = queryEngine.getDistinctForArray(dataEntity.getTableName(), dataAttribute.getColumnName());
+        } else {
+            candidateList = queryEngine.getDistinct(dataEntity.getTableName(), dataAttribute.getColumnName());
+        }
+        DataListVo<String> dataListVo = new DataListVo<>();
+        dataListVo.setDataList(candidateList);
+        dataListVo.setTotal(BigDecimal.valueOf(candidateList.size()));
+        return dataListVo;
+    }
+
+    private List<DataEntity> selectedEntities(RetrievalRule retrievalRule) {
+        if (CollectionUtils.isNotEmpty(retrievalRule.getRetrievalCriteria())) {
+            return retrievalRule.getRetrievalCriteria().stream().map(RetrievalCriteria::getEntity).toList();
+        }
+        if (CollectionUtils.isNotEmpty(retrievalRule.getDisplayAttributes())) {
+            return retrievalRule.getDisplayAttributes().stream().map(DisplayAttribute::getEntity).toList();
+        }
+        return Collections.emptyList();
+    }
+
+    private DataEntity resolveRuleEntity(RetrievalRule retrievalRule) {
+        List<DataEntity> entities = selectedEntities(retrievalRule);
+        if (entities.isEmpty()) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "规则缺少实体信息");
+        }
+        return entities.get(0);
     }
 
 }

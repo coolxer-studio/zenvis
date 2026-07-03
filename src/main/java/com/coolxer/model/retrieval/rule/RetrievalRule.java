@@ -15,6 +15,12 @@ public class RetrievalRule {
 
     private List<RetrievalCriteria> retrievalCriteria;
 
+    private String criteriaLogic;
+
+    private RetrievalCriteriaExpression criteriaExpression;
+
+    private String whereExpression;
+
     private List<DisplayAttribute> displayAttributes;
 
     private RetrievalPageable retrievalPageable;

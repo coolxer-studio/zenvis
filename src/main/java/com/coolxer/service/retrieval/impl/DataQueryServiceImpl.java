@@ -1,10 +1,14 @@
 package com.coolxer.service.retrieval.impl;
 
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.retrieval.query.ColumnCriteria;
+import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
 import com.coolxer.model.retrieval.query.DataQuery;
 import com.coolxer.model.retrieval.query.DataQueryContext;
 import com.coolxer.model.retrieval.query.DisplayColumn;
 import com.coolxer.model.retrieval.rule.RetrievalCriteria;
+import com.coolxer.model.retrieval.rule.RetrievalCriteriaExpression;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
 import com.coolxer.model.retrieval.rule.RetrievalRule;
 import com.coolxer.service.retrieval.DataQueryService;
@@ -37,7 +41,7 @@ public class DataQueryServiceImpl implements DataQueryService {
         dataQueryContext.setContextId(UUID.randomUUID().toString());
         List<DataQuery> dataQueryList;
         if (Objects.nonNull(retrievalRule.getRetrievalSql())) {
-            dataQueryList = generateSqlDataQueryList(retrievalRule);
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "自由SQL检索规则已禁用，请使用受限where表达式");
 
         } else {
             dataQueryList = generateDataQueryList(retrievalRule);
@@ -50,16 +54,6 @@ public class DataQueryServiceImpl implements DataQueryService {
         return dataQueryContext;
     }
 
-    private List<DataQuery> generateSqlDataQueryList(RetrievalRule retrievalRule) {
-        DataQuery dataQuery = new DataQuery();
-        dataQuery.setTableName(retrievalRule.getRetrievalSql().getEntity().getTableName());
-        dataQuery.setSql(retrievalRule.getRetrievalSql().getSql());
-        List<DisplayColumn> displayColumnList = retrievalRule.getDisplayAttributes().get(0).getAttributeList()
-                .stream().map(attribute -> new DisplayColumn().fromDisplayColumn(attribute)).toList();
-        dataQuery.setDisplayColumnList(displayColumnList);
-        return Collections.singletonList(dataQuery);
-    }
-
     private List<DataQuery> generateDataQueryList(RetrievalRule retrievalRule) {
         Map<String, List<DisplayColumn>> displayColumnNameMap = new HashMap<>();
         retrievalRule.getDisplayAttributes().forEach(table -> {
@@ -68,6 +62,9 @@ public class DataQueryServiceImpl implements DataQueryService {
                     .toList();
             displayColumnNameMap.put(table.getEntity().getTableName(), displayColumnList);
         });
+        if (Objects.nonNull(retrievalRule.getCriteriaExpression())) {
+            return generateExpressionDataQueryList(retrievalRule, displayColumnNameMap);
+        }
         List<DataQuery> dataQueryList = retrievalRule.getRetrievalCriteria().stream()
                 .map(this::toColumnCriteria)
                 .collect(Collectors.groupingBy(ColumnCriteria::getTableName))
@@ -76,6 +73,7 @@ public class DataQueryServiceImpl implements DataQueryService {
                     DataQuery dataQuery = new DataQuery();
                     dataQuery.setTableName(entry.getKey());
                     dataQuery.setColumnCriteria(entry.getValue());
+                    dataQuery.setCriteriaLogic(retrievalRule.getCriteriaLogic());
                     dataQuery.setDisplayColumnList(displayColumnNameMap.get(dataQuery.getTableName()));
                     return dataQuery;
                 })
@@ -86,16 +84,62 @@ public class DataQueryServiceImpl implements DataQueryService {
                 DataQuery dataQuery = new DataQuery();
                 dataQuery.setDisplayColumnList(displayColumnNameMap.get(table));
                 dataQuery.setTableName(table);
+                dataQuery.setCriteriaLogic(retrievalRule.getCriteriaLogic());
                 dataQueryList.add(dataQuery);
             });
         }
         return dataQueryList;
     }
 
+    private List<DataQuery> generateExpressionDataQueryList(RetrievalRule retrievalRule, Map<String, List<DisplayColumn>> displayColumnNameMap) {
+        Set<String> criteriaTables = collectExpressionTables(retrievalRule.getCriteriaExpression());
+        if (criteriaTables.size() != 1) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "暂不支持跨实体检索");
+        }
+        String tableName = criteriaTables.iterator().next();
+        Set<String> displayTables = displayColumnNameMap.keySet();
+        if (displayTables.size() > 1 || (!displayTables.isEmpty() && !displayTables.contains(tableName))) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "暂不支持跨实体检索");
+        }
+        DataQuery dataQuery = new DataQuery();
+        dataQuery.setTableName(tableName);
+        dataQuery.setCriteriaExpression(toColumnCriteriaExpression(retrievalRule.getCriteriaExpression()));
+        dataQuery.setColumnCriteria(retrievalRule.getRetrievalCriteria().stream().map(this::toColumnCriteria).toList());
+        dataQuery.setDisplayColumnList(displayColumnNameMap.get(tableName));
+        return List.of(dataQuery);
+    }
+
+    private Set<String> collectExpressionTables(RetrievalCriteriaExpression expression) {
+        if ("condition".equals(expression.getType())) {
+            return Set.of(expression.getCriteria().getEntity().getTableName());
+        }
+        if (CollectionUtils.isEmpty(expression.getChildren())) {
+            return Collections.emptySet();
+        }
+        return expression.getChildren().stream()
+                .flatMap(child -> collectExpressionTables(child).stream())
+                .collect(Collectors.toSet());
+    }
+
+    private ColumnCriteriaExpression toColumnCriteriaExpression(RetrievalCriteriaExpression expression) {
+        ColumnCriteriaExpression columnExpression = new ColumnCriteriaExpression();
+        columnExpression.setType(expression.getType());
+        columnExpression.setLogic(expression.getLogic());
+        if ("condition".equals(expression.getType())) {
+            columnExpression.setCriteria(toColumnCriteria(expression.getCriteria()));
+        } else {
+            columnExpression.setChildren(expression.getChildren().stream()
+                    .map(this::toColumnCriteriaExpression)
+                    .toList());
+        }
+        return columnExpression;
+    }
+
     private ColumnCriteria toColumnCriteria(RetrievalCriteria retrievalCriteria) {
         ColumnCriteria columnCriteria = new ColumnCriteria();
         columnCriteria.setTableName(retrievalCriteria.getEntity().getTableName());
         columnCriteria.setColumnName(retrievalCriteria.getAttribute().getColumnName());
+        columnCriteria.setColumnType(retrievalCriteria.getAttribute().getColumnType());
         columnCriteria.setOperatorName(retrievalCriteria.getOperator().getName());
         columnCriteria.setValueList(retrievalCriteria.getValueList());
         columnCriteria.setRetrievalType(retrievalCriteria.getAttribute().getRetrievalType());
@@ -137,7 +181,7 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private void chainQuery(DataQueryContext context) {
-
+        throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "暂不支持跨实体检索");
     }
 
     private void singleQuery(DataQueryContext context) {

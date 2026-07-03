@@ -1,9 +1,11 @@
 package com.coolxer.controller.retrieval;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.controller.BaseController;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
+import com.coolxer.model.retrieval.rule.RetrievalRule;
 import com.coolxer.model.retrieval.vo.DataAttributeResultVo;
 import com.coolxer.model.retrieval.vo.DataEntityResultVo;
 import com.coolxer.model.retrieval.vo.DataListVo;
@@ -32,6 +34,7 @@ public class RetrievalController extends BaseController {
     @PostMapping(value = "/do")
     @Operation(summary = "数据检索", description = "")
     public ResponseWrap<DataListVo> searchByCriteria(@RequestBody RetrievalRequestDto retrievalRequestDTO) {
+        validateRetrievalRequest(retrievalRequestDTO);
         if (retrievalRequestDTO.getDisplayList().get(0).getAttributeList().size() < 2) {
             return ResponseWrap.fail(ResultCodeEnum.DISPLAY_LIMIT_ERROR);
         }
@@ -78,8 +81,8 @@ public class RetrievalController extends BaseController {
     // 获取指定检索规则
     @GetMapping(value = "/rule/get")
     @Operation(summary = "获取指定检索规则", description = "获取指定检索规则")
-    public void getSearchRule(@RequestParam(value = "id") Integer id) {
-        retrievalService.getRule(id);
+    public ResponseWrap<RetrievalRule> getSearchRule(@RequestParam(value = "id") Integer id) {
+        return ResponseWrap.success(retrievalService.getRule(id));
     }
 
     // 根据检索规则id请求检索
@@ -109,9 +112,17 @@ public class RetrievalController extends BaseController {
     // 获取指定属性值列表
     @GetMapping(value = "/candidate/list")
     @Operation(summary = "获取指定字段备选信息", description = "获取指定字段备选信息")
-    public ResponseWrap<DataListVo> listCandidateValue(Integer attributeId, String text) {
-        retrievalService.listCandidate(attributeId, text);
-        DataListVo dataList = retrievalService.listCandidate(attributeId, text);
+    public ResponseWrap<DataListVo> listCandidateValue(
+            @RequestParam(value = "attributeId", required = false) Integer attributeId,
+            @RequestParam(value = "entity", required = false) String entity,
+            @RequestParam(value = "attribute", required = false) String attribute,
+            @RequestParam(value = "text", required = false) String text) {
+        DataListVo dataList;
+        if (entity != null && attribute != null) {
+            dataList = retrievalService.listCandidate(entity, attribute, text);
+        } else {
+            dataList = retrievalService.listCandidate(attributeId, text);
+        }
         return ResponseWrap.success(dataList);
     }
 
@@ -130,6 +141,16 @@ public class RetrievalController extends BaseController {
             @RequestParam(value = "rule_id", required = false) Integer ruleId) {
         DataAttributeResultVo dataAttributeResultVo = retrievalService.listAttributeForDisplay(entity, ruleId);
         return ResponseWrap.success(dataAttributeResultVo);
+    }
+
+    private void validateRetrievalRequest(RetrievalRequestDto retrievalRequestDTO) {
+        if (retrievalRequestDTO == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索请求不能为空");
+        }
+        if (retrievalRequestDTO.getDisplayList() == null || retrievalRequestDTO.getDisplayList().isEmpty()
+                || retrievalRequestDTO.getDisplayList().get(0).getAttributeList() == null) {
+            throw new ApiException(ResultCodeEnum.DISPLAY_LIMIT_ERROR);
+        }
     }
 
 }

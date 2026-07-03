@@ -13,4 +13,8 @@ public class DataAttributeResultVo {
 
     private List<SelectAttributeVo> selectAttributeList;
 
+    private String criteriaLogic;
+
+    private String sql;
+
 }

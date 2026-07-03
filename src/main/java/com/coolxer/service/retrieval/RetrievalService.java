@@ -26,6 +26,8 @@ public interface RetrievalService {
 
     DataListVo listCandidate(Integer attributeId, String text);
 
+    DataListVo listCandidate(String entity, String attribute, String text);
+
     DataAttributeResultVo listAttribute(String entity, Integer ruleId);
 
     DataAttributeResultVo listAttributeForDisplay(String entity, Integer ruleId);

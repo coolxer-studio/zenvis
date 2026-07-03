@@ -17,6 +17,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -109,10 +111,16 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         if (dataEntity != null) {
             List<DataAttribute> dataAttributes = metaDataService.getAllDataAttributeByEntity(dataEntity);
             // searchMapDto 提取pageable 参数
-            int page = Integer.parseInt(searchMapDto.remove("page").toString());
-            int perPage = Integer.parseInt(removeCompatibleParam(searchMapDto, "perPage", "per_page").toString());
-            String orderBy = searchMapDto.containsKey("orderBy") ? searchMapDto.remove("orderBy").toString() : null;
-            String orderDir = searchMapDto.containsKey("orderDir") ? searchMapDto.remove("orderDir").toString() : null;
+            int page = parseIntOrDefault(searchMapDto.remove("page"), 1);
+            int perPage = parseIntOrDefault(removeCompatibleParam(searchMapDto, "perPage", "per_page"), 10);
+            String orderBy = compatibleStringParam(searchMapDto, "orderBy", "sort_by");
+            String orderDir = compatibleStringParam(searchMapDto, "orderDir", "order", "sort_order");
+            if (orderBy != null) {
+                Map<String, DataAttribute> attributeMap = dataAttributes.stream()
+                        .collect(Collectors.toMap(DataAttribute::getName, Function.identity(), (first, second) -> first));
+                DataAttribute sortAttribute = attributeMap.get(orderBy);
+                orderBy = sortAttribute == null ? null : sortAttribute.getColumnName();
+            }
             RetrievalPageable pageable = new RetrievalPageable(page, perPage, orderBy, orderDir);
             Map<String, Object> byPage = queryEngine.findByPage(dataEntity.getTableName(), searchMapDto, pageable, dataAttributes);
             return new PageRowsVo<>((List<Map<String, Object>>) byPage.get("data"), ((BigDecimal) byPage.get("total")).longValue());
@@ -124,6 +132,27 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         Object primaryValue = params.remove(primaryKey);
         Object compatibleValue = params.remove(compatibleKey);
         return primaryValue != null ? primaryValue : compatibleValue;
+    }
+
+    private String compatibleStringParam(Map<String, Object> params, String... keys) {
+        for (String key : keys) {
+            Object value = params.remove(key);
+            if (value != null) {
+                return value.toString();
+            }
+        }
+        return null;
+    }
+
+    private int parseIntOrDefault(Object value, int defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 
     @Override
@@ -140,10 +169,13 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
             DataAttribute dataAttribute = metaDataService.getDataAttributeByName(entityName, attribute);
+            if (dataAttribute == null) {
+                throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "字段不存在: " + attribute);
+            }
             if (dataAttribute.getColumnType().startsWith("Array")) {
-                return queryEngine.getDistinctForArray(dataEntity.getTableName(), attribute);
+                return queryEngine.getDistinctForArray(dataEntity.getTableName(), dataAttribute.getColumnName());
             } else {
-                return queryEngine.getDistinct(dataEntity.getTableName(), attribute);
+                return queryEngine.getDistinct(dataEntity.getTableName(), dataAttribute.getColumnName());
             }
         }
         return null;
@@ -153,7 +185,11 @@ public class EntityCoreServiceImpl implements EntityCoreService {
     public List<String> getSimilarAttributes(String entityName, String attribute, String term) {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
-            return queryEngine.getLike(dataEntity.getTableName(), attribute, term);
+            DataAttribute dataAttribute = metaDataService.getDataAttributeByName(entityName, attribute);
+            if (dataAttribute == null) {
+                throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "字段不存在: " + attribute);
+            }
+            return queryEngine.getLike(dataEntity.getTableName(), dataAttribute.getColumnName(), term);
         }
         return null;
     }
@@ -173,7 +209,7 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         for (String entityName : entities) {
             DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
             if (dataEntity != null) {
-                countData.put(entityName, queryEngine.count(dataEntity.getTableName(), null).longValue());
+                countData.put(entityName, queryEngine.countToday(dataEntity.getTableName(), null).longValue());
             }
         }
         return countData;
@@ -245,9 +281,13 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         for (String entityName : entities) {
             DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
             if (dataEntity != null) {
+                DataAttribute dataAttribute = metaDataService.getDataAttributeByName(entityName, field);
+                if (dataAttribute == null) {
+                    throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "统计字段不存在: " + field);
+                }
                 assetNames.add(dataEntity.getName());
                 assetLabels.add(dataEntity.getLabel());
-                Map<String, Object> result = queryEngine.countByField(dataEntity.getTableName(), field);
+                Map<String, Object> result = queryEngine.countByField(dataEntity.getTableName(), dataAttribute.getColumnName());
                 keySet.addAll(result.keySet());
                 levelDataList.add(result);
             }
@@ -272,18 +312,21 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             String columnName = entry.getKey();
             // 检查是否mapping的备选值
             DataAttribute dataAttribute = metaDataService.getDataAttributeByName(entityName, columnName);
+            if (dataAttribute == null) {
+                throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "字段不存在: " + columnName);
+            }
             if (dataAttribute.isMustCandidate() && !dataAttribute.getMapping().containsValue(entry.getValue())) {
                 throw new ApiException(ResultCodeEnum.FIELD_NOT_CANDIDATE.getCode(), ResultCodeEnum.FIELD_NOT_CANDIDATE.getDescription());
             }
-            String keyColumn = entry.getKey();
+            String keyColumn = dataAttribute.getColumnName();
             switch (dataAttribute.getColumnType()) {
                 case "String":
                 case "DateTime64(3)":
                 case "json":
-                    columnValueMap.put(keyColumn, "'%s'".formatted(entry.getValue().toString().replaceAll("'", "\'")));
+                    columnValueMap.put(keyColumn, "'%s'".formatted(escapeSqlValue(entry.getValue().toString())));
                     break;
                 case "Array(String)":
-                    columnValueMap.put(keyColumn, "['%s']".formatted(entry.getValue().toString().replaceAll("'", "\'").replaceAll(",", "','")));
+                    columnValueMap.put(keyColumn, "['%s']".formatted(escapeSqlValue(entry.getValue().toString()).replaceAll(",", "','")));
                     break;
                 case "UInt16":
                 case "Float64":
@@ -293,5 +336,9 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             }
         });
         return columnValueMap;
+    }
+
+    private String escapeSqlValue(String value) {
+        return value.replace("'", "''");
     }
 }

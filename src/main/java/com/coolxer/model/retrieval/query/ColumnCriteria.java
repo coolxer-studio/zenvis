@@ -11,6 +11,8 @@ public class ColumnCriteria {
 
     private String columnName;
 
+    private String columnType;
+
     private String operatorName;
 
     private List<String> valueList;

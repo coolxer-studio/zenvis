@@ -12,6 +12,10 @@ public class DataQuery {
 
     private List<ColumnCriteria> columnCriteria;
 
+    private String criteriaLogic;
+
+    private ColumnCriteriaExpression criteriaExpression;
+
     private String sql;
 
     private List<DisplayColumn> displayColumnList;

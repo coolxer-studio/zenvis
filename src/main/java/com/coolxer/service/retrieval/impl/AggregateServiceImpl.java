@@ -1,6 +1,7 @@
 package com.coolxer.service.retrieval.impl;
 
 import com.coolxer.model.dashboard.vo.StackedLineChartVo;
+import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.vo.AggregateMsgInfoVo;
 import com.coolxer.service.retrieval.AggregateService;
@@ -34,7 +35,7 @@ public class AggregateServiceImpl implements AggregateService {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
             String tableName = dataEntity.getTableName();
-            String whereClause = buildWhereClauseForAggregate(params);
+            String whereClause = buildWhereClauseForAggregate(dataEntity, params);
             // 获取数据
             Map<String, Object> agendaTagsMap = queryEngine.groupAgendaTagsWithWhereClause(tableName, whereClause);
             ArrayList<AggregateMsgInfoVo.Tag> tags = new ArrayList<>();
@@ -82,7 +83,7 @@ public class AggregateServiceImpl implements AggregateService {
             LocalDate localDateStart = startTime.toInstant().atZone(ZoneOffset.ofHours(8)).toLocalDate();
             LocalDate localDateEnd = endTime.toInstant().atZone(ZoneOffset.ofHours(8)).toLocalDate();
             // 构建查询参数
-            String whereClause = buildWhereClauseForAggregate(params);
+            String whereClause = buildWhereClauseForAggregate(dataEntity, params);
             // 查询数据
             List<String> dateRange;
             SimpleDateFormat simpleDateFormat = DateUtil.SIMPLE_DATE_FORMAT_01;
@@ -132,7 +133,7 @@ public class AggregateServiceImpl implements AggregateService {
         return null;
     }
 
-    private String buildWhereClauseForAggregate(Map<String, String> params) {
+    private String buildWhereClauseForAggregate(DataEntity dataEntity, Map<String, String> params) {
         // 从参数中获取必需的值,剔除必要参数
         String active = params.remove("active");
         String startTimeStr = params.remove("start_time");
@@ -147,9 +148,13 @@ public class AggregateServiceImpl implements AggregateService {
             String value = entry.getValue();
             // 只有当值不为空时才添加到查询条件中
             if (value != null && !value.isEmpty()) {
-                // 对字段名进行验证，防止 SQL 注入
-                if (isValidFieldName(key)) {
-                    whereClauseBuilder.append(" AND ").append(escapeSqlField(key)).append(" = '").append(escapeSqlValue(value)).append("'");
+                DataAttribute dataAttribute = metaDataService.getDataAttributeByName(dataEntity.getName(), key);
+                if (dataAttribute != null) {
+                    whereClauseBuilder.append(" AND ")
+                            .append(escapeSqlField(dataAttribute.getColumnName()))
+                            .append(" = '")
+                            .append(escapeSqlValue(value))
+                            .append("'");
                 }
             }
         }

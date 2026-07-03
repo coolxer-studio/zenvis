@@ -4,6 +4,7 @@ package com.coolxer.dao.mysql.entity;
 import com.coolxer.dao.mysql.constant.MysqlFinalTableName;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -27,7 +28,8 @@ public class RetrievalRule extends BaseEntity {
     @Column
     private String description;
 
-    @Column(name = "rule_string", length = 8192)
+    @Lob
+    @Column(name = "rule_string", columnDefinition = "LONGTEXT")
     private String ruleString;
 
 }

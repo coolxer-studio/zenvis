@@ -25,4 +25,9 @@ public class McpServerDto {
     private Integer requestTimeoutSeconds;
 
     private Integer connectTimeoutSeconds;
+
+    /**
+     * 来源，用于区分插件导入资源。
+     */
+    private String source;
 }

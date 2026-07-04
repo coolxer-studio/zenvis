@@ -98,6 +98,12 @@ public class McpServerConfig extends BaseEntity {
     @Column(name = "last_connected_time")
     private Date lastConnectedTime;
 
+    /**
+     * 来源，用于区分插件导入资源。
+     */
+    @Column(name = "source", length = 256)
+    private String source = "default";
+
     public void updateFromDto(McpServerDto dto) {
         if (dto.getCode() != null) {
             this.code = dto.getCode();
@@ -125,6 +131,9 @@ public class McpServerConfig extends BaseEntity {
         }
         if (dto.getConnectTimeoutSeconds() != null) {
             this.connectTimeoutSeconds = dto.getConnectTimeoutSeconds();
+        }
+        if (dto.getSource() != null) {
+            this.source = dto.getSource();
         }
     }
 }

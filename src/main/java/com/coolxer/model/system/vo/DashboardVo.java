@@ -59,6 +59,11 @@ public class DashboardVo implements Serializable {
     private String htmlPath;
 
     /**
+     * 来源
+     */
+    private String source;
+
+    /**
      * 更新时间
      */
     private Date updateTime;
@@ -72,6 +77,7 @@ public class DashboardVo implements Serializable {
         this.url = dashboard.getUrl();
         this.configIndex = dashboard.getConfigIndex();
         this.htmlPath = dashboard.getHtmlPath();
+        this.source = dashboard.getSource();
         this.updateTime = dashboard.getUpdateTime();
     }
 

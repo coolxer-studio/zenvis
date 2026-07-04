@@ -44,6 +44,8 @@ public class McpServerVo implements Serializable {
 
     private Integer toolCount;
 
+    private String source;
+
     private Date createTime;
 
     private Date updateTime;
@@ -70,6 +72,7 @@ public class McpServerVo implements Serializable {
         this.lastError = config.getLastError();
         this.lastConnectedTime = config.getLastConnectedTime();
         this.toolCount = toolCount;
+        this.source = config.getSource();
         this.createTime = config.getCreateTime();
         this.updateTime = config.getUpdateTime();
     }

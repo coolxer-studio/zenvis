@@ -61,6 +61,12 @@ public class Dashboard extends BaseEntity {
     @Column
     private String htmlPath;
 
+    /**
+     * 来源，用于区分插件导入资源。
+     */
+    @Column
+    private String source = "default";
+
     public void updateFromDto(DashboardDto dashboardDto) {
         this.name = dashboardDto.getName();
         this.code = dashboardDto.getCode();
@@ -68,5 +74,8 @@ public class Dashboard extends BaseEntity {
         this.url = dashboardDto.getUrl();
         this.configIndex = dashboardDto.getConfigIndex();
         this.htmlPath = dashboardDto.getHtmlPath();
+        if (dashboardDto.getSource() != null) {
+            this.source = dashboardDto.getSource();
+        }
     }
 }

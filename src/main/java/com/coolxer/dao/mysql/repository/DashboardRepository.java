@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,6 +22,10 @@ public interface DashboardRepository extends BaseRepository<Dashboard, Integer> 
      * @return 菜单对象
      */
     Optional<Dashboard> findById(Integer id);
+
+    Optional<Dashboard> findByCode(String code);
+
+    List<Dashboard> findBySource(String source);
 
     /**
      * 分页查询

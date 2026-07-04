@@ -3,15 +3,22 @@ package com.coolxer.service.system.impl;
 import com.coolxer.commons.enums.MenuLevel;
 import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.enums.DashboardType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.extend.ExtendJarManager;
+import com.coolxer.dao.mysql.entity.Dashboard;
+import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.dao.mysql.entity.Menu;
 import com.coolxer.dao.mysql.entity.Plugin;
+import com.coolxer.dao.mysql.repository.DashboardRepository;
+import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.dao.mysql.repository.PluginRepository;
+import com.coolxer.model.dih.dto.McpServerDto;
 import com.coolxer.model.base.vo.FileTreeNodeVo;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.retrieval.meta.MetaData;
+import com.coolxer.model.system.dto.DashboardDto;
 import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.system.dto.PluginDto;
 import com.coolxer.model.system.dto.PluginSearchDto;
@@ -21,6 +28,7 @@ import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.core.ClickhouseSchemeService;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.rag.VectorStoreInitializerService;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.system.MenuService;
@@ -42,6 +50,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,8 +71,13 @@ import java.util.stream.Stream;
 @Service
 public class PluginServiceImpl implements PluginService {
 
-    private static final String PLUGIN_SKILL_DIR_NAME = "06_skill";
-    private static final String LEGACY_PLUGIN_SKILL_DIR_NAME = "skill";
+    private static final String PLUGIN_DASHBOARD_DIR_NAME = "05_dashboard";
+    private static final String PLUGIN_MCP_DIR_NAME = "06_mcp";
+    private static final String PLUGIN_SKILL_DIR_NAME = "07_skill";
+    private static final String PLUGIN_MENU_DIR_NAME = "08_menu";
+    private static final String DASHBOARD_LOW_CODE_DIR_NAME = "low-code";
+    private static final String DASHBOARD_HTML_PAGE_DIR_NAME = "html-page";
+    private static final String HTML_PAGE_PUBLIC_PREFIX = "/html-page/";
     private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
     private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
     private static final int LOG_QUEUE_CAPACITY = 512;
@@ -71,6 +85,12 @@ public class PluginServiceImpl implements PluginService {
 
     @Autowired
     private PluginRepository pluginRepository;
+
+    @Autowired
+    private DashboardRepository dashboardRepository;
+
+    @Autowired
+    private McpServerConfigRepository mcpServerConfigRepository;
 
     @Autowired
     private CustomWebConfig customWebConfig;
@@ -95,6 +115,9 @@ public class PluginServiceImpl implements PluginService {
 
     @Autowired
     private SkillService skillService;
+
+    @Autowired
+    private McpClientService mcpClientService;
 
     @Autowired
     private PluginOperationExecutor pluginOperationExecutor;
@@ -328,7 +351,11 @@ public class PluginServiceImpl implements PluginService {
                 // 2-5 构建UI配置
                 Path currentUIPath = requireChildPath(configRoot().resolve(plugin.getPackageName() + "_config"), configRoot());
                 pluginPackTool.copyUI(currentUIPath);
-                // 2-6 构建菜单配置
+                // 2-6 构建看板配置
+                exportPluginDashboards(plugin.getPackageName(), pluginPackTool);
+                // 2-7 构建MCP服务配置
+                exportPluginMcpServers(plugin.getPackageName(), pluginPackTool);
+                // 2-8 构建菜单配置
                 List<Menu> menuList = menuService.findBySource(plugin.getPackageName());
                 List<MenuVo> menuVoList = menuList.stream().map(pushTask -> {
                     MenuVo menuVo = new MenuVo();
@@ -338,7 +365,7 @@ public class PluginServiceImpl implements PluginService {
                     return menuVo;
                 }).toList();
                 pluginPackTool.writeMenuConfig(JacksonUtil.toJson(menuVoList));
-                // 2-7 压缩目录
+                // 2-9 压缩目录
                 pluginTarGzPath = pluginPackTool.compressDirToTarGz();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -446,11 +473,15 @@ public class PluginServiceImpl implements PluginService {
                 compensationStack.add("删除UI配置", () -> deleteIfExists(uiPath));
             }
 
-            writeLog(id, "6 存储菜单信息......");
-            compensationStack.add("删除菜单按钮", () -> deletePluginMenus(packageName));
-            createPluginMenus(packageName, pluginPackTool);
+            writeLog(id, "6 存储数据看板......");
+            compensationStack.add("删除数据看板", () -> cleanupPluginDashboards(packageName));
+            createPluginDashboards(id, packageName, pluginPackTool);
 
-            writeLog(id, "7 文档加载到RAG......");
+            writeLog(id, "7 存储MCP服务配置......");
+            compensationStack.add("删除MCP服务配置", () -> cleanupPluginMcpServers(packageName));
+            createPluginMcpServers(id, packageName, pluginPackTool);
+
+            writeLog(id, "8 文档加载到RAG......");
             try {
                 vectorStoreInitializerService.loadDocToRag(packageName.replaceAll("\\.", "_"), pluginPackTool.getDocPath());
             } catch (Exception e) {
@@ -459,7 +490,8 @@ public class PluginServiceImpl implements PluginService {
                 writeLog(id, "加载到RAG失败，跳过");
             }
 
-            writeLog(id, "8 加载插件Skill......");
+            writeLog(id, "9 加载插件Skill......");
+            compensationStack.add("卸载插件Skill", () -> skillService.uninstallPluginSkills(packageName));
             try {
                 skillService.installPluginSkills(packageName, pluginPackTool.getSkillPath());
             } catch (Exception e) {
@@ -467,6 +499,10 @@ public class PluginServiceImpl implements PluginService {
                 warnings.add("Skill加载失败");
                 writeLog(id, "加载插件Skill失败，跳过");
             }
+
+            writeLog(id, "10 存储菜单信息......");
+            compensationStack.add("删除菜单按钮", () -> deletePluginMenus(packageName));
+            createPluginMenus(packageName, pluginPackTool);
 
             String message = warnings.isEmpty() ? "安装完成" : "安装完成（" + String.join("，", warnings) + "）";
             finishOperation(id, PluginStatusType.INSTALLED, message, null);
@@ -667,6 +703,10 @@ public class PluginServiceImpl implements PluginService {
         return Paths.get(customWebConfig.getConfigPath()).toAbsolutePath().normalize();
     }
 
+    private Path htmlPageRoot() {
+        return Paths.get(customWebConfig.getHtmlPagePath()).toAbsolutePath().normalize();
+    }
+
     private Path requireChildPath(Path candidate, Path root) {
         Path normalizedRoot = root.toAbsolutePath().normalize();
         Path normalizedCandidate = candidate.toAbsolutePath().normalize();
@@ -674,6 +714,45 @@ public class PluginServiceImpl implements PluginService {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "非法文件路径: " + candidate);
         }
         return normalizedCandidate;
+    }
+
+    private void validateResourceName(String resourceName, String label) {
+        if (StringUtils.isBlank(resourceName) || !SAFE_PACKAGE_PATTERN.matcher(resourceName).matches()
+                || resourceName.contains("..") || resourceName.contains("/") || resourceName.contains("\\")) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), label + "不合法: " + resourceName);
+        }
+    }
+
+    private Path normalizeRelativePath(String path, String label) {
+        if (StringUtils.isBlank(path) || path.contains("\\") || path.contains("\0")) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), label + "不合法: " + path);
+        }
+        Path normalizedPath = Paths.get(path).normalize();
+        if (normalizedPath.isAbsolute() || normalizedPath.startsWith("..") || normalizedPath.toString().isBlank()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), label + "不合法: " + path);
+        }
+        for (Path part : normalizedPath) {
+            String name = part.toString();
+            if (name.isBlank() || ".".equals(name) || "..".equals(name)) {
+                throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), label + "不合法: " + path);
+            }
+        }
+        return normalizedPath;
+    }
+
+    private static String normalizeMcpCode(String code) {
+        String normalized = StringUtils.trimToEmpty(code).replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (StringUtils.isBlank(normalized)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        if (normalized.length() > 64) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "MCP服务标识不能超过64个字符");
+        }
+        return normalized;
+    }
+
+    private static String toUnixPath(Path path) {
+        return path.toString().replace('\\', '/');
     }
 
     private Path safePluginPath(String pluginPath) {
@@ -707,6 +786,12 @@ public class PluginServiceImpl implements PluginService {
 
         writeLog(id, "清理菜单按钮......");
         deletePluginMenus(packageName);
+
+        writeLog(id, "清理数据看板......");
+        cleanupPluginDashboards(packageName);
+
+        writeLog(id, "清理MCP服务配置......");
+        cleanupPluginMcpServers(packageName);
 
         writeLog(id, "清理UI配置......");
         deleteIfExists(requireChildPath(configRoot().resolve(packageName + "_config"), configRoot()));
@@ -847,6 +932,203 @@ public class PluginServiceImpl implements PluginService {
         });
     }
 
+    private void createPluginDashboards(Long id, String packageName, PluginPackTool pluginPackTool) throws IOException {
+        String dashboardConfig = pluginPackTool.readDashboardConfigFile();
+        List<DashboardDto> dashboardDtoList = JacksonUtil.toList(dashboardConfig, new TypeReference<List<DashboardDto>>() {
+        });
+        if (dashboardDtoList.isEmpty()) {
+            writeLog(id, "未发现数据看板配置，跳过");
+            return;
+        }
+
+        List<Path> copiedPaths = new ArrayList<>();
+        try {
+            for (DashboardDto dashboardDto : dashboardDtoList) {
+                if (dashboardDto == null || StringUtils.isBlank(dashboardDto.getCode())) {
+                    throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+                }
+                validateResourceName(dashboardDto.getCode(), "看板编码");
+                Optional<Dashboard> existing = dashboardRepository.findByCode(dashboardDto.getCode());
+                Dashboard existingDashboard = existing.orElse(null);
+                if (existingDashboard != null && !Objects.equals(packageName, existingDashboard.getSource())) {
+                    throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "看板编码已被其他来源占用: " + dashboardDto.getCode());
+                }
+                DashboardDto normalizedDto = normalizePluginDashboard(packageName, dashboardDto, pluginPackTool, copiedPaths, existingDashboard);
+                Dashboard dashboard = existing.orElseGet(Dashboard::new);
+                dashboard.updateFromDto(normalizedDto);
+                dashboard.setSource(packageName);
+                dashboardRepository.save(dashboard);
+            }
+        } catch (Exception e) {
+            cleanupPluginDashboards(packageName);
+            for (Path copiedPath : copiedPaths) {
+                deleteIfExists(copiedPath);
+            }
+            throw e;
+        }
+    }
+
+    private DashboardDto normalizePluginDashboard(String packageName,
+                                                  DashboardDto dashboardDto,
+                                                  PluginPackTool pluginPackTool,
+                                                  List<Path> copiedPaths,
+                                                  Dashboard existingDashboard) throws IOException {
+        if (dashboardDto == null || StringUtils.isBlank(dashboardDto.getName())
+                || StringUtils.isBlank(dashboardDto.getCode()) || dashboardDto.getType() == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        validateResourceName(dashboardDto.getCode(), "看板编码");
+        dashboardDto.setSource(packageName);
+        DashboardType type = dashboardDto.getType();
+        if (type == DashboardType.LOW_CODE_PAGE) {
+            String configIndex = dashboardDto.getConfigIndex();
+            validateResourceName(configIndex, "看板配置索引");
+            Path source = requireChildPath(pluginPackTool.getDashboardLowCodePath().resolve(configIndex + "_config"), pluginPackTool.getDashboardLowCodePath());
+            if (!Files.exists(source) || !Files.isDirectory(source)) {
+                throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "看板低代码配置不存在: " + configIndex);
+            }
+            Path target = requireChildPath(configRoot().resolve(configIndex + "_config"), configRoot());
+            if (existingDashboard != null && Objects.equals(packageName, existingDashboard.getSource())
+                    && StringUtils.isNotBlank(existingDashboard.getConfigIndex())
+                    && !Objects.equals(configIndex, existingDashboard.getConfigIndex())) {
+                validateResourceName(existingDashboard.getConfigIndex(), "看板配置索引");
+                deleteIfExists(requireChildPath(configRoot().resolve(existingDashboard.getConfigIndex() + "_config"), configRoot()));
+            }
+            if (Files.exists(target)) {
+                if (existingDashboard == null || !Objects.equals(packageName, existingDashboard.getSource())) {
+                    throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "看板低代码配置目录已存在: " + configIndex);
+                }
+                deleteIfExists(target);
+            }
+            WalkFileUtil.copy(source, target);
+            copiedPaths.add(target);
+        } else if (type == DashboardType.HTML_PAGE) {
+            Path relativeHtmlPath = normalizeRelativePath(dashboardDto.getHtmlPath(), "HTML看板路径");
+            Path source = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relativeHtmlPath), pluginPackTool.getDashboardHtmlPath());
+            if (!Files.exists(source) || !Files.isRegularFile(source)) {
+                throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "HTML看板文件不存在: " + dashboardDto.getHtmlPath());
+            }
+            Path targetRoot = requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot());
+            Path target = requireChildPath(targetRoot.resolve(relativeHtmlPath), targetRoot);
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            copiedPaths.add(targetRoot);
+            dashboardDto.setHtmlPath(HTML_PAGE_PUBLIC_PREFIX + packageName + "/" + toUnixPath(relativeHtmlPath));
+        } else if (type == DashboardType.LINK && StringUtils.isBlank(dashboardDto.getUrl())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        return dashboardDto;
+    }
+
+    private void exportPluginDashboards(String packageName, PluginPackTool pluginPackTool) throws IOException {
+        List<DashboardDto> dashboardDtoList = new ArrayList<>();
+        for (Dashboard dashboard : dashboardRepository.findBySource(packageName)) {
+            DashboardDto dashboardDto = new DashboardDto();
+            dashboardDto.setName(dashboard.getName());
+            dashboardDto.setCode(dashboard.getCode());
+            dashboardDto.setType(dashboard.getType());
+            dashboardDto.setUrl(dashboard.getUrl());
+            dashboardDto.setConfigIndex(dashboard.getConfigIndex());
+            dashboardDto.setHtmlPath(dashboard.getHtmlPath());
+            if (dashboard.getType() == DashboardType.LOW_CODE_PAGE && StringUtils.isNotBlank(dashboard.getConfigIndex())) {
+                Path source = requireChildPath(configRoot().resolve(dashboard.getConfigIndex() + "_config"), configRoot());
+                if (Files.exists(source)) {
+                    Path target = requireChildPath(pluginPackTool.getDashboardLowCodePath().resolve(dashboard.getConfigIndex() + "_config"), pluginPackTool.getDashboardLowCodePath());
+                    WalkFileUtil.copy(source, target);
+                }
+            } else if (dashboard.getType() == DashboardType.HTML_PAGE && StringUtils.isNotBlank(dashboard.getHtmlPath())) {
+                Path relativePath = exportHtmlPagePath(packageName, dashboard.getHtmlPath());
+                Path source = requireChildPath(htmlPageRoot().resolve(packageName).resolve(relativePath), requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+                if (Files.exists(source) && Files.isRegularFile(source)) {
+                    Path target = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relativePath), pluginPackTool.getDashboardHtmlPath());
+                    Files.createDirectories(target.getParent());
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                    dashboardDto.setHtmlPath(toUnixPath(relativePath));
+                }
+            }
+            dashboardDtoList.add(dashboardDto);
+        }
+        pluginPackTool.writeDashboardConfig(JacksonUtil.toJson(dashboardDtoList));
+    }
+
+    private Path exportHtmlPagePath(String packageName, String htmlPath) {
+        String expectedPrefix = HTML_PAGE_PUBLIC_PREFIX + packageName + "/";
+        if (!StringUtils.startsWith(htmlPath, expectedPrefix)) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "HTML看板路径不属于插件: " + htmlPath);
+        }
+        return normalizeRelativePath(htmlPath.substring(expectedPrefix.length()), "HTML看板路径");
+    }
+
+    private void cleanupPluginDashboards(String packageName) throws IOException {
+        List<Dashboard> dashboards = dashboardRepository.findBySource(packageName);
+        for (Dashboard dashboard : dashboards) {
+            if (dashboard.getType() == DashboardType.LOW_CODE_PAGE && StringUtils.isNotBlank(dashboard.getConfigIndex())) {
+                validateResourceName(dashboard.getConfigIndex(), "看板配置索引");
+                deleteIfExists(requireChildPath(configRoot().resolve(dashboard.getConfigIndex() + "_config"), configRoot()));
+            }
+        }
+        for (Dashboard dashboard : dashboards) {
+            dashboardRepository.deleteById(dashboard.getId());
+        }
+        deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+    }
+
+    private void createPluginMcpServers(Long id, String packageName, PluginPackTool pluginPackTool) {
+        String mcpConfig = pluginPackTool.readMcpConfigFile();
+        List<McpServerDto> mcpServerDtoList = JacksonUtil.toList(mcpConfig, new TypeReference<List<McpServerDto>>() {
+        });
+        if (mcpServerDtoList.isEmpty()) {
+            writeLog(id, "未发现MCP服务配置，跳过");
+            return;
+        }
+        try {
+            for (McpServerDto mcpServerDto : mcpServerDtoList) {
+                if (mcpServerDto == null) {
+                    throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+                }
+                String code = normalizeMcpCode(mcpServerDto.getCode());
+                mcpServerDto.setCode(code);
+                mcpServerDto.setSource(packageName);
+                Optional<McpServerConfig> existing = mcpServerConfigRepository.findByCode(code);
+                if (existing.isPresent() && !Objects.equals(packageName, existing.get().getSource())) {
+                    throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "MCP服务标识已被其他来源占用: " + code);
+                }
+                if (existing.isPresent()) {
+                    mcpClientService.update(existing.get().getId(), mcpServerDto);
+                } else {
+                    mcpClientService.create(mcpServerDto);
+                }
+            }
+        } catch (Exception e) {
+            cleanupPluginMcpServers(packageName);
+            throw e;
+        }
+    }
+
+    private void exportPluginMcpServers(String packageName, PluginPackTool pluginPackTool) {
+        List<McpServerDto> mcpServerDtoList = new ArrayList<>();
+        for (McpServerConfig config : mcpServerConfigRepository.findBySource(packageName)) {
+            McpServerDto dto = new McpServerDto();
+            dto.setCode(config.getCode());
+            dto.setName(config.getName());
+            dto.setDescription(config.getDescription());
+            dto.setBaseUrl(config.getBaseUrl());
+            dto.setSseEndpoint(config.getSseEndpoint());
+            dto.setHeaders(config.getHeaders());
+            dto.setEnabled(config.getEnabled());
+            dto.setRequestTimeoutSeconds(config.getRequestTimeoutSeconds());
+            dto.setConnectTimeoutSeconds(config.getConnectTimeoutSeconds());
+            mcpServerDtoList.add(dto);
+        }
+        pluginPackTool.writeMcpConfig(JacksonUtil.toJson(mcpServerDtoList));
+    }
+
+    private void cleanupPluginMcpServers(String packageName) {
+        for (McpServerConfig config : mcpServerConfigRepository.findBySource(packageName)) {
+            mcpClientService.delete(config.getId());
+        }
+    }
+
     private void deletePluginMenus(String packageName) {
         List<Menu> menuList = menuService.findBySource(packageName);
         menuList.forEach(menu -> menuService.delete(menu.getId().longValue()));
@@ -872,12 +1154,7 @@ public class PluginServiceImpl implements PluginService {
     }
 
     private static Path resolvePluginSkillPath(Path pluginDir) {
-        Path skillPath = pluginDir.resolve(PLUGIN_SKILL_DIR_NAME);
-        Path legacySkillPath = pluginDir.resolve(LEGACY_PLUGIN_SKILL_DIR_NAME);
-        if (hasDirectoryContent(skillPath) || !hasDirectoryContent(legacySkillPath)) {
-            return skillPath;
-        }
-        return legacySkillPath;
+        return pluginDir.resolve(PLUGIN_SKILL_DIR_NAME);
     }
 
     private static boolean hasDirectoryContent(Path path) {
@@ -1000,7 +1277,10 @@ public class PluginServiceImpl implements PluginService {
         private Path uiPath;
         private Path menuPath;
         private Path skillPath;
-        private Path legacySkillPath;
+        private Path dashboardPath;
+        private Path dashboardLowCodePath;
+        private Path dashboardHtmlPath;
+        private Path mcpPath;
 
         public PluginPackTool buildPacker(String workspaceDir, String packageName) {
             this.pluginFilePath = Paths.get(workspaceDir).resolve("temp/" + DateUtil.getCurrentDateTime().replace(" ", "/") + "/" + packageName);
@@ -1022,9 +1302,12 @@ public class PluginServiceImpl implements PluginService {
             this.pushTaskPath = pluginFilePath.resolve("02_push-task");
             this.apiPath = pluginFilePath.resolve("03_api");
             this.uiPath = pluginFilePath.resolve("04_ui");
-            this.menuPath = pluginFilePath.resolve("05_menu");
+            this.menuPath = pluginFilePath.resolve(PLUGIN_MENU_DIR_NAME);
             this.skillPath = pluginFilePath.resolve(PLUGIN_SKILL_DIR_NAME);
-            this.legacySkillPath = pluginFilePath.resolve(LEGACY_PLUGIN_SKILL_DIR_NAME);
+            this.dashboardPath = pluginFilePath.resolve(PLUGIN_DASHBOARD_DIR_NAME);
+            this.dashboardLowCodePath = dashboardPath.resolve(DASHBOARD_LOW_CODE_DIR_NAME);
+            this.dashboardHtmlPath = dashboardPath.resolve(DASHBOARD_HTML_PAGE_DIR_NAME);
+            this.mcpPath = pluginFilePath.resolve(PLUGIN_MCP_DIR_NAME);
             return this;
         }
 
@@ -1037,8 +1320,12 @@ public class PluginServiceImpl implements PluginService {
                 WalkFileUtil.mkdir(pushTaskPath);
                 WalkFileUtil.mkdir(apiPath);
                 WalkFileUtil.mkdir(uiPath);
-                WalkFileUtil.mkdir(menuPath);
+                WalkFileUtil.mkdir(dashboardPath);
+                WalkFileUtil.mkdir(dashboardLowCodePath);
+                WalkFileUtil.mkdir(dashboardHtmlPath);
+                WalkFileUtil.mkdir(mcpPath);
                 WalkFileUtil.mkdir(skillPath);
+                WalkFileUtil.mkdir(menuPath);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -1130,6 +1417,24 @@ public class PluginServiceImpl implements PluginService {
             }
         }
 
+        public void writeDashboardConfig(String configContext) {
+            try {
+                Files.createDirectories(dashboardPath);
+                Files.write(dashboardPath.resolve("config.json"), configContext.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public void writeMcpConfig(String configContext) {
+            try {
+                Files.createDirectories(mcpPath);
+                Files.write(mcpPath.resolve("config.json"), configContext.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
 
         public String saveImageFile(String iconBase64String) {
             try {
@@ -1202,8 +1507,22 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public String readMenuConfigFile() {
+            return readOptionalConfigFile(menuPath.resolve("config.json"));
+        }
+
+        public String readDashboardConfigFile() {
+            return readOptionalConfigFile(dashboardPath.resolve("config.json"));
+        }
+
+        public String readMcpConfigFile() {
+            return readOptionalConfigFile(mcpPath.resolve("config.json"));
+        }
+
+        private String readOptionalConfigFile(Path path) {
             try {
-                return Files.readString(menuPath.resolve("config.json"));
+                if (Files.exists(path) && Files.isRegularFile(path)) {
+                    return Files.readString(path);
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -1211,10 +1530,15 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public Path getSkillPath() {
-            if (hasDirectoryContent(skillPath) || !hasDirectoryContent(legacySkillPath)) {
-                return skillPath;
-            }
-            return legacySkillPath;
+            return skillPath;
+        }
+
+        public Path getDashboardLowCodePath() {
+            return dashboardLowCodePath;
+        }
+
+        public Path getDashboardHtmlPath() {
+            return dashboardHtmlPath;
         }
     }
 

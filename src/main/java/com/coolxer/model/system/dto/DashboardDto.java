@@ -48,4 +48,9 @@ public class DashboardDto implements Serializable {
      */
     private String htmlPath;
 
+    /**
+     * 来源，用于区分插件导入资源
+     */
+    private String source;
+
 }

@@ -108,9 +108,52 @@ class PluginServiceImplTest {
         assertThat(Path.of(pluginPath).toAbsolutePath().normalize()).startsWith(pluginRoot.toAbsolutePath().normalize());
     }
 
+    @Test
+    void uploadFileAcceptsDashboardAndMcpConfigFolders() throws Exception {
+        PluginServiceImpl service = newService();
+        byte[] packageBytes = tarGz(Map.of(
+                "index.json", """
+                        {
+                          "name": "Dashboard MCP",
+                          "package_name": "com.acme.dashboardmcp",
+                          "version": "1.0.0",
+                          "description": "dashboard and mcp",
+                          "author": "tester",
+                          "icon": "data:image/png;base64,AA=="
+                        }
+                        """,
+                "05_dashboard/config.json", "[]",
+                "06_mcp/config.json", "[]"
+        ));
+
+        String pluginPath = service.uploadFile(packageFile("dashboard-mcp.tar.gz", packageBytes)).getPluginPath();
+
+        assertThat(Path.of(pluginPath).toAbsolutePath().normalize()).startsWith(pluginRoot.toAbsolutePath().normalize());
+    }
+
+    @Test
+    void dashboardHtmlRelativePathRejectsTraversal() {
+        PluginServiceImpl service = newService();
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(service, "normalizeRelativePath", "../evil.html", "HTML看板路径"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("HTML看板路径不合法");
+    }
+
+    @Test
+    void mcpCodeNormalizationMatchesMcpServiceRules() {
+        PluginServiceImpl service = newService();
+
+        String code = ReflectionTestUtils.invokeMethod(service, "normalizeMcpCode", "risk system");
+
+        assertThat(code).isEqualTo("risk_system");
+    }
+
     private PluginServiceImpl newService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "pluginPath", pluginRoot.toString());
+        ReflectionTestUtils.setField(customWebConfig, "configPath", pluginRoot.resolve("config").toString());
+        ReflectionTestUtils.setField(customWebConfig, "htmlPagePath", pluginRoot.resolve("html-page").toString());
         PluginServiceImpl service = new PluginServiceImpl();
         ReflectionTestUtils.setField(service, "customWebConfig", customWebConfig);
         return service;

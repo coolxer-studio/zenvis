@@ -36,47 +36,90 @@ ZenVis 采用插件化架构，支持动态加载和功能扩展。
 
 ```
 deploy/open_config/plugin-package_config/
-├── index.json                    # 插件索引配置
-├── com.coolxer.plugin.asset/     # 资产插件
-│   ├── plugin.json              # 插件描述
-│   ├── lib/                      # 插件依赖
-│   └── 00_doc/                   # 插件文档
-└── com.coolxer.plugin.custom/    # 自定义插件（示例）
-    ├── plugin.json
-    └── lib/
+└── com.coolxer.plugin.asset/
+    ├── index.json                # 插件描述，上传解析入口
+    ├── README.md                 # 可选插件说明
+    ├── icon.png                  # 可选插件图标
+    ├── 00_doc/                   # 插件文档，可加载到 RAG
+    ├── 01_meta/                  # 检索元数据和 ClickHouse 表结构
+    ├── 02_push-task/             # 数推任务配置
+    ├── 03_api/                   # 动态加载的 API Jar
+    ├── 04_ui/                    # 低代码页面配置，安装到 <packageName>_config
+    ├── 05_dashboard/             # 数据看板配置
+    ├── 06_mcp/                   # MCP 服务配置
+    ├── 07_skill/                 # 插件 Skill
+    └── 08_menu/                  # 菜单配置，最后安装入口
 ```
 
 ## 插件配置
 
-### plugin.json
+### index.json
 
 ```json
 {
-  "name": "com.coolxer.plugin.asset",
+  "name": "资产管理",
+  "package_name": "com.coolxer.plugin.asset",
   "version": "1.0.0",
   "description": "资产管理插件",
   "author": "coolxer",
-  "class": "com.coolxer.plugin.asset.AssetPlugin",
-  "dependencies": [],
-  "init": true
+  "icon": "icon.png"
 }
 ```
 
 ### 插件索引配置
 
-`deploy/open_config/plugin_config/index.json`：
+### 05_dashboard/config.json
 
 ```json
-{
-  "plugins": [
-    {
-      "name": "com.coolxer.plugin.asset",
-      "path": "plugin-package_config/com.coolxer.plugin.asset",
-      "enabled": true
-    }
-  ]
-}
+[
+  {
+    "name": "资产看板",
+    "code": "com.coolxer.plugin.asset.dashboard",
+    "type": "LOW_CODE_PAGE",
+    "config_index": "com.coolxer.plugin.asset.dashboard"
+  },
+  {
+    "name": "资产大屏",
+    "code": "com.coolxer.plugin.asset.html",
+    "type": "HTML_PAGE",
+    "html_path": "asset-board.html"
+  }
+]
 ```
+
+`LOW_CODE_PAGE` 对应配置放到 `05_dashboard/low-code/<config_index>_config/`。`HTML_PAGE` 对应静态文件放到 `05_dashboard/html-page/`，安装后系统会改写为 `/html-page/<packageName>/<relativePath>`。
+
+### 06_mcp/config.json
+
+```json
+[
+  {
+    "code": "asset-mcp",
+    "name": "资产 MCP 服务",
+    "description": "资产插件提供的 MCP 服务配置",
+    "base_url": "https://example.com",
+    "sse_endpoint": "/sse",
+    "headers": "{\"Authorization\":\"Bearer token\"}",
+    "enabled": true,
+    "request_timeout_seconds": 30,
+    "connect_timeout_seconds": 10
+  }
+]
+```
+
+### 08_menu/config.json
+
+```json
+[
+  {
+    "name": "资产管理",
+    "type": "LOW_CODE_APP",
+    "params": "com.coolxer.plugin.asset"
+  }
+]
+```
+
+MCP 配置安装到 `t_ai_mcp_server`，看板和 MCP 均通过 `source = packageName` 记录插件归属，卸载插件时按该来源清理。
 
 ## 开发插件
 

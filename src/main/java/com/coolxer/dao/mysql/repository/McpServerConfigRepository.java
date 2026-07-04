@@ -15,6 +15,8 @@ public interface McpServerConfigRepository extends BaseRepository<McpServerConfi
 
     Optional<McpServerConfig> findByCode(String code);
 
+    List<McpServerConfig> findBySource(String source);
+
     List<McpServerConfig> findByEnabledTrueOrderByIdAsc();
 
     @Query("""

@@ -6,12 +6,16 @@ import com.coolxer.model.system.dto.PluginDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.util.Date;
 
 /**
  * 插件表
@@ -66,6 +70,7 @@ public class Plugin extends BaseEntity {
      * 状态
      */
     @Column
+    @Enumerated(EnumType.STRING)
     private PluginStatusType status;
 
     /**
@@ -73,6 +78,30 @@ public class Plugin extends BaseEntity {
      */
     @Column(name = "plugin_path")
     private String pluginPath;
+
+    /**
+     * 最近一次插件操作摘要
+     */
+    @Column(name = "operation_message")
+    private String operationMessage;
+
+    /**
+     * 最近一次插件操作错误
+     */
+    @Column(name = "operation_error", columnDefinition = "TEXT")
+    private String operationError;
+
+    /**
+     * 最近一次插件操作开始时间
+     */
+    @Column(name = "operation_started_at")
+    private Date operationStartedAt;
+
+    /**
+     * 最近一次插件操作结束时间
+     */
+    @Column(name = "operation_ended_at")
+    private Date operationEndedAt;
 
     public void updateFromDto(PluginDto pluginDto) {
         if (pluginDto.getName() != null) {

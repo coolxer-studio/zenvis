@@ -2,7 +2,6 @@ package com.coolxer.model.system.vo;
 
 import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.dao.mysql.entity.Plugin;
-import jakarta.persistence.Column;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -56,14 +55,38 @@ public class PluginVo implements Serializable {
     /**
      * 状态
      */
-    @Column
     private PluginStatusType status;
+
+    /**
+     * 状态描述
+     */
+    private String statusDescription;
 
 
     /**
      * 插件包路径
      */
     private String pluginPath;
+
+    /**
+     * 最近一次插件操作摘要
+     */
+    private String operationMessage;
+
+    /**
+     * 最近一次插件操作错误
+     */
+    private String operationError;
+
+    /**
+     * 最近一次插件操作开始时间
+     */
+    private Date operationStartedAt;
+
+    /**
+     * 最近一次插件操作结束时间
+     */
+    private Date operationEndedAt;
 
     /**
      * 更新时间
@@ -79,7 +102,12 @@ public class PluginVo implements Serializable {
         this.description = plugin.getDescription();
         this.author = plugin.getAuthor();
         this.status = plugin.getStatus();
+        this.statusDescription = plugin.getStatus() == null ? "" : plugin.getStatus().getDescription();
         this.pluginPath = plugin.getPluginPath();
+        this.operationMessage = plugin.getOperationMessage();
+        this.operationError = plugin.getOperationError();
+        this.operationStartedAt = plugin.getOperationStartedAt();
+        this.operationEndedAt = plugin.getOperationEndedAt();
         this.updateTime = plugin.getUpdateTime();
     }
 

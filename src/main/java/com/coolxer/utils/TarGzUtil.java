@@ -30,8 +30,9 @@ public final class TarGzUtil {
             throw new FileNotFoundException("File not found: " + tarGzFile);
         }
 
+        Path normalizedDestDir = destDir.toAbsolutePath().normalize();
         // 确保目标目录存在
-        Files.createDirectories(destDir);
+        Files.createDirectories(normalizedDestDir);
 
         try (InputStream fi = Files.newInputStream(tarGzFile);
              BufferedInputStream bi = new BufferedInputStream(fi);
@@ -40,14 +41,12 @@ public final class TarGzUtil {
 
             TarArchiveEntry entry;
             while ((entry = tis.getNextTarEntry()) != null) {
+                validateEntry(entry);
                 String entryName = entry.getName();
-                if (entryName.startsWith("/")) {
-                    entryName = entryName.substring(1);
-                }
-                Path targetPath = destDir.resolve(entryName).normalize();
+                Path targetPath = normalizedDestDir.resolve(entryName).normalize();
 
-                if (!targetPath.startsWith(destDir.normalize())) {
-                    log.warn("targetPath not start with: {},{}", targetPath, destDir.normalize());
+                if (!targetPath.startsWith(normalizedDestDir)) {
+                    log.warn("targetPath not start with: {},{}", targetPath, normalizedDestDir);
                     throw new IOException("Bad entry: " + entry.getName());
                 }
 
@@ -60,6 +59,25 @@ public final class TarGzUtil {
                     Files.copy(tis, targetPath, StandardCopyOption.REPLACE_EXISTING);
                     Files.setLastModifiedTime(targetPath, FileTime.fromMillis(entry.getLastModifiedDate().getTime()));
                 }
+            }
+        }
+    }
+
+    /**
+     * 校验 tar.gz 中所有条目的路径安全性和格式可读性。
+     */
+    public static void validateTarGz(Path tarGzFile) throws IOException {
+        if (!Files.isRegularFile(tarGzFile)) {
+            throw new FileNotFoundException("File not found: " + tarGzFile);
+        }
+        try (InputStream fi = Files.newInputStream(tarGzFile);
+             BufferedInputStream bi = new BufferedInputStream(fi);
+             GZIPInputStream gzi = new GZIPInputStream(bi);
+             TarArchiveInputStream tis = new TarArchiveInputStream(gzi)) {
+
+            TarArchiveEntry entry;
+            while ((entry = tis.getNextTarEntry()) != null) {
+                validateEntry(entry);
             }
         }
     }
@@ -141,6 +159,7 @@ public final class TarGzUtil {
         if (!Files.exists(tarGz)) {
             throw new FileNotFoundException(tarGz.toString());
         }
+        validateEntryName(fileName);
 
         try (InputStream fi = Files.newInputStream(tarGz);
              BufferedInputStream bi = new BufferedInputStream(fi);
@@ -149,6 +168,7 @@ public final class TarGzUtil {
 
             TarArchiveEntry entry;
             while ((entry = tis.getNextTarEntry()) != null) {
+                validateEntry(entry);
                 // 只匹配根目录的 index.json
                 if (!entry.isDirectory() && fileName.equals(entry.getName())) {
                     // 一次性读入内存
@@ -163,6 +183,35 @@ public final class TarGzUtil {
             }
         }
         return null; // 未找到
+    }
+
+    private static void validateEntry(TarArchiveEntry entry) throws IOException {
+        validateEntryName(entry.getName());
+        if (entry.isSymbolicLink() || entry.isLink()) {
+            throw new IOException("Link entry is not allowed: " + entry.getName());
+        }
+    }
+
+    private static void validateEntryName(String entryName) throws IOException {
+        if (entryName == null || entryName.isBlank()) {
+            throw new IOException("Empty tar entry name");
+        }
+        String normalizedName = entryName.replace('\\', '/');
+        if (normalizedName.startsWith("/") || normalizedName.contains("\0")) {
+            throw new IOException("Bad entry: " + entryName);
+        }
+        while (normalizedName.endsWith("/")) {
+            normalizedName = normalizedName.substring(0, normalizedName.length() - 1);
+        }
+        if (normalizedName.isBlank()) {
+            throw new IOException("Bad entry: " + entryName);
+        }
+        String[] parts = normalizedName.split("/");
+        for (String part : parts) {
+            if (part.isEmpty() || ".".equals(part) || "..".equals(part)) {
+                throw new IOException("Bad entry: " + entryName);
+            }
+        }
     }
 
 }

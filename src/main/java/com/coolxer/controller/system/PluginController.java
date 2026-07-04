@@ -1,8 +1,6 @@
 package com.coolxer.controller.system;
 
-import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.enums.ResultCodeEnum;
-import com.coolxer.configuration.extend.ExtendJarManager;
 import com.coolxer.controller.BaseController;
 import com.coolxer.model.base.vo.FileTreeNodeVo;
 import com.coolxer.model.base.vo.PageRowsVo;
@@ -14,18 +12,16 @@ import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.service.system.PluginService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -36,9 +32,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/system/plugin")
 public class PluginController extends BaseController {
-
-    @Autowired
-    private ConfigurableApplicationContext context;
 
     @Autowired
     private PluginService pluginService;
@@ -178,11 +171,14 @@ public class PluginController extends BaseController {
     public ResponseWrap<SingleValueVo> docView(@PathVariable("id") Long id, @RequestParam(value = "file") String file) {
         try {
             String docMarkdownText = pluginService.readDocFile(id, file);
+            if (docMarkdownText == null) {
+                return ResponseWrap.fail(ResultCodeEnum.NO_AUTHORITY);
+            }
             docMarkdownText = docMarkdownText.replaceAll("%", "%25");
             SingleValueVo singleValueVo = new SingleValueVo(docMarkdownText);
             return ResponseWrap.success(singleValueVo);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            return ResponseWrap.fail(e);
         }
     }
 
@@ -201,10 +197,10 @@ public class PluginController extends BaseController {
             while (true) {
                 String logInfo = pluginService.getLogs(id);
                 if (logInfo != null) {
-                    out.write((logInfo + "\n").getBytes());
+                    out.write((logInfo + "\n").getBytes(StandardCharsets.UTF_8));
                     out.flush();
                 }
-                if (StringUtils.contains(logInfo, "完成......")) {
+                if (StringUtils.contains(logInfo, "完成......") || StringUtils.contains(logInfo, "失败......")) {
                     break;
                 }
             }
@@ -216,22 +212,7 @@ public class PluginController extends BaseController {
     @PostMapping({"/{id}/install"})
     public ResponseWrap<PluginVo> install(@PathVariable("id") Long id) {
         try {
-            PluginVo pluginVo = pluginService.info(id);
-            if (pluginVo.getStatus() == PluginStatusType.INSTALLED) {
-                // 已经加载的不支持
-                return ResponseWrap.fail(ResultCodeEnum.PLUGIN_IS_INSTALLED);
-            } else {
-                // 在后台线程中执行安装操作
-                new Thread(() -> {
-                    try {
-                        pluginService.install(id);
-                    } catch (Exception e) {
-                        log.error("Plugin install failed in background", e);
-                    }
-                }).start();
-                // 返回成功
-                return ResponseWrap.success();
-            }
+            return ResponseWrap.success(pluginService.install(id));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -240,52 +221,10 @@ public class PluginController extends BaseController {
     @PostMapping({"/{id}/uninstall"})
     public ResponseWrap<PluginVo> uninstall(@PathVariable("id") Long id) {
         try {
-            PluginVo pluginVo = pluginService.info(id);
-            if (pluginVo.getStatus() == PluginStatusType.INSTALLED) {
-                // 在后台线程中执行安装操作
-                new Thread(() -> {
-                    try {
-                        pluginService.uninstall(id);
-                    } catch (Exception e) {
-                        log.error("Plugin uninstall failed in background", e);
-                    }
-                }).start();
-                // 返回成功
-                return ResponseWrap.success();
-            } else {
-                return ResponseWrap.fail(ResultCodeEnum.PLUGIN_IS_UNINSTALL);
-            }
+            return ResponseWrap.success(pluginService.uninstall(id));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
-    }
-
-    @GetMapping("/bean-definition-names")
-    public ResponseWrap<?> BeanDefinitionNames() {
-        try {
-            return ResponseWrap.success(context.getBeanDefinitionNames());
-        } catch (Exception e) {
-            return ResponseWrap.fail(e);
-        }
-    }
-
-    @Autowired
-    private ExtendJarManager pm;
-
-    @GetMapping("/admin/plugin")
-    public String upload() throws Exception {
-        File jar = new File("/Users/yaoqi.li/Downloads/Downloads/demo/plugin/plugin-0.0.1.jar");
-        if (pm.load(jar.getName(), jar)) {
-            return "loaded";
-        } else {
-            return "loaded(already)";
-        }
-    }
-
-    @GetMapping("/admin/unload/{id}")
-    public String unload(@PathVariable("id") String id) throws Exception {
-        pm.unload(id);
-        return "unloaded";
     }
 
 }

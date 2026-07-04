@@ -96,7 +96,7 @@ public interface PluginService {
      * @param id
      * @return
      */
-    boolean uninstall(Long id);
+    PluginVo uninstall(Long id);
 
     /**
      * 安装插件
@@ -104,7 +104,7 @@ public interface PluginService {
      * @param id
      * @return
      */
-    boolean install(Long id);
+    PluginVo install(Long id);
 
     /**
      * 获取插件readme

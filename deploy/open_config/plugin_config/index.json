@@ -136,12 +136,16 @@
 						"name": "status",
 						"label": "状态",
 						"type": "mapping",
-						"map": {
-							"UN_INSTALL": "<span class='label label-info'>未安装</span>",
-							"INSTALLED": "<span class='label label-danger'>已安装</span>",
-							"*": "<span class='label label-default'>未知</span>"
-						}
-					},
+							"map": {
+								"UN_INSTALL": "<span class='label label-info'>未安装</span>",
+								"INSTALLING": "<span class='label label-warning'>安装中</span>",
+								"INSTALLED": "<span class='label label-danger'>已安装</span>",
+								"INSTALL_FAILED": "<span class='label label-danger'>安装失败</span>",
+								"UNINSTALLING": "<span class='label label-warning'>卸载中</span>",
+								"UNINSTALL_FAILED": "<span class='label label-danger'>卸载失败</span>",
+								"*": "<span class='label label-default'>未知</span>"
+							}
+						},
 					{
 						"name": "package_name",
 						"label": "包名",
@@ -247,11 +251,11 @@
 						}
 					},
 					{
-						"type": "button",
-						"label": "安装",
-						"icon": "fa fa-play text-success",
-						"hiddenOn": "data.status == 'INSTALLED'",
-						"actionType": "dialog",
+							"type": "button",
+							"label": "安装",
+							"icon": "fa fa-play text-success",
+							"hiddenOn": "data.status == 'INSTALLED' || data.status == 'INSTALLING' || data.status == 'UNINSTALLING' || data.status == 'UNINSTALL_FAILED'",
+							"actionType": "dialog",
 						"dialog": {
 							"id": "dialog_install",
 							"data": {
@@ -314,11 +318,11 @@
 						}
 					},
 					{
-						"type": "button",
-						"label": "卸载",
-						"icon": "fa fa-stop text-warning",
-						"hiddenOn": "data.status != 'INSTALLED'",
-						"actionType": "dialog",
+							"type": "button",
+							"label": "卸载",
+							"icon": "fa fa-stop text-warning",
+							"hiddenOn": "data.status != 'INSTALLED' && data.status != 'INSTALL_FAILED' && data.status != 'UNINSTALL_FAILED'",
+							"actionType": "dialog",
 						"dialog": {
 							"id": "dialog_uninstall",
 							"data": {
@@ -382,10 +386,10 @@
 					},
 					{
 						"type": "button",
-						"label": "更新",
-						"icon": "fa fa-pencil text-warning",
-						"actionType": "dialog",
-						"disabledOn": "data.status == 'INSTALLED'",
+							"label": "更新",
+							"icon": "fa fa-pencil text-warning",
+							"actionType": "dialog",
+							"disabledOn": "data.status == 'INSTALLED' || data.status == 'INSTALLING' || data.status == 'UNINSTALLING'",
 						"dialog": {
 							"title": "更新",
 							"size": "lg",
@@ -461,11 +465,11 @@
 					{
 						"type": "button",
 						"label": "删除",
-						"icon": "fa fa-trash text-danger",
-						"actionType": "ajax",
-						"confirmText": "您确认要删除?",
-						"disabledOn": "data.status == 'INSTALLED'",
-						"api": "delete:/zenvis/api/v1/system/plugin/$id"
+							"icon": "fa fa-trash text-danger",
+							"actionType": "ajax",
+							"confirmText": "您确认要删除?",
+							"disabledOn": "data.status == 'INSTALLED' || data.status == 'INSTALLING' || data.status == 'UNINSTALLING'",
+							"api": "delete:/zenvis/api/v1/system/plugin/$id"
 					},
 					{
 						"type": "button",

@@ -210,6 +210,10 @@ public enum ResultCodeEnum {
 
     PLUGIN_IS_EXIST(203, "相同插件已经存在！"),
 
+    PLUGIN_OPERATION_RUNNING(204, "插件操作正在执行中，请稍后再试！"),
+
+    PLUGIN_PACKAGE_INVALID(205, "插件包不合法！"),
+
 
     FIELD_IS_EMPTY(301, "必填字段不能为空"),
 

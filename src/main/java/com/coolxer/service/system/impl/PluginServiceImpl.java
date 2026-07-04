@@ -46,8 +46,13 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -59,6 +64,10 @@ public class PluginServiceImpl implements PluginService {
 
     private static final String PLUGIN_SKILL_DIR_NAME = "06_skill";
     private static final String LEGACY_PLUGIN_SKILL_DIR_NAME = "skill";
+    private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
+    private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
+    private static final int LOG_QUEUE_CAPACITY = 512;
+    private static final long LOG_POLL_TIMEOUT_SECONDS = 2L;
 
     @Autowired
     private PluginRepository pluginRepository;
@@ -87,7 +96,10 @@ public class PluginServiceImpl implements PluginService {
     @Autowired
     private SkillService skillService;
 
-    private static ConcurrentSkipListMap<Long, String> LOG_CACHE = new ConcurrentSkipListMap<>();
+    @Autowired
+    private PluginOperationExecutor pluginOperationExecutor;
+
+    private static final ConcurrentHashMap<Long, PluginLogBuffer> LOG_CACHE = new ConcurrentHashMap<>();
 
     @Override
     public List<PluginVo> findAll() {
@@ -115,6 +127,9 @@ public class PluginServiceImpl implements PluginService {
         checkCreateOrUpdate(pluginDto);
         Plugin plugin = new Plugin();
         plugin.updateFromDto(pluginDto);
+        plugin.setStatus(PluginStatusType.UN_INSTALL);
+        plugin.setOperationMessage("插件已创建");
+        plugin.setOperationError(null);
         if (StringUtils.isEmpty(plugin.getIcon())) {
             // 设置默认图标
             plugin.setIcon("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAADrklEQVR4nO2dOWgVURiFPyVBtAha+lwQlwi2ro0xnUU0plDxRhG10xiLWGovagQrFRVcSkshuASNgmgTt0pLLRQRF1xAweXJwH0gwRff8s+8O3fOgVMOPM5355//zr3vDkiSJEmSJEmSJEmSJElSbZoBdALdQA+wBXCBeRcwBBwBbgDvgHIT/go8B64D+4F5rQh+OrAS2BZAwK5O9wMngbdNgqj4F3AFWJBV+HMDHemuTu8Gxo0gJP4M9KYd/tKcjno3yd1wzRBCcjccSHPkxxS++wvCuDGE3jQetjGUHTdJOfpgXI5KlgBWBxCSS9lnDQEkPmc5+mMsPW6CtwPvDQH89GW7aXUGEI7LyDeM74IBCwDdAQTjMvJRYwAjFgA2BBCMy8hDxgCSGXPTirn7cf/ohiwBfLEA4ArmsrEFAAHIlcsCgAAIAALgBEAAygKAALQ6EFd0AEV4E+q8d4QIoCeAYFxGPhgigGUBBOMy8tUQAUwBuqr84K3AWmARMBNo8+4AZgPLgU0ZBjgIXASeAq+B794vgVvAMLCzyrXDfhElOAAVCAs8iPXAGmC+D7uWaxNAfSkGPwCM+QXx/wXyDXgAnAYOA8eBe8DvFMI3A2Ch9knuJNeET/hQ0wgvKgCVu2G5YfiXUhy5UQL43zPF1TnyQw8/SACVctTXZM0PuewEDwD/YHYN+k4AweYewJQGW9TBGrudUBy0VjT44G11qNEAKDUA4EkAoUYDoKMBAG8CCDUaAG0NAMhL95MLAO0CkL8S9DqAUKMBUNJDOH9t6IUAQi30RGy/JmI2WtxA+BWPBRBsrgHoZVwEr6OP5qQUBSUtyES4JDkceDkyG7kLgXUTFuXba7x2ccqL8vuA23Usyt8HTgGHfCm7m2I5a1pTffDVtqV0+YBnTdiWUvJ9fpbbUgb8POEx8MqHnfgFMOp3QFTblnIs1G0p2phFawHob6q0FoA259JaAK5gLgsAAiAACIATAAEoCwAC0OpAnAAUy2UBQACKemDTHuPwP1kAKNK7oIPGAJ5ZANChfbT20L4iHVs5agxgrwWAohzcusP44NYfVge3JloVQEAuZZ83Hv1nMP5gw+YAQnIpdj8fjbuf5KQAU82O+Pj6h4bhJ4v7G0lJnZFB6PffgrEMP/kTYaqaE0k52gM8Mi47yZwpE03zO9y25XTUnzKs+cmov5xGza+1RV0S+GesdvsZbjLJumnQan7xM9wRvyHMrNWUJEmSJEmSJEmSJEmSiFp/AAmQ4TkXK5gLAAAAAElFTkSuQmCC");
@@ -129,18 +144,22 @@ public class PluginServiceImpl implements PluginService {
             Optional<Plugin> optionalPlugin = pluginRepository.findById(id);
             if (optionalPlugin.isPresent()) {
                 Plugin plugin = optionalPlugin.get();
-                plugin.updateFromDto(pluginDto);
-                if (pluginDto.getPackageName() != plugin.getPackageName() && isPackageExist(pluginDto.getPackageName())) {
-                    throw new ApiException(ResultCodeEnum.PLUGIN_IS_EXIST);
-                } else if (plugin.getStatus() == PluginStatusType.INSTALLED) {
-                    // 已经加载的不支持更新插件包
+                String oldPackageName = plugin.getPackageName();
+                PluginStatusType status = normalizeStatus(plugin.getStatus());
+                if (status == PluginStatusType.INSTALLED || status.isInProgress()) {
                     throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
+                }
+                plugin.updateFromDto(pluginDto);
+                if (!Objects.equals(oldPackageName, pluginDto.getPackageName()) && isPackageExist(pluginDto.getPackageName())) {
+                    throw new ApiException(ResultCodeEnum.PLUGIN_IS_EXIST);
                 } else {
                     pluginRepository.save(plugin);
                 }
                 return true;
             }
             return false;
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("更新对象失败, id: {}", id, e);
             return false;
@@ -150,19 +169,23 @@ public class PluginServiceImpl implements PluginService {
     @Override
     public void delete(Long id) {
         Plugin plugin = pluginRepository.findById(id).orElse(null);
-        if (plugin.getStatus() == PluginStatusType.INSTALLED) {
+        if (plugin == null) {
+            return;
+        }
+        PluginStatusType status = normalizeStatus(plugin.getStatus());
+        if (status == PluginStatusType.INSTALLED || status.isInProgress()) {
             // 已经加载的不支持删除
             throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
         }
-        if (plugin != null) {
-            try {
-                Path pluginPath = Paths.get(plugin.getPluginPath());
+        try {
+            if (StringUtils.isNotBlank(plugin.getPluginPath())) {
+                Path pluginPath = safePluginPath(plugin.getPluginPath());
                 if (Files.exists(pluginPath) && Files.isRegularFile(pluginPath)) {
                     WalkFileUtil.delete(pluginPath);
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
+        } catch (IOException e) {
+            log.warn("删除插件包文件失败: id={}", id, e);
         }
         pluginRepository.deleteById(id);
     }
@@ -188,32 +211,46 @@ public class PluginServiceImpl implements PluginService {
 
     @Override
     public PluginVo uploadFile(MultipartFile file) {
-        if (file.isEmpty()) {
-            throw new RuntimeException("上传文件为空");
-        }
+        validateUploadFile(file);
         try {
-            Path directory = Paths.get(customWebConfig.getPluginPath());
+            Path directory = pluginRoot();
             if (!Files.exists(directory)) {
                 Files.createDirectories(directory);
             }
 
-            Path tempDir = directory.resolve("temp/" + DateUtil.getCurrentDateTime().replace(" ", "/"));
+            Path tempDir = directory.resolve("temp").resolve(DateUtil.getCurrentDateTime().replace(" ", "/"));
             if (!Files.exists(tempDir)) {
                 Files.createDirectories(tempDir);
             }
-            Path path = tempDir.resolve(file.getOriginalFilename());
-            Files.write(path, file.getBytes());
+            String originalFilename = Objects.requireNonNull(file.getOriginalFilename(), "插件包文件名不能为空");
+            String fileName = Paths.get(originalFilename).getFileName().toString();
+            Path path = requireChildPath(tempDir.resolve(fileName), directory);
+            try (InputStream inputStream = file.getInputStream()) {
+                Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING);
+            }
+            TarGzUtil.validateTarGz(path);
             // 解析插件包，提取信息
             String pluginJsonString = TarGzUtil.readRootFile(path, "index.json");
+            if (StringUtils.isBlank(pluginJsonString)) {
+                throw invalidPluginPackage("插件包缺少 index.json");
+            }
             PluginVo pluginVo = JacksonUtil.toObject(pluginJsonString, PluginVo.class);
+            if (pluginVo == null || StringUtils.isBlank(pluginVo.getName()) || StringUtils.isBlank(pluginVo.getPackageName())) {
+                throw invalidPluginPackage("插件包 index.json 缺少插件名称或包名");
+            }
+            validatePackageName(pluginVo.getPackageName());
             // icon转化
-            if (!ImageDataUriUtil.isDataUrl(pluginVo.getIcon())) {
-                pluginVo.setIcon(ImageDataUriUtil.toDataUri(pluginVo.getIcon(), TarGzUtil.readBase64File(path, pluginVo.getIcon())));
+            if (StringUtils.isNotBlank(pluginVo.getIcon()) && !ImageDataUriUtil.isDataUrl(pluginVo.getIcon())) {
+                String iconBase64 = TarGzUtil.readBase64File(path, pluginVo.getIcon());
+                if (iconBase64 == null) {
+                    throw invalidPluginPackage("插件图标文件不存在");
+                }
+                pluginVo.setIcon(ImageDataUriUtil.toDataUri(pluginVo.getIcon(), iconBase64));
             }
             pluginVo.setPluginPath(path.toString());
             return pluginVo;
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw invalidPluginPackage(e.getMessage());
         }
     }
 
@@ -234,17 +271,16 @@ public class PluginServiceImpl implements PluginService {
     @Override
     public void export(Long id, jakarta.servlet.http.HttpServletResponse response) {
         // 1.查询插件详情
-        Plugin plugin = pluginRepository.findById(id).orElse(null);
-        if (plugin == null) {
-            throw new RuntimeException("插件不存在");
-        }
+        Plugin plugin = getPluginOrThrow(id);
+        validatePackageName(plugin.getPackageName());
         Path pluginTarGzPath = null;
-        if (plugin.getStatus() != PluginStatusType.INSTALLED && StringUtils.isNotEmpty(plugin.getPluginPath())) {
+        if (normalizeStatus(plugin.getStatus()) != PluginStatusType.INSTALLED && StringUtils.isNotEmpty(plugin.getPluginPath())) {
             // 未安装状态，存在默认插件包，直接输出
-            pluginTarGzPath = Paths.get(plugin.getPluginPath());
+            pluginTarGzPath = safePluginPackagePath(plugin.getPluginPath());
         } else {
             // 已安装状态，或者没有默认包，以加载内容输出插件包.构建打包属性包装类
-            PluginPackTool pluginPackTool = new PluginPackTool().buildPacker(customWebConfig.getPluginPath(), plugin.getPackageName())
+            Path installedRoot = installedPluginRoot(plugin);
+            PluginPackTool pluginPackTool = new PluginPackTool().buildPacker(pluginRoot().toString(), plugin.getPackageName())
                     .init().mkdir();
             // 2.构建插件包
             try {
@@ -258,13 +294,13 @@ public class PluginServiceImpl implements PluginService {
                 pluginVo.setIcon(pluginPackTool.saveImageFile(plugin.getIcon()));
                 pluginPackTool.writeIndexJson(JacksonUtil.toJson(pluginVo));
                 // 拷贝 DOC 文档
-                Path docPath = Paths.get(customWebConfig.getPluginPath(), plugin.getPackageName(), "00_doc");
+                Path docPath = requireChildPath(installedRoot.resolve("00_doc"), installedRoot);
                 pluginPackTool.copyDoc(docPath);
                 // 拷贝 Skill 配置
                 Path installedSkillPath = skillService.getInstalledPluginSkillPath(plugin.getPackageName());
                 Path currentSkillPath = hasDirectoryContent(installedSkillPath)
                         ? installedSkillPath
-                        : resolvePluginSkillPath(Paths.get(customWebConfig.getPluginPath(), plugin.getPackageName()));
+                        : resolvePluginSkillPath(installedRoot);
                 pluginPackTool.copySkill(currentSkillPath);
                 // 2-2 构建meta文件
                 try (Stream<Path> paths = Files.walk(Paths.get(customWebConfig.getRetrievalMetaFilePath()))) {
@@ -287,10 +323,10 @@ public class PluginServiceImpl implements PluginService {
                 }).toList();
                 pluginPackTool.writePushTaskConfig(JacksonUtil.toJson(pushTaskVoList));
                 // 2-4 查看并导出api服务jar包
-                Path currentApiJarPath = Paths.get(customWebConfig.getPluginPath()).resolve(plugin.getPackageName()).resolve("03_api");
+                Path currentApiJarPath = requireChildPath(installedRoot.resolve("03_api"), installedRoot);
                 pluginPackTool.copyApiJar(currentApiJarPath);
                 // 2-5 构建UI配置
-                Path currentUIPath = Paths.get(customWebConfig.getConfigPath()).resolve(plugin.getPackageName() + "_config");
+                Path currentUIPath = requireChildPath(configRoot().resolve(plugin.getPackageName() + "_config"), configRoot());
                 pluginPackTool.copyUI(currentUIPath);
                 // 2-6 构建菜单配置
                 List<Menu> menuList = menuService.findBySource(plugin.getPackageName());
@@ -313,197 +349,164 @@ public class PluginServiceImpl implements PluginService {
     }
 
     @Override
-    public boolean uninstall(Long id) {
-        writeLog(id, "插件检查......");
-        Plugin plugin = pluginRepository.findById(id).orElse(null);
-        if (plugin == null) {
-            writeLog(id, "插件检查异常！！！");
-            writeLog(id, "完成......");
-            return false;
+    public synchronized PluginVo uninstall(Long id) {
+        Plugin plugin = getPluginOrThrow(id);
+        PluginStatusType status = normalizeStatus(plugin.getStatus());
+        if (status.isInProgress()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_OPERATION_RUNNING);
         }
+        if (!status.canUninstall()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_IS_UNINSTALL);
+        }
+        validatePackageName(plugin.getPackageName());
+        resetLogs(id);
+        updateOperationState(plugin, PluginStatusType.UNINSTALLING, "卸载已开始", null, true);
+        Plugin saved = pluginRepository.save(plugin);
         try {
-            writeLog(id, "1 删除菜单按钮......");
-            List<Menu> menuList = menuService.findBySource(plugin.getPackageName());
-            menuList.forEach(menu -> {
-                menuService.delete(menu.getId().longValue());
-            });
-            // 2-ui
-            writeLog(id, "2 删除UI配置......");
-            Path uiPath = Paths.get(customWebConfig.getConfigPath()).resolve(plugin.getPackageName() + "_config");
-            if (Files.exists(uiPath)) {
-                WalkFileUtil.delete(uiPath);
-            }
-            writeLog(id, "3 删除API包......");
-            extendJarManager.unload(plugin.getPackageName());
-            writeLog(id, "4 删除push-task任务和文件......");
-            pushTaskService.deleteBySourceMark(plugin.getPackageName());
-            writeLog(id, "5 删除meta，删除库表......");
-            try (Stream<Path> paths = Files.walk(Paths.get(customWebConfig.getConfigPath()).resolve("meta_config"))) {
-                paths.filter(Files::isRegularFile) // 过滤出文件
-                        .filter(path -> path.getFileName().toString().startsWith(plugin.getPackageName())) // 过滤
-                        .forEach(path -> {
-                            try {
-                                // 删除库表
-                                MetaData metaData = JacksonUtil.toObject(Files.readString(path), MetaData.class);
-                                metaData.getEntity().forEach(entity -> {
-                                    clickhouseSchemeService.deleteTable(entity.getTableName());
-                                });
-                                // 删除文件
-                                if (Files.exists(path)) {
-                                    WalkFileUtil.delete(path);
-                                }
-                                // 重新加载元数据
-                                metaDataService.loadMetaData();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
-            }
-            writeLog(id, "6 删除解压的插件包......");
-            Path pluginDir = Paths.get(customWebConfig.getPluginPath(), plugin.getPackageName());
-            if (Files.exists(pluginDir)) {
-                WalkFileUtil.delete(pluginDir);
-            }
-            writeLog(id, "7 卸载RAG中的文档......");
-            try {
-                vectorStoreInitializerService.unloadDocFromRag(plugin.getPackageName().replaceAll("\\.", "_"));
-            } catch (Exception e) {
-                log.error("卸载RAG中的文档失败......", e);
-                writeLog(id, "卸载RAG中的文档失败......，跳过");
-            }
-            writeLog(id, "8 卸载插件Skill......");
-            try {
-                skillService.uninstallPluginSkills(plugin.getPackageName());
-            } catch (Exception e) {
-                log.error("卸载插件Skill失败......", e);
-                writeLog(id, "卸载插件Skill失败......，跳过");
-            }
-            writeLog(id, "9 更新插件状态......");
-            plugin.setStatus(PluginStatusType.UN_INSTALL);
-            pluginRepository.save(plugin);
-            writeLog(id, "完成......");
-            return true;
-        } catch (Exception e) {
-            e.printStackTrace();
+            pluginOperationExecutor.submit(() -> executeUninstall(id));
+        } catch (RuntimeException e) {
+            String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
+            finishOperation(id, PluginStatusType.UNINSTALL_FAILED, "卸载任务提交失败", error);
+            writeLog(id, "失败......" + error);
+            throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "插件卸载任务提交失败");
         }
-        return false;
+        return new PluginVo(saved);
     }
 
     @Override
-    public boolean install(Long id) {
-        writeLog(id, "插件检查......");
-        Plugin plugin = pluginRepository.findById(id).orElse(null);
-        if (plugin == null) {
-            writeLog(id, "插件检查异常！！！");
-            writeLog(id, "完成......");
-            return false;
+    public synchronized PluginVo install(Long id) {
+        Plugin plugin = getPluginOrThrow(id);
+        PluginStatusType status = normalizeStatus(plugin.getStatus());
+        if (status.isInProgress()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_OPERATION_RUNNING);
         }
+        if (!status.canInstall()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
+        }
+        validatePackageName(plugin.getPackageName());
+        safePluginPackagePath(plugin.getPluginPath());
+        resetLogs(id);
+        updateOperationState(plugin, PluginStatusType.INSTALLING, "安装已开始", null, true);
+        Plugin saved = pluginRepository.save(plugin);
         try {
-            // 构建插件包解析类
+            pluginOperationExecutor.submit(() -> executeInstall(id));
+        } catch (RuntimeException e) {
+            String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
+            finishOperation(id, PluginStatusType.INSTALL_FAILED, "安装任务提交失败", error);
+            writeLog(id, "失败......" + error);
+            throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "插件安装任务提交失败");
+        }
+        return new PluginVo(saved);
+    }
+
+    private void executeInstall(Long id) {
+        CompensationStack compensationStack = new CompensationStack(id);
+        List<String> warnings = new ArrayList<>();
+        try {
+            Plugin plugin = getPluginOrThrow(id);
+            String packageName = plugin.getPackageName();
+            Path pluginTarGzPath = safePluginPackagePath(plugin.getPluginPath());
             PluginPackTool pluginPackTool = new PluginPackTool()
-                    .buildInstaller(customWebConfig.getPluginPath(), plugin.getPackageName(), plugin.getPluginPath())
-                    .init()
-                    .decompress();
-            writeLog(id, "1-1 拷贝meta并加载......");
-            pluginPackTool.listMetaFiles()
-                    .forEach(path -> {
-                        try {
-                            Path metaPath = Paths.get(customWebConfig.getConfigPath())
-                                    .resolve("meta_config")
-                                    .resolve(plugin.getPackageName() + "_" + path.getFileName());
-                            WalkFileUtil.copy(path, metaPath);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    });
-            writeLog(id, "1-2 初始化加载meta......");
-            MetaData metaData = metaDataService.loadMetaData();
-            writeLog(id, "1-3 初始化Scheme表......");
-            clickhouseSchemeService.loadSchemeFromMetaData(metaData);
-            writeLog(id, "2-1 读取push-task......");
-            String pushTaskConfig = pluginPackTool.readPushTaskConfigFile();
-            List<PushTaskDto> pushTaskDtoList = JacksonUtil.toList(pushTaskConfig, new TypeReference<List<PushTaskDto>>() {
-            });
-            writeLog(id, "2-2 存储任务......");
-            pushTaskDtoList.forEach(pushTaskDto -> {
-                if (pushTaskDto.getConfig().endsWith(".toml") || pushTaskDto.getConfig().endsWith(".yaml") || pushTaskDto.getConfig().endsWith(".json")) {
-                    pushTaskDto.setConfig(pluginPackTool.readPushTaskConfigFile(pushTaskDto.getConfig()));
+                    .buildInstaller(pluginRoot().toString(), packageName, pluginTarGzPath.toString())
+                    .init();
+
+            writeLog(id, "插件检查......");
+            cleanupPluginCoreResources(id, plugin, false);
+
+            writeLog(id, "1 解压插件包......");
+            Path pluginDir = pluginPackTool.getPluginFilePath();
+            deleteIfExists(pluginDir);
+            TarGzUtil.decompressTarGz(pluginTarGzPath, pluginDir);
+            compensationStack.add("删除解压目录", () -> deleteIfExists(pluginDir));
+
+            writeLog(id, "2 拷贝meta并加载......");
+            List<String> pluginTableNames = readMetaTableNames(pluginPackTool.listMetaFiles());
+            List<Path> copiedMetaPaths = copyPluginMetaFiles(packageName, pluginPackTool.listMetaFiles());
+            compensationStack.add("删除meta和库表", () -> {
+                deletePluginTables(pluginTableNames);
+                for (Path metaPath : copiedMetaPaths) {
+                    deleteIfExists(metaPath);
                 }
-                pushTaskDto.setSource("SYSTEM");
-                pushTaskDto.setMark(plugin.getPackageName());
-                pushTaskService.createAndStart(pushTaskDto);
+                metaDataService.loadMetaData();
             });
-            writeLog(id, "3-1 读取api配置......");
-            pluginPackTool.listApiFiles()
-                    .forEach(jarPath -> {
-                        try {
-                            // 3-1加载到扩展插件
-                            if (extendJarManager.load(plugin.getPackageName(), jarPath.toFile())) {
-                                log.info("loaded");
-                            } else {
-                                log.info("loaded(already)");
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-            writeLog(id, "4-1 拷贝ui配置......");
-            Path pluginUIPath = pluginPackTool.getUiPath();
-            if (Files.exists(pluginUIPath)) {
-                Path uiPath = Paths.get(customWebConfig.getConfigPath()).resolve(plugin.getPackageName() + "_config");
-                WalkFileUtil.copy(pluginUIPath, uiPath);
+            MetaData metaData = metaDataService.loadMetaData();
+            clickhouseSchemeService.loadSchemeFromMetaData(metaData);
+
+            writeLog(id, "3 存储push-task任务......");
+            compensationStack.add("删除push-task任务", () -> pushTaskService.deleteBySourceMark(packageName));
+            createPluginPushTasks(id, packageName, pluginPackTool);
+
+            writeLog(id, "4 加载API包......");
+            compensationStack.add("卸载API包", () -> extendJarManager.unload(packageName));
+            loadPluginApiJars(packageName, pluginPackTool);
+
+            writeLog(id, "5 拷贝UI配置......");
+            Path uiPath = copyPluginUi(packageName, pluginPackTool);
+            if (uiPath != null) {
+                compensationStack.add("删除UI配置", () -> deleteIfExists(uiPath));
             }
-            writeLog(id, "5-1 解析菜单配置......");
-            String menuConfig = pluginPackTool.readMenuConfigFile();
-            List<MenuDto> menuDtoList = JacksonUtil.toList(menuConfig, new TypeReference<List<MenuDto>>() {
-            });
-            writeLog(id, "5-2 存储菜单信息......");
-            menuDtoList.forEach(menuDto -> {
-                menuDto.setLevel(MenuLevel.LEVEL_1);
-                menuDto.setParentId(0);
-                menuDto.setOrderNumber(0);
-                menuDto.setSource(plugin.getPackageName());
-                menuService.create(menuDto);
-            });
-            writeLog(id, "6 更新插件状态为已安装......");
-            plugin.setStatus(PluginStatusType.INSTALLED);
-            pluginRepository.save(plugin);
+
+            writeLog(id, "6 存储菜单信息......");
+            compensationStack.add("删除菜单按钮", () -> deletePluginMenus(packageName));
+            createPluginMenus(packageName, pluginPackTool);
+
             writeLog(id, "7 文档加载到RAG......");
             try {
-                vectorStoreInitializerService.loadDocToRag(plugin.getPackageName().replaceAll("\\.", "_"), pluginPackTool.getDocPath());
+                vectorStoreInitializerService.loadDocToRag(packageName.replaceAll("\\.", "_"), pluginPackTool.getDocPath());
             } catch (Exception e) {
-                log.error("加载到RAG失败......", e);
-                writeLog(id, "加载到RAG失败......，跳过");
+                log.error("加载到RAG失败", e);
+                warnings.add("RAG加载失败");
+                writeLog(id, "加载到RAG失败，跳过");
             }
+
             writeLog(id, "8 加载插件Skill......");
             try {
-                skillService.installPluginSkills(plugin.getPackageName(), pluginPackTool.getSkillPath());
+                skillService.installPluginSkills(packageName, pluginPackTool.getSkillPath());
             } catch (Exception e) {
-                log.error("加载插件Skill失败......", e);
-                writeLog(id, "加载插件Skill失败......，跳过");
+                log.error("加载插件Skill失败", e);
+                warnings.add("Skill加载失败");
+                writeLog(id, "加载插件Skill失败，跳过");
             }
+
+            String message = warnings.isEmpty() ? "安装完成" : "安装完成（" + String.join("，", warnings) + "）";
+            finishOperation(id, PluginStatusType.INSTALLED, message, null);
             writeLog(id, "完成......");
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            log.error("插件安装失败: id={}", id, e);
+            writeLog(id, "安装失败，开始回滚......");
+            compensationStack.rollback();
+            String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
+            finishOperation(id, PluginStatusType.INSTALL_FAILED, "安装失败", error);
+            writeLog(id, "失败......" + error);
         }
-        return false;
+    }
+
+    private void executeUninstall(Long id) {
+        try {
+            Plugin plugin = getPluginOrThrow(id);
+            writeLog(id, "插件检查......");
+            cleanupPluginCoreResources(id, plugin, true);
+            finishOperation(id, PluginStatusType.UN_INSTALL, "卸载完成", null);
+            writeLog(id, "完成......");
+        } catch (Exception e) {
+            log.error("插件卸载失败: id={}", id, e);
+            String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
+            finishOperation(id, PluginStatusType.UNINSTALL_FAILED, "卸载失败", error);
+            writeLog(id, "失败......" + error);
+        }
     }
 
 
     @Override
     public String readme(Long id) {
-        Plugin plugin = pluginRepository.findById(id).orElse(null);
-        if (plugin != null) {
-            try {
-                if (plugin.getPluginPath() != null) {
-                    return TarGzUtil.readRootFile(Paths.get(plugin.getPluginPath()), "README.md");
-                } else {
-                    return "# " + plugin.getName() + "\n\n" + "暂无";
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+        Plugin plugin = getPluginOrThrow(id);
+        try {
+            if (StringUtils.isNotBlank(plugin.getPluginPath())) {
+                return TarGzUtil.readRootFile(safePluginPackagePath(plugin.getPluginPath()), "README.md");
             }
+            return "# " + plugin.getName() + "\n\n" + "暂无";
+        } catch (IOException e) {
+            log.warn("读取插件 README 失败: id={}", id, e);
         }
         return null;
     }
@@ -516,13 +519,15 @@ public class PluginServiceImpl implements PluginService {
     @Override
     public List<FileTreeNodeVo> docTree(Long id) {
         try {
-            Plugin plugin = pluginRepository.findById(id).orElse(null);
-            Path docPath = Paths.get(customWebConfig.getPluginPath(), plugin.getPackageName(), "00_doc");
-            Path root = docPath.toAbsolutePath().normalize();
+            Plugin plugin = getPluginOrThrow(id);
+            Path root = installedPluginDocRoot(plugin);
+            if (!Files.exists(root) || !Files.isDirectory(root)) {
+                return Collections.emptyList();
+            }
             FileTreeNodeVo tree = buildTree(root, root);
             return tree.getChildren();
         } catch (IOException e) {
-            e.printStackTrace();
+            log.warn("读取插件文档树失败: id={}", id, e);
         }
         return Collections.emptyList();
     }
@@ -554,20 +559,16 @@ public class PluginServiceImpl implements PluginService {
 
     @Override
     public String readDocFile(Long id, String file) {
-        Plugin plugin = pluginRepository.findById(id).orElse(null);
-        if (plugin != null) {
-            Path docPath = Paths.get(customWebConfig.getPluginPath(), plugin.getPackageName(), "00_doc");
-            // 检查目录是否存在
-            if (Files.exists(docPath)) {
-                File docFile = docPath.resolve(file).toFile();
-                if (docFile.getAbsolutePath().startsWith(docPath.toFile().getAbsolutePath())) {
-                    try {
-                        return Files.readString(docFile.toPath());
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
+        Plugin plugin = getPluginOrThrow(id);
+        try {
+            Path docPath = installedPluginDocRoot(plugin);
+            Path docFile = requireChildPath(docPath.resolve(file), docPath);
+            if (!Files.exists(docFile) || !Files.isRegularFile(docFile) || docFile.getFileName().toString().startsWith(".")) {
+                return null;
             }
+            return Files.readString(docFile);
+        } catch (IOException e) {
+            log.warn("读取插件文档失败: id={}, file={}", id, file, e);
         }
         return null;
     }
@@ -577,27 +578,296 @@ public class PluginServiceImpl implements PluginService {
         return readLog(id);
     }
 
-    private String writeLog(Long id, String log) {
-        String oldLog = LOG_CACHE.get(id);
-        if (oldLog == null) {
-            LOG_CACHE.put(id, log);
-        } else {
-            LOG_CACHE.put(id, oldLog + "\n" + log);
-        }
-        return oldLog;
+    private void resetLogs(Long id) {
+        LOG_CACHE.put(id, new PluginLogBuffer());
+    }
+
+    private void writeLog(Long id, String logLine) {
+        LOG_CACHE.computeIfAbsent(id, key -> new PluginLogBuffer()).write(logLine);
     }
 
     private String readLog(Long id) {
-        String log = LOG_CACHE.get(id);
-        if (log != null) {
-            LOG_CACHE.remove(id);
+        PluginLogBuffer buffer = LOG_CACHE.computeIfAbsent(id, key -> new PluginLogBuffer());
+        try {
+            return buffer.poll();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
         }
-        return log;
+    }
+
+    private void validateUploadFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw invalidPluginPackage("上传文件为空");
+        }
+        if (file.getSize() > MAX_PLUGIN_PACKAGE_BYTES) {
+            throw invalidPluginPackage("插件包不能超过300MB");
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (StringUtils.isBlank(originalFilename)) {
+            throw invalidPluginPackage("插件包文件名不能为空");
+        }
+        String fileName = Paths.get(originalFilename).getFileName().toString();
+        if (!StringUtils.endsWithIgnoreCase(fileName, ".tar.gz")) {
+            throw invalidPluginPackage("插件包仅支持 .tar.gz 格式");
+        }
+    }
+
+    private static ApiException invalidPluginPackage(String message) {
+        return new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), message);
+    }
+
+    private Plugin getPluginOrThrow(Long id) {
+        Plugin plugin = pluginRepository.findById(id).orElse(null);
+        if (plugin == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "插件不存在");
+        }
+        return plugin;
+    }
+
+    private static PluginStatusType normalizeStatus(PluginStatusType status) {
+        return status == null ? PluginStatusType.UN_INSTALL : status;
+    }
+
+    private static void updateOperationState(Plugin plugin,
+                                             PluginStatusType status,
+                                             String message,
+                                             String error,
+                                             boolean started) {
+        Date now = new Date();
+        plugin.setStatus(status);
+        plugin.setOperationMessage(message);
+        plugin.setOperationError(error);
+        if (started) {
+            plugin.setOperationStartedAt(now);
+            plugin.setOperationEndedAt(null);
+        } else {
+            plugin.setOperationEndedAt(now);
+        }
+    }
+
+    private void finishOperation(Long id, PluginStatusType status, String message, String error) {
+        Plugin plugin = getPluginOrThrow(id);
+        updateOperationState(plugin, status, message, error, false);
+        pluginRepository.save(plugin);
+    }
+
+    private void validatePackageName(String packageName) {
+        if (StringUtils.isBlank(packageName) || !SAFE_PACKAGE_PATTERN.matcher(packageName).matches()
+                || packageName.contains("..") || packageName.contains("/") || packageName.contains("\\")) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "非法插件包名: " + packageName);
+        }
+    }
+
+    private Path pluginRoot() {
+        return Paths.get(customWebConfig.getPluginPath()).toAbsolutePath().normalize();
+    }
+
+    private Path configRoot() {
+        return Paths.get(customWebConfig.getConfigPath()).toAbsolutePath().normalize();
+    }
+
+    private Path requireChildPath(Path candidate, Path root) {
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path normalizedCandidate = candidate.toAbsolutePath().normalize();
+        if (!normalizedCandidate.startsWith(normalizedRoot)) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "非法文件路径: " + candidate);
+        }
+        return normalizedCandidate;
+    }
+
+    private Path safePluginPath(String pluginPath) {
+        if (StringUtils.isBlank(pluginPath)) {
+            throw invalidPluginPackage("插件包路径不能为空");
+        }
+        return requireChildPath(Paths.get(pluginPath), pluginRoot());
+    }
+
+    private Path safePluginPackagePath(String pluginPath) {
+        Path path = safePluginPath(pluginPath);
+        if (!StringUtils.endsWithIgnoreCase(path.getFileName().toString(), ".tar.gz")
+                || !Files.exists(path) || !Files.isRegularFile(path)) {
+            throw invalidPluginPackage("插件包文件不存在或格式不正确");
+        }
+        return path;
+    }
+
+    private Path installedPluginRoot(Plugin plugin) {
+        validatePackageName(plugin.getPackageName());
+        return requireChildPath(pluginRoot().resolve(plugin.getPackageName()), pluginRoot());
+    }
+
+    private Path installedPluginDocRoot(Plugin plugin) {
+        return requireChildPath(installedPluginRoot(plugin).resolve("00_doc"), installedPluginRoot(plugin));
+    }
+
+    private void cleanupPluginCoreResources(Long id, Plugin plugin, boolean includeRagSkill) throws Exception {
+        String packageName = plugin.getPackageName();
+        validatePackageName(packageName);
+
+        writeLog(id, "清理菜单按钮......");
+        deletePluginMenus(packageName);
+
+        writeLog(id, "清理UI配置......");
+        deleteIfExists(requireChildPath(configRoot().resolve(packageName + "_config"), configRoot()));
+
+        writeLog(id, "卸载API包......");
+        extendJarManager.unload(packageName);
+
+        writeLog(id, "清理push-task任务......");
+        pushTaskService.deleteBySourceMark(packageName);
+
+        writeLog(id, "清理meta和库表......");
+        deletePluginMetaAndTables(packageName);
+
+        writeLog(id, "清理解压目录......");
+        deleteIfExists(installedPluginRoot(plugin));
+
+        if (includeRagSkill) {
+            writeLog(id, "卸载RAG中的文档......");
+            try {
+                vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
+            } catch (Exception e) {
+                log.error("卸载RAG中的文档失败", e);
+                writeLog(id, "卸载RAG中的文档失败，跳过");
+            }
+
+            writeLog(id, "卸载插件Skill......");
+            try {
+                skillService.uninstallPluginSkills(packageName);
+            } catch (Exception e) {
+                log.error("卸载插件Skill失败", e);
+                writeLog(id, "卸载插件Skill失败，跳过");
+            }
+        }
+    }
+
+    private List<Path> copyPluginMetaFiles(String packageName, List<Path> metaFiles) throws IOException {
+        Path metaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
+        Files.createDirectories(metaRoot);
+        List<Path> copiedPaths = new ArrayList<>();
+        for (Path source : metaFiles) {
+            Path target = requireChildPath(metaRoot.resolve(packageName + "_" + source.getFileName()), metaRoot);
+            WalkFileUtil.copy(source, target);
+            copiedPaths.add(target);
+        }
+        return copiedPaths;
+    }
+
+    private List<String> readMetaTableNames(List<Path> metaFiles) throws IOException {
+        List<String> tableNames = new ArrayList<>();
+        for (Path path : metaFiles) {
+            tableNames.addAll(readMetaTableNames(path));
+        }
+        return tableNames;
+    }
+
+    private List<String> readMetaTableNames(Path path) throws IOException {
+        MetaData metaData = JacksonUtil.toObject(Files.readString(path), MetaData.class);
+        if (metaData == null || metaData.getEntity() == null) {
+            return Collections.emptyList();
+        }
+        List<String> tableNames = new ArrayList<>();
+        metaData.getEntity().forEach(entity -> {
+            if (StringUtils.isNotBlank(entity.getTableName())) {
+                tableNames.add(entity.getTableName());
+            }
+        });
+        return tableNames;
+    }
+
+    private void deletePluginMetaAndTables(String packageName) throws IOException {
+        Path metaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
+        if (!Files.exists(metaRoot)) {
+            return;
+        }
+        List<Path> pluginMetaFiles;
+        try (Stream<Path> paths = Files.walk(metaRoot)) {
+            pluginMetaFiles = paths.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith(packageName + "_"))
+                    .toList();
+        }
+        for (Path path : pluginMetaFiles) {
+            deletePluginTables(readMetaTableNames(path));
+            deleteIfExists(path);
+        }
+        metaDataService.loadMetaData();
+    }
+
+    private void deletePluginTables(List<String> tableNames) {
+        for (String tableName : tableNames) {
+            clickhouseSchemeService.deleteTable(tableName);
+        }
+    }
+
+    private void createPluginPushTasks(Long id, String packageName, PluginPackTool pluginPackTool) {
+        String pushTaskConfig = pluginPackTool.readPushTaskConfigFile();
+        List<PushTaskDto> pushTaskDtoList = JacksonUtil.toList(pushTaskConfig, new TypeReference<List<PushTaskDto>>() {
+        });
+        pushTaskDtoList.forEach(pushTaskDto -> {
+            String configRef = StringUtils.defaultString(pushTaskDto.getConfig());
+            if (configRef.endsWith(".toml") || configRef.endsWith(".yaml") || configRef.endsWith(".json")) {
+                pushTaskDto.setConfig(pluginPackTool.readPushTaskConfigFile(configRef));
+            }
+            pushTaskDto.setSource("SYSTEM");
+            pushTaskDto.setMark(packageName);
+            if (!pushTaskService.createAndStart(pushTaskDto)) {
+                writeLog(id, "push-task 创建失败: " + pushTaskDto.getName());
+            }
+        });
+    }
+
+    private void loadPluginApiJars(String packageName, PluginPackTool pluginPackTool) throws Exception {
+        for (Path jarPath : pluginPackTool.listApiFiles()) {
+            extendJarManager.load(packageName, jarPath.toFile());
+        }
+    }
+
+    private Path copyPluginUi(String packageName, PluginPackTool pluginPackTool) throws IOException {
+        Path pluginUIPath = pluginPackTool.getUiPath();
+        if (!Files.exists(pluginUIPath)) {
+            return null;
+        }
+        Path uiPath = requireChildPath(configRoot().resolve(packageName + "_config"), configRoot());
+        deleteIfExists(uiPath);
+        WalkFileUtil.copy(pluginUIPath, uiPath);
+        return uiPath;
+    }
+
+    private void createPluginMenus(String packageName, PluginPackTool pluginPackTool) {
+        String menuConfig = pluginPackTool.readMenuConfigFile();
+        List<MenuDto> menuDtoList = JacksonUtil.toList(menuConfig, new TypeReference<List<MenuDto>>() {
+        });
+        menuDtoList.forEach(menuDto -> {
+            menuDto.setLevel(MenuLevel.LEVEL_1);
+            menuDto.setParentId(0);
+            menuDto.setOrderNumber(0);
+            menuDto.setSource(packageName);
+            menuService.create(menuDto);
+        });
+    }
+
+    private void deletePluginMenus(String packageName) {
+        List<Menu> menuList = menuService.findBySource(packageName);
+        menuList.forEach(menu -> menuService.delete(menu.getId().longValue()));
+    }
+
+    private void deleteIfExists(Path path) throws IOException {
+        if (Files.exists(path)) {
+            WalkFileUtil.delete(path);
+        }
     }
 
     private static void checkCreateOrUpdate(PluginDto pluginDto) {
         if (StringUtils.isEmpty(pluginDto.getName()) || StringUtils.isEmpty(pluginDto.getPackageName())) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        if (StringUtils.isNotBlank(pluginDto.getPackageName())
+                && (!SAFE_PACKAGE_PATTERN.matcher(pluginDto.getPackageName()).matches()
+                || pluginDto.getPackageName().contains("..")
+                || pluginDto.getPackageName().contains("/")
+                || pluginDto.getPackageName().contains("\\"))) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "非法插件包名: " + pluginDto.getPackageName());
         }
     }
 
@@ -661,6 +931,60 @@ public class PluginServiceImpl implements PluginService {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static class PluginLogBuffer {
+        private final BlockingQueue<String> queue = new LinkedBlockingQueue<>(LOG_QUEUE_CAPACITY);
+        private final Deque<String> recentLogs = new ArrayDeque<>();
+
+        synchronized void write(String logLine) {
+            recentLogs.addLast(logLine);
+            while (recentLogs.size() > LOG_QUEUE_CAPACITY) {
+                recentLogs.removeFirst();
+            }
+            if (!queue.offer(logLine)) {
+                queue.poll();
+                queue.offer(logLine);
+            }
+        }
+
+        String poll() throws InterruptedException {
+            return queue.poll(LOG_POLL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }
+    }
+
+    private class CompensationStack {
+        private final Long pluginId;
+        private final Deque<CompensationStep> steps = new ArrayDeque<>();
+
+        CompensationStack(Long pluginId) {
+            this.pluginId = pluginId;
+        }
+
+        void add(String name, CompensationAction action) {
+            steps.push(new CompensationStep(name, action));
+        }
+
+        void rollback() {
+            while (!steps.isEmpty()) {
+                CompensationStep step = steps.pop();
+                try {
+                    writeLog(pluginId, "回滚：" + step.name);
+                    step.action.run();
+                } catch (Exception e) {
+                    log.warn("插件安装回滚失败: pluginId={}, step={}", pluginId, step.name, e);
+                    writeLog(pluginId, "回滚失败：" + step.name);
+                }
+            }
+        }
+    }
+
+    private record CompensationStep(String name, CompensationAction action) {
+    }
+
+    @FunctionalInterface
+    private interface CompensationAction {
+        void run() throws Exception;
     }
 
     @Getter

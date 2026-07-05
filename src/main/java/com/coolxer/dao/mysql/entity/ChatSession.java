@@ -46,13 +46,13 @@ public class ChatSession extends BaseEntity {
     /**
      * 会话内容（json格式）
      */
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "LONGTEXT")
     private String messages;
 
     /**
      * 附加数据（json格式）
      */
-    @Column(name = "extra_data", columnDefinition = "TEXT")
+    @Column(name = "extra_data", columnDefinition = "LONGTEXT")
     private String extraData;
 
     /**

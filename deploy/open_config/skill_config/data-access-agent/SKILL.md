@@ -24,8 +24,19 @@
 - JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
 
 ```zenvis:notice
-{"title":"元数据配置检查提醒","content":"当前缺少创建 meta 元数据配置所需信息，请补充：\n1. 实体含义、稳定英文实体名和中文展示名；\n2. ClickHouse 目标表名、主键/唯一标识字段、默认排序字段和时间字段；\n3. 字段清单：字段逻辑名、物理列名、中文名、字段类型和字段说明。","level":"warning"}
+{"title":"元数据配置检查提醒","content":"当前缺少创建 meta 元数据配置所需信息，请补充：\n1. 一条或多条原始数据样例，或完整字段清单；\n2. 每个字段的含义和字段类型，如无法提供类型请说明样例值；\n3. 可作为主键/唯一标识、默认排序和时间字段的候选字段。","level":"warning"}
 ```
+
+## 插件样例参考规则
+
+`zenvis-plugin` 下的插件可作为生成 meta 元数据配置和 Vectum 数据推送服务的参考范式，但不得机械复制其中的缺失项、拆分方式、连接地址、认证信息或演示数据。
+
+- `plugin-user-event`：单实体、单 meta 配置、单 demo_logs 到 ClickHouse 的推送任务，可参考其字段类型、数组/JSON 展示方式和最小闭环结构。
+- `plugin-asset`：一个 meta 文件包含 10 个资产实体，是多实体同业务域写入同一个 meta 配置的主要参考。
+- `plugin-operation`、`plugin-risk`：一个 meta 文件包含多个事件/风险实体，push-task 使用 route 分流到多个 ClickHouse sink，可参考多实体入库拓扑。
+- `plugin-probe`：一个原始消息实体对应 Kafka、syslog、file 三类数据源推送任务，可参考多数据源接入方式。
+- `plugin-sta`：55 个协议实体和一个 `sta-import.toml` 入库任务，其中 push-task 通过 `logtype_route` 分流到多个 ClickHouse sink；只参考其 route 多 sink 模式，不照搬“一个实体一个 meta 文件”的拆分方式。
+- 新生成的 meta 配置必须遵守本 Skill 的完整规则：多个实体优先合入同一个配置，顶层 `operator` 必须补齐标准定义；不能因为参考样例缺失 `operator` 或使用不同表名风格而省略或偏离规范。
 
 ## 第一步：创建元数据配置
 
@@ -34,25 +45,37 @@
 首轮提问原则：
 
 - 只询问生成 meta 配置所必需的信息。
+- 数据库固定使用 `zenvis`；ClickHouse 表名、实体英文名、实体中文名由智能体根据数据内容自动生成，不要求用户提供。
+- 默认需要自动建表，表引擎使用 `MergeTree`。
 - 不要在首轮询问是否需要同步到第三方、数据源连接、目标端点、认证方式、Vectum 任务名称、启动时机等数据推送服务信息。
 - 如果用户主动同时提到“推送/同步/接入第三方”，也先完成 meta 配置；可在 meta 配置确认后再进入第二步收集推送信息。
+
+### 命名与冲突规避
+
+- 实体英文名、表名、文件名都由智能体自动生成，使用稳定、可读的 snake_case。
+- 表名默认等于实体英文名，完整表名固定为 `zenvis.<table_name>`。
+- 文件名默认等于实体英文名加 `.json`。
+- 如果一次元数据配置涉及多个实体，必须写入同一个 meta 配置文件；文件名按共同业务主题自动生成，例如 `<business_domain>.json`，不要拆成一个实体一个配置文件。
+- 生成前优先调用 `policy_config_tree(type="meta")` 获取已有 meta 配置文件，必要时读取现有配置中的 `entity.table_name`，避免文件名和表名冲突。
+- 如果已存在同名文件或表名，自动生成不冲突名称，不要要求用户改名；优先追加能表达业务的后缀，例如 `_log`、`_event`、`_flow`，仍冲突再追加 `_1`、`_2`。
+- 命名冲突规避结果需要在配置摘要里说明。
 
 ### 元数据内容检查
 
 生成前逐项检查：
 
-- 实体含义、稳定英文实体名、中文展示名。
-- ClickHouse 目标表名，可带库名。
+- 是否有足够的原始数据样例或字段清单，可据此推断实体含义、实体英文名、实体中文名。
+- 数据库固定为 `zenvis`；目标表名由实体英文名自动生成，必须检查并避免与现有表名或 meta 配置文件冲突。
 - 字段清单：字段逻辑名、物理列名、中文名、字段类型、字段说明。
-- 主键或唯一标识字段、默认排序字段。
-- 时间字段及其存储类型；是否需要趋势、聚合、CRUD、自动建表。
+- 主键或唯一标识字段、默认排序字段；如果用户未指定，优先使用已有 `id`，否则生成物理列 `id`。
+- 时间字段及其存储类型；默认需要自动建表，使用 `MergeTree`。
 - 枚举、数组、JSON、IP、数值、时间等特殊字段的查询与展示要求。
-- 目标文件名，例如 `xxx.json`；如果未提供，按实体名生成稳定文件名。
+- 目标文件名按实体英文名生成 `xxx.json`，冲突时自动加业务后缀或递增序号。
 
 检查不通过时，只输出提示卡，例如：
 
 ```zenvis:notice
-{"title":"元数据配置检查提醒","content":"当前缺少字段类型、主键/排序字段和目标表名，请补充后再生成 meta 配置。","level":"warning"}
+{"title":"元数据配置检查提醒","content":"当前缺少字段清单或数据样例，无法推断字段类型和实体含义，请补充后再生成 meta 配置。","level":"warning"}
 ```
 
 ### meta JSON 生成规则
@@ -60,8 +83,13 @@
 - 只生成一个合法 JSON 对象；顶层固定为 `entity`、`attribute`、`operator` 三个数组。
 - 字段名使用 snake_case；禁止生成 `search_type`。
 - 每个 `entity` 必填 `id`、`name`、`label`、`description`、`table_name`、`data_source`。
-- `data_source` 通常填 `clickhouse`。
-- 如需自动建表，`entity.auto_create` 必须包含 `engine`、`order_by`、`partition_by`；`order_by` 中字段必须存在于本实体 attribute 的 `column_name`。
+- 多个实体时，在同一个 JSON 的 `entity` 数组中放入多个实体对象，在同一个 `attribute` 数组中放入所有实体字段；每个 attribute 的 `entity` 必须指向所属实体的 `entity.name`。
+- 多个实体时，仍然只输出一个 `zenvis:meta-config` 配置卡和一个目标文件名，不要输出多个 `zenvis:meta-config` 配置卡。
+- `entity.name`、`entity.label` 根据数据内容自动生成；英文名使用稳定 snake_case，中文名使用简洁业务名。
+- `entity.table_name` 固定为 `zenvis.<entity_name>` 或 `zenvis.<non_conflicting_table_name>`，不得使用其他数据库。
+- 生成前通过现有 meta 配置、配置文件树或已知表名检查冲突；如冲突，自动追加业务后缀或递增序号，例如 `_log`、`_event`、`_1`。
+- `data_source` 固定填 `clickhouse`。
+- 默认生成 `entity.auto_create`，必须包含 `engine: "MergeTree"`、`order_by`、`partition_by`；`order_by` 中字段必须存在于本实体 attribute 的 `column_name`。
 - 需要实体 CRUD/MCP 工具稳定工作时，必须包含物理列 `id`。
 - 需要 `entity_trend` 时包含 `insert_time`；需要 `retrieval_msg_trend` 时包含 `server_time` 和 `fact_type`；需要 `retrieval_msg_tag` 时包含 `agenda_tags`，推荐 `Array(String)`。
 - 每个 `attribute` 必填 `id`、`entity`、`name`、`label`、`description`、`column_name`、`column_type`、`operators`、`display_selected`。
@@ -69,7 +97,7 @@
 - `display_name` 一般不要生成；如必须生成，只能是 SQL select/alias 可映射字段名，不能是中文。
 - `retrieval_type` 仅在实际按 epoch 毫秒存储且需要日期输入转换时使用 `date`；普通 `DateTime64(3)` 不要使用。
 - 凡被 attribute 引用的 operator，必须在顶层 `operator` 数组定义。
-- 默认输出完整标准 operator：`equal`、`notequal`、`match`、`greatthan`、`greatequalthan`、`lessthan`、`lessequalthan`、`between`、`in`。
+- 默认输出完整标准 operator：`equal`、`notequal`、`match`、`greatthan`、`greatequalthan`、`lessthan`、`lessequalthan`、`between`、`in`；即使参考插件样例缺少顶层 `operator`，新配置也必须补齐。
 
 ### meta 配置展示与用户选择
 
@@ -129,7 +157,7 @@
   "fileName": "example_event.json",
   "entityName": "example_event",
   "entityLabel": "示例事件",
-  "tableName": "default.example_event",
+  "tableName": "zenvis.example_event",
   "status": "applied",
   "config": {
     "entity": [],
@@ -163,6 +191,9 @@
 
 - 默认生成 YAML，因为 Vector 推荐 YAML，Vectum 会从配置字符串自动识别 YAML/TOML/JSON。
 - 配置必须至少包含一个 `source` 和一个 `sink`；每个 `inputs` 必须引用已存在的上游 source 或 transform。
+- 写入 ZenVis ClickHouse 时，sink 的 `database` 固定为 `zenvis`，`table` 必须与已确认 meta 配置中的实体表一致。
+- 多目标表写入时，参考 `plugin-operation`、`plugin-risk`、`plugin-sta` 的 route 分流模式：先按业务字段或类型字段路由，再让每个 ClickHouse sink 只写入对应实体表。
+- Kafka、syslog、file、demo_logs 等数据源类型可参考现有插件样例，但不得编造连接地址、认证、端点、topic、文件路径或业务映射；信息不足时输出 `zenvis:notice` 要求补充。
 - 不编造 Vector 组件字段；不熟悉的组件需先依据已知 Vector 规则或验证脚本确认。
 - 能本地验证时，将配置保存为临时文件并运行 `vectum-data-integration/scripts/validate_vector_config.sh <file>`；如果运行环境没有 `vector`，说明本地预验证已跳过，改用 Vectum 运行日志判断。
 

@@ -32,7 +32,6 @@ public class Message {
      * 用户消息携带的附件；历史消息没有该字段时前端忽略。
      */
     private List<ChatAttachment> attachments;
-
     public Message(String sender, String content) {
         this.id = UUID.randomUUID().toString();
         this.sender = sender;

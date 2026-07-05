@@ -92,7 +92,12 @@ public class ChatMessagePartParser {
             return configPart;
         }
 
-        if (!"zenvis:notice".equals(info) && !"zenvis:confirm".equals(info)) {
+        if (!"zenvis:notice".equals(info)
+                && !"zenvis:confirm".equals(info)
+                && !"zenvis:analysis-decision".equals(info)
+                && !"zenvis:data-access-decision".equals(info)
+                && !"zenvis:meta-config-record".equals(info)
+                && !"zenvis:vectum-task-record".equals(info)) {
             return null;
         }
 
@@ -103,13 +108,20 @@ public class ChatMessagePartParser {
                     new TypeReference<Map<String, Object>>() {
                     }
             );
-            String type = "zenvis:notice".equals(info) ? "notice" : "confirm";
+            String type = switch (info) {
+                case "zenvis:notice" -> "notice";
+                case "zenvis:analysis-decision" -> "analysis-decision";
+                case "zenvis:data-access-decision" -> "data-access-decision";
+                case "zenvis:meta-config-record" -> "metadata-config-record";
+                case "zenvis:vectum-task-record" -> "data-push-service-record";
+                default -> "confirm";
+            };
             ChatMessagePart.ChatMessagePartBuilder builder = part(type)
                     .title(textValue(node, "title"))
-                    .content(firstTextValue(node, "content", "message", "description"))
+                    .content(firstTextValue(node, "content", "message", "description", "name", "entityLabel", "fileName", "taskId"))
                     .level(firstTextValue(node, "level", "type"))
                     .metadata(metadata);
-            if ("confirm".equals(type)) {
+            if ("confirm".equals(type) || "analysis-decision".equals(type) || "data-access-decision".equals(type)) {
                 builder.status("pending");
             }
             return builder.build();
@@ -150,6 +162,14 @@ public class ChatMessagePartParser {
                     "json",
                     "continuous-analysis-task",
                     "continuous-analysis-task.json",
+                    info
+            );
+            case "zenvis:meta-config" -> configPart(
+                    body,
+                    "元数据配置",
+                    "json",
+                    "meta-config",
+                    "meta_config/<entity>.json",
                     info
             );
             case "zenvis:disposal-strategy-config" -> configPart(

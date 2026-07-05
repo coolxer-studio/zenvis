@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -133,6 +134,25 @@ class ChatMessagePartParserTest {
         assertEquals("json", parts.get(0).getLanguage());
         assertEquals("continuous-analysis-task", parts.get(0).getMetadata().get("configKind"));
         assertEquals("continuous-analysis-task.json", parts.get(0).getMetadata().get("defaultFileName"));
+    }
+
+    @Test
+    @DisplayName("元数据配置围栏应解析为配置片段")
+    void parseMetaConfigFence() {
+        String content = """
+                ```zenvis:meta-config
+                {"entity":[],"attribute":[],"operator":[]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("config", parts.get(0).getType());
+        assertEquals("元数据配置", parts.get(0).getTitle());
+        assertEquals("json", parts.get(0).getLanguage());
+        assertEquals("meta-config", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("meta_config/<entity>.json", parts.get(0).getMetadata().get("defaultFileName"));
     }
 
     @Test
@@ -284,6 +304,85 @@ class ChatMessagePartParserTest {
         assertEquals("准备生成插件产物", parts.get(0).getContent());
         assertEquals("pending", parts.get(0).getStatus());
         assertEquals("plugin.generate", parts.get(0).getMetadata().get("action"));
+    }
+
+    @Test
+    @DisplayName("研判后续选择围栏应解析为待选择片段")
+    void parseAnalysisDecisionFence() {
+        String content = """
+                ```zenvis:analysis-decision
+                {"title":"研判完成，请选择后续处理","content":"可以执行处置、忽略告警，或补充研判重点继续分析。","actions":["dispose","ignore","continue"]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("analysis-decision", parts.get(0).getType());
+        assertEquals("研判完成，请选择后续处理", parts.get(0).getTitle());
+        assertEquals("可以执行处置、忽略告警，或补充研判重点继续分析。", parts.get(0).getContent());
+        assertEquals("pending", parts.get(0).getStatus());
+        assertEquals(List.of("dispose", "ignore", "continue"), parts.get(0).getMetadata().get("actions"));
+    }
+
+    @Test
+    @DisplayName("数据接入后续选择围栏应解析为待选择片段")
+    void parseDataAccessDecisionFence() {
+        String content = """
+                ```zenvis:data-access-decision
+                {"title":"元数据配置已生成，请选择后续处理","content":"可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。","actions":["apply_config","abandon","revise"]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("data-access-decision", parts.get(0).getType());
+        assertEquals("元数据配置已生成，请选择后续处理", parts.get(0).getTitle());
+        assertEquals("可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。", parts.get(0).getContent());
+        assertEquals("pending", parts.get(0).getStatus());
+        assertEquals(List.of("apply_config", "abandon", "revise"), parts.get(0).getMetadata().get("actions"));
+    }
+
+    @Test
+    @DisplayName("元数据配置记录围栏应解析为记录片段")
+    void parseMetaConfigRecordFence() {
+        String content = """
+                ```zenvis:meta-config-record
+                {"title":"元数据配置已记录","fileName":"ips.json","entityName":"ips","entityLabel":"IP 情报","tableName":"default.ips","status":"applied","config":{"entity":[{"name":"ips"}],"attribute":[{"name":"ip"}],"operator":[]}}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("metadata-config-record", parts.get(0).getType());
+        assertEquals("元数据配置已记录", parts.get(0).getTitle());
+        assertEquals("applied", parts.get(0).getMetadata().get("status"));
+        assertEquals("ips.json", parts.get(0).getMetadata().get("fileName"));
+        assertEquals("IP 情报", parts.get(0).getContent());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) parts.get(0).getMetadata().get("config");
+        assertNotNull(config);
+    }
+
+    @Test
+    @DisplayName("Vectum 任务记录围栏应解析为记录片段")
+    void parseVectumTaskRecordFence() {
+        String content = """
+                ```zenvis:vectum-task-record
+                {"title":"数据推送服务已创建","taskId":"task-001","name":"IP 情报推送","description":"同步 IP 情报数据","status":"running","config":"sources:\\n  in:\\n    type: demo_logs"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("data-push-service-record", parts.get(0).getType());
+        assertEquals("数据推送服务已创建", parts.get(0).getTitle());
+        assertEquals("同步 IP 情报数据", parts.get(0).getContent());
+        assertEquals("task-001", parts.get(0).getMetadata().get("taskId"));
+        assertEquals("running", parts.get(0).getMetadata().get("status"));
     }
 
     @Test

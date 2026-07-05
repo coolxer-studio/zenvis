@@ -68,7 +68,7 @@ public class McpClientServiceImpl implements McpClientService {
     public McpClientServiceImpl(McpServerConfigRepository mcpServerConfigRepository,
                                 ObjectMapper objectMapper,
                                 @Value("${spring.ai.mcp.server.version:1.0.0}") String clientVersion,
-                                @Value("${app.ai.mcp.allow-private-server-urls:false}") boolean allowPrivateServerUrls,
+                                @Value("${app.ai.mcp.allow-private-server-urls:true}") boolean allowPrivateServerUrls,
                                 @Value("${app.ai.mcp.allow-destructive-tool-calls:false}") boolean allowDestructiveToolCalls) {
         this.mcpServerConfigRepository = mcpServerConfigRepository;
         this.objectMapper = objectMapper;

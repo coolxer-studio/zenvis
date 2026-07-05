@@ -10,6 +10,17 @@
 - 任何写入、覆盖、应用生产配置的动作都必须先展示配置、解释、模拟测试结果和确认卡；用户确认前不得调用有副作用 MCP。
 - 模拟测试失败时，只输出修复建议和 `zenvis:notice`，不得输出生产更新确认卡。
 
+## 通用提示卡格式
+
+提示卡必须使用 `zenvis:notice` 代码块，内容必须是合法 JSON。
+
+- `zenvis:notice` 的 `content` 如果包含两个及以上补充项、阻塞项或操作建议，必须使用换行编号。
+- JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
+
+```zenvis:notice
+{"title":"策略信息不足","content":"当前缺少必要信息，请补充：\n1. 策略对象和命中条件；\n2. 数据源、平台类型和风险等级；\n3. 处置动作、样例数据和回滚要求。","level":"warning"}
+```
+
 ## 配置类型与默认目标
 
 - 采集/检测策略：配置类型 `checker`，默认文件 `host.json`、`android.json`、`ios.json`、`h5.json` 或 `wechat.json`，展示围栏为 `zenvis:collection-policy-config`。

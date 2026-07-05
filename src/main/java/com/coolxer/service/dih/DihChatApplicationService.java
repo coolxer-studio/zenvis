@@ -26,7 +26,9 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -42,7 +44,6 @@ public class DihChatApplicationService {
     private static final String TYPE_ASK = "ask";
     private static final String LEGACY_MCP_AGENT_TYPE = "agent_mcp";
     private static final String CHAT_ERROR_MESSAGE = "抱歉，回复失败，请稍后重试~";
-
     private final AIChatService chatService;
     private final AIBaseService baseService;
     private final ChatSessionService chatSessionService;
@@ -301,8 +302,9 @@ public class DihChatApplicationService {
 
     private Message saveAiResponse(ChatSession chatSession, User currentUser, String content, MessageType type, boolean withParts, boolean deepThinkRequested) {
         Message aiMessage = new Message("ai", content, type);
+        List<ChatMessagePart> parts = List.of();
         if (withParts) {
-            List<ChatMessagePart> parts = new ArrayList<>(chatMessagePartParser.parse(content, type));
+            parts = new ArrayList<>(chatMessagePartParser.parse(content, type));
             if (deepThinkRequested && parts.stream().noneMatch(part -> "thinking".equals(part.getType()))) {
                 parts.add(0, ChatMessagePart.builder()
                         .id(java.util.UUID.randomUUID().toString())
@@ -318,12 +320,225 @@ public class DihChatApplicationService {
             return aiMessage;
         }
         try {
-            chatSessionService.appendMessage(chatSession, aiMessage, currentUser);
+            ChatSession savedSession = chatSessionService.appendMessage(chatSession, aiMessage, currentUser);
+            mergeDataAccessExtraData(savedSession, parts, currentUser);
             log.info("保存AI响应到会话，消息类型: {}, 富消息片段: {}", aiMessage.getType(), withParts);
         } catch (Exception e) {
             log.error("保存模型响应到会话失败: {}", e.getMessage(), e);
         }
         return aiMessage;
+    }
+
+    private void mergeDataAccessExtraData(ChatSession chatSession, List<ChatMessagePart> parts, User currentUser) {
+        Map<String, Object> patch = buildDataAccessExtraDataPatch(parts);
+        if (chatSession == null || patch == null || patch.isEmpty()) {
+            return;
+        }
+        Map<String, Object> extraData = new LinkedHashMap<>(parseJsonObject(chatSession.getExtraData()));
+        Map<String, Object> dataAccess = mapValue(extraData.get("dataAccess"));
+        Map<String, Object> patchDataAccess = mapValue(patch.get("dataAccess"));
+        mergeRecordList(dataAccess, patchDataAccess, "metadataConfigs");
+        mergeRecordList(dataAccess, patchDataAccess, "dataPushServices");
+        extraData.put("dataAccess", dataAccess);
+
+        String extraDataJson = JacksonUtil.toJson(extraData);
+        ChatSessionDto chatSessionDto = new ChatSessionDto();
+        chatSessionDto.setExtraData(extraDataJson);
+        chatSessionService.update((long) chatSession.getId(), chatSessionDto, currentUser);
+        chatSession.setExtraData(extraDataJson);
+    }
+
+    private Map<String, Object> buildDataAccessExtraDataPatch(List<ChatMessagePart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return null;
+        }
+        List<Map<String, Object>> metadataConfigs = new ArrayList<>();
+        List<Map<String, Object>> dataPushServices = new ArrayList<>();
+        for (ChatMessagePart part : parts) {
+            if ("metadata-config-record".equals(part.getType())) {
+                metadataConfigs.add(buildMetaConfigRecord(part, stringValue(part.getMetadata(), "status", "applied")));
+            } else if ("data-push-service-record".equals(part.getType())) {
+                dataPushServices.add(buildDataPushServiceRecord(part));
+            }
+        }
+        if (metadataConfigs.isEmpty() && dataPushServices.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> dataAccess = new LinkedHashMap<>();
+        if (!metadataConfigs.isEmpty()) {
+            dataAccess.put("metadataConfigs", metadataConfigs);
+        }
+        if (!dataPushServices.isEmpty()) {
+            dataAccess.put("dataPushServices", dataPushServices);
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("dataAccess", dataAccess);
+        return metadata;
+    }
+
+    private void mergeRecordList(Map<String, Object> dataAccess,
+                                 Map<String, Object> patchDataAccess,
+                                 String key) {
+        List<Map<String, Object>> records = listOfMaps(dataAccess.get(key));
+        for (Map<String, Object> record : listOfMaps(patchDataAccess.get(key))) {
+            upsertRecord(records, record);
+        }
+        if (!records.isEmpty()) {
+            dataAccess.put(key, records);
+        }
+    }
+
+    private void upsertRecord(List<Map<String, Object>> records, Map<String, Object> record) {
+        String id = firstNonBlank(
+                stringValue(record, "id", null),
+                stringValue(record, "fileName", null),
+                stringValue(record, "taskId", null),
+                stringValue(record, "name", null)
+        );
+        if (id != null) {
+            records.removeIf(item -> id.equals(firstNonBlank(
+                    stringValue(item, "id", null),
+                    stringValue(item, "fileName", null),
+                    stringValue(item, "taskId", null),
+                    stringValue(item, "name", null)
+            )));
+        }
+        records.add(record);
+    }
+
+    private Map<String, Object> buildMetaConfigRecord(ChatMessagePart part, String defaultStatus) {
+        Map<String, Object> record = new LinkedHashMap<>();
+        Map<String, Object> metadata = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> config = mapFromValue(metadata.get("config"));
+        if (config.isEmpty()) {
+            config = parseJsonObject(part.getContent());
+        }
+        Map<String, Object> entity = firstObject(config.get("entity"));
+
+        String entityName = firstNonBlank(
+                stringValue(metadata, "entityName", null),
+                stringValue(entity, "name", null),
+                stringValue(entity, "id", null)
+        );
+        String entityLabel = firstNonBlank(
+                stringValue(metadata, "entityLabel", null),
+                stringValue(entity, "label", null),
+                entityName
+        );
+        String fileName = firstNonBlank(
+                stringValue(metadata, "fileName", null),
+                stringValue(metadata, "targetFile", null),
+                entityName == null ? null : entityName + ".json",
+                stringValue(metadata, "defaultFileName", "meta_config/<entity>.json")
+        );
+
+        record.put("id", firstNonBlank(stringValue(metadata, "id", null), fileName, java.util.UUID.randomUUID().toString()));
+        record.put("name", firstNonBlank(entityLabel, fileName, "元数据配置"));
+        record.put("fileName", fileName);
+        record.put("entityName", entityName);
+        record.put("entityLabel", entityLabel);
+        record.put("tableName", firstNonBlank(stringValue(metadata, "tableName", null), stringValue(entity, "table_name", null)));
+        record.put("fieldCount", listSize(config.get("attribute")));
+        record.put("status", stringValue(metadata, "status", defaultStatus));
+        record.put("source", "message");
+        record.put("content", part.getContent());
+        if (!config.isEmpty()) {
+            record.put("config", config);
+        }
+        return record;
+    }
+
+    private Map<String, Object> buildDataPushServiceRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> record = new LinkedHashMap<>();
+        String id = firstNonBlank(stringValue(raw, "id", null), stringValue(raw, "taskId", null), stringValue(raw, "task_id", null));
+        String name = firstNonBlank(stringValue(raw, "name", null), stringValue(raw, "taskName", null), stringValue(raw, "task_name", null), part.getContent());
+        record.put("id", firstNonBlank(id, java.util.UUID.randomUUID().toString()));
+        record.put("name", firstNonBlank(name, "Vectum 数据推送服务"));
+        record.put("description", stringValue(raw, "description", ""));
+        record.put("status", stringValue(raw, "status", "created"));
+        record.put("source", "vectum");
+        record.put("taskId", id);
+        record.put("config", raw.get("config"));
+        record.put("raw", raw);
+        return record;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJsonObject(String content) {
+        if (!StringUtils.hasText(content)) {
+            return Map.of();
+        }
+        try {
+            Object parsed = com.coolxer.configuration.JacksonConfig.OBJECT_MAPPER.readValue(content, Object.class);
+            return parsed instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapFromValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return new LinkedHashMap<>((Map<String, Object>) map);
+        }
+        return new LinkedHashMap<>();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> listOfMaps(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return new ArrayList<>();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                result.add(new LinkedHashMap<>((Map<String, Object>) map));
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> firstObject(Object value) {
+        if (value instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private int listSize(Object value) {
+        return value instanceof List<?> list ? list.size() : 0;
+    }
+
+    private String stringValue(Map<String, Object> map, String key, String fallback) {
+        if (map == null) {
+            return fallback;
+        }
+        Object value = map.get(key);
+        return value == null || !StringUtils.hasText(value.toString()) ? fallback : value.toString();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String toNdjson(ChatStreamEvent event) {

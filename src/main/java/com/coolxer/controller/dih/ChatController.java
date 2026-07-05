@@ -54,6 +54,12 @@ public class ChatController extends BaseController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private static final String DECISION_APPROVED = "approved";
     private static final String DECISION_REJECTED = "rejected";
+    private static final String DECISION_DISPOSE = "dispose";
+    private static final String DECISION_IGNORE = "ignore";
+    private static final String DECISION_CONTINUE = "continue";
+    private static final String DECISION_APPLY_CONFIG = "apply_config";
+    private static final String DECISION_ABANDON = "abandon";
+    private static final String DECISION_REVISE = "revise";
 
     @Autowired
     private DihChatApplicationService dihChatApplicationService;
@@ -132,8 +138,8 @@ public class ChatController extends BaseController {
     @Operation(summary = "记录聊天动作确认结果")
     public ResponseWrap<?> actionDecision(@Valid @RequestBody ChatActionDecisionDto decisionDto) {
         String decision = decisionDto.getDecision();
-        if (!DECISION_APPROVED.equals(decision) && !DECISION_REJECTED.equals(decision)) {
-            return ResponseWrap.fail(400, "决策值只支持 approved 或 rejected");
+        if (!isSupportedDecision(decision)) {
+            return ResponseWrap.fail(400, "决策值只支持 approved、rejected、dispose、ignore、continue、apply_config、abandon 或 revise");
         }
 
         try {
@@ -145,22 +151,7 @@ public class ChatController extends BaseController {
 
             List<Message> messages = JacksonUtil.toList(chatSession.getMessages(), new TypeReference<List<Message>>() {
             });
-            boolean updated = false;
-            for (Message message : messages) {
-                if (!Objects.equals(message.getId(), decisionDto.getMessageId()) || message.getParts() == null) {
-                    continue;
-                }
-                for (ChatMessagePart part : message.getParts()) {
-                    if (Objects.equals(part.getId(), decisionDto.getPartId()) && "confirm".equals(part.getType())) {
-                        part.setStatus(decision);
-                        updated = true;
-                        break;
-                    }
-                }
-                if (updated) {
-                    break;
-                }
-            }
+            boolean updated = updateDecisionPart(messages, decisionDto);
 
             if (!updated) {
                 return ResponseWrap.fail(404, "确认项不存在");
@@ -179,5 +170,96 @@ public class ChatController extends BaseController {
 
     private boolean isPlaceholderBuiltinAgent(String chatType) {
         return false;
+    }
+
+    private boolean isSupportedDecision(String decision) {
+        return DECISION_APPROVED.equals(decision)
+                || DECISION_REJECTED.equals(decision)
+                || DECISION_DISPOSE.equals(decision)
+                || DECISION_IGNORE.equals(decision)
+                || DECISION_CONTINUE.equals(decision)
+                || DECISION_APPLY_CONFIG.equals(decision)
+                || DECISION_ABANDON.equals(decision)
+                || DECISION_REVISE.equals(decision);
+    }
+
+    private boolean isDecisionPart(ChatMessagePart part) {
+        return "confirm".equals(part.getType())
+                || "analysis-decision".equals(part.getType())
+                || "data-access-decision".equals(part.getType());
+    }
+
+    private boolean updateDecisionPart(List<Message> messages, ChatActionDecisionDto decisionDto) {
+        if (messages == null || messages.isEmpty()) {
+            return false;
+        }
+        String expectedType = expectedDecisionPartType(decisionDto.getDecision());
+        ChatMessagePart matchedPart = findDecisionPart(messages, decisionDto, expectedType, true, true);
+        if (matchedPart == null) {
+            matchedPart = findDecisionPart(messages, decisionDto, expectedType, false, true);
+        }
+        if (matchedPart == null) {
+            matchedPart = findDecisionPart(messages, decisionDto, expectedType, false, false);
+        }
+        if (matchedPart == null) {
+            log.warn("确认项不存在: chatId={}, messageId={}, partId={}, decision={}",
+                    decisionDto.getChatId(),
+                    decisionDto.getMessageId(),
+                    decisionDto.getPartId(),
+                    decisionDto.getDecision());
+            return false;
+        }
+        matchedPart.setStatus(decisionDto.getDecision());
+        return true;
+    }
+
+    private ChatMessagePart findDecisionPart(List<Message> messages,
+                                             ChatActionDecisionDto decisionDto,
+                                             String expectedType,
+                                             boolean requireMessageId,
+                                             boolean requirePartId) {
+        for (int messageIndex = messages.size() - 1; messageIndex >= 0; messageIndex--) {
+            Message message = messages.get(messageIndex);
+            if (requireMessageId && !Objects.equals(message.getId(), decisionDto.getMessageId())) {
+                continue;
+            }
+            if (message.getParts() == null || message.getParts().isEmpty()) {
+                continue;
+            }
+            for (int partIndex = message.getParts().size() - 1; partIndex >= 0; partIndex--) {
+                ChatMessagePart part = message.getParts().get(partIndex);
+                if (!isDecisionPart(part)) {
+                    continue;
+                }
+                if (expectedType != null && !expectedType.equals(part.getType())) {
+                    continue;
+                }
+                if (requirePartId && !Objects.equals(part.getId(), decisionDto.getPartId())) {
+                    continue;
+                }
+                if (!requirePartId && part.getStatus() != null && !"pending".equals(part.getStatus())) {
+                    continue;
+                }
+                return part;
+            }
+        }
+        return null;
+    }
+
+    private String expectedDecisionPartType(String decision) {
+        if (DECISION_DISPOSE.equals(decision)
+                || DECISION_IGNORE.equals(decision)
+                || DECISION_CONTINUE.equals(decision)) {
+            return "analysis-decision";
+        }
+        if (DECISION_APPLY_CONFIG.equals(decision)
+                || DECISION_ABANDON.equals(decision)
+                || DECISION_REVISE.equals(decision)) {
+            return "data-access-decision";
+        }
+        if (DECISION_APPROVED.equals(decision) || DECISION_REJECTED.equals(decision)) {
+            return "confirm";
+        }
+        return null;
     }
 }

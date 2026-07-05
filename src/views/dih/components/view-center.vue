@@ -29,6 +29,8 @@
                 :message="message"
                 @copy-code="copyMessage"
                 @decide-action="handleActionDecision(message, $event)"
+                @choose-analysis-decision="handleAnalysisDecision(message, $event)"
+                @choose-data-access-decision="handleDataAccessDecision(message, $event)"
               />
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：AI消息的交互按钮 -->
@@ -148,8 +150,16 @@
             </el-button>
           </el-tooltip>
 
-          <el-tooltip content="发送" placement="top">
-  <el-button class="action-btn send-btn" :disabled="!canSendMessage" @click="sendMessage">
+          <el-tooltip v-if="isStreamingResponse" content="停止生成" placement="top">
+            <el-button class="action-btn stop-btn" @click="stopCurrentChat">
+              <el-icon>
+                <Close />
+              </el-icon>
+            </el-button>
+          </el-tooltip>
+
+          <el-tooltip v-else content="发送" placement="top">
+            <el-button class="action-btn send-btn" :disabled="!canSendMessage" @click="sendMessage">
               <el-icon>
                 <Position />
               </el-icon>
@@ -234,6 +244,13 @@ type SendMessageOptions = {
   content?: string;
 };
 
+type DataAccessRecord = Record<string, unknown> & {
+  id?: string;
+  name?: string;
+  status?: string;
+};
+
+const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const MAX_FILES_PER_PICK = 10;
 const UPLOAD_CONCURRENCY = 3;
@@ -255,6 +272,8 @@ const pendingAttachments = ref<ChatAttachment[]>([])
 const isUploadingAttachment = ref(false)
 const isStreamingResponse = ref(false)
 const currentChatAbortController = ref<AbortController | null>(null)
+const currentStreamingMessageIndex = ref<number | null>(null)
+const isUserStoppingChat = ref(false)
 const canSendMessage = computed(() => {
   return !isUploadingAttachment.value
     && !isStreamingResponse.value
@@ -327,6 +346,68 @@ const messages = ref<ChatMessage[]>([
     time: getCurrentFormattedDate()
   }
 ])
+const chatSessionExtraData = ref('');
+
+const asObject = (value: unknown): Record<string, unknown> => {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+};
+
+const asRecordList = (value: unknown): DataAccessRecord[] => {
+  return Array.isArray(value)
+    ? value.filter(item => item && typeof item === 'object').map(item => item as DataAccessRecord)
+    : [];
+};
+
+const upsertById = (items: DataAccessRecord[], record: DataAccessRecord) => {
+  const id = String(record.id || record.fileName || record.taskId || record.name || '');
+  if (!id) {
+    return [...items, record];
+  }
+  const next = items.filter(item => String(item.id || item.fileName || item.taskId || item.name || '') !== id);
+  next.push(record);
+  return next;
+};
+
+const upsertInto = (items: DataAccessRecord[], record: DataAccessRecord) => {
+  items.splice(0, items.length, ...upsertById(items, record));
+};
+
+const parseSessionExtraData = () => {
+  if (!chatSessionExtraData.value.trim()) {
+    return {};
+  }
+  try {
+    return asObject(JSON.parse(chatSessionExtraData.value));
+  } catch {
+    return {};
+  }
+};
+
+const extractDataAccessRecords = () => {
+  const metadataConfigs: DataAccessRecord[] = [];
+  const dataPushServices: DataAccessRecord[] = [];
+  const dataAccess = asObject(parseSessionExtraData().dataAccess);
+  asRecordList(dataAccess.metadataConfigs).forEach(record => {
+    upsertInto(metadataConfigs, record);
+  });
+  asRecordList(dataAccess.dataPushServices).forEach(record => {
+    upsertInto(dataPushServices, record);
+  });
+  return {
+    metadataConfigs,
+    dataPushServices,
+  };
+};
+
+const publishDataAccessRecords = () => {
+  window.dispatchEvent(new CustomEvent(DATA_ACCESS_RECORD_EVENT, {
+    detail: extractDataAccessRecords(),
+  }));
+};
+
+watch(chatSessionExtraData, publishDataAccessRecords);
 
 const showSuggestionBtn = ref(true);
 const chatSessionTitle = ref('新的会话');
@@ -484,6 +565,7 @@ const removePendingAttachment = (index: number) => {
 };
 
 onUnmounted(() => {
+  isUserStoppingChat.value = true;
   currentChatAbortController.value?.abort();
 });
 
@@ -552,6 +634,19 @@ const processMessageFormat = (message: ChatMessage) => {
   }
 };
 
+const refreshChatSessionExtraData = async () => {
+  if (!chatSessionId.value) {
+    chatSessionExtraData.value = '';
+    return;
+  }
+  try {
+    const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
+    chatSessionExtraData.value = data.extraData || '';
+  } catch (error) {
+    console.error('刷新会话附加数据失败:', error);
+  }
+};
+
 const getChatSession = async () => {
   // 优先使用 props 传入的参数（悬浮窗模式），否则从路由获取
   if (props.chatSessionType) {
@@ -587,6 +682,7 @@ const getChatSession = async () => {
     try {
       const data = await DihService.getChatSession(chatSessionId.value,{type:chatSessionType.value});
       messages.value = data.messageList;
+      chatSessionExtraData.value = data.extraData || '';
       
       // 延迟处理消息格式，确保右侧组件已经完全挂载
       setTimeout(() => {
@@ -605,6 +701,7 @@ const getChatSession = async () => {
         content: '嘿！我是你的人工智能助手。有什么问题尽管问我吧！',
         time: getCurrentFormattedDate()
       }];
+      chatSessionExtraData.value = '';
       chatSessionTitle.value = '新的会话';
     }
   } else {
@@ -613,6 +710,7 @@ const getChatSession = async () => {
         content: '嘿！我是你的人工智能助手。有什么问题尽管问我吧！',
         time: getCurrentFormattedDate()
       }];
+    chatSessionExtraData.value = '';
     chatSessionTitle.value = '新的会话';
   }
 
@@ -714,6 +812,33 @@ const insertLineBreak = () => {
   }
 }
 
+const markMessageStopped = (messageIndex: number | null) => {
+  if (messageIndex === null || !messages.value[messageIndex]) {
+    return;
+  }
+  const message = messages.value[messageIndex];
+  message.loading = false;
+  message.isError = false;
+  if (message.content?.includes('[已停止生成]')) {
+    return;
+  }
+  message.content = message.content?.trim()
+    ? `${message.content}\n\n[已停止生成]`
+    : '已停止生成';
+  message.parts = undefined;
+};
+
+const stopCurrentChat = () => {
+  if (!currentChatAbortController.value || !isStreamingResponse.value) {
+    return;
+  }
+  isUserStoppingChat.value = true;
+  currentChatAbortController.value.abort();
+  markMessageStopped(currentStreamingMessageIndex.value);
+  ElMessage.info('已停止生成');
+  scrollToBottom();
+};
+
 // 发送消息
 const sendMessage = async (options: SendMessageOptions = {}) => {
   const explicitMessage = options.content?.trim();
@@ -753,6 +878,8 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
     
     const abortController = new AbortController();
     currentChatAbortController.value = abortController;
+    currentStreamingMessageIndex.value = aiMessageIndex;
+    isUserStoppingChat.value = false;
     isStreamingResponse.value = true;
 
     try {
@@ -786,6 +913,7 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
               loading: false,
             };
             processMessageFormat(messages.value[aiMessageIndex]);
+            await refreshChatSessionExtraData();
           } else {
             messages.value[aiMessageIndex].loading = false;
             messages.value[aiMessageIndex].content = accumulatedContent;
@@ -807,6 +935,10 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
       }, { signal: abortController.signal });
 
       if (!streamOk) {
+        if (abortController.signal.aborted || isUserStoppingChat.value) {
+          markMessageStopped(aiMessageIndex);
+          return;
+        }
         messages.value[aiMessageIndex].loading = false;
         messages.value[aiMessageIndex].isError = true;
         messages.value[aiMessageIndex].content = '抱歉，回复失败，请稍后重试~';
@@ -841,6 +973,10 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
         router.replace({ name: 'service-dih', query: nextQuery });
       }
     } catch (error) {
+      if (abortController.signal.aborted || isUserStoppingChat.value) {
+        markMessageStopped(aiMessageIndex);
+        return;
+      }
       console.error('聊天接口调用失败:', error);
       messages.value[aiMessageIndex].loading = false;
       messages.value[aiMessageIndex].isError = true;
@@ -849,7 +985,11 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
       if (currentChatAbortController.value === abortController) {
         currentChatAbortController.value = null;
       }
+      if (currentStreamingMessageIndex.value === aiMessageIndex) {
+        currentStreamingMessageIndex.value = null;
+      }
       isStreamingResponse.value = false;
+      isUserStoppingChat.value = false;
     }
   }
 }
@@ -867,6 +1007,28 @@ const autoConfirmMessage = (action: string) => {
     return '我已确认更新生产策略配置，请根据上一条确认卡、模拟测试结果和配置块，通过配置管理 MCP 写入系统配置。';
   }
   return '我已确认研判分析方案，请根据上一条确认卡开始执行一次性研判分析。';
+};
+
+const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', detail?: string) => {
+  if (decision === 'dispose') {
+    return '我选择执行处置。请基于上一轮研判结论、关键证据和处置策略配置，进入处置执行准备流程；先说明拟执行动作、影响范围、回滚方案和需要我确认的配置。';
+  }
+  if (decision === 'ignore') {
+    return '我选择忽略本次告警。请基于上一轮研判结论记录忽略原因、适用条件和后续观察建议，不执行处置动作。';
+  }
+  const focus = detail?.trim() || '请围绕上一轮尚未闭环的疑点继续补充证据。';
+  return `我需要补充信息继续研判。补充研判重点如下：\n${focus}\n请基于上一轮证据继续研判，并说明新增证据、结论变化和下一步建议。`;
+};
+
+const dataAccessDecisionMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
+  if (decision === 'apply_config') {
+    return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. policy_config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 policy_config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 policy_config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。MCP 成功后输出 zenvis:meta-config-record 记录。';
+  }
+  if (decision === 'abandon') {
+    return '我选择放弃本次元数据配置。请记录本次配置已放弃，不要写入系统，也不要继续创建或更新相关配置。';
+  }
+  const focus = detail?.trim() || '请基于上一轮配置继续优化字段、实体或展示规则。';
+  return `我需要补充信息继续更新元数据配置。调整要求如下：\n${focus}\n请基于上一轮 meta 配置重新生成完整配置，并再次展示完整配置和后续选择。`;
 };
 
 // 切换任务折叠状态
@@ -1021,16 +1183,76 @@ const handleActionDecision = async (
       part_id: payload.part.id,
       decision: payload.decision,
     });
-    payload.part.status = payload.decision;
-    ElMessage.success(payload.decision === 'approved' ? '已确认执行' : '已取消操作');
-    const action = confirmAction(payload.part);
-    if (payload.decision === 'approved' && AUTO_CONFIRM_ACTIONS.has(action)) {
-      await nextTick();
-      await sendMessage({ content: autoConfirmMessage(action) });
-    }
   } catch (error) {
     console.error('记录确认结果失败:', error);
   }
+  payload.part.status = payload.decision;
+  ElMessage.success(payload.decision === 'approved' ? '已确认执行' : '已取消操作');
+  const action = confirmAction(payload.part);
+  if (payload.decision === 'approved' && AUTO_CONFIRM_ACTIONS.has(action)) {
+    await nextTick();
+    await sendMessage({ content: autoConfirmMessage(action) });
+  }
+};
+
+const handleAnalysisDecision = async (
+  message: ChatMessage,
+  payload: { part: ChatMessagePart; decision: 'dispose' | 'ignore' | 'continue'; detail?: string }
+) => {
+  if (!chatSessionId.value || !message.id || !payload.part.id) {
+    ElMessage.warning('缺少研判选择记录标识，无法记录操作结果');
+    return;
+  }
+
+  try {
+    await DihService.recordActionDecision({
+      chat_id: chatSessionId.value,
+      message_id: message.id,
+      part_id: payload.part.id,
+      decision: payload.decision,
+    });
+  } catch (error) {
+    console.error('记录研判后续选择失败:', error);
+  }
+  payload.part.status = payload.decision;
+  const toastMap = {
+    dispose: '已选择执行处置',
+    ignore: '已选择忽略告警',
+    continue: '已提交补充研判重点',
+  };
+  ElMessage.success(toastMap[payload.decision]);
+  await nextTick();
+  await sendMessage({ content: analysisDecisionMessage(payload.decision, payload.detail) });
+};
+
+const handleDataAccessDecision = async (
+  message: ChatMessage,
+  payload: { part: ChatMessagePart; decision: 'apply_config' | 'abandon' | 'revise'; detail?: string }
+) => {
+  if (!chatSessionId.value || !message.id || !payload.part.id) {
+    ElMessage.warning('缺少数据接入选择记录标识，无法记录操作结果');
+    return;
+  }
+
+  try {
+    await DihService.recordActionDecision({
+      chat_id: chatSessionId.value,
+      message_id: message.id,
+      part_id: payload.part.id,
+      decision: payload.decision,
+    });
+  } catch (error) {
+    console.error('记录数据接入后续选择失败:', error);
+  }
+  payload.part.status = payload.decision;
+  const toastMap = {
+    apply_config: '已选择添加配置到系统',
+    abandon: '已放弃本次配置',
+    revise: '已提交配置调整要求',
+  };
+  ElMessage.success(toastMap[payload.decision]);
+  await nextTick();
+  await sendMessage({ content: dataAccessDecisionMessage(payload.decision, payload.detail) });
 };
 
 // 分享消息（示例）
@@ -1492,6 +1714,15 @@ const dislikeMessage = (index: number) => {
 
 .send-btn:hover {
   color: #66b1ff;
+}
+
+.stop-btn {
+  color: #f56c6c;
+  background-color: rgba(245, 108, 108, 0.1);
+}
+
+.stop-btn:hover {
+  color: #f78989;
 }
 
 .suggestions {
@@ -2083,9 +2314,6 @@ const dislikeMessage = (index: number) => {
 
 
 .message-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 40px;

@@ -214,13 +214,16 @@ export class DihService {
 
       return true;
     } catch (error) {
+      if (options.signal?.aborted) {
+        return false;
+      }
       console.error('聊天事件流调用失败:', error);
       return false;
     }
   }
 
   static async recordActionDecision(params: ChatActionDecisionParams): Promise<string> {
-    return request<string>(`${prefix}/chat/action-decision`, params, 'POST');
+    return request<string>(`${prefix}/chat/action-decision`, params, 'POST', { silent: true });
   }
 
   static async getModelList(): Promise<ModelInfo[]> {

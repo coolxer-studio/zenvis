@@ -116,20 +116,22 @@
         </div>
 
         <div class="input-actions">
-          <el-dropdown size="small" @command="handleModelCommand">
-            <span class="chart-filter">
-              {{ modelSelectData.period }} <el-icon>
-                <ArrowDown />
-              </el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item v-for="(item, index) in modelSelectData.periodOptions" :key="index" :command="item">
-                  {{ item }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <el-select
+            v-model="modelSelectData.period"
+            class="model-select"
+            popper-class="dih-model-select-popper"
+            size="small"
+            filterable
+            placeholder="选择模型"
+            no-match-text="未找到模型"
+          >
+            <el-option
+              v-for="item in modelSelectData.periodOptions"
+              :key="item"
+              :label="item"
+              :value="item"
+            />
+          </el-select>
           
           <!-- 新增深度思考按钮 -->
           <el-tooltip content="深度思考" placement="top">
@@ -186,7 +188,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
-  ArrowDown, Close, Loading, Monitor, Paperclip, Position, Opportunity
+  Close, Loading, Monitor, Paperclip, Position, Opportunity
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { DihService } from '@/service/api'
@@ -1052,11 +1054,6 @@ const modelSelectData = ref<SelectData>({
   period: 'qianwen-max',
 })
 
-const handleModelCommand = (command: string) => {
-  modelSelectData.value.period = command
-}
-
-
 // 上传文件
 const validateFilesBeforeUpload = (files: File[]) => {
   const selectedFiles = files.slice(0, MAX_FILES_PER_PICK);
@@ -1573,7 +1570,7 @@ const dislikeMessage = (index: number) => {
 
 :deep(.el-textarea__inner) {
   border: none;
-  padding: 12px 150px 12px 12px;
+  padding: 12px min(220px, 48%) 12px 12px;
   resize: none;
   box-shadow: none;
 }
@@ -1587,14 +1584,49 @@ const dislikeMessage = (index: number) => {
   right: 10px;
   bottom: 8px;
   display: flex;
+  align-items: center;
   gap: 5px;
+}
+
+.model-select {
+  width: 60px;
+}
+
+:deep(.model-select .el-select__wrapper) {
+  min-height: 28px;
+  padding: 0 6px;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  border-radius: 6px;
+}
+
+:deep(.model-select .el-select__wrapper:hover),
+:deep(.model-select .el-select__wrapper.is-focused) {
+  box-shadow: none;
+}
+
+:deep(.model-select .el-select__selected-item) {
+  max-width: 28px;
+}
+
+:global(.dih-model-select-popper) {
+  max-width: 320px;
+}
+
+:global(.dih-model-select-popper .el-select-dropdown__wrap) {
+  max-height: 260px;
+}
+
+:global(.dih-model-select-popper .el-select-dropdown__item) {
+  max-width: 300px;
 }
 
 .pending-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 150px 10px 12px;
+  padding: 0 min(220px, 48%) 10px 12px;
 }
 
 .pending-attachment,
@@ -2151,19 +2183,6 @@ const dislikeMessage = (index: number) => {
   font-size: 16px;
   font-weight: 500;
   color: #303133;
-}
-
-.chart-filter {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: #606266;
-  cursor: pointer;
-  padding: 4px;
-}
-
-.chart-filter .el-icon {
-  margin-left: 4px;
 }
 
 .chart-placeholder {

@@ -245,7 +245,19 @@ public class McpClientServiceImpl implements McpClientService {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "破坏性MCP工具调用未启用");
         }
         Map<String, Object> arguments = callDto.getArguments() == null ? Map.of() : callDto.getArguments();
-        return holder.getClient().callTool(new McpSchema.CallToolRequest(callDto.getName(), arguments));
+        long startedAt = System.nanoTime();
+        log.info("MCP工具测试调用开始: serverCode={}, tool={}, arguments={}",
+                holder.getServerCode(), callDto.getName(), summarizeObject(arguments));
+        try {
+            Object result = holder.getClient().callTool(new McpSchema.CallToolRequest(callDto.getName(), arguments));
+            log.info("MCP工具测试调用成功: serverCode={}, tool={}, durationMs={}, result={}",
+                    holder.getServerCode(), callDto.getName(), elapsedMillis(startedAt), summarizeObject(result));
+            return result;
+        } catch (RuntimeException e) {
+            log.warn("MCP工具测试调用失败: serverCode={}, tool={}, durationMs={}, error={}",
+                    holder.getServerCode(), callDto.getName(), elapsedMillis(startedAt), e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override
@@ -572,6 +584,24 @@ public class McpClientServiceImpl implements McpClientService {
         CRC32 crc32 = new CRC32();
         crc32.update(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         return Long.toHexString(crc32.getValue());
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
+    }
+
+    private String summarizeObject(Object value) {
+        if (value == null) {
+            return "";
+        }
+        String raw;
+        try {
+            raw = objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            raw = String.valueOf(value);
+        }
+        String normalized = raw.replace('\n', ' ').replace('\r', ' ').trim();
+        return normalized.length() <= 500 ? normalized : normalized.substring(0, 500) + "...";
     }
 
     @Data

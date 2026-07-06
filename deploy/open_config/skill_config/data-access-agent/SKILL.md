@@ -38,6 +38,17 @@
 - `plugin-sta`：55 个协议实体和一个 `sta-import.toml` 入库任务，其中 push-task 通过 `logtype_route` 分流到多个 ClickHouse sink；只参考其 route 多 sink 模式，不照搬“一个实体一个 meta 文件”的拆分方式。
 - 新生成的 meta 配置必须遵守本 Skill 的完整规则：多个实体优先合入同一个配置，顶层 `operator` 必须补齐标准定义；不能因为参考样例缺失 `operator` 或使用不同表名风格而省略或偏离规范。
 
+## Markdown 需求模板处理规则
+
+系统已预置数据接入需求模板：`data-access-requirement-template.md`。用户可通过数据接入智能体开场白中的下载链接获取模板，填写后作为 `.md` 附件上传。
+
+- 当用户询问“模板、需求文档、如何填写、下载文档”时，说明可以下载并填写数据接入需求模板，填写完成后上传 `.md` 附件；不要把模板当作配置文件写入系统。
+- 当用户上传填写后的模板时，优先解析模板中的“第一步：元数据配置（必填）”，提取原始数据样例、实体含义、字段清单、主键/排序/时间字段、特殊字段和命名偏好。
+- 如果模板的元数据部分信息完整，直接进入 meta 配置生成流程；如果缺失，仍然只针对元数据配置缺失项一次性提示补充。
+- 如果模板同时填写了“第二步：数据推送服务”，先暂存为后续上下文，不要提前创建推送服务；必须等 meta 元数据配置添加并应用成功后，才处理推送服务内容。
+- 如果模板只填写元数据部分，不要追问推送服务信息；只有用户明确要求采集、同步或推送数据时才进入第二步。
+- 如果模板中存在真实密钥、密码、生产地址等敏感内容，生成配置和回复时需要提醒用户确认脱敏和权限风险，不要在普通摘要里重复展示完整敏感值。
+
 ## 第一步：创建元数据配置
 
 元数据配置是必做步骤。接入前必须获得足够的数据格式信息，并生成满足 Retrieval `meta_config/*.json` 的配置。
@@ -136,8 +147,10 @@
 1. 收到 `apply_config` 授权后，立即使用 `policy_config_tree(type="meta")` 检查目标文件是否已存在，不要先输出说明卡等待用户。
 2. 新文件先调用 `policy_config_add(type="meta", configDto={"fileName":"xxx.json"})`，创建成功后继续下一步。
 3. 写入并生效调用 `policy_config_apply(type="meta", configDto={"fileName":"xxx.json","text":"<meta json>"})`。
-4. 更新已有文件前先读取 `policy_config_read(type="meta", fileName="xxx.json")`，说明将覆盖的实体和字段差异，并请求用户确认覆盖；用户未确认覆盖前不得调用 apply。
-5. `policy_config_add` 和 `policy_config_apply` 的参数字段使用 `fileName`，不要使用 `file_name`。
+4. 应用后必须调用 `policy_config_read(type="meta", fileName="xxx.json")` 读回文件内容，确认文件存在、内容非空且与目标 meta JSON 一致；必要时再调用 `policy_config_tree(type="meta")` 确认文件出现在配置树。
+5. 更新已有文件前先读取 `policy_config_read(type="meta", fileName="xxx.json")`，说明将覆盖的实体和字段差异，并请求用户确认覆盖；用户未确认覆盖前不得调用 apply。
+6. `policy_config_add` 和 `policy_config_apply` 的参数字段使用 `fileName`，不要使用 `file_name`。
+7. 只有 `policy_config_apply` 返回成功且读回校验通过后，才允许输出 `zenvis:meta-config-record`；如果任一步失败，不得输出成功记录，必须说明失败原因和修复动作。
 
 ### 元数据配置记录
 
@@ -199,13 +212,13 @@
 
 ### Vectum MCP 执行规则
 
-- 创建任务：`createTask(name, description, config)`。
-- 更新任务：`updateTask(id, name, description, config)`；更新时传完整字段，避免覆盖丢失。
-- 启停任务：`toggleTask(id)`。
-- 查询状态：`getTask(id)` 或 `getTasks()`。
-- 排障日志：`getTaskLog(id, "system")` 和 `getTaskLog(id, "console")`。
-- 启动后必须检查状态和日志；`running` 才算成功。
-- `running[error]`、`error`、启动后 `stopped` 或工具调用失败，需要读取日志修复配置并重试，最多 5 轮。
+- 数据推送服务必须使用系统真实 MCP 工具，不要使用不存在的 `createTask`、`updateTask`、`toggleTask`、`getTask` 或 `getTasks`。
+- 先调用 `push_task_detect_format(content)` 检测配置格式。
+- 创建并启动任务：`push_task_create_and_start(request)`，其中 `request` 至少包含 `name`、`description`、`config`、`source: "SYSTEM"`、`mark`；`mark` 必须使用稳定唯一值，例如 `data-access:<chatId>:<business_name>`。
+- 创建前后都调用 `push_task_list_by_source_mark(mark)` 校验：创建前用于发现冲突，创建后用于确认任务确实存在，并获取真实 `id`、`name`、`status`、`config`。
+- 仅当 `push_task_create_and_start` 返回成功，且 `push_task_list_by_source_mark(mark)` 能查到任务时，才算创建成功。
+- 创建后如果任务状态异常、返回失败或列表查不到任务，需要说明失败原因并修复配置后重试，最多 5 轮。
+- 需要删除同 mark 冲突任务时，先说明影响并征得用户确认，再调用 `push_task_delete_by_source_mark(mark)`。
 - 遇到缺少密钥、DNS/网络不可达、认证失败、目标服务不可用、权限不足、运行环境路径不存在等外部阻塞时停止自动修复，并用 `zenvis:notice` 提示用户补充或修复环境。
 
 ### Vectum 任务记录
@@ -215,7 +228,8 @@ Vectum 任务创建、更新或启动成功后，必须额外输出一个 `zenvi
 记录必须是合法 JSON，字段要求：
 
 - `title`：固定使用“数据推送服务已创建”或更具体的成功标题。
-- `taskId`：Vectum 返回的任务 ID。
+- `taskId`：通过 `push_task_list_by_source_mark(mark)` 查询到的真实任务 ID。
+- `sourceMark`：创建任务时提交的 `mark`，用于后端校验记录是否真实存在。
 - `name`、`description`：创建或更新任务时使用的名称与描述。
 - `status`：创建未启动用 `created`，启动并检查为运行中用 `running`，异常用 `error`。
 - `config`：最终提交给 Vectum 的完整配置；YAML/TOML 配置以 JSON 字符串保存。
@@ -224,6 +238,7 @@ Vectum 任务创建、更新或启动成功后，必须额外输出一个 `zenvi
 {
   "title": "数据推送服务已创建",
   "taskId": "task-001",
+  "sourceMark": "data-access:session-001:example_event",
   "name": "示例事件数据推送",
   "description": "将外部示例事件同步到 ZenVis ClickHouse",
   "status": "running",

@@ -14,4 +14,8 @@ public record McpToolContext(ToolCallbackProvider toolCallbackProvider, String s
     public boolean hasTools() {
         return toolCallbackProvider != null && StringUtils.hasText(systemPrompt);
     }
+
+    public McpToolContext withToolCallbackProvider(ToolCallbackProvider provider) {
+        return new McpToolContext(provider, systemPrompt);
+    }
 }

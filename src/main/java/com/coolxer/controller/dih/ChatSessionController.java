@@ -1,6 +1,7 @@
 package com.coolxer.controller.dih;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.controller.BaseController;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
@@ -15,8 +16,18 @@ import com.coolxer.utils.JacksonUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -28,8 +39,15 @@ import java.util.List;
 @RequestMapping("/api/v1/dih/chat-session")
 public class ChatSessionController extends BaseController {
 
+    private static final String DATA_ACCESS_TEMPLATE_FILE = "data-access-requirement-template.md";
+    private static final String DATA_ACCESS_TEMPLATE_DOWNLOAD_NAME = "ZenVis数据接入需求模板.md";
+    private static final String DATA_ACCESS_TEMPLATE_DOWNLOAD_URL = "/api/v1/dih/chat-session/templates/data-access-requirement.md";
+
     @Autowired
     private ChatSessionService chatSessionService;
+
+    @Autowired
+    private CustomWebConfig customWebConfig;
 
     @PostMapping({"/add"})
     public ResponseWrap<?> add(@RequestBody ChatSessionDto chatSessionDto) {
@@ -118,9 +136,9 @@ public class ChatSessionController extends BaseController {
     }
 
     private static final String PROLOGUE_DEFAULT = "我是数智助手（X-Sage），可以解答系统相关运营问题，有什么问题尽管提问吧！";
-    private static final String PROLOGUE_AGENT_DATA_ACCESS = "我是数据接入智能体，专注于多源日志数据的数据接入、存储和可视化。\n" +
-            " 通过全局随机抽样与重点数据智能挖掘，实时提供精准的数据统计、查询及可视化服务。\n" +
-            " 我将根据用户提供的实体、字段和统计维度，自动调用最优查询接口并智能匹配最合适的图表组件，确保数据洞察清晰直观。";
+    private static final String PROLOGUE_AGENT_DATA_ACCESS = "我是数据接入智能体，只处理数据接入相关工作，主要包括两件事：元数据配置和数据推送服务。\n" +
+            "默认会先完成元数据配置，配置成功生效后，再根据你的明确要求添加数据推送服务。\n" +
+            "你可以先下载并填写 [数据接入需求模板](" + DATA_ACCESS_TEMPLATE_DOWNLOAD_URL + ")，填写完成后作为 `.md` 附件上传，我会读取文档内容帮助生成并生效配置。";
     private static final String PROLOGUE_AGENT_INSPECT = "我是巡检智能体，专注于多源日志数据的智能分析与可视化呈现。\n" +
             " 通过全局随机抽样与重点数据智能挖掘，实时提供精准的数据统计、查询及可视化服务。\n" +
             " 我将根据用户提供的实体、字段和统计维度，自动调用最优查询接口并智能匹配最合适的图表组件，确保数据洞察清晰直观。";
@@ -150,6 +168,37 @@ public class ChatSessionController extends BaseController {
             return ResponseWrap.success(new ChatSessionVo(chatSession));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping({"/templates/data-access-requirement.md"})
+    public ResponseEntity<Resource> downloadDataAccessRequirementTemplate() {
+        try {
+            Path templatePath = Paths.get(customWebConfig.getSkillPath())
+                    .resolve("data-access-agent")
+                    .resolve(DATA_ACCESS_TEMPLATE_FILE)
+                    .toAbsolutePath()
+                    .normalize();
+            if (!Files.isRegularFile(templatePath) || !Files.isReadable(templatePath)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Resource resource = new UrlResource(templatePath.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String encodedFileName = URLEncoder
+                    .encode(DATA_ACCESS_TEMPLATE_DOWNLOAD_NAME, StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("text/markdown;charset=UTF-8"))
+                    .contentLength(Files.size(templatePath))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
+                    .body(resource);
+        } catch (Exception e) {
+            log.warn("下载数据接入需求模板失败: {}", e.getMessage(), e);
+            return ResponseEntity.notFound().build();
         }
     }
 

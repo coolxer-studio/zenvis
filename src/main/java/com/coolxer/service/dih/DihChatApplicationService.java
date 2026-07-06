@@ -18,12 +18,17 @@ import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
+import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.system.PushTaskService;
+import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.utils.JacksonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,6 +62,8 @@ public class DihChatApplicationService {
     private final ChatAttachmentService chatAttachmentService;
     private final AgentMcpToolService agentMcpToolService;
     private final SkillService skillService;
+    private final ConfigService configService;
+    private final PushTaskService pushTaskService;
 
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
@@ -70,7 +77,9 @@ public class DihChatApplicationService {
                                      ChatMessagePartParser chatMessagePartParser,
                                      ChatAttachmentService chatAttachmentService,
                                      AgentMcpToolService agentMcpToolService,
-                                     SkillService skillService) {
+                                     SkillService skillService,
+                                     ConfigService configService,
+                                     PushTaskService pushTaskService) {
         this.chatService = chatService;
         this.baseService = baseService;
         this.chatSessionService = chatSessionService;
@@ -84,6 +93,8 @@ public class DihChatApplicationService {
         this.chatAttachmentService = chatAttachmentService;
         this.agentMcpToolService = agentMcpToolService;
         this.skillService = skillService;
+        this.configService = configService;
+        this.pushTaskService = pushTaskService;
     }
 
     public Flux<String> chat(ChatDto chatDto, User currentUser) {
@@ -120,6 +131,13 @@ public class DihChatApplicationService {
         McpToolContext mcpToolContext = hasImageAttachment
                 ? McpToolContext.empty()
                 : agentMcpToolService.resolve(chatType);
+        McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
+        if (mcpToolContext.hasTools()) {
+            mcpToolLogStream = McpToolLogStream.create();
+            mcpToolContext = mcpToolContext.withToolCallbackProvider(
+                    new McpToolCallLoggingProvider(mcpToolContext.toolCallbackProvider(), mcpToolLogStream::emit)
+            );
+        }
 
         String prompt = chatAttachmentService.appendAttachmentContext(userMessage, chatDto.getAttachments(), currentUser);
         ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
@@ -127,16 +145,25 @@ public class DihChatApplicationService {
         StringBuilder modelResponse = new StringBuilder();
         AtomicReference<MessageType> messageType = new AtomicReference<>(MessageType.TEXT);
 
-        Flux<String> fluxResponse = dispatchChat(
+        String resolvedModel = model;
+        McpToolContext resolvedMcpToolContext = mcpToolContext;
+        Flux<String> fluxResponse = Flux.defer(() -> dispatchChat(
                 chatType,
                 chatId,
-                model,
+                resolvedModel,
                 prompt,
                 chatDto,
                 currentUser,
-                mcpToolContext,
+                resolvedMcpToolContext,
                 messageType
-        );
+        ));
+        if (mcpToolLogStream.enabled()) {
+            McpToolLogStream finalMcpToolLogStream = mcpToolLogStream;
+            fluxResponse = Flux.merge(
+                    finalMcpToolLogStream.flux(),
+                    fluxResponse.doFinally(signalType -> finalMcpToolLogStream.complete())
+            );
+        }
 
         if (eventStream) {
             return fluxResponse
@@ -356,9 +383,15 @@ public class DihChatApplicationService {
         List<Map<String, Object>> dataPushServices = new ArrayList<>();
         for (ChatMessagePart part : parts) {
             if ("metadata-config-record".equals(part.getType())) {
-                metadataConfigs.add(buildMetaConfigRecord(part, stringValue(part.getMetadata(), "status", "applied")));
+                Map<String, Object> record = buildMetaConfigRecord(part, stringValue(part.getMetadata(), "status", "applied"));
+                if (isMetaConfigRecordPresent(record)) {
+                    metadataConfigs.add(record);
+                }
             } else if ("data-push-service-record".equals(part.getType())) {
-                dataPushServices.add(buildDataPushServiceRecord(part));
+                Map<String, Object> record = buildDataPushServiceRecord(part);
+                if (isDataPushServiceRecordPresent(record)) {
+                    dataPushServices.add(record);
+                }
             }
         }
         if (metadataConfigs.isEmpty() && dataPushServices.isEmpty()) {
@@ -450,20 +483,81 @@ public class DihChatApplicationService {
         return record;
     }
 
+    private boolean isMetaConfigRecordPresent(Map<String, Object> record) {
+        String fileName = stringValue(record, "fileName", null);
+        if (!StringUtils.hasText(fileName)) {
+            log.warn("忽略未验证的元数据配置记录：缺少 fileName，record={}", record);
+            return false;
+        }
+        try {
+            boolean exists = configService.fileExistsInConfigPath("meta", fileName);
+            if (!exists) {
+                log.warn("忽略未验证的元数据配置记录：meta_config 中不存在文件 {}", fileName);
+                return false;
+            }
+            String content = configService.readFile("meta", fileName);
+            if (!StringUtils.hasText(content)) {
+                log.warn("忽略未验证的元数据配置记录：文件 {} 内容为空或不可读", fileName);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("忽略未验证的元数据配置记录：校验文件 {} 失败: {}", fileName, e.getMessage(), e);
+            return false;
+        }
+    }
+
     private Map<String, Object> buildDataPushServiceRecord(ChatMessagePart part) {
         Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
         Map<String, Object> record = new LinkedHashMap<>();
         String id = firstNonBlank(stringValue(raw, "id", null), stringValue(raw, "taskId", null), stringValue(raw, "task_id", null));
         String name = firstNonBlank(stringValue(raw, "name", null), stringValue(raw, "taskName", null), stringValue(raw, "task_name", null), part.getContent());
+        String sourceMark = firstNonBlank(stringValue(raw, "sourceMark", null), stringValue(raw, "source_mark", null), stringValue(raw, "mark", null));
         record.put("id", firstNonBlank(id, java.util.UUID.randomUUID().toString()));
         record.put("name", firstNonBlank(name, "Vectum 数据推送服务"));
         record.put("description", stringValue(raw, "description", ""));
         record.put("status", stringValue(raw, "status", "created"));
         record.put("source", "vectum");
         record.put("taskId", id);
+        record.put("sourceMark", sourceMark);
         record.put("config", raw.get("config"));
         record.put("raw", raw);
         return record;
+    }
+
+    private boolean isDataPushServiceRecordPresent(Map<String, Object> record) {
+        String sourceMark = stringValue(record, "sourceMark", null);
+        if (!StringUtils.hasText(sourceMark)) {
+            log.warn("忽略未验证的数据推送服务记录：缺少 sourceMark/mark，record={}", record);
+            return false;
+        }
+        try {
+            List<PushTaskVo> tasks = pushTaskService.findBySourceMark(sourceMark);
+            if (tasks == null || tasks.isEmpty()) {
+                log.warn("忽略未验证的数据推送服务记录：未查询到 sourceMark={} 的推送任务", sourceMark);
+                return false;
+            }
+            String taskId = stringValue(record, "taskId", null);
+            String name = stringValue(record, "name", null);
+            if (StringUtils.hasText(taskId)) {
+                boolean matchedById = tasks.stream()
+                        .anyMatch(task -> task.getId() != null && taskId.equals(String.valueOf(task.getId())));
+                if (!matchedById) {
+                    log.warn("忽略未验证的数据推送服务记录：sourceMark={} 下不存在 taskId={}", sourceMark, taskId);
+                    return false;
+                }
+            } else if (StringUtils.hasText(name)) {
+                boolean matchedByName = tasks.stream().anyMatch(task -> name.equals(task.getName()));
+                if (!matchedByName) {
+                    log.warn("忽略未验证的数据推送服务记录：sourceMark={} 下不存在 name={}", sourceMark, name);
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("忽略未验证的数据推送服务记录：校验 sourceMark={} 失败: {}", sourceMark, e.getMessage(), e);
+            return false;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -543,5 +637,84 @@ public class DihChatApplicationService {
 
     private String toNdjson(ChatStreamEvent event) {
         return JacksonUtil.toJson(event) + "\n";
+    }
+
+    private static class McpToolLogStream {
+
+        private final Sinks.Many<String> sink;
+
+        private McpToolLogStream(Sinks.Many<String> sink) {
+            this.sink = sink;
+        }
+
+        private static McpToolLogStream create() {
+            return new McpToolLogStream(Sinks.many().multicast().onBackpressureBuffer());
+        }
+
+        private static McpToolLogStream disabled() {
+            return new McpToolLogStream(null);
+        }
+
+        private boolean enabled() {
+            return sink != null;
+        }
+
+        private Flux<String> flux() {
+            return enabled() ? sink.asFlux() : Flux.empty();
+        }
+
+        private void emit(McpToolCallLoggingProvider.McpToolCallLog logEvent) {
+            if (!enabled() || logEvent == null) {
+                return;
+            }
+            sink.tryEmitNext(formatLog(logEvent));
+        }
+
+        private void complete() {
+            if (enabled()) {
+                sink.tryEmitComplete();
+            }
+        }
+
+        private static String formatLog(McpToolCallLoggingProvider.McpToolCallLog logEvent) {
+            String toolName = inlineCode(logEvent.toolName());
+            if ("started".equals(logEvent.status())) {
+                return "\n\n> MCP调用开始：" + toolName + formatArguments(logEvent.arguments()) + "\n\n";
+            }
+            if ("succeeded".equals(logEvent.status())) {
+                return "\n\n> MCP调用成功：" + toolName
+                        + formatDuration(logEvent.durationMillis())
+                        + formatResult(logEvent.result())
+                        + "\n\n";
+            }
+            if ("failed".equals(logEvent.status())) {
+                return "\n\n> MCP调用失败：" + toolName
+                        + formatDuration(logEvent.durationMillis())
+                        + formatError(logEvent.error())
+                        + "\n\n";
+            }
+            return "\n\n> MCP调用日志：" + toolName + "\n\n";
+        }
+
+        private static String formatArguments(String arguments) {
+            return StringUtils.hasText(arguments) ? "，参数：" + inlineCode(arguments) : "";
+        }
+
+        private static String formatResult(String result) {
+            return StringUtils.hasText(result) ? "，返回：" + inlineCode(result) : "";
+        }
+
+        private static String formatError(String error) {
+            return StringUtils.hasText(error) ? "，错误：" + inlineCode(error) : "";
+        }
+
+        private static String formatDuration(Long durationMillis) {
+            return durationMillis == null ? "" : "，耗时 " + durationMillis + "ms";
+        }
+
+        private static String inlineCode(String value) {
+            String normalized = StringUtils.hasText(value) ? value : "-";
+            return "`" + normalized.replace('`', '\'') + "`";
+        }
     }
 }

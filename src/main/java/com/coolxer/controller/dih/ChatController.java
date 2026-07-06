@@ -1,5 +1,6 @@
 package com.coolxer.controller.dih;
 
+import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.controller.BaseController;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
@@ -7,9 +8,12 @@ import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.ChatMessagePart;
 import com.coolxer.model.dih.Message;
+import com.coolxer.model.dih.SuggestDto;
 import com.coolxer.model.dih.dto.ChatActionDecisionDto;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
+import com.coolxer.service.dih.AIBaseService;
+import com.coolxer.service.dih.AIGeneralCompleteService;
 import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.DihChatApplicationService;
 import com.coolxer.service.dih.ChatSessionService;
@@ -27,6 +31,7 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,6 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.nio.file.Path;
@@ -70,6 +76,12 @@ public class ChatController extends BaseController {
     @Autowired
     private ChatAttachmentService chatAttachmentService;
 
+    @Autowired
+    private AIBaseService baseService;
+
+    @Autowired
+    private AIGeneralCompleteService completeService;
+
 
     /**
      * Send the specified parameters to get the model response.
@@ -91,6 +103,43 @@ public class ChatController extends BaseController {
             response.setContentType("application/x-ndjson;charset=UTF-8");
         }
         return dihChatApplicationService.chat(chatDto, getSessionUser());
+    }
+
+    /**
+     * 获取建议
+     */
+    @PostMapping(value = "/suggest")
+    @Operation(summary = "补全建议", description = "补全建议")
+    public ResponseWrap<String> suggest(@RequestBody SuggestDto suggestDto) {
+        try {
+            if (suggestDto == null || !StringUtils.hasText(suggestDto.getCurrentLine()) || suggestDto.getCurrentLine().length() < 2) {
+                return ResponseWrap.success("AI暂无可用建议");
+            }
+            String currentLine = suggestDto.getCurrentLine().substring(0, suggestDto.getCurrentLine().length() - 2);
+            String context = StringUtils.hasText(suggestDto.getContent())
+                    ? suggestDto.getContent().replace(suggestDto.getCurrentLine(), currentLine)
+                    : currentLine;
+            String prompt = "上下文：%s\n当前行：%s\n".formatted(context, currentLine);
+            String suggest = completeService.complete(prompt);
+            return ResponseWrap.success(suggest);
+        } catch (Exception e) {
+            log.warn("生成补全建议失败: {}", e.getMessage(), e);
+        }
+        return ResponseWrap.success("AI暂无可用建议");
+    }
+
+    @GetMapping("/model/list")
+    public ResponseWrap<List<Map<String, String>>> modelList() {
+        List<Map<String, String>> models = baseService.getModels();
+        if (models.isEmpty()) {
+            return ResponseWrap.fail(ResultCodeEnum.NO_AUTHORITY);
+        }
+        return ResponseWrap.success(models);
+    }
+
+    @GetMapping("/health")
+    public ResponseWrap<String> health() {
+        return ResponseWrap.success("is running......");
     }
 
     @PostMapping("/upload")

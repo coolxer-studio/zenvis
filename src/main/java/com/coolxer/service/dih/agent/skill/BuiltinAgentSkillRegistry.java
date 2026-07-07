@@ -27,7 +27,7 @@ public final class BuiltinAgentSkillRegistry {
                     AGENT_INSPECT,
                     "智能巡检",
                     20,
-                    "智能巡检智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+                    "智能巡检智能体仅通过只读 Retrieval MCP 查询真实数据，输出文本巡检分析、异常线索和后续建议。"
             ),
             new BuiltinAgentSkill(
                     "analysis-agent",

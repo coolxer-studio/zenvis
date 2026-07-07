@@ -1,7 +1,6 @@
 package com.coolxer.service.dih.agent;
 
-import com.coolxer.service.dih.agent.nl2sql.connector.accessor.ClickHouseAccessor;
-import com.coolxer.service.dih.agent.nl2sql.service.LlmService;
+import com.coolxer.service.dih.AgentLlmService;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -18,29 +17,11 @@ public class AIAgentConfiguration {
         return new Gson();
     }
 
-    // TODO heyjd 这里使用不太好
-    //required a single bean, but 2 were found:
-//    @Bean
-//    public DbConfig dbConfig() {
-//        DbConfig dbConfig = new DbConfig();
-//        dbConfig.setDialectType("clickhouse");
-//        dbConfig.setSchema("zenvis");
-//        return dbConfig;
-//    }
-
-
     @Bean
-    public LlmService llmService(ChatModel chatModel) {
+    public AgentLlmService agentLlmService(ChatModel chatModel) {
         ChatClient chatClient = ChatClient.builder(chatModel)
                 .defaultAdvisors(new SimpleLoggerAdvisor())
                 .build();
-        return new LlmService(chatClient);
+        return new AgentLlmService(chatClient);
     }
-
-    @Bean
-    public ClickHouseAccessor clickHouseAccessor() {
-        return new ClickHouseAccessor();
-    }
-
-
 }

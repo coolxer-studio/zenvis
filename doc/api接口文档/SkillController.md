@@ -20,7 +20,7 @@
   "version": "1.0.0",
   "author": "ZenVis",
   "agentTypes": ["agent_inspect"],
-  "tags": ["inspection", "nl2sql", "echarts"],
+  "tags": ["inspection", "retrieval"],
   "enabled": true,
   "entry": "SKILL.md",
   "path": "inspection-agent",
@@ -158,7 +158,7 @@ skill_config/
   "version": "1.0.0",
   "author": "ZenVis",
   "agentTypes": ["agent_inspect"],
-  "tags": ["inspection", "nl2sql", "echarts"],
+  "tags": ["inspection", "retrieval"],
   "enabled": true,
   "entry": "SKILL.md"
 }

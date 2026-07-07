@@ -118,9 +118,8 @@ class SkillServiceTest {
                 .contains("zenvis:notice")
                 .contains("policy_config_add")
                 .contains("policy_config_apply")
-                .contains("Vectum MCP")
-                .contains("Vector 仅作为 Vectum 任务配置")
-                .contains("toggleTask");
+                .contains("Vectum 数据推送服务")
+                .contains("Vector 仅作为 Vectum 任务配置");
         assertThat(prompt)
                 .doesNotContain("menu_create")
                 .doesNotContain("菜单 MCP")
@@ -129,7 +128,7 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinInspectionSkillDocumentsVisualizationWorkflow() throws Exception {
+    void builtinInspectionSkillDocumentsRetrievalOnlyWorkflow() throws Exception {
         Path repoSkill = Path.of("deploy/open_config/skill_config/inspection-agent");
         writeSkill(
                 skillRoot.resolve("inspection-agent"),
@@ -147,16 +146,19 @@ class SkillServiceTest {
                 .contains("retrieval_list_display_entity")
                 .contains("retrieval_search")
                 .contains("entity_statistics")
-                .contains("amis")
-                .contains("zenvis:low-code-page-config")
-                .contains("zenvis:low-code-app-config")
-                .contains("zenvis:html-page-config")
-                .contains("policy_config_ensure_root")
-                .contains("policy_config_modify")
-                .contains("menu_create")
-                .contains("dashboard_create")
-                .contains("LOW_CODE_PAGE")
-                .contains("HTML_PAGE");
+                .contains("只调用只读 Retrieval MCP 工具")
+                .contains("不生成 SQL")
+                .contains("不输出 ECharts JSON");
+        assertThat(prompt)
+                .doesNotContain("zenvis:low-code-page-config")
+                .doesNotContain("zenvis:low-code-app-config")
+                .doesNotContain("zenvis:html-page-config")
+                .doesNotContain("policy_config_ensure_root")
+                .doesNotContain("policy_config_modify")
+                .doesNotContain("menu_create")
+                .doesNotContain("dashboard_create")
+                .doesNotContain("LOW_CODE_PAGE")
+                .doesNotContain("HTML_PAGE");
     }
 
     @Test

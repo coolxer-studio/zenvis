@@ -5,7 +5,6 @@ import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.ChatMessagePart;
-import com.coolxer.model.dih.ChatResponse;
 import com.coolxer.model.dih.ChatStreamEvent;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
@@ -221,10 +220,9 @@ public class DihChatApplicationService {
             messageType.set(MessageType.TEXT);
             return reportAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
-        if ("agent_inspect".equals(chatType)) {
-            ChatResponse chatResponse = inspectionAgent.chat(prompt, model, chatId, mcpToolContext);
-            messageType.set(chatResponse.getType());
-            return Flux.just(chatResponse.getContent());
+        if (InspectionAgent.AGENT_TYPE.equals(chatType)) {
+            messageType.set(MessageType.TEXT);
+            return inspectionAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (isPlaceholderBuiltinAgent(chatType)) {
             messageType.set(MessageType.TEXT);

@@ -262,7 +262,7 @@ MCP 不再作为独立聊天 Agent。它是通用工具能力层，由普通问�
 - `src/main/java/com/coolxer/service/dih/mcp/McpClientServiceImpl.java`
 - `src/main/java/com/coolxer/controller/dih/ChatController.java`
 - `src/main/java/com/coolxer/service/dih/AIChatService.java`
-- `src/main/java/com/coolxer/service/dih/agent/nl2sql/service/LlmService.java`
+- `src/main/java/com/coolxer/service/dih/AgentLlmService.java`
 
 ### 调用流程
 
@@ -275,7 +275,7 @@ ChatController
   → AgentMcpToolService.resolve(type)
         │
         ▼
-业务 Agent / AIChatService / LlmService
+业务 Agent / AIChatService / AgentLlmService
   → 注入 MCP system prompt
   → 注入 ToolCallbackProvider
         │

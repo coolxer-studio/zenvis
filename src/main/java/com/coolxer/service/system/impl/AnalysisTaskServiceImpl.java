@@ -11,9 +11,9 @@ import com.coolxer.model.system.dto.AnalysisTaskSearchDto;
 import com.coolxer.model.system.vo.AnalysisTaskQueueVo;
 import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
+import com.coolxer.service.dih.AgentLlmService;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
-import com.coolxer.service.dih.agent.nl2sql.service.LlmService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.system.AnalysisTaskService;
@@ -52,7 +52,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     private AnalysisTaskRepository analysisTaskRepository;
 
     @Autowired
-    private LlmService llmService;
+    private AgentLlmService agentLlmService;
 
     @Autowired
     private AIBaseService aiBaseService;
@@ -260,12 +260,12 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         String model = aiBaseService.resolveChatModel(analysisTask.getModel(), false, false);
         McpToolContext mcpToolContext = agentMcpToolService.resolve("agent_analysis");
         try {
-            llmService.setModel(model);
-            llmService.setMcpToolContext(mcpToolContext);
-            return llmService.callWithSystemPrompt(buildAnalysisSystemPrompt(), buildAnalyzePrompt(analysisTask));
+            agentLlmService.setModel(model);
+            agentLlmService.setMcpToolContext(mcpToolContext);
+            return agentLlmService.callWithSystemPrompt(buildAnalysisSystemPrompt(), buildAnalyzePrompt(analysisTask));
         } finally {
-            llmService.clearModel();
-            llmService.clearMcpToolContext();
+            agentLlmService.clearModel();
+            agentLlmService.clearMcpToolContext();
         }
     }
 

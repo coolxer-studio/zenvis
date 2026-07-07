@@ -1,11 +1,16 @@
 package com.coolxer.service.dih.mcp;
 
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class AgentMcpToolService {
@@ -19,6 +24,25 @@ public class AgentMcpToolService {
     private static final String DEFAULT_SCOPE_PROPERTY = AGENT_SCOPE_PREFIX + "default";
 
     private static final String ALL_SCOPE = "*";
+
+    private static final String INSPECTION_AGENT_TYPE = "agent_inspect";
+
+    private static final Set<String> INSPECTION_READ_ONLY_RETRIEVAL_TOOLS = Set.of(
+            "retrieval_search",
+            "retrieval_list_rule",
+            "retrieval_list_entity",
+            "retrieval_list_attribute",
+            "retrieval_list_candidate",
+            "retrieval_list_display_entity",
+            "retrieval_list_display_attribute",
+            "retrieval_msg_tag",
+            "retrieval_msg_trend",
+            "entity_count",
+            "entity_trend",
+            "entity_statistics",
+            "entity_list",
+            "entity_view"
+    );
 
     private static final String MCP_TOOL_USAGE_PROMPT = """
             【MCP工具使用规则】
@@ -36,25 +60,82 @@ public class AgentMcpToolService {
 
     private final Environment environment;
 
-    public AgentMcpToolService(McpClientService mcpClientService, Environment environment) {
+    private final ToolCallbackProvider localToolCallbackProvider;
+
+    public AgentMcpToolService(McpClientService mcpClientService,
+                               Environment environment,
+                               @Qualifier("retrievalToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider) {
         this.mcpClientService = mcpClientService;
         this.environment = environment;
+        this.localToolCallbackProvider = localToolCallbackProvider;
     }
 
     public McpToolContext resolve(String agentType) {
         Scope scope = resolveScope(agentType);
-        if (!scope.enabled() || !mcpClientService.hasAvailableTools(scope.serverCodes())) {
+        if (!scope.enabled()) {
             return McpToolContext.empty();
         }
 
-        String mcpPrompt = mcpClientService.buildEnabledMcpPrompt(scope.serverCodes());
+        String normalizedAgentType = normalizeAgentType(agentType);
+        boolean inspectionAgent = INSPECTION_AGENT_TYPE.equals(normalizedAgentType);
+        List<ToolCallback> toolCallbacks = new ArrayList<>();
+        StringBuilder mcpPrompt = new StringBuilder();
+        appendLocalTools(toolCallbacks, mcpPrompt, inspectionAgent ? INSPECTION_READ_ONLY_RETRIEVAL_TOOLS : null);
+        if (!inspectionAgent) {
+            appendExternalTools(scope, toolCallbacks, mcpPrompt);
+        }
+
         if (StringUtils.isBlank(mcpPrompt)) {
             return McpToolContext.empty();
         }
         return new McpToolContext(
-                mcpClientService.getToolCallbackProvider(scope.serverCodes()),
-                MCP_TOOL_USAGE_PROMPT.formatted(mcpPrompt)
+                ToolCallbackProvider.from(toolCallbacks),
+                MCP_TOOL_USAGE_PROMPT.formatted(mcpPrompt.toString().trim())
         );
+    }
+
+    private void appendLocalTools(List<ToolCallback> toolCallbacks, StringBuilder prompt, Set<String> allowedToolNames) {
+        ToolCallback[] callbacks = localToolCallbackProvider == null ? null : localToolCallbackProvider.getToolCallbacks();
+        if (callbacks == null || callbacks.length == 0) {
+            return;
+        }
+        StringBuilder localPrompt = new StringBuilder("### MCP服务：ZenVis 内置工具 (local)\n");
+        boolean added = false;
+        for (ToolCallback callback : callbacks) {
+            if (callback == null || callback.getToolDefinition() == null) {
+                continue;
+            }
+            String toolName = callback.getToolDefinition().name();
+            if (allowedToolNames != null && !allowedToolNames.contains(toolName)) {
+                continue;
+            }
+            toolCallbacks.add(callback);
+            added = true;
+            String description = StringUtils.defaultIfBlank(callback.getToolDefinition().description(), toolName);
+            localPrompt.append("- ").append(toolName)
+                    .append("：")
+                    .append(description)
+                    .append("\n");
+        }
+        if (added) {
+            prompt.append(localPrompt).append("\n");
+        }
+    }
+
+    private void appendExternalTools(Scope scope, List<ToolCallback> toolCallbacks, StringBuilder prompt) {
+        if (!mcpClientService.hasAvailableTools(scope.serverCodes())) {
+            return;
+        }
+        String externalPrompt = mcpClientService.buildEnabledMcpPrompt(scope.serverCodes());
+        if (StringUtils.isBlank(externalPrompt)) {
+            return;
+        }
+        ToolCallbackProvider externalProvider = mcpClientService.getToolCallbackProvider(scope.serverCodes());
+        ToolCallback[] externalCallbacks = externalProvider == null ? null : externalProvider.getToolCallbacks();
+        if (externalCallbacks != null) {
+            toolCallbacks.addAll(Arrays.asList(externalCallbacks));
+        }
+        prompt.append(externalPrompt).append("\n\n");
     }
 
     private Scope resolveScope(String agentType) {
@@ -63,7 +144,7 @@ public class AgentMcpToolService {
             return Scope.disabled();
         }
 
-        String normalizedAgentType = StringUtils.defaultIfBlank(agentType, DEFAULT_AGENT_TYPE);
+        String normalizedAgentType = normalizeAgentType(agentType);
         String configuredScope = environment.getProperty(AGENT_SCOPE_PREFIX + normalizedAgentType);
         if (StringUtils.isBlank(configuredScope)) {
             configuredScope = environment.getProperty(DEFAULT_SCOPE_PROPERTY, ALL_SCOPE);
@@ -89,6 +170,10 @@ public class AgentMcpToolService {
                 || "off".equalsIgnoreCase(normalized)
                 || "false".equalsIgnoreCase(normalized)
                 || "disabled".equalsIgnoreCase(normalized);
+    }
+
+    private String normalizeAgentType(String agentType) {
+        return StringUtils.defaultIfBlank(agentType, DEFAULT_AGENT_TYPE);
     }
 
     private record Scope(boolean enabled, List<String> serverCodes) {

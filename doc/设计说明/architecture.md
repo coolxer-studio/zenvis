@@ -32,8 +32,8 @@ ZenVis 是一个配置化数据分析应用框架，采用分层架构设计，�
 │  │  │  ┌─────────────────────────────────────────────┐│    │    │
 │  │  │  │            AI Agent (Spring AI)            ││    │    │
 │  │  │  │  ┌─────────────┐  ┌─────────────────────┐ ││    │    │
-│  │  │  │  │Inspection   │  │  ReAct Agent        │ ││    │    │
-│  │  │  │  │  Agent      │  │  (NL2SQL/RAG)       │ ││    │    │
+│  │  │  │  │Inspection   │  │ Prompt-driven Agent │ ││    │    │
+│  │  │  │  │  Agent      │  │   (MCP / RAG)       │ ││    │    │
 │  │  │  │  └─────────────┘  └─────────────────────┘ ││    │    │
 │  │  │  └─────────────────────────────────────────────┘│    │    │
 │  │  │                                                  │    │    │
@@ -113,7 +113,6 @@ com.coolxer.controller/
 com.coolxer.service/
 ├── dih/
 │   ├── agent/        # Agent实现
-│   │   ├── nl2sql/   # NL2SQL服务
 │   │   ├── rag/      # RAG实现
 │   │   └── converter/# 数据转换器
 │   └── rag/

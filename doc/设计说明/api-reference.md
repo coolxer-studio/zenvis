@@ -39,8 +39,7 @@ http://localhost:11001/swagger-ui/index.html
 | [RoleController](../api接口文档/RoleController.md) | 角色管理 |
 | [SkillController](../api接口文档/SkillController.md) | Skill 管理 |
 | [UserController](../api接口文档/UserController.md) | 用户管理 |
-| [VectorStoreQueryController](../api接口文档/VectorStoreQueryController.md) | 向量存储查询 |
-
+| [VectorStoreQueryController](../api接口文档/VectorStoreQueryController.md) | 插件文档 RAG 管理 |
 已从当前源码移除或暂未恢复的旧 Controller 文档已归档到 [legacy](../api接口文档/legacy)。
 
 ## 通用对接规则

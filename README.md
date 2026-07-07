@@ -123,7 +123,7 @@ ZenVis = **配置化数据存储 + 可视化引擎 + 检索分析 + 插件扩展
 | 检索引擎    | 数据检索、过滤、排序      |
 | 聚合服务    | 数据聚合、统计、分析      |
 | 配置服务    | 配置管理、动态配置       |
-| AI 智能分析 | NL2SQL、RAG、智能问答 |
+| AI 智能分析 | RAG、MCP 工具调用、智能问答 |
 
 #### 3. 数据层
 
@@ -392,9 +392,8 @@ zenvis-backend/
 | :-------- | :--------------------------- | :--------------- |
 | AI 聊天     | `ChatController`             | 智能聊天接口，支持自然语言查询  |
 | 聊天会话管理    | `ChatSessionController`      | 会话生命周期管理         |
-| NL2SQL 查询 | `DihController`              | 自然语言转SQL查询       |
-| 向量存储查询    | `VectorStoreQueryController` | 向量检索接口           |
-| 智能巡检Agent | `InspectionAgent`            | ReAct模式智能巡检Agent |
+| RAG 文档管理 | `VectorStoreQueryController` | 插件文档向量管理和相似度搜索 |
+| 智能巡检Agent | `InspectionAgent`            | retrieval MCP 只读巡检 |
 
 ### 检索引擎
 

@@ -13,7 +13,7 @@
 | 会话实体 | `src/main/java/com/coolxer/dao/mysql/entity/ChatSession.java` | 保存会话标题、类型、消息 JSON、置顶、深度思考等状态 |
 | 结构化消息解析 | `src/main/java/com/coolxer/service/dih/ChatMessagePartParser.java` | 将 AI 回复解析为 markdown、code、thinking、notice、confirm、chart 等片段 |
 | 附件服务 | `src/main/java/com/coolxer/service/dih/ChatAttachmentService.java` | 上传附件、读取文本附件、图片转 OpenAI image_url 输入 |
-| 巡检 Agent | `src/main/java/com/coolxer/service/dih/agent/InspectionAgent.java` | NL2SQL、SQL 安全校验、执行 SQL、表格/图表输出 |
+| 巡检 Agent | `src/main/java/com/coolxer/service/dih/agent/InspectionAgent.java` | 通过只读 retrieval MCP 工具完成巡检分析 |
 | MCP Agent | `src/main/java/com/coolxer/service/dih/agent/McpAgent.java` | 将已连接 MCP 工具挂到模型工具调用链路 |
 | 记忆配置 | `src/main/java/com/coolxer/configuration/ai/SpringAiChatMemoryConfiguration.java` | 初始化 Spring AI JDBC chat memory，并使用 MySQL 存储 |
 
@@ -169,7 +169,7 @@ Controller 会做几类前置检查：
 
 ### 巡检 Agent
 
-`type=agent_inspect` 时调用 `InspectionAgent.chat`。这条链路不是普通的流式 ChatClient，而是同步完成 NL2SQL 后把结果包装成 `Flux.just(content)` 返回。
+`type=agent_inspect` 时调用 `InspectionAgent.chat`。这条链路由 `PromptDrivenAgentRuntime` 驱动，后端为巡检 Agent 注入只读 retrieval MCP 工具，返回文本或 Markdown 流式内容。
 
 核心流程：
 
@@ -177,47 +177,22 @@ Controller 会做几类前置检查：
 用户问题
   |
   v
-读取 ChatMemory 历史
+解析巡检 Agent 的 retrieval MCP 工具白名单
   |
   v
-rewrite：问题重写、闲聊/需澄清识别
+拼接巡检 system prompt、Skill prompt 和工具说明
   |
   v
-问题扩展、证据召回、关键词提取
+调用 Spring AI ChatClient 流式对话
   |
   v
-Schema 召回：表、字段、数据库名
+模型按需调用 retrieval 查询、统计、趋势或详情工具
   |
   v
-fineSelect：让 LLM 精筛相关表
-  |
-  v
-生成 SQL；如历史中有 [SQL: ...]，作为参考 SQL 注入
-  |
-  v
-SqlSafeValidator 安全校验
-  |
-  v
-ClickHouse 执行 SQL；失败时最多让 LLM 修复重试 2 次
-  |
-  v
-判断是否需要 ECharts
-  |
-  |-- 不需要 -> Markdown 表格，MessageType.TEXT
-  |-- 需要   -> ECharts JSON，MessageType.CHART
-  |
-  v
-手动写入 ChatMemory
+输出普通文本/Markdown 分析，MessageType.TEXT
 ```
 
-非 SQL 意图会分两种：
-
-- 自由闲聊：使用巡检 Agent system prompt 和已启用 skill，让 LLM 直接回答。
-- 需要澄清：返回固定引导文案，提示用户补充时间范围、字段、统计方式等。
-
-SQL 安全校验只允许 `SELECT` 或 `WITH` 开头的查询，禁止分号、DDL/DML/DCL 关键词、危险表函数、`system.*` 访问等。通过后才执行。
-
-巡检 Agent 保存到记忆时有一个特别设计：如果返回图表，写入 ChatMemory 的不是完整 ECharts JSON，而是类似 `[图表数据已展示，图表类型：bar]` 的摘要；同时会追加 `[SQL: ...]`，供后续追问提取最近 SQL 作为参考。
+巡检 Agent 不直接访问数据库、不生成查询语句、不执行写入类 MCP 工具，也不会返回 `MessageType.CHART`。
 
 ## 消息结构与渲染
 
@@ -302,7 +277,7 @@ SQL 安全校验只允许 `SELECT` 或 `WITH` 开头的查询，禁止分号、D
 
 普通聊天的 RAG 只在 `app.ai.embedding.enabled=true` 时启用，通过 `QuestionAnswerAdvisor` 查询 Redis vector store。
 
-巡检 Agent 的 NL2SQL schema/evidence 召回也依赖 embedding 和 Redis vector store。embedding 关闭时，相关召回可能为空，NL2SQL 质量会明显下降，甚至无法生成有效 SQL。
+巡检 Agent 依赖 retrieval MCP 工具获取业务数据；普通聊天的 RAG 仍由 Redis vector store 支撑。
 
 ### JSON 字段命名
 

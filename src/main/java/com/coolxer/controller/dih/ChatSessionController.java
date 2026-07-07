@@ -121,9 +121,9 @@ public class ChatSessionController extends BaseController {
     private static final String PROLOGUE_AGENT_DATA_ACCESS = "我是数据接入智能体，只处理数据接入相关工作，主要包括两件事：元数据配置和数据推送服务。\n" +
             "默认会先完成元数据配置，配置成功生效后，再根据你的明确要求添加数据推送服务。\n" +
             "你可以先下载并填写 [数据接入需求模板](" + DATA_ACCESS_TEMPLATE_DOWNLOAD_URL + ")，填写完成后作为 `.md` 附件上传，我会读取文档内容帮助生成并生效配置。";
-    private static final String PROLOGUE_AGENT_INSPECT = "我是巡检智能体，专注于多源日志数据的智能分析与可视化呈现。\n" +
-            " 通过全局随机抽样与重点数据智能挖掘，实时提供精准的数据统计、查询及可视化服务。\n" +
-            " 我将根据用户提供的实体、字段和统计维度，自动调用最优查询接口并智能匹配最合适的图表组件，确保数据洞察清晰直观。";
+    private static final String PROLOGUE_AGENT_INSPECT = "我是巡检智能体，专注于通过只读 Retrieval MCP 查询多源日志数据并完成巡检分析。\n" +
+            " 我会先确认真实可用的实体、字段、统计维度和时间范围，再调用检索、计数、趋势、分布等只读工具获取证据。\n" +
+            " 我只输出文本或 Markdown 格式的巡检结论、数据摘要、异常线索和后续建议，不直接访问数据库、不生成图表消息或落库操作。";
     private static final String PROLOGUE_AGENT_ANALYSIS = "我是研判智能体，专注于风险事件的深度分析与等级评估。\n" +
             " 通过数据聚合、情报关联、规则匹配及动态执行等多维度研判手段，精准评估风险等级合理性。\n" +
             " 所有研判过程均调用外部工具进行证据链验证，所有分析依据与取证结果将完整存档，确保研判结论可追溯、可复现。";

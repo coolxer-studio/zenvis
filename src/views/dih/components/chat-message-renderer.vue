@@ -505,16 +505,60 @@ const dataAccessDecisionStatusText = (status?: string) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .message-content {
+  max-width: 100%;
+  min-width: 0;
   font-size: 14px;
   line-height: 1.65;
   word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.message-content :deep(p),
+.message-content :deep(li),
+.message-content :deep(blockquote),
+.message-content :deep(a),
+.message-content :deep(span),
+.message-content :deep(strong),
+.message-content :deep(em),
+.message-content :deep(code) {
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.message-content :deep(p) {
+  white-space: pre-wrap;
+}
+
+.message-content :deep(pre) {
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+
+.message-content :deep(pre code) {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.message-content :deep(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .thinking-part {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   background: #f7f8fa;
@@ -557,9 +601,12 @@ const dataAccessDecisionStatusText = (status?: string) => {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .code-part {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   overflow: hidden;
@@ -593,13 +640,21 @@ const dataAccessDecisionStatusText = (status?: string) => {
   color: #f5f7fa;
   font-size: 13px;
   line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .code-content code {
   font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .config-part {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid #b3d8ff;
   border-radius: 8px;
   overflow: hidden;
@@ -648,11 +703,16 @@ const dataAccessDecisionStatusText = (status?: string) => {
   color: #1f2329;
   font-size: 13px;
   line-height: 1.6;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .config-card-content code {
   font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .notice-part,
@@ -660,10 +720,13 @@ const dataAccessDecisionStatusText = (status?: string) => {
 .analysis-decision-part,
 .data-access-decision-part,
 .chart-part {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   background: #ffffff;
   padding: 12px;
+  overflow: hidden;
 }
 
 .notice-title,
@@ -688,6 +751,8 @@ const dataAccessDecisionStatusText = (status?: string) => {
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .notice-info {

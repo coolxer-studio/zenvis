@@ -244,6 +244,7 @@ interface Props {
 
 type SendMessageOptions = {
   content?: string;
+  requestContent?: string;
 };
 
 type DataAccessRecord = Record<string, unknown> & {
@@ -844,15 +845,16 @@ const stopCurrentChat = () => {
 // 发送消息
 const sendMessage = async (options: SendMessageOptions = {}) => {
   const explicitMessage = options.content?.trim();
+  const explicitRequestMessage = options.requestContent?.trim();
   const canSend = explicitMessage
     ? !isUploadingAttachment.value && !isStreamingResponse.value
     : canSendMessage.value;
 
   if (canSend) {
     // 清空输入框 
-    const sendMessage = explicitMessage || inputMessage.value.trim();
+    const sendMessage = explicitRequestMessage || explicitMessage || inputMessage.value.trim();
     const messageAttachments = explicitMessage ? [] : pendingAttachments.value.slice();
-    const displayMessage = sendMessage || '请分析上传的附件内容。';
+    const displayMessage = explicitMessage || sendMessage || '请分析上传的附件内容。';
     if (!explicitMessage) {
       inputMessage.value = ''
       pendingAttachments.value = []
@@ -888,7 +890,7 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
       let accumulatedContent = '';
       const streamOk = await DihService.chatEvents({
         type: chatSessionType.value,
-        message: displayMessage,
+        message: sendMessage,
         model: modelSelectData.value.period,
         deep_think: isDeepThinking.value,
         chat_id: chatSessionId.value, // 使用正确的chatSessionId
@@ -1024,13 +1026,24 @@ const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', de
 
 const dataAccessDecisionMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
   if (decision === 'apply_config') {
-    return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. policy_config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 policy_config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 policy_config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。MCP 成功后输出 zenvis:meta-config-record 记录。';
+    return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. policy_config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 policy_config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 policy_config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 policy_config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才输出 zenvis:meta-config-record 记录。';
   }
   if (decision === 'abandon') {
     return '我选择放弃本次元数据配置。请记录本次配置已放弃，不要写入系统，也不要继续创建或更新相关配置。';
   }
   const focus = detail?.trim() || '请基于上一轮配置继续优化字段、实体或展示规则。';
   return `我需要补充信息继续更新元数据配置。调整要求如下：\n${focus}\n请基于上一轮 meta 配置重新生成完整配置，并再次展示完整配置和后续选择。`;
+};
+
+const dataAccessDecisionDisplayMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
+  if (decision === 'apply_config') {
+    return '我已确认添加配置到系统。';
+  }
+  if (decision === 'abandon') {
+    return '我已放弃本次元数据配置。';
+  }
+  const focus = detail?.trim() || '继续优化元数据配置。';
+  return `我已补充配置调整要求：\n${focus}`;
 };
 
 // 切换任务折叠状态
@@ -1249,7 +1262,10 @@ const handleDataAccessDecision = async (
   };
   ElMessage.success(toastMap[payload.decision]);
   await nextTick();
-  await sendMessage({ content: dataAccessDecisionMessage(payload.decision, payload.detail) });
+  await sendMessage({
+    content: dataAccessDecisionDisplayMessage(payload.decision, payload.detail),
+    requestContent: dataAccessDecisionMessage(payload.decision, payload.detail),
+  });
 };
 
 // 分享消息（示例）
@@ -2341,25 +2357,32 @@ const dislikeMessage = (index: number) => {
 .message-item {
   display: flex;
   justify-content: flex-start;
+  min-width: 0;
 }
 
 .message-bubble {
   max-width: 80%;
+  min-width: 0;
   padding: 12px 16px;
   border-radius: 12px;
   line-height: 1.5;
   word-break: break-word;
+  overflow-wrap: anywhere;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
   position: relative;
 }
 
 .user-message {
+  max-width: 80%;
+  min-width: 0;
   background-color: #e6f1fc;
   align-self: flex-end;
   border-bottom-right-radius: 4px;
 }
 
 .ai-message {
+  max-width: 80%;
+  min-width: 0;
   background-color: #f5f7fa;
   align-self: flex-start;
   border-bottom-left-radius: 4px;
@@ -2369,11 +2392,13 @@ const dislikeMessage = (index: number) => {
   display: flex;
   flex-direction: row-reverse;
   width: 100%;
+  min-width: 0;
 }
 
 .ai-message-container {
   display: flex;
   width: 100%;
+  min-width: 0;
 }
 
 .avatar {
@@ -2396,12 +2421,16 @@ const dislikeMessage = (index: number) => {
   margin: 0;
   font-size: 14px;
   color: #303133;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* 添加用户消息内容样式，支持换行 */
 .user-content {
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* 添加Markdown内容样式 */

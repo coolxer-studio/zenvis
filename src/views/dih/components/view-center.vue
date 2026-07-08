@@ -608,7 +608,7 @@ const markChartAsLoaded = (message: ChatMessage) => {
 };
 
 const dispatchChartData = (jsonData: any) => {
-  window.dispatchEvent(new CustomEvent('inspectChartData', {
+  window.dispatchEvent(new CustomEvent('dataVisualizationChartData', {
     detail: {
       chartType: jsonData.chart_type || 'line',
       option: jsonData.option || jsonData,

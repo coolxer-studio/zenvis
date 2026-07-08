@@ -172,7 +172,7 @@ const chartData = reactive<ChartData>({
 })
 
 // 处理图表数据事件
-const handleInspectChartData = (event: CustomEvent) => {
+const handleDataVisualizationChartData = (event: CustomEvent) => {
   const { chartType, option, rawData, columns } = event.detail
   chartData.chartType = chartType || 'line'
   chartData.option = option
@@ -274,8 +274,8 @@ const dashboardConfigs = ref<ResourceItem[]>([
   },
   {
     id: 'dashboard-002',
-    name: '巡检指标看板配置',
-    jumpLink: '/dashboard/configs/inspection-metrics'
+    name: '数据可视化指标看板配置',
+    jumpLink: '/dashboard/configs/data-visualization-metrics'
   },
   {
     id: 'dashboard-003',
@@ -288,18 +288,18 @@ const dashboardConfigs = ref<ResourceItem[]>([
 const menuConfigs = ref<ResourceItem[]>([
   {
     id: 'menu-001',
-    name: '巡检总览菜单配置',
-    jumpLink: '/inspect/menu-configs/overview'
+    name: '数据可视化总览菜单配置',
+    jumpLink: '/visualization/menu-configs/overview'
   },
   {
     id: 'menu-002',
     name: '图表库菜单配置',
-    jumpLink: '/inspect/menu-configs/chart-library'
+    jumpLink: '/visualization/menu-configs/chart-library'
   },
   {
     id: 'menu-003',
     name: '数据看板菜单配置',
-    jumpLink: '/inspect/menu-configs/dashboard'
+    jumpLink: '/visualization/menu-configs/dashboard'
   }
 ])
 
@@ -324,7 +324,7 @@ const artifacts = ref<Artifact[]>([
 
 onMounted(() => {
   // 监听图表数据事件
-  window.addEventListener('inspectChartData', handleInspectChartData as EventListener)
+  window.addEventListener('dataVisualizationChartData', handleDataVisualizationChartData as EventListener)
 
   // 初始化Monaco编辑器
   if (editorContainer.value) {
@@ -345,7 +345,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   // 移除事件监听
-  window.removeEventListener('inspectChartData', handleInspectChartData as EventListener)
+  window.removeEventListener('dataVisualizationChartData', handleDataVisualizationChartData as EventListener)
 
   // 销毁编辑器
   if (editor) {

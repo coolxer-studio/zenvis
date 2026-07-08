@@ -16,7 +16,7 @@
           <ViewCenter :suggestions="mySuggestions" />
         </el-splitter-panel>
         <el-splitter-panel v-if="showRightPanel" collapsible :size="30" min="20">
-          <ViewRightInspect v-if="route.query.type && route.query.type === 'agent_inspect'" />
+          <ViewRightDataVisualization v-if="route.query.type && route.query.type === 'agent_data_visualization'" />
           <ViewRightAnalysis v-if="route.query.type && route.query.type === 'agent_analysis'" />
           <ViewRightDispose v-if="route.query.type && route.query.type === 'agent_dispose'" />
           <ViewRightDataAccess v-if="route.query.type && route.query.type === 'agent_data_access'" />
@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import ViewLeft from './components/view-left.vue'
 import ViewCenter from './components/view-center.vue'
-import ViewRightInspect from './components/view-right-inspect.vue'
+import ViewRightDataVisualization from './components/view-right-data-visualization.vue'
 import ViewRightAnalysis from './components/view-right-analysis.vue'
 import ViewRightDispose from './components/view-right-dispose.vue'
 import ViewRightDataAccess from './components/view-right-data-access.vue'
@@ -69,7 +69,7 @@ interface Suggestion {
 
 const agentIconMap: Record<string, any> = {
   agent_data_access: Connection,
-  agent_inspect: Monitor,
+  agent_data_visualization: Monitor,
   agent_analysis: DataAnalysis,
   agent_dispose: Operation,
   agent_report: Document,

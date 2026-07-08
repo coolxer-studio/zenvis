@@ -23,9 +23,9 @@ import java.util.Map;
  */
 @Configuration
 @EnableTransactionManagement
-@EntityScan(basePackages = "com.coolxer.dao.mysql.entity")
+@EntityScan(basePackages = {"com.coolxer.dao.mysql.entity", "com.coolxer.lubinsun.entity"})
 @EnableJpaRepositories(
-        basePackages = "com.coolxer.dao.mysql.repository",
+        basePackages = {"com.coolxer.dao.mysql.repository", "com.coolxer.lubinsun.repository"},
         entityManagerFactoryRef = "mysqlEntityManagerFactoryBean",
         transactionManagerRef = "mysqlTransactionManager"
 )
@@ -60,7 +60,7 @@ public class JpaMysqlConfiguration {
         return builder
                 .dataSource(mysqlDataSource())
                 .properties(getVendorProperties())
-                .packages("com.coolxer.dao.mysql.entity")
+                .packages("com.coolxer.dao.mysql.entity", "com.coolxer.lubinsun.entity")
                 .persistenceUnit("mysql")
                 .build();
 

@@ -58,6 +58,7 @@ public class DataInitiator {
 
         // 初始化菜单权限
         initDefaultPermission();
+        ensureLubinsunTaskMenu();
 
         // 初始化管理员账号
         initDefaultAdminUser();
@@ -101,6 +102,7 @@ public class DataInitiator {
             menuRepository.save(new Menu().setName("Skill 管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("skill").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(3).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("MCP 服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("mcp").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(4).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("RAG 文档管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("vectorstore").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(5).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("Lubinsun任务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("lubinsun-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(6).setLevel(MenuLevel.LEVEL_2));
 
             Menu systemMenu = menuRepository.save(new Menu().setName("系统管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(5).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("菜单管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("menu").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
@@ -113,6 +115,46 @@ public class DataInitiator {
         }
 
 
+    }
+
+    private void ensureLubinsunTaskMenu() {
+        List<Menu> menuList = menuRepository.findAll();
+        if (CollectionUtils.isEmpty(menuList)) {
+            return;
+        }
+        boolean exists = menuList.stream().anyMatch(menu -> "lubinsun-task".equals(menu.getParams()));
+        if (exists) {
+            return;
+        }
+
+        Menu serviceMenu = menuList.stream()
+                .filter(menu -> menu.getParentId() != null && menu.getParentId() == 0)
+                .filter(menu -> "服务管理".equals(menu.getName()))
+                .findFirst()
+                .orElse(null);
+        if (serviceMenu == null) {
+            log.warn("未找到服务管理菜单，跳过 Lubinsun 任务菜单初始化");
+            return;
+        }
+
+        Menu lubinsunMenu = menuRepository.save(new Menu()
+                .setName("Lubinsun任务")
+                .setType(MenuType.LOW_CODE_PAGE)
+                .setRoute(MenuType.LOW_CODE_PAGE.getRoute())
+                .setParams("lubinsun-task")
+                .setIsEditable(false)
+                .setParentId(serviceMenu.getId())
+                .setOrderNumber(menuRepository.getMaxOrderNumberById(serviceMenu.getId()).orElse(5) + 1)
+                .setLevel(MenuLevel.LEVEL_2));
+
+        roleRepository.findAll().forEach(role -> {
+            List<RolePermission> permissions = rolePermissionRepository.findByRoleId(role.getId());
+            boolean hasServiceMenu = permissions.stream().anyMatch(permission -> permission.getPermissionId() == serviceMenu.getId());
+            boolean hasLubinsunMenu = permissions.stream().anyMatch(permission -> permission.getPermissionId() == lubinsunMenu.getId());
+            if (hasServiceMenu && !hasLubinsunMenu) {
+                rolePermissionRepository.save(new RolePermission(role.getId(), lubinsunMenu.getId()));
+            }
+        });
     }
 
     /**

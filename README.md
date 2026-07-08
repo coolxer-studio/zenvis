@@ -393,7 +393,7 @@ zenvis-backend/
 | AI 聊天     | `ChatController`             | 智能聊天接口，支持自然语言查询  |
 | 聊天会话管理    | `ChatSessionController`      | 会话生命周期管理         |
 | RAG 文档管理 | `VectorStoreQueryController` | 插件文档向量管理和相似度搜索 |
-| 智能巡检Agent | `InspectionAgent`            | retrieval MCP 只读巡检 |
+| 数据可视化Agent | `DataVisualizationAgent`     | retrieval MCP 只读可视化分析 |
 
 ### 检索引擎
 

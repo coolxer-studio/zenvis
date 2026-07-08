@@ -11,8 +11,8 @@ import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.service.dih.agent.AnalysisAgent;
 import com.coolxer.service.dih.agent.DataAccessAgent;
+import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.DisposeAgent;
-import com.coolxer.service.dih.agent.InspectionAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -57,7 +57,7 @@ public class DihChatApplicationService {
     private final DisposeAgent disposeAgent;
     private final ReportAgent reportAgent;
     private final DataAccessAgent dataAccessAgent;
-    private final InspectionAgent inspectionAgent;
+    private final DataVisualizationAgent dataVisualizationAgent;
     private final ChatMessagePartParser chatMessagePartParser;
     private final ChatAttachmentService chatAttachmentService;
     private final ChatTitleService chatTitleService;
@@ -75,7 +75,7 @@ public class DihChatApplicationService {
                                      DisposeAgent disposeAgent,
                                      ReportAgent reportAgent,
                                      DataAccessAgent dataAccessAgent,
-                                     InspectionAgent inspectionAgent,
+                                     DataVisualizationAgent dataVisualizationAgent,
                                      ChatMessagePartParser chatMessagePartParser,
                                      ChatAttachmentService chatAttachmentService,
                                      ChatTitleService chatTitleService,
@@ -92,7 +92,7 @@ public class DihChatApplicationService {
         this.disposeAgent = disposeAgent;
         this.reportAgent = reportAgent;
         this.dataAccessAgent = dataAccessAgent;
-        this.inspectionAgent = inspectionAgent;
+        this.dataVisualizationAgent = dataVisualizationAgent;
         this.chatMessagePartParser = chatMessagePartParser;
         this.chatAttachmentService = chatAttachmentService;
         this.chatTitleService = chatTitleService;
@@ -237,9 +237,9 @@ public class DihChatApplicationService {
             messageType.set(MessageType.TEXT);
             return reportAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
-        if (InspectionAgent.AGENT_TYPE.equals(chatType)) {
+        if (DataVisualizationAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
-            return inspectionAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
+            return dataVisualizationAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (isPlaceholderBuiltinAgent(chatType)) {
             messageType.set(MessageType.TEXT);

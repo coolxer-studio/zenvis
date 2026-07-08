@@ -299,7 +299,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/mcp/tools/call" \
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| agentType | String | 否 | 业务 Agent 类型，如 `ask`、`agent_data_access`、`agent_inspect`；不传时按默认 scope |
+| agentType | String | 否 | 业务 Agent 类型，如 `ask`、`agent_data_access`、`agent_data_visualization`；不传时按默认 scope |
 
 ```bash
 curl "http://localhost:11001/api/v1/dih/mcp/agent/prompt?agentType=agent_data_access"
@@ -315,7 +315,7 @@ MCP 工具作为通用工具能力注入聊天接口，不再需要单独的 `ag
 
 **接口地址**: `POST /api/v1/dih/chat`
 
-请求中的 `type` 可为普通问答 `ask`，也可为具体业务 Agent，如 `agent_data_access`、`agent_inspect`。后端会根据 `app.ai.mcp.agent-scopes.<type>` 控制可用 MCP 服务范围。
+请求中的 `type` 可为普通问答 `ask`，也可为具体业务 Agent，如 `agent_data_access`、`agent_data_visualization`。后端会根据 `app.ai.mcp.agent-scopes.<type>` 控制可用 MCP 服务范围。
 
 示例：
 

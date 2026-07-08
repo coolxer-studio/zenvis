@@ -89,7 +89,7 @@ class SkillServiceTest {
 
         assertThat(List.of(
                 BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS,
-                BuiltinAgentSkillRegistry.AGENT_INSPECT,
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
                 BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
                 BuiltinAgentSkillRegistry.AGENT_DISPOSE,
                 BuiltinAgentSkillRegistry.AGENT_REPORT
@@ -128,10 +128,10 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinInspectionSkillDocumentsRetrievalOnlyWorkflow() throws Exception {
-        Path repoSkill = Path.of("deploy/open_config/skill_config/inspection-agent");
+    void builtinDataVisualizationSkillDocumentsRetrievalOnlyWorkflow() throws Exception {
+        Path repoSkill = Path.of("deploy/open_config/skill_config/data-visualization-agent");
         writeSkill(
-                skillRoot.resolve("inspection-agent"),
+                skillRoot.resolve("data-visualization-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
                 Files.readString(repoSkill.resolve("SKILL.md"))
         );
@@ -139,7 +139,7 @@ class SkillServiceTest {
         SkillService service = newSkillService();
         service.reload();
 
-        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_INSPECT);
+        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
 
         assertThat(prompt)
                 .contains("Retrieval MCP")
@@ -148,7 +148,7 @@ class SkillServiceTest {
                 .contains("entity_statistics")
                 .contains("只调用只读 Retrieval MCP 工具")
                 .contains("不生成 SQL")
-                .contains("不输出 ECharts JSON");
+                .contains("可视化分析报告");
         assertThat(prompt)
                 .doesNotContain("zenvis:low-code-page-config")
                 .doesNotContain("zenvis:low-code-app-config")

@@ -37,7 +37,7 @@ McpClientServiceImpl
             - 按业务 Agent 类型解析 MCP scope
             - 构造 MCP 工具提示词
             - 构造 ToolCallbackProvider
-            - 注入普通问答 / DataAccessAgent / InspectionAgent / AnalysisTask
+            - 注入普通问答 / DataAccessAgent / DataVisualizationAgent / AnalysisTask
                     │
                     ▼
               Spring AI ChatClient toolCallbacks(...)
@@ -268,7 +268,7 @@ MCP 不再作为独立聊天 Agent。它是通用工具能力层，由普通问�
 
 ```text
 POST /api/v1/dih/chat
-  type = ask / agent_data_access / agent_inspect / ...
+  type = ask / agent_data_access / agent_data_visualization / ...
         │
         ▼
 ChatController
@@ -300,7 +300,7 @@ Spring AI ChatClient.toolCallbacks(...)
 app.ai.mcp.enabled=true
 app.ai.mcp.agent-scopes.default=*
 app.ai.mcp.agent-scopes.agent_data_access=risk,asset
-app.ai.mcp.agent-scopes.agent_inspect=none
+app.ai.mcp.agent-scopes.agent_data_visualization=none
 ```
 
 scope 值为 `none/off/false/disabled` 时，该业务 Agent 不注入 MCP 工具。

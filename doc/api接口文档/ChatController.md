@@ -18,7 +18,7 @@
   "message": "你好",          // String - 用户消息内容
   "model": "auto",            // String - AI模型名称（可选，不传或auto时使用配置默认模型）
   "chatId": "chat-001",       // String - 会话ID
-  "type": "ask",              // String - 聊天类型（ask/agent_inspect等）
+  "type": "ask",              // String - 聊天类型（ask/agent_data_visualization等）
   "deepThink": false,         // Boolean - 是否深度思考模式
   "onlineSearch": false       // Boolean - 是否在线搜索
 }
@@ -113,5 +113,5 @@ data: "对不起，当前智能体没有开通权限，请联系管理员！"
 2. **流式响应**: 使用SSE(Server-Sent Events)协议返回流式响应
 3. **会话管理**: chatId用于维护会话上下文，首次传入时会自动创建会话
 4. **模型支持**: 支持的模型通过 OpenAI 兼容 `/v1/models` 接口动态获取；不传或传 `auto` 时由后端按请求场景自动选择模型
-5. **智能体权限**: 除agent_inspect外，其他agent类型需要管理员开通权限
+5. **智能体权限**: 各 agent 类型需在 Skill 管理中启用后可用
 6. **深度思考**: 设置deepThink为true可启用深度思考模式

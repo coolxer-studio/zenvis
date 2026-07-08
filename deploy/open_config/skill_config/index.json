@@ -34,15 +34,15 @@
     },
     {
       "type": "button",
-      "label": "巡检 Prompt",
+      "label": "数据可视化 Prompt",
       "icon": "fa fa-file-text-o",
       "actionType": "dialog",
       "dialog": {
-        "title": "巡检智能体 Skill Prompt",
+        "title": "数据可视化智能体 Skill Prompt",
         "size": "lg",
         "body": {
           "type": "service",
-          "api": "/zenvis/api/v1/dih/skills/agent/agent_inspect/prompt",
+          "api": "/zenvis/api/v1/dih/skills/agent/agent_data_visualization/prompt",
           "body": {
             "type": "code",
             "language": "markdown",
@@ -149,8 +149,8 @@
                 "value": "agent_data_access"
               },
               {
-                "label": "巡检智能体",
-                "value": "agent_inspect"
+                "label": "数据可视化智能体",
+                "value": "agent_data_visualization"
               },
               {
                 "label": "研判分析智能体",

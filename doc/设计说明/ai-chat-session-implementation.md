@@ -1,6 +1,6 @@
 # AI 会话实现说明
 
-本文面向需要理解 ZenVis Backend 当前 AI 会话实现的开发者，重点说明 `/api/v1/dih/chat`、会话管理、普通问答、深度思考、附件、MCP Agent 和巡检 Agent 的主要逻辑。
+本文面向需要理解 ZenVis Backend 当前 AI 会话实现的开发者，重点说明 `/api/v1/dih/chat`、会话管理、普通问答、深度思考、附件、MCP Agent 和数据可视化 Agent 的主要逻辑。
 
 ## 代码范围
 
@@ -13,7 +13,7 @@
 | 会话实体 | `src/main/java/com/coolxer/dao/mysql/entity/ChatSession.java` | 保存会话标题、类型、消息 JSON、置顶、深度思考等状态 |
 | 结构化消息解析 | `src/main/java/com/coolxer/service/dih/ChatMessagePartParser.java` | 将 AI 回复解析为 markdown、code、thinking、notice、confirm、chart 等片段 |
 | 附件服务 | `src/main/java/com/coolxer/service/dih/ChatAttachmentService.java` | 上传附件、读取文本附件、图片转 OpenAI image_url 输入 |
-| 巡检 Agent | `src/main/java/com/coolxer/service/dih/agent/InspectionAgent.java` | 通过只读 retrieval MCP 工具完成巡检分析 |
+| 数据可视化 Agent | `src/main/java/com/coolxer/service/dih/agent/DataVisualizationAgent.java` | 通过只读 retrieval MCP 工具完成可视化分析 |
 | MCP Agent | `src/main/java/com/coolxer/service/dih/agent/McpAgent.java` | 将已连接 MCP 工具挂到模型工具调用链路 |
 | 记忆配置 | `src/main/java/com/coolxer/configuration/ai/SpringAiChatMemoryConfiguration.java` | 初始化 Spring AI JDBC chat memory，并使用 MySQL 存储 |
 
@@ -24,7 +24,7 @@
 | 数据 | 主要用途 | 写入位置 | 读取位置 |
 | :--- | :--- | :--- | :--- |
 | `ChatSession.messages` | 前端展示历史消息 | `ChatController.saveAiResponse` 和用户消息追加逻辑 | `ChatSessionController.sessionInfo/list/view` |
-| Spring AI `ChatMemory` | 给模型提供多轮上下文 | Spring AI `MessageChatMemoryAdvisor` 自动写入；原生 OpenAI 分支和 `InspectionAgent` 手动写入 | `AIChatService`、`InspectionAgent` |
+| Spring AI `ChatMemory` | 给模型提供多轮上下文 | Spring AI `MessageChatMemoryAdvisor` 自动写入；原生 OpenAI 分支和业务 Agent 运行时手动写入 | `AIChatService`、`PromptDrivenAgentRuntime` |
 
 这两层不是同一个表，也不是同一份 JSON。前端历史主要依赖 `t_ai_chat_session.messages`，模型记忆主要依赖 Spring AI JDBC memory 表。
 
@@ -45,7 +45,7 @@ ChatController.chat
         |
         |-- agent_data_access -> DataAccessAgent -> AIChatService.chatWithSystemPrompt
         |-- agent_mcp         -> McpAgent -> AIChatService.chatWithSystemPromptAndTools
-        |-- agent_inspect     -> InspectionAgent.chat
+        |-- agent_data_visualization -> DataVisualizationAgent.chat
         |-- deep_think=true   -> AIChatService.deepThinkingChat
         |-- 默认 ask/普通聊天 -> AIChatService.chat
         |
@@ -81,7 +81,7 @@ Flux<String> 模型输出
 
 Controller 会做几类前置检查：
 
-- `type` 如果以 `agent` 开头，只允许 `agent_data_access`、`agent_mcp`、`agent_inspect`，其他 agent 类型暂时返回“没有开通权限”。
+- `type` 如果以 `agent` 开头，只允许已注册且已启用的内置 agent 类型，例如 `agent_data_access`、`agent_data_visualization`、`agent_analysis`、`agent_dispose`、`agent_report`。
 - 模型列表来自 `AIBaseService.getModels()`，底层读取 `src/main/resources/models.yaml`。当前模型白名单包括 `auto` 和 `${OPENAI_CHAT_MODEL}` 解析后的值。
 - `model` 为空、`auto` 或 `x-sage-v1` 时最终会转成 `null`，交给 Spring AI 默认模型配置。
 - 用户消息为空但有附件时，会自动使用“请分析上传的附件内容。”作为本轮消息。
@@ -167,9 +167,9 @@ Controller 会做几类前置检查：
 
 注意：MCP Agent 的 system prompt 要求“副作用动作先确认”，但当前工具确认的强制性主要依赖模型遵守提示；后端还有 `zenvis:confirm` 结构化片段和 `/chat/action-decision` 记录接口，但这只是记录用户选择，不会自动执行或阻断工具调用。
 
-### 巡检 Agent
+### 数据可视化 Agent
 
-`type=agent_inspect` 时调用 `InspectionAgent.chat`。这条链路由 `PromptDrivenAgentRuntime` 驱动，后端为巡检 Agent 注入只读 retrieval MCP 工具，返回文本或 Markdown 流式内容。
+`type=agent_data_visualization` 时调用 `DataVisualizationAgent.chat`。这条链路由 `PromptDrivenAgentRuntime` 驱动，后端为数据可视化 Agent 注入只读 retrieval MCP 工具，返回文本或 Markdown 流式内容。
 
 核心流程：
 
@@ -177,10 +177,10 @@ Controller 会做几类前置检查：
 用户问题
   |
   v
-解析巡检 Agent 的 retrieval MCP 工具白名单
+解析数据可视化 Agent 的 retrieval MCP 工具白名单
   |
   v
-拼接巡检 system prompt、Skill prompt 和工具说明
+拼接数据可视化 system prompt、Skill prompt 和工具说明
   |
   v
 调用 Spring AI ChatClient 流式对话
@@ -192,7 +192,7 @@ Controller 会做几类前置检查：
 输出普通文本/Markdown 分析，MessageType.TEXT
 ```
 
-巡检 Agent 不直接访问数据库、不生成查询语句、不执行写入类 MCP 工具，也不会返回 `MessageType.CHART`。
+数据可视化 Agent 不直接访问数据库、不生成查询语句、不执行写入类 MCP 工具。
 
 ## 消息结构与渲染
 
@@ -277,7 +277,7 @@ Controller 会做几类前置检查：
 
 普通聊天的 RAG 只在 `app.ai.embedding.enabled=true` 时启用，通过 `QuestionAnswerAdvisor` 查询 Redis vector store。
 
-巡检 Agent 依赖 retrieval MCP 工具获取业务数据；普通聊天的 RAG 仍由 Redis vector store 支撑。
+数据可视化 Agent 依赖 retrieval MCP 工具获取业务数据；普通聊天的 RAG 仍由 Redis vector store 支撑。
 
 ### JSON 字段命名
 
@@ -288,8 +288,8 @@ Controller 会做几类前置检查：
 ## 需要注意的实现细节
 
 1. `ChatSession.messages` 和 Spring AI `ChatMemory` 是两套数据。界面历史和模型记忆可能不同步，排查“模型不记得上下文”时不要只看 `t_ai_chat_session.messages`。
-2. 普通 Spring AI 分支通过 `MessageChatMemoryAdvisor` 自动维护记忆；原生 OpenAI 图片/深度思考分支通过 `saveNativeChatMemory` 手动维护；巡检 Agent 也手动维护自己的 `inspectionAgentChatMemory`。
-3. `agent_inspect` 返回虽然被外层包装成 `Flux.just(...)`，但内部是同步阻塞链路，会多次调用 LLM、向量召回和数据库查询。慢查询或 LLM 慢响应会直接影响接口首包时间。
+2. 普通 Spring AI 分支通过 `MessageChatMemoryAdvisor` 自动维护记忆；原生 OpenAI 图片/深度思考分支通过 `saveNativeChatMemory` 手动维护；业务 Agent 由 `PromptDrivenAgentRuntime` 维护对应记忆。
+3. `agent_data_visualization` 会调用只读 retrieval MCP 工具获取真实数据。慢查询或 LLM 慢响应会直接影响接口首包时间。
 4. `online_search` 目前只保存到会话字段，聊天主流程没有看到实际在线搜索逻辑。
 5. `response_format=events` 时，`done` 事件会保存并返回最终 AI 消息；如果流中途异常，当前只返回 `error` 事件，不会保存部分 AI 回复。
 6. 非 events 的纯文本模式会在 `doOnComplete` 保存 AI 回复，但不会返回最终 message id/parts；前端如果需要结构化渲染，应继续使用 events。
@@ -306,7 +306,7 @@ Controller 会做几类前置检查：
 | :--- | :--- |
 | 前端有历史，模型却不接上下文 | Spring AI chat memory 表中是否有同一 `chat_id` 的记录；是否走了不会写 memory 的异常路径 |
 | 图片附件没有被模型看到 | 是否配置了 `spring.ai.openai.base-url` 和 `api-key`；是否走了原生 OpenAI 分支 |
-| 巡检 Agent 生成 SQL 失败 | embedding 是否启用、Redis 向量索引是否有 schema/evidence、LLM 返回格式是否符合 prompt 解析 |
-| 图表没有渲染 | `InspectionAgent` 返回的 `MessageType` 是否为 `CHART`，`content` 是否为 ECharts JSON，最终 `parts` 是否有 `chart` |
+| 数据可视化 Agent 数据查询失败 | retrieval MCP 工具是否启用、可查询实体和字段是否存在、工具返回是否为空或报错 |
+| 图表没有渲染 | AI 消息 `MessageType` 是否为 `CHART`，`content` 是否为 ECharts JSON，最终 `parts` 是否有 `chart` |
 | MCP Agent 不会调用工具 | MCP 服务是否 enabled/connected，`McpClientService.hasAvailableTools()` 是否为 true，工具名是否进入 system prompt |
 | 深度思考没有过程 | 模型是否支持 reasoning metadata 或 `<think>` 输出；是否触发了后端 fallback thinking part |

@@ -9,27 +9,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 智能巡检结果数据传输对象
+ * 数据可视化结果数据传输对象
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class InspectionResult {
+public class DataVisualizationResult {
 
     /**
-     * 巡检时间
+     * 分析时间
      */
-    private String inspectionTime;
+    private String visualizationTime;
 
     /**
-     * 巡检范围
+     * 分析范围
      * 如: ["所有主机", "所有应用", "网络设备"]
      */
-    private List<String> inspectionScope;
+    private List<String> visualizationScope;
 
     /**
-     * 巡检总结
+     * 可视化分析总结
      */
     private String summary;
 

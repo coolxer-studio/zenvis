@@ -54,12 +54,12 @@ AI features use Spring AI and OpenAI-compatible models.
 
 Important services:
 - `AIChatService`: streaming chat, memory, attachments, and RAG
-- `InspectionAgent`: retrieval-only inspection agent
+- `DataVisualizationAgent`: retrieval-only data visualization agent
 - `PromptDrivenAgentRuntime`: shared prompt-driven agent runtime
 - `AgentMcpToolService`: resolves MCP tools by agent type
 - `AgentLlmService`: generic synchronous/streaming LLM wrapper for non-chat flows
 
-Inspection agent behavior:
+Data visualization agent behavior:
 - Uses only read-only retrieval MCP tools
 - Does not generate or execute SQL
 - Does not produce chart messages

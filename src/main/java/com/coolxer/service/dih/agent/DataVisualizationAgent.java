@@ -11,15 +11,15 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 
 @Service
-public class InspectionAgent {
+public class DataVisualizationAgent {
 
-    public static final String AGENT_TYPE = "agent_inspect";
+    public static final String AGENT_TYPE = "agent_data_visualization";
 
     private final PromptDrivenAgentRuntime agentRuntime;
     private final PromptTemplate systemPromptTemplate;
 
-    public InspectionAgent(PromptDrivenAgentRuntime agentRuntime,
-                           @Qualifier("agentInspectSystemPromptTemplate") PromptTemplate systemPromptTemplate) {
+    public DataVisualizationAgent(PromptDrivenAgentRuntime agentRuntime,
+                                  @Qualifier("agentDataVisualizationSystemPromptTemplate") PromptTemplate systemPromptTemplate) {
         this.agentRuntime = agentRuntime;
         this.systemPromptTemplate = systemPromptTemplate;
     }

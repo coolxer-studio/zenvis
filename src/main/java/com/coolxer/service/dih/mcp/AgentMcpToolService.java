@@ -25,9 +25,9 @@ public class AgentMcpToolService {
 
     private static final String ALL_SCOPE = "*";
 
-    private static final String INSPECTION_AGENT_TYPE = "agent_inspect";
+    private static final String DATA_VISUALIZATION_AGENT_TYPE = "agent_data_visualization";
 
-    private static final Set<String> INSPECTION_READ_ONLY_RETRIEVAL_TOOLS = Set.of(
+    private static final Set<String> DATA_VISUALIZATION_READ_ONLY_RETRIEVAL_TOOLS = Set.of(
             "retrieval_search",
             "retrieval_list_rule",
             "retrieval_list_entity",
@@ -80,11 +80,11 @@ public class AgentMcpToolService {
         }
 
         String normalizedAgentType = normalizeAgentType(agentType);
-        boolean inspectionAgent = INSPECTION_AGENT_TYPE.equals(normalizedAgentType);
+        boolean dataVisualizationAgent = DATA_VISUALIZATION_AGENT_TYPE.equals(normalizedAgentType);
         List<ToolCallback> toolCallbacks = new ArrayList<>();
         StringBuilder mcpPrompt = new StringBuilder();
-        appendLocalTools(toolCallbacks, mcpPrompt, inspectionAgent ? INSPECTION_READ_ONLY_RETRIEVAL_TOOLS : null);
-        if (!inspectionAgent) {
+        appendLocalTools(toolCallbacks, mcpPrompt, dataVisualizationAgent ? DATA_VISUALIZATION_READ_ONLY_RETRIEVAL_TOOLS : null);
+        if (!dataVisualizationAgent) {
             appendExternalTools(scope, toolCallbacks, mcpPrompt);
         }
 

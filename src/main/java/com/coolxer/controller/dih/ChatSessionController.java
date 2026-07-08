@@ -212,9 +212,9 @@ public class ChatSessionController extends BaseController {
             | 全部用户事件数据 | user-event / 调试信息 | 写入 msg_user_event 表；目标库默认为系统的 zenvis 库。 |
 
            """;
-    private static final String PROLOGUE_AGENT_INSPECT = "我是巡检智能体，专注于通过只读 Retrieval MCP 查询多源日志数据并完成巡检分析。\n" +
+    private static final String PROLOGUE_AGENT_DATA_VISUALIZATION = "我是数据可视化智能体，专注于通过只读 Retrieval MCP 查询多源日志数据并完成可视化分析。\n" +
             " 我会先确认真实可用的实体、字段、统计维度和时间范围，再调用检索、计数、趋势、分布等只读工具获取证据。\n" +
-            " 我只输出文本或 Markdown 格式的巡检结论、数据摘要、异常线索和后续建议，不直接访问数据库、不生成图表消息或落库操作。";
+            " 我只输出文本或 Markdown 格式的数据概览、统计洞察、可视化建议和后续建议，不直接访问数据库、不执行落库操作。";
     private static final String PROLOGUE_AGENT_ANALYSIS = "我是研判智能体，专注于风险事件的深度分析与等级评估。\n" +
             " 通过数据聚合、情报关联、规则匹配及动态执行等多维度研判手段，精准评估风险等级合理性。\n" +
             " 所有研判过程均调用外部工具进行证据链验证，所有分析依据与取证结果将完整存档，确保研判结论可追溯、可复现。";
@@ -282,7 +282,7 @@ public class ChatSessionController extends BaseController {
     private String resolvePrologue(String type) {
         return switch (normalizeType(type)) {
             case "agent_data_access" -> PROLOGUE_AGENT_DATA_ACCESS;
-            case "agent_inspect" -> PROLOGUE_AGENT_INSPECT;
+            case "agent_data_visualization" -> PROLOGUE_AGENT_DATA_VISUALIZATION;
             case "agent_analysis" -> PROLOGUE_AGENT_ANALYSIS;
             case "agent_dispose" -> PROLOGUE_AGENT_DISPOSE;
             case "agent_report" -> PROLOGUE_AGENT_REPORT;

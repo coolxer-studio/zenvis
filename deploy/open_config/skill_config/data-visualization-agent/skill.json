@@ -1,0 +1,19 @@
+{
+  "id": "data-visualization-agent",
+  "name": "数据可视化",
+  "description": "系统内置数据可视化 Skill，仅通过只读 Retrieval MCP 查询数据并输出数据概览、统计洞察、可视化建议和后续建议。",
+  "version": "1.1.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_data_visualization"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "data-visualization",
+    "retrieval",
+    "readonly"
+  ],
+  "enabled": true,
+  "entry": "SKILL.md"
+}

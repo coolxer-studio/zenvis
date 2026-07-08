@@ -14,16 +14,16 @@
 
 ```json
 {
-  "id": "inspection-agent",
-  "name": "巡检智能体基础能力",
-  "description": "为巡检智能体补充能力边界、回答风格和数据分析行为说明。",
+  "id": "data-visualization-agent",
+  "name": "数据可视化智能体基础能力",
+  "description": "为数据可视化智能体补充能力边界、回答风格和数据分析行为说明。",
   "version": "1.0.0",
   "author": "ZenVis",
-  "agentTypes": ["agent_inspect"],
-  "tags": ["inspection", "retrieval"],
+  "agentTypes": ["agent_data_visualization"],
+  "tags": ["data-visualization", "retrieval"],
   "enabled": true,
   "entry": "SKILL.md",
-  "path": "inspection-agent",
+  "path": "data-visualization-agent",
   "updateTime": "2026-06-28T10:00:00.000+00:00"
 }
 ```
@@ -32,9 +32,9 @@
 
 ```json
 {
-  "id": "inspection-agent",
-  "name": "巡检智能体基础能力",
-  "content": "# 巡检智能体基础能力\n..."
+  "id": "data-visualization-agent",
+  "name": "数据可视化智能体基础能力",
+  "content": "# 数据可视化智能体基础能力\n..."
 }
 ```
 
@@ -43,7 +43,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | keyword | String | 否 | 匹配 ID、名称、描述和标签 |
-| agentType | String | 否 | 智能体类型，如 `agent_inspect` |
+| agentType | String | 否 | 智能体类型，如 `agent_data_visualization` |
 | enabled | Boolean | 否 | 是否启用 |
 | page | Integer | 否 | 页码，默认 1 |
 | perPage | Integer | 否 | 每页数量，默认 10 |
@@ -72,7 +72,7 @@
 **请求示例**:
 
 ```bash
-curl "http://localhost:11001/api/v1/dih/skills/list?page=1&perPage=10&agentType=agent_inspect"
+curl "http://localhost:11001/api/v1/dih/skills/list?page=1&perPage=10&agentType=agent_data_visualization"
 ```
 
 **成功响应**:
@@ -84,8 +84,8 @@ curl "http://localhost:11001/api/v1/dih/skills/list?page=1&perPage=10&agentType=
   "data": {
     "rows": [
       {
-        "id": "inspection-agent",
-        "name": "巡检智能体基础能力",
+        "id": "data-visualization-agent",
+        "name": "数据可视化智能体基础能力",
         "enabled": true,
         "entry": "SKILL.md"
       }
@@ -100,7 +100,7 @@ curl "http://localhost:11001/api/v1/dih/skills/list?page=1&perPage=10&agentType=
 **接口地址**: `GET /api/v1/dih/skills/{id}/view`
 
 ```bash
-curl "http://localhost:11001/api/v1/dih/skills/inspection-agent/view"
+curl "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/view"
 ```
 
 ### 重载 Skill
@@ -116,7 +116,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/skills/reload"
 **接口地址**: `POST /api/v1/dih/skills/{id}/enable`
 
 ```bash
-curl -X POST "http://localhost:11001/api/v1/dih/skills/inspection-agent/enable"
+curl -X POST "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/enable"
 ```
 
 ### 停用 Skill
@@ -124,7 +124,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/skills/inspection-agent/enable"
 **接口地址**: `POST /api/v1/dih/skills/{id}/disable`
 
 ```bash
-curl -X POST "http://localhost:11001/api/v1/dih/skills/inspection-agent/disable"
+curl -X POST "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/disable"
 ```
 
 ### 查看 Agent 加载片段
@@ -132,7 +132,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/skills/inspection-agent/disable"
 **接口地址**: `GET /api/v1/dih/skills/agent/{agentType}/prompt`
 
 ```bash
-curl "http://localhost:11001/api/v1/dih/skills/agent/agent_inspect/prompt"
+curl "http://localhost:11001/api/v1/dih/skills/agent/agent_data_visualization/prompt"
 ```
 
 ---
@@ -143,7 +143,7 @@ curl "http://localhost:11001/api/v1/dih/skills/agent/agent_inspect/prompt"
 
 ```text
 skill_config/
-  inspection-agent/
+  data-visualization-agent/
     skill.json
     SKILL.md
 ```
@@ -152,13 +152,13 @@ skill_config/
 
 ```json
 {
-  "id": "inspection-agent",
-  "name": "巡检智能体基础能力",
-  "description": "为巡检智能体补充能力边界、回答风格和数据分析行为说明。",
+  "id": "data-visualization-agent",
+  "name": "数据可视化智能体基础能力",
+  "description": "为数据可视化智能体补充能力边界、回答风格和数据分析行为说明。",
   "version": "1.0.0",
   "author": "ZenVis",
-  "agentTypes": ["agent_inspect"],
-  "tags": ["inspection", "retrieval"],
+  "agentTypes": ["agent_data_visualization"],
+  "tags": ["data-visualization", "retrieval"],
   "enabled": true,
   "entry": "SKILL.md"
 }

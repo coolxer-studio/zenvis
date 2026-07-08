@@ -53,11 +53,11 @@ class AgentMcpToolServiceTest {
         );
 
         assertThat(service.resolve("agent_data_access").hasTools()).isFalse();
-        assertThat(service.resolve("agent_inspect").hasTools()).isFalse();
+        assertThat(service.resolve("agent_data_visualization").hasTools()).isFalse();
     }
 
     @Test
-    void resolveInspectionAgentOnlyUsesReadOnlyRetrievalTools() {
+    void resolveDataVisualizationAgentOnlyUsesReadOnlyRetrievalTools() {
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
                 new MockEnvironment(),
@@ -71,7 +71,7 @@ class AgentMcpToolServiceTest {
                 )
         );
 
-        McpToolContext context = service.resolve("agent_inspect");
+        McpToolContext context = service.resolve("agent_data_visualization");
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
@@ -83,7 +83,7 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void resolveInspectionAgentReturnsEmptyWhenNoReadOnlyRetrievalToolsExist() {
+    void resolveDataVisualizationAgentReturnsEmptyWhenNoReadOnlyRetrievalToolsExist() {
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),
@@ -93,11 +93,11 @@ class AgentMcpToolServiceTest {
                 )
         );
 
-        assertThat(service.resolve("agent_inspect").hasTools()).isFalse();
+        assertThat(service.resolve("agent_data_visualization").hasTools()).isFalse();
     }
 
     @Test
-    void resolveNonInspectionAgentKeepsLocalAndExternalTools() {
+    void resolveNonDataVisualizationAgentKeepsLocalAndExternalTools() {
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),

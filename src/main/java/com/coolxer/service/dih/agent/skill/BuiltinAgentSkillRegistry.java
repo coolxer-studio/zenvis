@@ -9,7 +9,7 @@ import java.util.Optional;
 public final class BuiltinAgentSkillRegistry {
 
     public static final String AGENT_DATA_ACCESS = "agent_data_access";
-    public static final String AGENT_INSPECT = "agent_inspect";
+    public static final String AGENT_DATA_VISUALIZATION = "agent_data_visualization";
     public static final String AGENT_ANALYSIS = "agent_analysis";
     public static final String AGENT_DISPOSE = "agent_dispose";
     public static final String AGENT_REPORT = "agent_report";
@@ -23,11 +23,11 @@ public final class BuiltinAgentSkillRegistry {
                     "数据接入智能体能力正在建设中，当前 Skill 仅用于入口占位。"
             ),
             new BuiltinAgentSkill(
-                    "inspection-agent",
-                    AGENT_INSPECT,
-                    "智能巡检",
+                    "data-visualization-agent",
+                    AGENT_DATA_VISUALIZATION,
+                    "数据可视化",
                     20,
-                    "智能巡检智能体仅通过只读 Retrieval MCP 查询真实数据，输出文本巡检分析、异常线索和后续建议。"
+                    "数据可视化智能体仅通过只读 Retrieval MCP 查询真实数据，输出数据概览、统计洞察、可视化建议和后续建议。"
             ),
             new BuiltinAgentSkill(
                     "analysis-agent",

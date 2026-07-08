@@ -66,6 +66,7 @@ public class ChatController extends BaseController {
     private static final String DECISION_APPLY_CONFIG = "apply_config";
     private static final String DECISION_ABANDON = "abandon";
     private static final String DECISION_REVISE = "revise";
+    private static final String DECISION_SUBMITTED = "submitted";
 
     @Autowired
     private DihChatApplicationService dihChatApplicationService;
@@ -188,7 +189,7 @@ public class ChatController extends BaseController {
     public ResponseWrap<?> actionDecision(@Valid @RequestBody ChatActionDecisionDto decisionDto) {
         String decision = decisionDto.getDecision();
         if (!isSupportedDecision(decision)) {
-            return ResponseWrap.fail(400, "决策值只支持 approved、rejected、dispose、ignore、continue、apply_config、abandon 或 revise");
+            return ResponseWrap.fail(400, "决策值只支持 approved、rejected、dispose、ignore、continue、apply_config、abandon、revise 或 submitted");
         }
 
         try {
@@ -229,11 +230,13 @@ public class ChatController extends BaseController {
                 || DECISION_CONTINUE.equals(decision)
                 || DECISION_APPLY_CONFIG.equals(decision)
                 || DECISION_ABANDON.equals(decision)
-                || DECISION_REVISE.equals(decision);
+                || DECISION_REVISE.equals(decision)
+                || DECISION_SUBMITTED.equals(decision);
     }
 
     private boolean isDecisionPart(ChatMessagePart part) {
         return "confirm".equals(part.getType())
+                || "info-steps".equals(part.getType())
                 || "analysis-decision".equals(part.getType())
                 || "data-access-decision".equals(part.getType());
     }
@@ -308,6 +311,9 @@ public class ChatController extends BaseController {
         }
         if (DECISION_APPROVED.equals(decision) || DECISION_REJECTED.equals(decision)) {
             return "confirm";
+        }
+        if (DECISION_SUBMITTED.equals(decision)) {
+            return "info-steps";
         }
         return null;
     }

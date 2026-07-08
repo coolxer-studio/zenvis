@@ -10,7 +10,6 @@ import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.annotation.Pointcut;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -26,9 +25,6 @@ import java.util.Objects;
 @Aspect
 @Component
 public class LogAopAspect {
-
-    @Autowired
-    public HttpServletRequest request;
 
     /**
      * 统计请求处理时间
@@ -49,6 +45,14 @@ public class LogAopAspect {
 
         log.info("=== 开始 ===");
         startTime.set(System.currentTimeMillis());
+        HttpServletRequest request = currentHttpRequest();
+        if (request == null) {
+            log.debug("Skip web request logging outside request context: {}.{}",
+                    joinPoint.getSignature().getDeclaringTypeName(),
+                    joinPoint.getSignature().getName());
+            return;
+        }
+
         log.info("请求地址: {} {}", request.getRequestURL().toString(), request.getMethod());
         log.info("类名方法: {}.{}", joinPoint.getSignature().getDeclaringTypeName(),
                 joinPoint.getSignature().getName());
@@ -78,17 +82,21 @@ public class LogAopAspect {
     @AfterReturning(returning = "ret", pointcut = "logAspect()")
     public void doAfterReturning(Object ret) throws Throwable {
 
+        Long startedAt = startTime.get();
+        if (startedAt == null) {
+            return;
+        }
+
         // 接口耗时(ms)
-        long timeConsuming = System.currentTimeMillis() - startTime.get();
+        long timeConsuming = System.currentTimeMillis() - startedAt;
 
         // 接口耗时大于等于2s时打印日志
         if (timeConsuming >= 2000) {
-            RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
-            if (Objects.isNull(requestAttributes)) {
+            HttpServletRequest request1 = currentHttpRequest();
+            if (Objects.isNull(request1)) {
+                startTime.remove();
                 return;
             }
-
-            HttpServletRequest request1 = ((ServletRequestAttributes) requestAttributes).getRequest();
 
             log.warn("URL [{}]，Filter condition [{}]，Time consuming [{}]ms!!!",
                     request1.getRequestURL().toString(), JacksonUtil.toJson(request1.getParameterMap()),
@@ -99,5 +107,12 @@ public class LogAopAspect {
         log.info("=== 结束 ===");
     }
 
+    private HttpServletRequest currentHttpRequest() {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (requestAttributes instanceof ServletRequestAttributes servletRequestAttributes) {
+            return servletRequestAttributes.getRequest();
+        }
+        return null;
+    }
 
 }

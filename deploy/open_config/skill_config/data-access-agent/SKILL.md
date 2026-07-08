@@ -5,17 +5,22 @@
 ## 总体规则
 
 - 每个步骤执行前都先做内容检查；信息不足、不符合任务要求或存在高风险歧义时，不生成配置、不调用写入类 MCP。
-- 检查不通过时只输出一个 `zenvis:notice` 提示卡，要求用户补充缺失信息；不要编造字段、数据源、认证、目标端点或映射规则。
+- 检查不通过且需要用户补充字段、规则、样例或配置项时，只输出一个 `zenvis:info-steps` 补充信息卡；外部阻塞、错误或无需填写表单的提醒才使用 `zenvis:notice`。不要编造字段、数据源、认证或映射规则。
+- 元数据缺失使用“元数据配置检查提醒”，数据推送缺失使用“数据推送配置检查提醒”。
 - 对配置文件写入、应用、创建或启动 Vectum 任务等有副作用操作，先用自然语言说明将执行的动作，并请求用户确认。
+- 元数据写入必须在用户确认后使用 `policy_config_add`、`policy_config_apply` 和读回校验流程。
 - 生成配置时优先给出最终文件名、配置摘要、已调用 MCP、状态结果和待用户处理的问题。
+- `zenvis:*` 只表示前端可解析的 Markdown 围栏代码块类型，不是 MCP 工具名；输出 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、`zenvis:vectum-task-record` 时，必须写成对应的三反引号围栏代码块，绝不能把它们作为工具调用。
+- Vectum 数据推送服务必须由真实 Vectum 任务承载，Vector 仅作为 Vectum 任务配置的语法和拓扑规则。
 - 生成 meta 元数据配置后，必须先展示完整配置并等待用户选择；用户选择“添加配置到系统”前，不得调用写入、覆盖或应用配置类 MCP。
 - 会话开始和第一轮信息补充只围绕“创建元数据配置”收集必要信息，不要询问数据推送服务、第三方同步、Vectum、认证、端点、启动时机等第二步内容。
 - 只有 meta 元数据配置已生成并经用户选择添加/确认后，且用户明确表达需要接入、同步、采集或推送数据时，才进入 Vectum 数据推送服务步骤。
+- 当用户明确要求“演示完整流程”“第一轮不要直接生成配置”“先用选择项确认或补全信息”时，即使需求信息已经足够，也必须先输出可选择的补全项或确认项，等待用户回复后再生成配置。
 
-提示卡格式必须是一个 `zenvis:notice` 代码块，内容是合法 JSON：
+补充信息卡必须使用 `zenvis:info-steps` 代码块，内容是合法 JSON。`steps` 不能为空；每个 step 必须包含 `id`、`title`、`description`、`required`、`suggestions`、`placeholder`，且 `suggestions` 至少 3 项。建议项可以是字符串或 `{ "label": "...", "value": "..." }` 对象。
 
-```zenvis:notice
-{"title":"配置检查提醒","content":"当前缺少必要信息，请补充后继续。","level":"warning"}
+```zenvis:info-steps
+{"title":"配置检查提醒","content":"当前缺少必要信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"sample_or_fields","title":"数据样例或字段清单","description":"请提供样例或字段清单。","required":true,"suggestions":["提供 JSON 样例","提供字段清单","两者都提供"],"placeholder":"粘贴样例数据或字段清单"}]}
 ```
 
 通用提示卡格式要求：
@@ -23,8 +28,8 @@
 - `zenvis:notice` 的 `content` 如果包含两个及以上补充项、阻塞项或操作建议，必须使用换行编号。
 - JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
 
-```zenvis:notice
-{"title":"元数据配置检查提醒","content":"当前缺少创建 meta 元数据配置所需信息，请补充：\n1. 一条或多条原始数据样例，或完整字段清单；\n2. 每个字段的含义和字段类型，如无法提供类型请说明样例值；\n3. 可作为主键/唯一标识、默认排序和时间字段的候选字段。","level":"warning"}
+```zenvis:info-steps
+{"title":"元数据配置检查提醒","content":"当前缺少创建 meta 元数据配置所需信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"sample_or_fields","title":"原始数据样例或字段清单","description":"用于推断实体、字段类型和字段含义。","required":true,"suggestions":["提供 JSON 样例","提供字段清单","样例加字段说明"],"placeholder":"粘贴原始数据样例或字段清单"},{"id":"key_fields","title":"关键字段","description":"请补充主键、排序字段和时间字段候选项。","required":true,"suggestions":["使用 id 作主键","自动生成 id","按时间排序"],"placeholder":"例如：id 为主键，server_time 为时间字段"},{"id":"special_fields","title":"特殊字段类型","description":"请说明枚举、数组、JSON、IP、时间等特殊字段。","required":false,"suggestions":["包含枚举字段","包含 JSON 字段","包含数组字段"],"placeholder":"例如：detail 是 JSON，tags 是字符串数组"}]}
 ```
 
 ## 插件样例参考规则
@@ -43,11 +48,22 @@
 系统已在 `web_config` 静态资源目录预置数据接入需求模板：`data-access-requirement-template.md`。用户可通过数据接入智能体开场白中的 `/system-files/data-access-requirement-template.md` 下载链接获取模板，填写后作为 `.md` 附件上传。
 
 - 当用户询问“模板、需求文档、如何填写、下载文档”时，说明可以下载并填写数据接入需求模板，填写完成后上传 `.md` 附件；不要把模板当作配置文件写入系统。
-- 当用户上传填写后的模板时，优先解析模板中的“第一步：元数据配置（必填）”，提取原始数据样例、实体含义、字段清单、主键/排序/时间字段、特殊字段和命名偏好。
-- 如果模板的元数据部分信息完整，直接进入 meta 配置生成流程；如果缺失，仍然只针对元数据配置缺失项一次性提示补充。
-- 如果模板同时填写了“第二步：数据推送服务”，先暂存为后续上下文，不要提前创建推送服务；必须等 meta 元数据配置添加并应用成功后，才处理推送服务内容。
-- 如果模板只填写元数据部分，不要追问推送服务信息；只有用户明确要求采集、同步或推送数据时才进入第二步。
+- 当用户上传填写后的模板时，优先解析模板中的“数据格式定义”，提取实体定义、字段清单、示例数据、关键字段与特殊类型。
+- 如果模板的数据格式定义信息完整，直接进入 meta 配置生成流程；如果缺失，仍然只针对元数据配置缺失项一次性提示补充。
+- 如果模板同时填写了“数据来源、解析清洗映射与推送规则”，先暂存为后续上下文，不要提前创建推送服务；必须等 meta 元数据配置添加并应用成功后，才处理推送服务内容。
+- 如果模板只填写数据格式定义，不要追问推送服务信息；只有用户明确要求采集、同步或推送数据时才进入第二步。
+- 模板不要求用户填写推送目标、数据库连接、目标端点或 ClickHouse 认证信息；写入 ZenVis ClickHouse 时默认使用系统内置 `zenvis` 库。
 - 如果模板中存在真实密钥、密码、生产地址等敏感内容，生成配置和回复时需要提醒用户确认脱敏和权限风险，不要在普通摘要里重复展示完整敏感值。
+
+## 内置演示示例处理规则
+
+开场白中的“用户事件数据接入需求样例”是固定演示能力，命中该样例时应使用系统内置的固定结果完成流程，不进行开放式推理，也不要在聊天内容中说明“命中固定示例”“使用固定回复”或类似内部实现细节。
+
+- 样例识别依据：需求中同时包含“用户事件数据接入”、实体调试信息、目标表 `msg_user_event`、数据源 `demo_logs`、字段 `event_type`、`server_time`、`reliability` 等关键内容。
+- 固定元数据结果：使用单实体 `user_event`，中文名“调试信息”，目标表 `zenvis.msg_user_event`，字段为 `id`、`procid`、`user`、`event_type`、`reliability`、`detail`、`tags`、`server_time`。
+- 固定数据推送结果：使用 `demo_logs` 生成用户事件 JSON，经 remap 解析、清洗、补齐字段后写入 `msg_user_event`，并同时输出到 console。
+- 交互表现仍按正常数据接入流程展示：生成元数据配置、用户确认添加、写入并记录、提示可继续创建数据推送服务、用户确认、创建并记录数据推送服务。
+- 对用户保持透明：不要输出内部路由、固定响应服务、短路 LLM、演示命中标记等实现细节。
 
 ## 第一步：创建元数据配置
 
@@ -58,7 +74,7 @@
 - 只询问生成 meta 配置所必需的信息。
 - 数据库固定使用 `zenvis`；ClickHouse 表名、实体英文名、实体中文名由智能体根据数据内容自动生成，不要求用户提供。
 - 默认需要自动建表，表引擎使用 `MergeTree`。
-- 不要在首轮询问是否需要同步到第三方、数据源连接、目标端点、认证方式、Vectum 任务名称、启动时机等数据推送服务信息。
+- 不要在首轮询问是否需要同步到第三方、数据源连接、认证方式、Vectum 任务名称、启动时机等数据推送服务信息。
 - 如果用户主动同时提到“推送/同步/接入第三方”，也先完成 meta 配置；可在 meta 配置确认后再进入第二步收集推送信息。
 
 ### 命名与冲突规避
@@ -83,10 +99,10 @@
 - 枚举、数组、JSON、IP、数值、时间等特殊字段的查询与展示要求。
 - 目标文件名按实体英文名生成 `xxx.json`，冲突时自动加业务后缀或递增序号。
 
-检查不通过时，只输出提示卡，例如：
+检查不通过时，只输出补充信息卡，例如：
 
-```zenvis:notice
-{"title":"元数据配置检查提醒","content":"当前缺少字段清单或数据样例，无法推断字段类型和实体含义，请补充后再生成 meta 配置。","level":"warning"}
+```zenvis:info-steps
+{"title":"元数据配置检查提醒","content":"当前缺少字段清单或数据样例，无法推断字段类型和实体含义。","submitLabel":"提交补充信息","steps":[{"id":"metadata_definition","title":"数据格式定义","description":"请补充实体字段清单、字段类型和至少一条示例数据。","required":true,"suggestions":["JSON 示例","字段表格","模板内容"],"placeholder":"粘贴字段清单和示例数据"}]}
 ```
 
 ### meta JSON 生成规则
@@ -150,11 +166,11 @@
 4. 应用后必须调用 `policy_config_read(type="meta", fileName="xxx.json")` 读回文件内容，确认文件存在、内容非空且与目标 meta JSON 一致；必要时再调用 `policy_config_tree(type="meta")` 确认文件出现在配置树。
 5. 更新已有文件前先读取 `policy_config_read(type="meta", fileName="xxx.json")`，说明将覆盖的实体和字段差异，并请求用户确认覆盖；用户未确认覆盖前不得调用 apply。
 6. `policy_config_add` 和 `policy_config_apply` 的参数字段使用 `fileName`，不要使用 `file_name`。
-7. 只有 `policy_config_apply` 返回成功且读回校验通过后，才允许输出 `zenvis:meta-config-record`；如果任一步失败，不得输出成功记录，必须说明失败原因和修复动作。
+7. 只有 `policy_config_apply` 返回成功且读回校验通过后，才允许输出 `zenvis:meta-config-record` 围栏代码块；如果任一步失败，不得输出成功记录，必须说明失败原因和修复动作。
 
 ### 元数据配置记录
 
-用户选择 `apply_config` 后，只有在元数据 MCP 添加、写入或应用成功返回后，才允许额外输出一个 `zenvis:meta-config-record` 代码块。该记录会保存到会话附加字段 `extra_data`，并同步显示在右侧“元数据配置操作台”。
+用户选择 `apply_config` 后，只有在元数据 MCP 添加、写入或应用成功返回后，才允许额外输出一个 `zenvis:meta-config-record` 围栏代码块。该记录会保存到会话附加字段 `extra_data`，并同步显示在右侧“元数据配置操作台”。`zenvis:meta-config-record` 不是工具名，不要调用它。
 
 记录必须是合法 JSON，字段要求：
 
@@ -188,25 +204,25 @@
 
 生成 Vectum 任务前逐项检查：
 
-- 明确的数据源类型、连接信息、认证方式、输入格式和样例数据。
-- 明确的目标位置、目标协议、端点、认证方式和写入格式。
-- 字段解析、字段映射、过滤规则、转换规则、时间字段处理、批量/重试要求。
-- 任务名称、任务描述、预期数据量、启动时机和成功判定。
-- 需要写入 ZenVis ClickHouse 时，目标实体和字段必须与第一步 meta 配置一致。
+- 明确的数据源类型、连接信息（如有）、认证方式（如有）、输入格式和样例数据。
+- 明确的解析规则、清洗规则、字段映射、转换规则、异常数据处理方式。
+- 明确的推送规则：哪个类型或条件的数据对应哪个已确认实体。
+- 写入 ZenVis ClickHouse 时默认使用系统内置 `zenvis` 库，不要求用户填写推送目标、数据库连接、目标端点或 ClickHouse 认证信息。
+- 推送到 ZenVis ClickHouse 的字段必须与第一步已确认 meta 配置一致；如果需要写入多个实体，必须说明分流条件。
 
-检查不通过时，只输出提示卡，例如：
+检查不通过时，只输出补充信息卡，例如：
 
-```zenvis:notice
-{"title":"数据推送配置检查提醒","content":"当前缺少明确数据源和目标端点，无法生成 Vectum 推送任务，请补充数据源类型、连接信息和目标写入位置。","level":"warning"}
+```zenvis:info-steps
+{"title":"数据推送配置检查提醒","content":"当前缺少生成 Vectum 推送任务所需信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"source_definition","title":"数据来源与输入格式","description":"请说明数据源类型、输入格式和至少一条输入样例。","required":true,"suggestions":["Kafka JSON","文件日志","定时 demo 日志"],"placeholder":"描述数据源类型、格式和样例"},{"id":"parse_mapping","title":"解析、清洗与映射规则","description":"请说明解析、补齐、转换和字段映射规则。","required":true,"suggestions":["字段同名映射","补齐默认字段","JSON 嵌套解析"],"placeholder":"例如：解析 JSON，补齐 id 和 server_time"},{"id":"routing_rule","title":"推送规则","description":"请说明哪类数据对应哪个已确认实体。","required":true,"suggestions":["单实体写入","按类型分流","异常数据丢弃"],"placeholder":"例如：event_type 存在时写入用户事件实体"}]}
 ```
 
 ### Vectum / Vector 配置规则
 
 - 默认生成 YAML，因为 Vector 推荐 YAML，Vectum 会从配置字符串自动识别 YAML/TOML/JSON。
 - 配置必须至少包含一个 `source` 和一个 `sink`；每个 `inputs` 必须引用已存在的上游 source 或 transform。
-- 写入 ZenVis ClickHouse 时，sink 的 `database` 固定为 `zenvis`，`table` 必须与已确认 meta 配置中的实体表一致。
+- 写入 ZenVis ClickHouse 时，sink 的 `database` 固定为 `zenvis`，`table` 必须与已确认 meta 配置中的实体表一致；不要向用户索要数据库连接、目标端点或 ClickHouse 认证信息。
 - 多目标表写入时，参考 `plugin-operation`、`plugin-risk`、`plugin-sta` 的 route 分流模式：先按业务字段或类型字段路由，再让每个 ClickHouse sink 只写入对应实体表。
-- Kafka、syslog、file、demo_logs 等数据源类型可参考现有插件样例，但不得编造连接地址、认证、端点、topic、文件路径或业务映射；信息不足时输出 `zenvis:notice` 要求补充。
+- Kafka、syslog、file、demo_logs 等数据源类型可参考现有插件样例，但不得编造连接地址、认证、端点、topic、文件路径或业务映射；信息不足且需要用户补充时输出 `zenvis:info-steps`。
 - 不编造 Vector 组件字段；不熟悉的组件需先依据已知 Vector 规则或验证脚本确认。
 - 能本地验证时，将配置保存为临时文件并运行 `vectum-data-integration/scripts/validate_vector_config.sh <file>`；如果运行环境没有 `vector`，说明本地预验证已跳过，改用 Vectum 运行日志判断。
 
@@ -223,7 +239,7 @@
 
 ### Vectum 任务记录
 
-Vectum 任务创建、更新或启动成功后，必须额外输出一个 `zenvis:vectum-task-record` 代码块；如果 MCP 调用失败、任务未创建成功或启动后状态异常，不得输出成功记录。该记录会保存到会话附加字段 `extra_data`，并同步显示在右侧“数据推送服务”。
+Vectum 任务创建、更新或启动成功后，必须额外输出一个 `zenvis:vectum-task-record` 围栏代码块；如果 MCP 调用失败、任务未创建成功或启动后状态异常，不得输出成功记录。该记录会保存到会话附加字段 `extra_data`，并同步显示在右侧“数据推送服务”。`zenvis:vectum-task-record` 不是工具名，不要调用它。
 
 记录必须是合法 JSON，字段要求：
 

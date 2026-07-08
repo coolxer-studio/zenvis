@@ -52,6 +52,7 @@ public class DihChatApplicationService {
     private final AIBaseService baseService;
     private final ChatSessionService chatSessionService;
     private final FixedPromptResponseService fixedPromptResponseService;
+    private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final AnalysisAgent analysisAgent;
     private final DisposeAgent disposeAgent;
     private final ReportAgent reportAgent;
@@ -59,6 +60,7 @@ public class DihChatApplicationService {
     private final InspectionAgent inspectionAgent;
     private final ChatMessagePartParser chatMessagePartParser;
     private final ChatAttachmentService chatAttachmentService;
+    private final ChatTitleService chatTitleService;
     private final AgentMcpToolService agentMcpToolService;
     private final SkillService skillService;
     private final ConfigService configService;
@@ -68,6 +70,7 @@ public class DihChatApplicationService {
                                      AIBaseService baseService,
                                      ChatSessionService chatSessionService,
                                      FixedPromptResponseService fixedPromptResponseService,
+                                     DataAccessDemoResponseService dataAccessDemoResponseService,
                                      AnalysisAgent analysisAgent,
                                      DisposeAgent disposeAgent,
                                      ReportAgent reportAgent,
@@ -75,6 +78,7 @@ public class DihChatApplicationService {
                                      InspectionAgent inspectionAgent,
                                      ChatMessagePartParser chatMessagePartParser,
                                      ChatAttachmentService chatAttachmentService,
+                                     ChatTitleService chatTitleService,
                                      AgentMcpToolService agentMcpToolService,
                                      SkillService skillService,
                                      ConfigService configService,
@@ -83,6 +87,7 @@ public class DihChatApplicationService {
         this.baseService = baseService;
         this.chatSessionService = chatSessionService;
         this.fixedPromptResponseService = fixedPromptResponseService;
+        this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.analysisAgent = analysisAgent;
         this.disposeAgent = disposeAgent;
         this.reportAgent = reportAgent;
@@ -90,6 +95,7 @@ public class DihChatApplicationService {
         this.inspectionAgent = inspectionAgent;
         this.chatMessagePartParser = chatMessagePartParser;
         this.chatAttachmentService = chatAttachmentService;
+        this.chatTitleService = chatTitleService;
         this.agentMcpToolService = agentMcpToolService;
         this.skillService = skillService;
         this.configService = configService;
@@ -153,6 +159,7 @@ public class DihChatApplicationService {
                 prompt,
                 chatDto,
                 currentUser,
+                chatSession,
                 resolvedMcpToolContext,
                 messageType
         ));
@@ -201,11 +208,21 @@ public class DihChatApplicationService {
                                       String prompt,
                                       ChatDto chatDto,
                                       User currentUser,
+                                      ChatSession chatSession,
                                       McpToolContext mcpToolContext,
                                       AtomicReference<MessageType> messageType) {
         Optional<String> fixedResponse = fixedPromptResponseService.findResponse(resolveUserMessage(chatDto));
         if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
+            Optional<Flux<String>> demoResponse = dataAccessDemoResponseService.findResponse(
+                    chatSession,
+                    chatId,
+                    prompt,
+                    currentUser
+            );
+            if (demoResponse.isPresent()) {
+                return demoResponse.get();
+            }
             return dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (AnalysisAgent.AGENT_TYPE.equals(chatType)) {
@@ -261,7 +278,9 @@ public class DihChatApplicationService {
     private ChatSession appendUserMessage(ChatDto chatDto, String chatType, String userMessage, User currentUser) {
         ChatSessionDto chatSessionDto = new ChatSessionDto();
         chatSessionDto.setSessionId(chatDto.getChatId());
-        chatSessionDto.setTitle(userMessage);
+        if (chatSessionService.getChatSessionBySessionId(chatDto.getChatId(), currentUser) == null) {
+            chatSessionDto.setTitle(chatTitleService.generateTitle(userMessage));
+        }
         chatSessionDto.setType(chatType);
         chatSessionDto.setDeepThink(chatDto.getDeepThink());
         chatSessionDto.setOnlineSearch(chatDto.getOnlineSearch());

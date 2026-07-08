@@ -51,6 +51,9 @@ public class AgentMcpToolService {
             调用工具前先确认必要参数；参数不足时先向用户追问，不要编造参数。
             对具有写入、删除、执行任务等副作用的工具，先用自然语言说明将要执行的动作并请求用户确认。
             工具返回后，请用中文归纳结果，保留关键字段、异常信息和下一步建议。
+            只能调用下方“可用 MCP 工具”中明确列出的工具名。`zenvis:*` 是前端 UI 代码块协议，
+            例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
+            `zenvis:vectum-task-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
 
             【可用 MCP 工具】
             %s

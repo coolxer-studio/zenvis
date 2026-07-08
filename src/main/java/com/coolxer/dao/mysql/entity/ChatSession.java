@@ -25,6 +25,8 @@ import org.apache.commons.lang3.StringUtils;
 @Table(name = MysqlFinalTableName.T_AI_CHAT_SESSION)
 public class ChatSession extends BaseEntity {
 
+    public static final int MAX_TITLE_LENGTH = 60;
+
     /**
      * 会话ID（UUID形式）
      */
@@ -78,7 +80,7 @@ public class ChatSession extends BaseEntity {
             this.sessionId = chatSessionDto.getSessionId();
         }
         if (StringUtils.isNotEmpty(chatSessionDto.getTitle())) {
-            this.title = chatSessionDto.getTitle();
+            this.title = StringUtils.left(chatSessionDto.getTitle(), MAX_TITLE_LENGTH);
         }
         if (StringUtils.isNotEmpty(chatSessionDto.getType())) {
             this.type = chatSessionDto.getType();

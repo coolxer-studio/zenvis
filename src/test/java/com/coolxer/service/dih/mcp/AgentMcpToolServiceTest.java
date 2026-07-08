@@ -33,7 +33,10 @@ class AgentMcpToolServiceTest {
         McpToolContext context = service.resolve("agent_data_access");
 
         assertThat(context.hasTools()).isTrue();
-        assertThat(context.systemPrompt()).contains("policy_config_tree");
+        assertThat(context.systemPrompt())
+                .contains("policy_config_tree")
+                .contains("zenvis:meta-config-record")
+                .contains("绝不能作为工具调用");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
                 .contains("policy_config_tree");

@@ -94,6 +94,7 @@ public class ChatMessagePartParser {
 
         if (!"zenvis:notice".equals(info)
                 && !"zenvis:confirm".equals(info)
+                && !"zenvis:info-steps".equals(info)
                 && !"zenvis:analysis-decision".equals(info)
                 && !"zenvis:data-access-decision".equals(info)
                 && !"zenvis:meta-config-record".equals(info)
@@ -110,6 +111,7 @@ public class ChatMessagePartParser {
             );
             String type = switch (info) {
                 case "zenvis:notice" -> "notice";
+                case "zenvis:info-steps" -> "info-steps";
                 case "zenvis:analysis-decision" -> "analysis-decision";
                 case "zenvis:data-access-decision" -> "data-access-decision";
                 case "zenvis:meta-config-record" -> "metadata-config-record";
@@ -121,7 +123,10 @@ public class ChatMessagePartParser {
                     .content(firstTextValue(node, "content", "message", "description", "name", "entityLabel", "fileName", "taskId"))
                     .level(firstTextValue(node, "level", "type"))
                     .metadata(metadata);
-            if ("confirm".equals(type) || "analysis-decision".equals(type) || "data-access-decision".equals(type)) {
+            if ("confirm".equals(type)
+                    || "info-steps".equals(type)
+                    || "analysis-decision".equals(type)
+                    || "data-access-decision".equals(type)) {
                 builder.status("pending");
             }
             return builder.build();

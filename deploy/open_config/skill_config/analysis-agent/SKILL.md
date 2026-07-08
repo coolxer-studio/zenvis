@@ -6,15 +6,15 @@
 
 - 先判断用户意图：一次性直接分析，或持续分析任务创建。
 - 首轮不直接执行分析或创建任务；先总结分析目标、分析过程、数据来源、匹配条件、输出物和副作用动作。
-- 信息不足时只输出 `zenvis:notice` 提示卡，要求用户补充数据来源、实体字段、匹配条件、时间范围、分析频率、分析对象或处置策略偏好。
+- 信息不足且需要用户补充数据来源、实体字段、匹配条件、时间范围、分析频率、分析对象或处置策略偏好时，只输出 `zenvis:info-steps` 补充信息卡。
 - 写入、创建、启动、入队、删除、更新类操作都属于副作用，必须先展示配置和确认卡，确认前不调用副作用 MCP。
 - 用户补充信息后重新整理目标和过程，并再次确认。
 - 如果 MCP 不可用、字段不存在、查询失败、任务创建失败或运行状态异常，用 `zenvis:notice` 说明阻塞点和需要用户处理的事项。
 
-提示卡必须是合法 JSON：
+补充信息卡必须使用 `zenvis:info-steps` 代码块，内容是合法 JSON。`steps` 不能为空；每个 step 必须包含 `id`、`title`、`description`、`required`、`suggestions`、`placeholder`，且 `suggestions` 至少 3 项。建议项可以是字符串，也可以是 `{ "label": "...", "value": "...", "description": "..." }` 对象。
 
-```zenvis:notice
-{"title":"研判信息不足","content":"当前缺少匹配条件和时间范围，请补充后继续。","level":"warning"}
+```zenvis:info-steps
+{"title":"研判信息不足","content":"当前缺少匹配条件和时间范围，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"analysis_object","title":"分析对象","description":"请选择或填写本次研判关注的数据实体、对象或告警。","required":true,"suggestions":[{"label":"指定实体","value":"按指定实体进行研判"},{"label":"指定告警","value":"按告警 ID 或告警记录进行研判"},{"label":"指定对象","value":"按 IP、账号、设备或业务对象进行研判"}],"placeholder":"例如：分析近 24 小时登录异常告警"},{"id":"conditions","title":"匹配条件","description":"请补充筛选字段、匹配条件或风险假设。","required":true,"suggestions":[{"label":"按时间范围","value":"限定明确时间范围"},{"label":"按字段条件","value":"使用实体字段条件筛选数据"},{"label":"按风险假设","value":"围绕一个风险假设补证分析"}],"placeholder":"例如：event_type=登录 且 reliability<0.6"},{"id":"output_preference","title":"输出偏好","description":"请选择期望的分析输出和后续动作。","required":false,"suggestions":[{"label":"证据明细","value":"输出关键证据记录"},{"label":"趋势统计","value":"补充趋势和 TopN 统计"},{"label":"处置建议","value":"生成下一步处置策略建议"}],"placeholder":"例如：需要风险等级、证据表格和处置建议"}]}
 ```
 
 通用提示卡格式要求：
@@ -22,8 +22,8 @@
 - `zenvis:notice` 的 `content` 如果包含两个及以上补充项、阻塞项或操作建议，必须使用换行编号。
 - JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
 
-```zenvis:notice
-{"title":"重新分析参数待明确","content":"当前重新分析缺少必要信息，请补充：\n1. 新的时间范围或告警 ID；\n2. 是否更换实体或增加匹配字段；\n3. 风险判定标准或处置策略偏好。","level":"warning"}
+```zenvis:info-steps
+{"title":"重新分析参数待明确","content":"当前重新分析缺少必要信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"new_scope","title":"新的范围","description":"请补充新的时间范围、告警 ID 或分析对象。","required":true,"suggestions":[{"label":"近 24 小时","value":"重新分析近 24 小时数据"},{"label":"指定告警 ID","value":"按指定告警 ID 重新分析"},{"label":"指定实体对象","value":"按指定实体对象重新分析"}],"placeholder":"例如：补查 2026-07-08 00:00 至 12:00 的同源 IP 行为"},{"id":"field_adjustment","title":"字段或实体调整","description":"请选择是否更换实体或增加匹配字段。","required":false,"suggestions":[{"label":"沿用当前实体","value":"沿用当前实体和字段"},{"label":"增加匹配字段","value":"增加新的匹配字段"},{"label":"更换实体","value":"更换或补充分析实体"}],"placeholder":"例如：增加 user、src_ip、procid 字段"},{"id":"risk_standard","title":"风险判定标准","description":"请选择或填写新的风险判断和处置偏好。","required":false,"suggestions":[{"label":"高置信优先","value":"只输出高置信风险结论"},{"label":"召回优先","value":"尽量保留可疑线索"},{"label":"偏人工复核","value":"风险不确定时建议人工复核"}],"placeholder":"例如：低于 0.6 置信度视为可疑"}]}
 ```
 
 一次性分析确认卡必须是合法 JSON，并使用固定 action：

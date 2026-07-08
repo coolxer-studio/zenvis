@@ -6,19 +6,21 @@
 
 - 先理解需求，再生成策略。识别用户要生成的策略类型：采集策略、标记/评分策略、处置策略；一个需求可以同时生成多类策略。
 - 不编造配置结构。生成任何策略前，必须调用 `policy_config_schema` 获取对应 schema，并按需调用 `policy_config_tree`、`policy_config_read` 读取现有配置。
-- 信息不足时，不直接生成策略。使用 `zenvis:notice` 追问最小必要信息，例如策略对象、命中条件、数据源、平台类型、风险等级、处置动作、样例数据、回滚要求。
+- 信息不足时，不直接生成策略。需要用户补充策略对象、命中条件、数据源、平台类型、风险等级、处置动作、样例数据、回滚要求等信息时，使用 `zenvis:info-steps` 补充信息卡。
 - 任何写入、覆盖、应用生产配置的动作都必须先展示配置、解释、模拟测试结果和确认卡；用户确认前不得调用有副作用 MCP。
 - 模拟测试失败时，只输出修复建议和 `zenvis:notice`，不得输出生产更新确认卡。
 
-## 通用提示卡格式
+## 通用补充信息卡格式
 
-提示卡必须使用 `zenvis:notice` 代码块，内容必须是合法 JSON。
+补充信息卡必须使用 `zenvis:info-steps` 代码块，内容必须是合法 JSON。`steps` 不能为空；每个 step 必须包含 `id`、`title`、`description`、`required`、`suggestions`、`placeholder`，且 `suggestions` 至少 3 项。建议项可以是字符串，也可以是 `{ "label": "...", "value": "...", "description": "..." }` 对象。
+
+`zenvis:notice` 只用于模拟失败、MCP 不可用、写入失败、阻塞说明等无需用户填写表单的提示。
 
 - `zenvis:notice` 的 `content` 如果包含两个及以上补充项、阻塞项或操作建议，必须使用换行编号。
 - JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
 
-```zenvis:notice
-{"title":"策略信息不足","content":"当前缺少必要信息，请补充：\n1. 策略对象和命中条件；\n2. 数据源、平台类型和风险等级；\n3. 处置动作、样例数据和回滚要求。","level":"warning"}
+```zenvis:info-steps
+{"title":"策略信息不足","content":"当前缺少必要信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"policy_object","title":"策略对象和命中条件","description":"请说明策略作用对象以及触发条件。","required":true,"suggestions":[{"label":"按实体字段命中","value":"根据实体字段条件命中策略"},{"label":"按标签命中","value":"根据风险标签或评分命中策略"},{"label":"按平台命中","value":"根据平台类型或数据源命中策略"}],"placeholder":"例如：安卓端登录失败次数超过阈值"},{"id":"risk_context","title":"数据源、平台和风险等级","description":"请补充策略适用的数据源、平台类型和风险等级。","required":true,"suggestions":[{"label":"主机侧","value":"适用于主机侧数据"},{"label":"移动端","value":"适用于 Android/iOS/H5 数据"},{"label":"高风险","value":"按高风险策略处理"}],"placeholder":"例如：适用于 H5 登录事件，中高风险"},{"id":"action_and_rollback","title":"处置动作和回滚要求","description":"请选择或填写处置动作、样例数据和回滚要求。","required":true,"suggestions":[{"label":"人工复核","value":"命中后进入人工复核"},{"label":"标记风险","value":"命中后添加风险标签或评分"},{"label":"限制动作","value":"命中后限制相关操作，并保留回滚方案"}],"placeholder":"例如：命中后标记 high_risk，误报时移除标签"}]}
 ```
 
 ## 配置类型与默认目标

@@ -17,17 +17,19 @@
 - `retrieval_msg_trend`、`retrieval_msg_tag`、`entity_count`、`entity_trend`、`entity_statistics` 补充统计、趋势和标签分布。
 - `analysis_task_list`、`analysis_task_view` 查看既有分析任务及结果。
 
-所有关键结论必须能追溯到来源。如果来源不足，使用 `zenvis:notice` 提醒用户补充材料，不编造证据、时间、数量、实体名称或处置结果。
+所有关键结论必须能追溯到来源。如果来源不足且需要用户补充材料，使用 `zenvis:info-steps` 补充信息卡，不编造证据、时间、数量、实体名称或处置结果。
 
-## 通用提示卡格式
+## 通用补充信息卡格式
 
-提示卡必须使用 `zenvis:notice` 代码块，内容必须是合法 JSON。
+补充信息卡必须使用 `zenvis:info-steps` 代码块，内容必须是合法 JSON。`steps` 不能为空；每个 step 必须包含 `id`、`title`、`description`、`required`、`suggestions`、`placeholder`，且 `suggestions` 至少 3 项。建议项可以是字符串，也可以是 `{ "label": "...", "value": "...", "description": "..." }` 对象。
+
+`zenvis:notice` 只用于证据冲突、工具失败、阻塞说明等无需用户填写表单的提示。
 
 - `zenvis:notice` 的 `content` 如果包含两个及以上补充项、阻塞项或操作建议，必须使用换行编号。
 - JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
 
-```zenvis:notice
-{"title":"报表材料不足","content":"当前缺少必要材料，请补充：\n1. 报表范围、时间区间或事件编号；\n2. 可追溯的证据、统计结果或任务结果；\n3. 目标读者、报告类型和输出格式偏好。","level":"warning"}
+```zenvis:info-steps
+{"title":"报表材料不足","content":"当前缺少必要材料，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"report_scope","title":"报表范围和时间区间","description":"请补充报表覆盖范围、时间区间或事件编号。","required":true,"suggestions":[{"label":"事件复盘","value":"围绕指定事件生成复盘报告"},{"label":"周期报告","value":"按周报/月报等周期生成报告"},{"label":"专题报告","value":"围绕指定风险或业务主题生成报告"}],"placeholder":"例如：生成 2026-07-08 登录异常事件复盘"},{"id":"evidence_sources","title":"证据和统计来源","description":"请提供可追溯的证据、统计结果、任务结果或附件材料。","required":true,"suggestions":[{"label":"使用当前会话结果","value":"使用当前会话已有智能体输出作为材料"},{"label":"补充查询结果","value":"需要调用只读 MCP 补充统计和明细"},{"label":"上传附件材料","value":"我将提供附件或粘贴材料"}],"placeholder":"例如：使用上一轮研判结论和证据记录 ID"},{"id":"audience_and_format","title":"读者和输出格式","description":"请选择目标读者、报告类型和格式偏好。","required":false,"suggestions":[{"label":"管理层摘要","value":"面向管理层，突出结论和影响"},{"label":"技术分析报告","value":"面向技术团队，保留证据和查询口径"},{"label":"整改闭环报告","value":"突出问题、处置、验证和后续计划"}],"placeholder":"例如：面向安全运营团队，输出 Markdown 报告"}]}
 ```
 
 ## 报表结构

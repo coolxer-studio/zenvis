@@ -345,6 +345,29 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("补充信息步骤围栏应解析为待提交片段")
+    void parseInfoStepsFence() {
+        String content = """
+                ```zenvis:info-steps
+                {"title":"需要补充信息","content":"请补充以下信息后继续。","submitLabel":"提交补充信息","steps":[{"id":"data_source","title":"数据源类型","description":"请选择或填写本次接入的数据来源。","required":true,"suggestions":[{"label":"Kafka","value":"Kafka"},{"label":"HTTP API","value":"HTTP API"},{"label":"文件日志","value":"file"}],"placeholder":"也可以输入其他数据源类型"}]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("info-steps", parts.get(0).getType());
+        assertEquals("需要补充信息", parts.get(0).getTitle());
+        assertEquals("请补充以下信息后继续。", parts.get(0).getContent());
+        assertEquals("pending", parts.get(0).getStatus());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) parts.get(0).getMetadata().get("steps");
+        assertNotNull(steps);
+        assertEquals(1, steps.size());
+        assertEquals("data_source", steps.get(0).get("id"));
+    }
+
+    @Test
     @DisplayName("元数据配置记录围栏应解析为记录片段")
     void parseMetaConfigRecordFence() {
         String content = """

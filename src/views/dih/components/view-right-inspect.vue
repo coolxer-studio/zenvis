@@ -22,13 +22,13 @@
               <div class="data-table-header">
                 <h4>原始数据</h4>
               </div>
-              <el-table :data="chartData.rawData" stripe style="width: 100%" max-height="250">
+              <el-table :data="chartData.rawData" stripe table-layout="fixed" style="width: 100%" max-height="250">
                 <el-table-column
                   v-for="col in chartData.columns"
                   :key="col"
                   :prop="col"
                   :label="col"
-                  min-width="120"
+                  show-overflow-tooltip
                 />
               </el-table>
             </div>
@@ -53,10 +53,10 @@
 
         <el-tab-pane label="可视化页面配置" name="visualPageConfigs">
           <div class="resource-container">
-            <el-table :data="visualPageConfigs" stripe style="width: 100%">
-              <el-table-column prop="id" label="ID" min-width="100" />
-              <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-              <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
+            <el-table :data="visualPageConfigs" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="id" label="ID" show-overflow-tooltip />
+              <el-table-column prop="name" label="名称" show-overflow-tooltip />
+              <el-table-column label="跳转链接" show-overflow-tooltip>
                 <template #default="scope">
                   <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
                     {{ scope.row.jumpLink }}
@@ -69,10 +69,10 @@
 
         <el-tab-pane label="可视化应用配置" name="visualAppConfigs">
           <div class="resource-container">
-            <el-table :data="visualAppConfigs" stripe style="width: 100%">
-              <el-table-column prop="id" label="ID" min-width="100" />
-              <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-              <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
+            <el-table :data="visualAppConfigs" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="id" label="ID" show-overflow-tooltip />
+              <el-table-column prop="name" label="名称" show-overflow-tooltip />
+              <el-table-column label="跳转链接" show-overflow-tooltip>
                 <template #default="scope">
                   <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
                     {{ scope.row.jumpLink }}
@@ -85,10 +85,10 @@
 
         <el-tab-pane label="数据看板配置" name="dashboardConfigs">
           <div class="resource-container">
-            <el-table :data="dashboardConfigs" stripe style="width: 100%">
-              <el-table-column prop="id" label="ID" min-width="100" />
-              <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-              <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
+            <el-table :data="dashboardConfigs" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="id" label="ID" show-overflow-tooltip />
+              <el-table-column prop="name" label="名称" show-overflow-tooltip />
+              <el-table-column label="跳转链接" show-overflow-tooltip>
                 <template #default="scope">
                   <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
                     {{ scope.row.jumpLink }}
@@ -101,10 +101,10 @@
 
         <el-tab-pane label="菜单配置" name="menuConfigs">
           <div class="resource-container">
-            <el-table :data="menuConfigs" stripe style="width: 100%">
-              <el-table-column prop="id" label="ID" min-width="100" />
-              <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-              <el-table-column label="跳转链接" min-width="180" show-overflow-tooltip>
+            <el-table :data="menuConfigs" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="id" label="ID" show-overflow-tooltip />
+              <el-table-column prop="name" label="名称" show-overflow-tooltip />
+              <el-table-column label="跳转链接" show-overflow-tooltip>
                 <template #default="scope">
                   <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
                     {{ scope.row.jumpLink }}

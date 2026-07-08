@@ -60,12 +60,18 @@
   const currentFileName = ref<string>('');
   const language = ref<string>('javascript');
 
+  const routeFileName = () => {
+    const fileName = route.query.fileName || route.query.file_name;
+    return Array.isArray(fileName) ? fileName[0] || '' : fileName?.toString() || '';
+  };
+
   // 编辑器挂载回调
   const editorMounted = (editor: monaco.editor.IStandaloneCodeEditor) => {
   };
 
   // 获取文件内容
   const getTextContent = (path: string) => {
+    if (!path || !configType.value) return;
     fileContext.value = '';
     currentFileName.value = '';
     
@@ -173,17 +179,24 @@
 
   // 初始化数据
   getListConfig();
+  if (routeFileName()) {
+    getTextContent(routeFileName());
+  }
 
   // 监听路由变化
   watch(
-    () => route.params['menuParams'],
-    (newParams) => {
+    () => [route.params['menuParams'], route.query.fileName, route.query.file_name],
+    ([newParams]) => {
       const newConfigType = newParams?.toString() || '';
       if (newConfigType && newConfigType !== configType.value) {
         configType.value = newConfigType;
         getListConfig();
         fileContext.value = '';
         currentFileName.value = '';
+      }
+      const nextFileName = routeFileName();
+      if (nextFileName && nextFileName !== currentFileName.value) {
+        getTextContent(nextFileName);
       }
     },
     { deep: true }

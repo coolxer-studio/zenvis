@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'notice' | 'confirm' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'notice' | 'confirm' | 'info-steps' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -141,7 +141,7 @@ export type ChatActionDecisionParams = {
   chat_id: string;
   message_id: string;
   part_id: string;
-  decision: 'approved' | 'rejected' | 'dispose' | 'ignore' | 'continue' | 'apply_config' | 'abandon' | 'revise';
+  decision: 'approved' | 'rejected' | 'dispose' | 'ignore' | 'continue' | 'apply_config' | 'abandon' | 'revise' | 'submitted';
 };
 
 // 聊天会话分页列表参数

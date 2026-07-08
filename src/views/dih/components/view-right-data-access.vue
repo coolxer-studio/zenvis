@@ -10,10 +10,23 @@
         >
           <div class="config-table-container">
             <el-empty v-if="!section.items.length" class="empty-state" description="暂无记录" />
-            <el-table v-else :data="section.items" stripe style="width: 100%">
-              <el-table-column prop="id" label="ID" min-width="130" show-overflow-tooltip />
-              <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
-              <el-table-column label="状态" min-width="90">
+            <el-table v-else :data="section.items" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column v-if="section.name !== 'metadataConfigs'" prop="id" label="ID" show-overflow-tooltip />
+              <el-table-column label="名称" show-overflow-tooltip>
+                <template #default="scope">
+                  <el-button
+                    v-if="section.name === 'dataPushServices' && scope.row.name"
+                    class="record-link"
+                    text
+                    type="primary"
+                    @click="openDataPushService(scope.row)"
+                  >
+                    {{ scope.row.name }}
+                  </el-button>
+                  <span v-else>{{ scope.row.name || '-' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态">
                 <template #default="scope">
                   <el-tag :type="statusTagType(scope.row.status)" effect="plain">
                     {{ statusLabel(scope.row.status) }}
@@ -21,35 +34,38 @@
                 </template>
               </el-table-column>
               <template v-if="section.name === 'metadataConfigs'">
-                <el-table-column prop="fileName" label="文件" min-width="150" show-overflow-tooltip />
-                <el-table-column prop="tableName" label="目标表" min-width="150" show-overflow-tooltip />
-                <el-table-column prop="fieldCount" label="字段" width="76" />
+                <el-table-column label="文件" show-overflow-tooltip>
+                  <template #default="scope">
+                    <el-button
+                      v-if="scope.row.fileName"
+                      class="record-link"
+                      text
+                      type="primary"
+                      @click="openMetaConfig(scope.row)"
+                    >
+                      {{ scope.row.fileName }}
+                    </el-button>
+                    <span v-else>-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="tableName" label="目标表" show-overflow-tooltip />
+                <el-table-column prop="fieldCount" label="字段" show-overflow-tooltip />
               </template>
               <template v-else>
-                <el-table-column prop="taskId" label="任务ID" min-width="130" show-overflow-tooltip />
-                <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="taskId" label="任务ID" show-overflow-tooltip />
+                <el-table-column prop="description" label="描述" show-overflow-tooltip />
               </template>
-              <el-table-column label="JSON" width="86" fixed="right">
-                <template #default="scope">
-                  <el-button size="small" text type="primary" @click="openJsonDialog(scope.row)">
-                    查看
-                  </el-button>
-                </template>
-              </el-table-column>
             </el-table>
           </div>
         </el-tab-pane>
       </el-tabs>
     </div>
-
-    <el-dialog v-model="jsonDialogVisible" title="记录 JSON" width="620px">
-      <pre class="json-preview">{{ selectedRecordJson }}</pre>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 type ConsoleRecord = Record<string, unknown> & {
   id?: string
@@ -72,8 +88,7 @@ const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated'
 const activeTab = ref('metadataConfigs')
 const metadataConfigs = ref<ConsoleRecord[]>([])
 const dataPushServices = ref<ConsoleRecord[]>([])
-const jsonDialogVisible = ref(false)
-const selectedRecordJson = ref('')
+const router = useRouter()
 
 const asRecordList = (value: unknown): ConsoleRecord[] => {
   return Array.isArray(value)
@@ -81,8 +96,14 @@ const asRecordList = (value: unknown): ConsoleRecord[] => {
     : []
 }
 
+const metadataConfigRows = computed<ConsoleRecord[]>(() => metadataConfigs.value.map(record => {
+  const row = { ...record }
+  delete row.id
+  return row
+}))
+
 const configSections = computed(() => [
-  { name: 'metadataConfigs', label: '元数据配置操作台', items: metadataConfigs.value },
+  { name: 'metadataConfigs', label: '元数据配置', items: metadataConfigRows.value },
   { name: 'dataPushServices', label: '数据推送服务', items: dataPushServices.value },
 ])
 
@@ -111,9 +132,31 @@ const statusTagType = (status?: string) => {
   return 'info'
 }
 
-const openJsonDialog = (record: ConsoleRecord) => {
-  selectedRecordJson.value = JSON.stringify(record.config || record.raw || record, null, 2)
-  jsonDialogVisible.value = true
+const openRouteInNewTab = (routeLocation: Parameters<typeof router.resolve>[0]) => {
+  const route = router.resolve(routeLocation)
+  window.open(route.href, '_blank', 'noopener,noreferrer')
+}
+
+const openMetaConfig = (record: ConsoleRecord) => {
+  if (!record.fileName) {
+    return
+  }
+  openRouteInNewTab({
+    name: 'policy-config',
+    params: { menuParams: 'meta' },
+    query: { fileName: record.fileName },
+  })
+}
+
+const openDataPushService = (record: ConsoleRecord) => {
+  openRouteInNewTab({
+    name: 'low-code-page',
+    params: { menuParams: 'push-task' },
+    query: {
+      taskId: record.taskId || record.id || '',
+      sourceMark: typeof record.sourceMark === 'string' ? record.sourceMark : '',
+    },
+  })
 }
 
 const handleRecordsUpdated = (event: Event) => {
@@ -193,16 +236,16 @@ onUnmounted(() => {
   height: 220px;
 }
 
-.json-preview {
-  max-height: 520px;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  background: #f6f8fa;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+.record-link {
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  vertical-align: baseline;
+}
+
+.record-link :deep(span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

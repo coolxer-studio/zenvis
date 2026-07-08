@@ -29,6 +29,7 @@
                 :message="message"
                 @copy-code="copyMessage"
                 @decide-action="handleActionDecision(message, $event)"
+                @submit-info-steps="handleInfoStepsSubmit(message, $event)"
                 @choose-analysis-decision="handleAnalysisDecision(message, $event)"
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
               />
@@ -153,10 +154,8 @@
           </el-tooltip>
 
           <el-tooltip v-if="isStreamingResponse" content="停止生成" placement="top">
-            <el-button class="action-btn stop-btn" @click="stopCurrentChat">
-              <el-icon>
-                <Close />
-              </el-icon>
+            <el-button class="action-btn stop-btn" aria-label="停止生成" @click="stopCurrentChat">
+              <span class="stop-icon-square" aria-hidden="true"></span>
             </el-button>
           </el-tooltip>
 
@@ -253,6 +252,13 @@ type DataAccessRecord = Record<string, unknown> & {
   status?: string;
 };
 
+type InfoStepAnswer = {
+  id: string;
+  title: string;
+  value: string;
+  source: 'suggestion' | 'custom';
+};
+
 const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const MAX_FILES_PER_PICK = 10;
@@ -287,6 +293,13 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'analysis.start',
   'analysis.create_continuous_task',
   'policy.apply_to_production',
+  'data_access.generate_demo_push_config',
+  'data_access.create_demo_push_task',
+])
+
+const AUTO_REJECT_ACTIONS = new Set([
+  'data_access.generate_demo_push_config',
+  'data_access.create_demo_push_task',
 ])
 
 // 添加一个变量来跟踪Enter按键次数
@@ -1010,7 +1023,23 @@ const autoConfirmMessage = (action: string) => {
   if (action === 'policy.apply_to_production') {
     return '我已确认更新生产策略配置，请根据上一条确认卡、模拟测试结果和配置块，通过配置管理 MCP 写入系统配置。';
   }
+  if (action === 'data_access.generate_demo_push_config') {
+    return '我已确认继续生成用户事件数据推送服务配置。请先生成完整的数据推送服务配置并展示给我确认，不要创建或启动数据推送服务。';
+  }
+  if (action === 'data_access.create_demo_push_task') {
+    return '我已确认创建用户事件数据推送服务，请根据上一条确认卡和数据推送配置创建并启动数据推送服务。';
+  }
   return '我已确认研判分析方案，请根据上一条确认卡开始执行一次性研判分析。';
+};
+
+const autoRejectMessage = (action: string) => {
+  if (action === 'data_access.generate_demo_push_config') {
+    return '我已取消生成用户事件数据推送服务配置。请记录本次演示到元数据配置阶段结束，不要生成数据推送配置，也不要创建数据推送服务。';
+  }
+  if (action === 'data_access.create_demo_push_task') {
+    return '我已取消创建用户事件数据推送服务。请记录数据推送配置已生成但未添加到系统，不要创建或启动数据推送服务。';
+  }
+  return '我已取消本次操作。';
 };
 
 const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', detail?: string) => {
@@ -1026,7 +1055,7 @@ const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', de
 
 const dataAccessDecisionMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
   if (decision === 'apply_config') {
-    return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. policy_config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 policy_config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 policy_config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 policy_config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才输出 zenvis:meta-config-record 记录。';
+    return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. policy_config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 policy_config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 policy_config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 policy_config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才用 Markdown 围栏代码块输出 zenvis:meta-config-record 记录；zenvis:meta-config-record 不是工具名，请不要调用它。';
   }
   if (decision === 'abandon') {
     return '我选择放弃本次元数据配置。请记录本次配置已放弃，不要写入系统，也不要继续创建或更新相关配置。';
@@ -1177,6 +1206,54 @@ const copyMessage = (content: string) => {
   });
 };
 
+const infoStepsDisplayMessage = (part: ChatMessagePart, answers: InfoStepAnswer[]) => {
+  const title = part.title || '需要补充信息';
+  if (!answers.length) {
+    return `我已补充「${title}」所需信息。`;
+  }
+  return `我已补充以下信息：\n${answers.map(answer => `- ${answer.title}：${answer.value}`).join('\n')}`;
+};
+
+const infoStepsRequestMessage = (part: ChatMessagePart, answers: InfoStepAnswer[]) => {
+  return [
+    '我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。',
+    '',
+    JSON.stringify({
+      title: part.title || '需要补充信息',
+      content: part.content || '',
+      answers,
+    }, null, 2),
+  ].join('\n');
+};
+
+const handleInfoStepsSubmit = async (
+  message: ChatMessage,
+  payload: { part: ChatMessagePart; answers: InfoStepAnswer[] }
+) => {
+  if (!chatSessionId.value || !message.id || !payload.part.id) {
+    ElMessage.warning('缺少补充信息卡片标识，无法记录提交结果');
+    return;
+  }
+
+  try {
+    await DihService.recordActionDecision({
+      chat_id: chatSessionId.value,
+      message_id: message.id,
+      part_id: payload.part.id,
+      decision: 'submitted',
+    });
+  } catch (error) {
+    console.error('记录补充信息提交失败:', error);
+  }
+  payload.part.status = 'submitted';
+  ElMessage.success('已提交补充信息');
+  await nextTick();
+  await sendMessage({
+    content: infoStepsDisplayMessage(payload.part, payload.answers),
+    requestContent: infoStepsRequestMessage(payload.part, payload.answers),
+  });
+};
+
 const handleActionDecision = async (
   message: ChatMessage,
   payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' }
@@ -1202,6 +1279,9 @@ const handleActionDecision = async (
   if (payload.decision === 'approved' && AUTO_CONFIRM_ACTIONS.has(action)) {
     await nextTick();
     await sendMessage({ content: autoConfirmMessage(action) });
+  } else if (payload.decision === 'rejected' && AUTO_REJECT_ACTIONS.has(action)) {
+    await nextTick();
+    await sendMessage({ content: autoRejectMessage(action) });
   }
 };
 
@@ -1765,12 +1845,35 @@ const dislikeMessage = (index: number) => {
 }
 
 .stop-btn {
-  color: #f56c6c;
-  background-color: rgba(245, 108, 108, 0.1);
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: #fff;
+  background-color: #ff4d4f;
+  box-shadow: 0 4px 10px rgba(255, 77, 79, 0.28);
+  transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
-.stop-btn:hover {
-  color: #f78989;
+.stop-btn:hover,
+.stop-btn:focus {
+  color: #fff;
+  background-color: #ff6b6d;
+  box-shadow: 0 6px 14px rgba(255, 77, 79, 0.36);
+}
+
+.stop-btn:active {
+  transform: scale(0.94);
+  background-color: #e94749;
+}
+
+.stop-icon-square {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background-color: currentColor;
 }
 
 .suggestions {

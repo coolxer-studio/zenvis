@@ -42,18 +42,31 @@
 
       <div v-else-if="part.type === 'code'" class="code-part">
         <div class="code-header">
-          <span class="code-language">{{ part.language || 'plaintext' }}</span>
-          <el-tooltip content="复制代码" placement="top">
-            <el-button
-              class="code-copy-btn"
-              size="small"
-              :icon="CopyDocument"
-              circle
-              @click="copyPart(part.content || '')"
-            />
-          </el-tooltip>
+          <div class="code-title">
+            <span class="code-language">{{ part.title || part.language || 'plaintext' }}</span>
+          </div>
+          <div class="code-tools">
+            <el-tooltip content="复制代码" placement="top">
+              <el-button
+                class="code-copy-btn"
+                size="small"
+                :icon="CopyDocument"
+                circle
+                @click="copyPart(part.content || '')"
+              />
+            </el-tooltip>
+            <el-tooltip :content="isCodeExpanded(part) ? '折叠' : '展开'" placement="top">
+              <el-button
+                class="code-copy-btn"
+                size="small"
+                :icon="isCodeExpanded(part) ? CaretTop : CaretBottom"
+                circle
+                @click="toggleCode(part)"
+              />
+            </el-tooltip>
+          </div>
         </div>
-        <pre class="code-content"><code>{{ part.content }}</code></pre>
+        <pre v-if="isCodeExpanded(part)" class="code-content"><code>{{ part.content }}</code></pre>
       </div>
 
       <div v-else-if="part.type === 'config'" class="config-part">
@@ -63,121 +76,241 @@
             <span class="config-card-name">{{ part.title || '配置文件' }}</span>
             <el-tag size="small" effect="plain">{{ configKindText(part) }}</el-tag>
           </div>
-          <el-tooltip content="复制配置" placement="top">
-            <el-button
-              class="config-copy-btn"
-              size="small"
-              :icon="CopyDocument"
-              circle
-              @click="copyPart(part.content || '')"
-            />
-          </el-tooltip>
+          <div class="config-card-tools">
+            <el-tooltip content="复制配置" placement="top">
+              <el-button
+                class="config-copy-btn"
+                size="small"
+                :icon="CopyDocument"
+                circle
+                @click="copyPart(part.content || '')"
+              />
+            </el-tooltip>
+            <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+              <el-button
+                class="card-toggle-btn"
+                size="small"
+                :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+                circle
+                @click="toggleZenvisCard(part)"
+              />
+            </el-tooltip>
+          </div>
         </div>
-        <div class="config-card-meta">
+        <div v-if="isZenvisCardExpanded(part)" class="config-card-meta">
           <span>默认文件：{{ defaultConfigFileName(part) }}</span>
         </div>
-        <pre class="config-card-content"><code>{{ part.content }}</code></pre>
+        <pre v-if="isZenvisCardExpanded(part)" class="config-card-content"><code>{{ part.content }}</code></pre>
       </div>
 
       <div v-else-if="part.type === 'notice'" class="notice-part" :class="noticeClass(part)">
         <div class="notice-title">
           <el-icon><component :is="noticeIcon(part)" /></el-icon>
-          <span>{{ part.title || '提示' }}</span>
+          <span class="card-title-text">{{ part.title || '提示' }}</span>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
         </div>
-        <div class="notice-content">{{ part.content }}</div>
+        <div v-if="isZenvisCardExpanded(part)" class="notice-content">{{ part.content }}</div>
       </div>
 
       <div v-else-if="part.type === 'confirm'" class="confirm-part">
         <div class="confirm-title">
           <el-icon><QuestionFilled /></el-icon>
-          <span>{{ part.title || '需要确认' }}</span>
+          <span class="card-title-text">{{ part.title || '需要确认' }}</span>
           <el-tag size="small" :type="confirmTagType(part.status)" effect="plain">
             {{ confirmStatusText(part.status) }}
           </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
         </div>
-        <div class="confirm-content">{{ part.content }}</div>
-        <div class="confirm-actions" v-if="!part.status || part.status === 'pending'">
-          <el-button size="small" type="primary" @click="requestDecision(part, 'approved')">
-            确认执行
-          </el-button>
-          <el-button size="small" @click="requestDecision(part, 'rejected')">取消</el-button>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div class="confirm-content">{{ part.content }}</div>
+          <div class="confirm-actions" v-if="!part.status || part.status === 'pending'">
+            <el-button size="small" type="primary" @click="requestDecision(part, 'approved')">
+              确认执行
+            </el-button>
+            <el-button size="small" @click="requestDecision(part, 'rejected')">取消</el-button>
+          </div>
+        </template>
+      </div>
+
+      <div v-else-if="part.type === 'info-steps'" class="info-steps-part">
+        <div class="info-steps-title">
+          <el-icon><InfoFilled /></el-icon>
+          <span class="card-title-text">{{ part.title || '需要补充信息' }}</span>
+          <el-tag size="small" :type="infoStepsTagType(part.status)" effect="plain">
+            {{ infoStepsStatusText(part.status) }}
+          </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
         </div>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div v-if="part.content" class="info-steps-content">{{ part.content }}</div>
+          <div class="info-steps-list">
+            <div
+              v-for="(step, stepIndex) in infoSteps(part)"
+              :key="step.id || stepIndex"
+              class="info-step-item"
+            >
+              <div class="info-step-marker">{{ stepIndex + 1 }}</div>
+              <div class="info-step-body">
+                <div class="info-step-heading">
+                  <span class="info-step-title">{{ step.title || `补充项 ${stepIndex + 1}` }}</span>
+                  <el-tag v-if="step.required" size="small" type="danger" effect="plain">必填</el-tag>
+                </div>
+                <div v-if="step.description" class="info-step-description">{{ step.description }}</div>
+                <div class="info-step-suggestions">
+                  <el-button
+                    v-for="(suggestion, suggestionIndex) in stepSuggestions(step)"
+                    :key="suggestionIndex"
+                    class="info-step-suggestion"
+                    size="small"
+                    :type="isSuggestionSelected(part, step, suggestion) ? 'primary' : 'default'"
+                    plain
+                    :disabled="part.status === 'submitted'"
+                    @click="selectInfoStepSuggestion(part, step, suggestion)"
+                  >
+                    {{ suggestion.label }}
+                  </el-button>
+                </div>
+                <el-input
+                  v-model="infoStepCustomInputs[infoStepKey(part, step)]"
+                  class="info-step-input"
+                  type="textarea"
+                  :rows="2"
+                  maxlength="1000"
+                  show-word-limit
+                  :disabled="part.status === 'submitted'"
+                  :placeholder="step.placeholder || '也可以输入自定义内容'"
+                />
+              </div>
+            </div>
+          </div>
+          <div v-if="!part.status || part.status === 'pending'" class="info-steps-actions">
+            <el-button size="small" type="primary" @click="submitInfoSteps(part)">
+              {{ infoStepsSubmitLabel(part) }}
+            </el-button>
+          </div>
+        </template>
       </div>
 
       <div v-else-if="part.type === 'analysis-decision'" class="analysis-decision-part">
         <div class="analysis-decision-title">
           <el-icon><QuestionFilled /></el-icon>
-          <span>{{ part.title || '研判完成，请选择后续处理' }}</span>
+          <span class="card-title-text">{{ part.title || '研判完成，请选择后续处理' }}</span>
           <el-tag size="small" :type="analysisDecisionTagType(part.status)" effect="plain">
             {{ analysisDecisionStatusText(part.status) }}
           </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
         </div>
-        <div class="analysis-decision-content">
-          {{ part.content || '请选择下一步处理方式。' }}
-        </div>
-        <div v-if="!part.status || part.status === 'pending'" class="analysis-decision-actions">
-          <el-button size="small" type="primary" @click="requestAnalysisDecision(part, 'dispose')">
-            执行处置
-          </el-button>
-          <el-button size="small" @click="requestAnalysisDecision(part, 'ignore')">
-            忽略告警
-          </el-button>
-          <el-button size="small" type="warning" plain @click="requestAnalysisDecision(part, 'continue')">
-            补充信息继续研判
-          </el-button>
-        </div>
-        <div v-if="isContinueInputVisible(part) && (!part.status || part.status === 'pending')" class="analysis-continue-box">
-          <el-input
-            v-model="analysisDecisionInputs[partKey(part)]"
-            type="textarea"
-            :rows="3"
-            maxlength="1000"
-            show-word-limit
-            placeholder="输入需要继续研判的重点，例如：补查近 24 小时同源 IP 登录行为、重点关注横向移动证据"
-          />
-          <div class="analysis-continue-actions">
-            <el-button size="small" type="primary" @click="submitAnalysisContinue(part)">继续研判</el-button>
-            <el-button size="small" @click="hideContinueInput(part)">取消</el-button>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div class="analysis-decision-content">
+            {{ part.content || '请选择下一步处理方式。' }}
           </div>
-        </div>
+          <div v-if="!part.status || part.status === 'pending'" class="analysis-decision-actions">
+            <el-button size="small" type="primary" @click="requestAnalysisDecision(part, 'dispose')">
+              执行处置
+            </el-button>
+            <el-button size="small" @click="requestAnalysisDecision(part, 'ignore')">
+              忽略告警
+            </el-button>
+            <el-button size="small" type="warning" plain @click="requestAnalysisDecision(part, 'continue')">
+              补充信息继续研判
+            </el-button>
+          </div>
+          <div v-if="isContinueInputVisible(part) && (!part.status || part.status === 'pending')" class="analysis-continue-box">
+            <el-input
+              v-model="analysisDecisionInputs[partKey(part)]"
+              type="textarea"
+              :rows="3"
+              maxlength="1000"
+              show-word-limit
+              placeholder="输入需要继续研判的重点，例如：补查近 24 小时同源 IP 登录行为、重点关注横向移动证据"
+            />
+            <div class="analysis-continue-actions">
+              <el-button size="small" type="primary" @click="submitAnalysisContinue(part)">继续研判</el-button>
+              <el-button size="small" @click="hideContinueInput(part)">取消</el-button>
+            </div>
+          </div>
+        </template>
       </div>
 
       <div v-else-if="part.type === 'data-access-decision'" class="data-access-decision-part">
         <div class="data-access-decision-title">
           <el-icon><QuestionFilled /></el-icon>
-          <span>{{ part.title || '元数据配置已生成，请选择后续处理' }}</span>
+          <span class="card-title-text">{{ part.title || '元数据配置已生成，请选择后续处理' }}</span>
           <el-tag size="small" :type="dataAccessDecisionTagType(part.status)" effect="plain">
             {{ dataAccessDecisionStatusText(part.status) }}
           </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
         </div>
-        <div class="data-access-decision-content">
-          {{ part.content || '可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。' }}
-        </div>
-        <div v-if="!part.status || part.status === 'pending'" class="data-access-decision-actions">
-          <el-button size="small" type="primary" @click="requestDataAccessDecision(part, 'apply_config')">
-            添加配置到系统
-          </el-button>
-          <el-button size="small" @click="requestDataAccessDecision(part, 'abandon')">
-            放弃本次配置
-          </el-button>
-          <el-button size="small" type="warning" plain @click="requestDataAccessDecision(part, 'revise')">
-            补充信息继续更新配置
-          </el-button>
-        </div>
-        <div v-if="isDataAccessReviseInputVisible(part) && (!part.status || part.status === 'pending')" class="data-access-revise-box">
-          <el-input
-            v-model="dataAccessDecisionInputs[partKey(part)]"
-            type="textarea"
-            :rows="3"
-            maxlength="1000"
-            show-word-limit
-            placeholder="输入需要调整的内容，例如：增加 server_time 字段、修改实体中文名、补充 IP 字段展示类型"
-          />
-          <div class="data-access-revise-actions">
-            <el-button size="small" type="primary" @click="submitDataAccessRevise(part)">继续更新配置</el-button>
-            <el-button size="small" @click="hideDataAccessReviseInput(part)">取消</el-button>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div class="data-access-decision-content">
+            {{ part.content || '可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。' }}
           </div>
-        </div>
+          <div v-if="!part.status || part.status === 'pending'" class="data-access-decision-actions">
+            <el-button size="small" type="primary" @click="requestDataAccessDecision(part, 'apply_config')">
+              添加配置到系统
+            </el-button>
+            <el-button size="small" @click="requestDataAccessDecision(part, 'abandon')">
+              放弃本次配置
+            </el-button>
+            <el-button size="small" type="warning" plain @click="requestDataAccessDecision(part, 'revise')">
+              补充信息继续更新配置
+            </el-button>
+          </div>
+          <div v-if="isDataAccessReviseInputVisible(part) && (!part.status || part.status === 'pending')" class="data-access-revise-box">
+            <el-input
+              v-model="dataAccessDecisionInputs[partKey(part)]"
+              type="textarea"
+              :rows="3"
+              maxlength="1000"
+              show-word-limit
+              placeholder="输入需要调整的内容，例如：增加 server_time 字段、修改实体中文名、补充 IP 字段展示类型"
+            />
+            <div class="data-access-revise-actions">
+              <el-button size="small" type="primary" @click="submitDataAccessRevise(part)">继续更新配置</el-button>
+              <el-button size="small" @click="hideDataAccessReviseInput(part)">取消</el-button>
+            </div>
+          </div>
+        </template>
       </div>
 
       <div v-else-if="part.type === 'chart'" class="chart-part">
@@ -192,7 +325,7 @@
 
 <script setup lang="ts">
 import { computed, reactive } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   CaretBottom,
   CaretTop,
@@ -210,6 +343,28 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
 
+type InfoStepSuggestion = {
+  label: string;
+  value: string;
+  description?: string;
+};
+
+type InfoStepItem = {
+  id: string;
+  title: string;
+  description?: string;
+  required?: boolean;
+  suggestions?: Array<string | InfoStepSuggestion | Record<string, unknown>>;
+  placeholder?: string;
+};
+
+type InfoStepAnswer = {
+  id: string;
+  title: string;
+  value: string;
+  source: 'suggestion' | 'custom';
+};
+
 marked.setOptions({
   gfm: true,
   breaks: true,
@@ -222,12 +377,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'copyCode', content: string): void;
   (e: 'decideAction', payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' }): void;
+  (e: 'submitInfoSteps', payload: { part: ChatMessagePart; answers: InfoStepAnswer[] }): void;
   (e: 'chooseAnalysisDecision', payload: { part: ChatMessagePart; decision: 'dispose' | 'ignore' | 'continue'; detail?: string }): void;
   (e: 'chooseDataAccessDecision', payload: { part: ChatMessagePart; decision: 'apply_config' | 'abandon' | 'revise'; detail?: string }): void;
 }>();
 
 const expandedThinking = reactive<Record<string, boolean>>({});
 const hiddenThinking = reactive<Record<string, boolean>>({});
+const expandedCode = reactive<Record<string, boolean>>({});
+const expandedZenvisCards = reactive<Record<string, boolean>>({});
+const infoStepSelectedValues = reactive<Record<string, string>>({});
+const infoStepCustomInputs = reactive<Record<string, string>>({});
 const continueInputVisible = reactive<Record<string, boolean>>({});
 const analysisDecisionInputs = reactive<Record<string, string>>({});
 const dataAccessReviseInputVisible = reactive<Record<string, boolean>>({});
@@ -241,6 +401,37 @@ const renderParts = computed<ChatMessagePart[]>(() => {
 });
 
 const partKey = (part: ChatMessagePart) => part.id || `${part.type}-${part.content || ''}`;
+
+const isTruthyMetadata = (part: ChatMessagePart, key: string) => {
+  const value = part.metadata?.[key];
+  return value === true || value === 'true';
+};
+
+const isCodeExpanded = (part: ChatMessagePart) => {
+  const key = partKey(part);
+  if (expandedCode[key] === undefined) {
+    return !isTruthyMetadata(part, 'defaultCollapsed');
+  }
+  return expandedCode[key] === true;
+};
+
+const toggleCode = (part: ChatMessagePart) => {
+  const key = partKey(part);
+  expandedCode[key] = !isCodeExpanded(part);
+};
+
+const isZenvisCardExpanded = (part: ChatMessagePart) => {
+  const key = partKey(part);
+  if (expandedZenvisCards[key] === undefined) {
+    return !isTruthyMetadata(part, 'defaultCollapsed');
+  }
+  return expandedZenvisCards[key] === true;
+};
+
+const toggleZenvisCard = (part: ChatMessagePart) => {
+  const key = partKey(part);
+  expandedZenvisCards[key] = !isZenvisCardExpanded(part);
+};
 
 const parseFallbackThinkingParts = (content: string): ChatMessagePart[] => {
   const thinkStart = content.indexOf('<think>');
@@ -332,6 +523,103 @@ const configKindText = (part: ChatMessagePart) => {
 
 const defaultConfigFileName = (part: ChatMessagePart) => {
   return metadataText(part, 'defaultFileName') || '-';
+};
+
+const infoSteps = (part: ChatMessagePart): InfoStepItem[] => {
+  const steps = part.metadata?.steps;
+  if (!Array.isArray(steps)) {
+    return [];
+  }
+  return steps
+    .filter(step => step && typeof step === 'object')
+    .map((step, index) => {
+      const raw = step as Record<string, unknown>;
+      return {
+        id: typeof raw.id === 'string' && raw.id.trim() ? raw.id : `step_${index + 1}`,
+        title: typeof raw.title === 'string' ? raw.title : '',
+        description: typeof raw.description === 'string' ? raw.description : '',
+        required: raw.required === true || raw.required === 'true',
+        suggestions: Array.isArray(raw.suggestions) ? raw.suggestions : [],
+        placeholder: typeof raw.placeholder === 'string' ? raw.placeholder : '',
+      };
+    });
+};
+
+const normalizeSuggestion = (suggestion: string | InfoStepSuggestion | Record<string, unknown>): InfoStepSuggestion => {
+  if (typeof suggestion === 'string') {
+    return {
+      label: suggestion,
+      value: suggestion,
+    };
+  }
+  const label = typeof suggestion.label === 'string' ? suggestion.label : '';
+  const value = typeof suggestion.value === 'string' ? suggestion.value : label;
+  return {
+    label: label || value || '建议项',
+    value: value || label,
+    description: typeof suggestion.description === 'string' ? suggestion.description : undefined,
+  };
+};
+
+const stepSuggestions = (step: InfoStepItem): InfoStepSuggestion[] => {
+  return (step.suggestions || []).map(normalizeSuggestion);
+};
+
+const infoStepKey = (part: ChatMessagePart, step: InfoStepItem) => `${partKey(part)}::${step.id}`;
+
+const selectedInfoStepValue = (part: ChatMessagePart, step: InfoStepItem) => {
+  return infoStepSelectedValues[infoStepKey(part, step)] || '';
+};
+
+const isSuggestionSelected = (part: ChatMessagePart, step: InfoStepItem, suggestion: InfoStepSuggestion) => {
+  return selectedInfoStepValue(part, step) === suggestion.value;
+};
+
+const selectInfoStepSuggestion = (part: ChatMessagePart, step: InfoStepItem, suggestion: InfoStepSuggestion) => {
+  const key = infoStepKey(part, step);
+  infoStepSelectedValues[key] = suggestion.value;
+  infoStepCustomInputs[key] = '';
+};
+
+const infoStepAnswerValue = (part: ChatMessagePart, step: InfoStepItem) => {
+  const key = infoStepKey(part, step);
+  const customValue = (infoStepCustomInputs[key] || '').trim();
+  if (customValue) {
+    return {
+      value: customValue,
+      source: 'custom' as const,
+    };
+  }
+  return {
+    value: (infoStepSelectedValues[key] || '').trim(),
+    source: 'suggestion' as const,
+  };
+};
+
+const infoStepsSubmitLabel = (part: ChatMessagePart) => {
+  const value = part.metadata?.submitLabel;
+  return typeof value === 'string' && value.trim() ? value : '提交补充信息';
+};
+
+const submitInfoSteps = (part: ChatMessagePart) => {
+  const steps = infoSteps(part);
+  const missingStep = steps.find(step => step.required && !infoStepAnswerValue(part, step).value);
+  if (missingStep) {
+    ElMessage.warning(`请补充「${missingStep.title || '必填项'}」`);
+    return;
+  }
+  const answers = steps
+    .map(step => {
+      const answer = infoStepAnswerValue(part, step);
+      return {
+        id: step.id,
+        title: step.title || step.id,
+        value: answer.value,
+        source: answer.source,
+      };
+    })
+    .filter(answer => answer.value);
+  emit('submitInfoSteps', { part, answers });
 };
 
 const requestDecision = async (part: ChatMessagePart, decision: 'approved' | 'rejected') => {
@@ -469,6 +757,16 @@ const confirmStatusText = (status?: string) => {
   if (status === 'approved') return '已确认';
   if (status === 'rejected') return '已取消';
   return '待确认';
+};
+
+const infoStepsTagType = (status?: string) => {
+  if (status === 'submitted') return 'success';
+  return 'warning';
+};
+
+const infoStepsStatusText = (status?: string) => {
+  if (status === 'submitted') return '已提交';
+  return '待补充';
 };
 
 const analysisDecisionTagType = (status?: string) => {
@@ -622,9 +920,23 @@ const dataAccessDecisionStatusText = (status?: string) => {
   color: #cfd3dc;
 }
 
+.code-title,
+.code-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.code-tools {
+  flex: 0 0 auto;
+}
+
 .code-language {
+  min-width: 0;
   font-size: 12px;
   line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .code-copy-btn {
@@ -686,6 +998,13 @@ const dataAccessDecisionStatusText = (status?: string) => {
   overflow-wrap: anywhere;
 }
 
+.config-card-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .config-copy-btn {
   flex: 0 0 auto;
 }
@@ -717,6 +1036,7 @@ const dataAccessDecisionStatusText = (status?: string) => {
 
 .notice-part,
 .confirm-part,
+.info-steps-part,
 .analysis-decision-part,
 .data-access-decision-part,
 .chart-part {
@@ -731,6 +1051,7 @@ const dataAccessDecisionStatusText = (status?: string) => {
 
 .notice-title,
 .confirm-title,
+.info-steps-title,
 .analysis-decision-title,
 .data-access-decision-title,
 .chart-part {
@@ -742,8 +1063,22 @@ const dataAccessDecisionStatusText = (status?: string) => {
   color: #303133;
 }
 
+.card-title-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.card-toggle-btn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  background: transparent;
+}
+
 .notice-content,
 .confirm-content,
+.info-steps-content,
 .analysis-decision-content,
 .data-access-decision-content {
   margin-top: 8px;
@@ -779,6 +1114,102 @@ const dataAccessDecisionStatusText = (status?: string) => {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+}
+
+.info-steps-part {
+  border-color: #d9ecff;
+  background: #f8fbff;
+}
+
+.info-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 12px;
+}
+
+.info-step-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.info-step-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  left: 13px;
+  width: 2px;
+  background: #d9ecff;
+}
+
+.info-step-marker {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #409eff;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+}
+
+.info-step-body {
+  min-width: 0;
+}
+
+.info-step-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.info-step-title {
+  font-weight: 600;
+  color: #303133;
+  word-break: break-word;
+}
+
+.info-step-description {
+  margin-top: 4px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.info-step-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.info-step-suggestion {
+  max-width: 100%;
+}
+
+.info-step-suggestion :deep(span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-step-input {
+  margin-top: 10px;
+}
+
+.info-steps-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .analysis-decision-part {

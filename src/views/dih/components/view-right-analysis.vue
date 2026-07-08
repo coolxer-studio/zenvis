@@ -48,10 +48,10 @@
               </div>
             </div>
 
-            <el-table :data="conclusions" stripe style="width: 100%">
-              <el-table-column prop="name" label="结论项" min-width="140" />
-              <el-table-column prop="evidence" label="关键依据" min-width="180" show-overflow-tooltip />
-              <el-table-column prop="result" label="判断结果" min-width="120" />
+            <el-table :data="conclusions" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="name" label="结论项" show-overflow-tooltip />
+              <el-table-column prop="evidence" label="关键依据" show-overflow-tooltip />
+              <el-table-column prop="result" label="判断结果" show-overflow-tooltip />
             </el-table>
           </div>
         </el-tab-pane>
@@ -74,12 +74,12 @@
 
         <el-tab-pane label="数据推送服务" name="dataPushServices">
           <div class="analysis-section">
-            <el-table :data="dataPushServices" stripe style="width: 100%">
-              <el-table-column prop="id" label="服务ID" min-width="120" />
-              <el-table-column prop="name" label="服务名称" min-width="180" show-overflow-tooltip />
-              <el-table-column prop="target" label="推送目标" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="mode" label="推送方式" min-width="120" />
-              <el-table-column label="状态" min-width="100">
+            <el-table :data="dataPushServices" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="id" label="服务ID" show-overflow-tooltip />
+              <el-table-column prop="name" label="服务名称" show-overflow-tooltip />
+              <el-table-column prop="target" label="推送目标" show-overflow-tooltip />
+              <el-table-column prop="mode" label="推送方式" show-overflow-tooltip />
+              <el-table-column label="状态">
                 <template #default="scope">
                   <el-tag :type="scope.row.statusType">{{ scope.row.status }}</el-tag>
                 </template>
@@ -90,12 +90,12 @@
 
         <el-tab-pane label="数据分析任务" name="dataAnalysisTasks">
           <div class="analysis-section">
-            <el-table :data="dataAnalysisTasks" stripe style="width: 100%">
-              <el-table-column prop="id" label="任务ID" min-width="120" />
-              <el-table-column prop="name" label="任务名称" min-width="180" show-overflow-tooltip />
-              <el-table-column prop="type" label="分析类型" min-width="140" />
-              <el-table-column prop="schedule" label="调度周期" min-width="120" />
-              <el-table-column label="状态" min-width="100">
+            <el-table :data="dataAnalysisTasks" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="id" label="任务ID" show-overflow-tooltip />
+              <el-table-column prop="name" label="任务名称" show-overflow-tooltip />
+              <el-table-column prop="type" label="分析类型" show-overflow-tooltip />
+              <el-table-column prop="schedule" label="调度周期" show-overflow-tooltip />
+              <el-table-column label="状态">
                 <template #default="scope">
                   <el-tag :type="scope.row.statusType">{{ scope.row.status }}</el-tag>
                 </template>

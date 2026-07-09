@@ -58,6 +58,57 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("数据可视化图表预览围栏应解析为预览片段")
+    void parseDataVisualizationChartPreviewFence() {
+        String content = """
+                ```zenvis:visualization-chart-preview
+                {"title":"用户事件上报趋势图","content":"按小时聚合","chartType":"line","echartsOption":{"xAxis":{"type":"category"},"series":[]}}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("visualization-chart-preview", parts.get(0).getType());
+        assertEquals("用户事件上报趋势图", parts.get(0).getTitle());
+        assertEquals("按小时聚合", parts.get(0).getContent());
+        assertEquals("line", parts.get(0).getMetadata().get("chartType"));
+        assertNotNull(parts.get(0).getMetadata().get("echartsOption"));
+    }
+
+    @Test
+    @DisplayName("数据可视化记录围栏应解析为对应记录片段")
+    void parseDataVisualizationRecordFences() {
+        String content = """
+                ```zenvis:visualization-chart-record
+                {"name":"登录趋势图","chartType":"line","status":"temporary"}
+                ```
+                ```zenvis:visualization-config-record
+                {"name":"登录可视化页面","configType":"login-visualization","fileName":"index.json"}
+                ```
+                ```zenvis:dashboard-config-record
+                {"name":"登录大屏","dashboardId":"12","code":"login-dashboard"}
+                ```
+                ```zenvis:menu-config-record
+                {"name":"登录菜单","menuId":"34","params":"login-visualization"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(4, parts.size());
+        assertEquals("visualization-chart-record", parts.get(0).getType());
+        assertEquals("登录趋势图", parts.get(0).getContent());
+        assertEquals("line", parts.get(0).getMetadata().get("chartType"));
+        assertEquals("visualization-config-record", parts.get(1).getType());
+        assertEquals("login-visualization", parts.get(1).getMetadata().get("configType"));
+        assertEquals("dashboard-config-record", parts.get(2).getType());
+        assertEquals("12", parts.get(2).getMetadata().get("dashboardId"));
+        assertEquals("menu-config-record", parts.get(3).getType());
+        assertEquals("34", parts.get(3).getMetadata().get("menuId"));
+    }
+
+    @Test
     @DisplayName("低代码页面配置围栏应解析为配置片段")
     void parseLowCodePageConfigFence() {
         String content = """

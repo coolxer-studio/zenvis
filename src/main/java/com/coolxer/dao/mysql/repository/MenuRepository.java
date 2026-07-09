@@ -55,12 +55,20 @@ public interface MenuRepository extends BaseRepository<Menu, Integer> {
      */
     @Query(nativeQuery = true,
             value = "SELECT a.* FROM " + MysqlFinalTableName.T_SYS_MENU + " a WHERE a.parent_id = 0 AND " +
-                    "(:name IS NULL OR a.name like concat('%',:name,'%')) AND " +
-                    "(:route IS NULL OR a.route like concat('%',:route,'%')) " +
+                    "(:name IS NULL OR a.name like concat('%',:name,'%') OR EXISTS (" +
+                    "SELECT 1 FROM " + MysqlFinalTableName.T_SYS_MENU + " b WHERE b.parent_id = a.id AND b.name like concat('%',:name,'%')" +
+                    ")) AND " +
+                    "(:route IS NULL OR a.route like concat('%',:route,'%') OR EXISTS (" +
+                    "SELECT 1 FROM " + MysqlFinalTableName.T_SYS_MENU + " b WHERE b.parent_id = a.id AND b.route like concat('%',:route,'%')" +
+                    ")) " +
                     "ORDER BY a.order_number ASC",
             countQuery = "SELECT count(*) FROM " + MysqlFinalTableName.T_SYS_MENU + " a WHERE a.parent_id = 0 AND " +
-                    "(:name IS NULL OR a.name like concat('%',:name,'%')) AND " +
-                    "(:route IS NULL OR a.route like concat('%',:route,'%')) ")
+                    "(:name IS NULL OR a.name like concat('%',:name,'%') OR EXISTS (" +
+                    "SELECT 1 FROM " + MysqlFinalTableName.T_SYS_MENU + " b WHERE b.parent_id = a.id AND b.name like concat('%',:name,'%')" +
+                    ")) AND " +
+                    "(:route IS NULL OR a.route like concat('%',:route,'%') OR EXISTS (" +
+                    "SELECT 1 FROM " + MysqlFinalTableName.T_SYS_MENU + " b WHERE b.parent_id = a.id AND b.route like concat('%',:route,'%')" +
+                    ")) ")
     Page<Menu> findByPage(Pageable pageable, @Param("name") String name, @Param("route") String route);
 
     /**

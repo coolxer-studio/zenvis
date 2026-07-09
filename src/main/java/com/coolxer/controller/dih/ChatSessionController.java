@@ -212,9 +212,13 @@ public class ChatSessionController extends BaseController {
             | 全部用户事件数据 | user-event / 调试信息 | 写入 msg_user_event 表；目标库默认为系统的 zenvis 库。 |
 
            """;
-    private static final String PROLOGUE_AGENT_DATA_VISUALIZATION = "我是数据可视化智能体，专注于通过只读 Retrieval MCP 查询多源日志数据并完成可视化分析。\n" +
-            " 我会先确认真实可用的实体、字段、统计维度和时间范围，再调用检索、计数、趋势、分布等只读工具获取证据。\n" +
-            " 我只输出文本或 Markdown 格式的数据概览、统计洞察、可视化建议和后续建议，不直接访问数据库、不执行落库操作。";
+    private static final String PROLOGUE_AGENT_DATA_VISUALIZATION = "我是数据可视化智能体，建立在数据接入产生的元数据实体之上，可以生成临时图表、低代码页面/应用、静态 HTML 页面、数据看板和菜单配置。\n" +
+            "我会先确认目标类型、实体字段、时间范围、统计维度和实现方式；涉及写入 open_config、创建菜单或看板时，会先给出确认卡，只有你确认后才写入系统。";
+    private static final String PROLOGUE_AGENT_DATA_VISUALIZATION_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词。";
+    private static final String DATA_VISUALIZATION_CHART_EXAMPLE_PROMPT = "请查看用户事件数据的上报情况，并生成一个临时性的可视化图表。";
+    private static final String DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT = "请根据用户事件数据生成一个单页面应用。";
+    private static final String DATA_VISUALIZATION_APP_EXAMPLE_PROMPT = "请生成一个带侧边栏的用户事件数据应用。";
+    private static final String DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT = "请生成一个用户事件数据看板。";
     private static final String PROLOGUE_AGENT_ANALYSIS = "我是研判智能体，专注于风险事件的深度分析与等级评估。\n" +
             " 通过数据聚合、情报关联、规则匹配及动态执行等多维度研判手段，精准评估风险等级合理性。\n" +
             " 所有研判过程均调用外部工具进行证据链验证，所有分析依据与取证结果将完整存档，确保研判结论可追溯、可复现。";
@@ -272,6 +276,38 @@ public class ChatSessionController extends BaseController {
                             .language("markdown")
                             .content(DATA_ACCESS_USER_EVENT_EXAMPLE_PROMPT)
                             .metadata(Map.of("defaultCollapsed", true))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_data_visualization".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_DATA_VISUALIZATION
+                    + "\n\n"
+                    + PROLOGUE_AGENT_DATA_VISUALIZATION_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "临时图表｜单页面应用｜带侧边栏应用｜数据看板";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_DATA_VISUALIZATION)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_DATA_VISUALIZATION_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title("用户事件数据可视化示例")
+                            .metadata(Map.of(
+                                    "examples",
+                                    List.of(
+                                            Map.of("label", "临时图表", "prompt", DATA_VISUALIZATION_CHART_EXAMPLE_PROMPT),
+                                            Map.of("label", "单页面应用", "prompt", DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT),
+                                            Map.of("label", "带侧边栏应用", "prompt", DATA_VISUALIZATION_APP_EXAMPLE_PROMPT),
+                                            Map.of("label", "数据看板", "prompt", DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT)
+                                    )
+                            ))
                             .build()
             ));
             return message;

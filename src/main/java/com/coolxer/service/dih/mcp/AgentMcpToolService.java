@@ -27,7 +27,7 @@ public class AgentMcpToolService {
 
     private static final String DATA_VISUALIZATION_AGENT_TYPE = "agent_data_visualization";
 
-    private static final Set<String> DATA_VISUALIZATION_READ_ONLY_RETRIEVAL_TOOLS = Set.of(
+    private static final Set<String> DATA_VISUALIZATION_ALLOWED_TOOLS = Set.of(
             "retrieval_search",
             "retrieval_list_rule",
             "retrieval_list_entity",
@@ -41,7 +41,19 @@ public class AgentMcpToolService {
             "entity_trend",
             "entity_statistics",
             "entity_list",
-            "entity_view"
+            "entity_view",
+            "policy_config_ensure_root",
+            "policy_config_add",
+            "policy_config_apply",
+            "policy_config_read",
+            "dashboard_create",
+            "dashboard_list",
+            "dashboard_view",
+            "menu_create",
+            "menu_list",
+            "menu_view",
+            "menu_type_options",
+            "menu_parent_options"
     );
 
     private static final String MCP_TOOL_USAGE_PROMPT = """
@@ -53,7 +65,8 @@ public class AgentMcpToolService {
             工具返回后，请用中文归纳结果，保留关键字段、异常信息和下一步建议。
             只能调用下方“可用 MCP 工具”中明确列出的工具名。`zenvis:*` 是前端 UI 代码块协议，
             例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
-            `zenvis:vectum-task-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
+            `zenvis:vectum-task-record`、`zenvis:visualization-chart-preview`、`zenvis:visualization-chart-record`、`zenvis:visualization-config-record`、
+            `zenvis:dashboard-config-record`、`zenvis:menu-config-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
 
             【可用 MCP 工具】
             %s
@@ -83,7 +96,7 @@ public class AgentMcpToolService {
         boolean dataVisualizationAgent = DATA_VISUALIZATION_AGENT_TYPE.equals(normalizedAgentType);
         List<ToolCallback> toolCallbacks = new ArrayList<>();
         StringBuilder mcpPrompt = new StringBuilder();
-        appendLocalTools(toolCallbacks, mcpPrompt, dataVisualizationAgent ? DATA_VISUALIZATION_READ_ONLY_RETRIEVAL_TOOLS : null);
+        appendLocalTools(toolCallbacks, mcpPrompt, dataVisualizationAgent ? DATA_VISUALIZATION_ALLOWED_TOOLS : null);
         if (!dataVisualizationAgent) {
             appendExternalTools(scope, toolCallbacks, mcpPrompt);
         }

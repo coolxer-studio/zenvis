@@ -57,7 +57,7 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void resolveDataVisualizationAgentOnlyUsesReadOnlyRetrievalTools() {
+    void resolveDataVisualizationAgentUsesRetrievalAndControlledWriteTools() {
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
                 new MockEnvironment(),
@@ -66,8 +66,12 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("entity_view", "获取指定实体的单条记录详情"),
                         new FakeToolCallback("retrieval_create_rule", "创建一个新的检索规则"),
                         new FakeToolCallback("entity_update", "更新指定实体的记录"),
-                        new FakeToolCallback("policy_config_tree", "获取配置文件树"),
-                        new FakeToolCallback("dashboard_create", "创建看板")
+                        new FakeToolCallback("policy_config_apply", "应用配置"),
+                        new FakeToolCallback("policy_config_delete", "删除配置"),
+                        new FakeToolCallback("dashboard_create", "创建看板"),
+                        new FakeToolCallback("dashboard_delete", "删除看板"),
+                        new FakeToolCallback("menu_create", "创建菜单"),
+                        new FakeToolCallback("menu_update", "更新菜单")
                 )
         );
 
@@ -75,15 +79,15 @@ class AgentMcpToolServiceTest {
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
-                .contains("retrieval_search", "entity_view")
-                .doesNotContain("retrieval_create_rule", "entity_update", "policy_config_tree", "dashboard_create", "external_write");
+                .contains("retrieval_search", "entity_view", "policy_config_apply", "dashboard_create", "menu_create")
+                .doesNotContain("retrieval_create_rule", "entity_update", "policy_config_delete", "dashboard_delete", "menu_update", "external_write");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("retrieval_search", "entity_view");
+                .containsExactly("retrieval_search", "entity_view", "policy_config_apply", "dashboard_create", "menu_create");
     }
 
     @Test
-    void resolveDataVisualizationAgentReturnsEmptyWhenNoReadOnlyRetrievalToolsExist() {
+    void resolveDataVisualizationAgentCanUseControlledWriteToolsWithoutRetrievalTools() {
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),
@@ -93,7 +97,12 @@ class AgentMcpToolServiceTest {
                 )
         );
 
-        assertThat(service.resolve("agent_data_visualization").hasTools()).isFalse();
+        McpToolContext context = service.resolve("agent_data_visualization");
+
+        assertThat(context.hasTools()).isTrue();
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly("dashboard_create");
     }
 
     @Test

@@ -27,7 +27,7 @@ public final class BuiltinAgentSkillRegistry {
                     AGENT_DATA_VISUALIZATION,
                     "数据可视化",
                     20,
-                    "数据可视化智能体仅通过只读 Retrieval MCP 查询真实数据，输出数据概览、统计洞察、可视化建议和后续建议。"
+                    "数据可视化智能体基于元数据实体生成临时图表、低代码页面/应用、静态 HTML、数据看板和菜单配置。"
             ),
             new BuiltinAgentSkill(
                     "analysis-agent",

@@ -128,7 +128,7 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinDataVisualizationSkillDocumentsRetrievalOnlyWorkflow() throws Exception {
+    void builtinDataVisualizationSkillDocumentsVisualizationWorkflow() throws Exception {
         Path repoSkill = Path.of("deploy/open_config/skill_config/data-visualization-agent");
         writeSkill(
                 skillRoot.resolve("data-visualization-agent"),
@@ -142,23 +142,29 @@ class SkillServiceTest {
         String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
 
         assertThat(prompt)
-                .contains("Retrieval MCP")
+                .contains("意图确认")
+                .contains("amis")
+                .contains("静态 HTML")
+                .contains("open_config")
                 .contains("retrieval_list_display_entity")
                 .contains("retrieval_search")
                 .contains("entity_statistics")
-                .contains("只调用只读 Retrieval MCP 工具")
+                .contains("policy_config_ensure_root")
+                .contains("dashboard_create")
+                .contains("menu_create")
+                .contains("内置演示示例处理规则")
+                .contains("zenvis:visualization-chart-preview")
+                .contains("zenvis:visualization-chart-record")
+                .contains("zenvis:visualization-config-record")
+                .contains("zenvis:dashboard-config-record")
+                .contains("zenvis:menu-config-record")
                 .contains("不生成 SQL")
-                .contains("可视化分析报告");
+                .contains("data_visualization.add_chart_library")
+                .contains("data_visualization.apply_config");
         assertThat(prompt)
-                .doesNotContain("zenvis:low-code-page-config")
-                .doesNotContain("zenvis:low-code-app-config")
-                .doesNotContain("zenvis:html-page-config")
-                .doesNotContain("policy_config_ensure_root")
                 .doesNotContain("policy_config_modify")
-                .doesNotContain("menu_create")
-                .doesNotContain("dashboard_create")
-                .doesNotContain("LOW_CODE_PAGE")
-                .doesNotContain("HTML_PAGE");
+                .doesNotContain("menu_delete")
+                .doesNotContain("dashboard_delete");
     }
 
     @Test

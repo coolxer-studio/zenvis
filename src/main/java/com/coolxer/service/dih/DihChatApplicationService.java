@@ -19,7 +19,11 @@ import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.system.DashboardService;
+import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
+import com.coolxer.model.system.vo.DashboardVo;
+import com.coolxer.model.system.vo.MenuVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.utils.JacksonUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +57,7 @@ public class DihChatApplicationService {
     private final ChatSessionService chatSessionService;
     private final FixedPromptResponseService fixedPromptResponseService;
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
+    private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
     private final AnalysisAgent analysisAgent;
     private final DisposeAgent disposeAgent;
     private final ReportAgent reportAgent;
@@ -65,12 +70,15 @@ public class DihChatApplicationService {
     private final SkillService skillService;
     private final ConfigService configService;
     private final PushTaskService pushTaskService;
+    private final DashboardService dashboardService;
+    private final MenuService menuService;
 
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
                                      ChatSessionService chatSessionService,
                                      FixedPromptResponseService fixedPromptResponseService,
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
+                                     DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
                                      AnalysisAgent analysisAgent,
                                      DisposeAgent disposeAgent,
                                      ReportAgent reportAgent,
@@ -82,12 +90,15 @@ public class DihChatApplicationService {
                                      AgentMcpToolService agentMcpToolService,
                                      SkillService skillService,
                                      ConfigService configService,
-                                     PushTaskService pushTaskService) {
+                                     PushTaskService pushTaskService,
+                                     DashboardService dashboardService,
+                                     MenuService menuService) {
         this.chatService = chatService;
         this.baseService = baseService;
         this.chatSessionService = chatSessionService;
         this.fixedPromptResponseService = fixedPromptResponseService;
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
+        this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
         this.analysisAgent = analysisAgent;
         this.disposeAgent = disposeAgent;
         this.reportAgent = reportAgent;
@@ -100,6 +111,8 @@ public class DihChatApplicationService {
         this.skillService = skillService;
         this.configService = configService;
         this.pushTaskService = pushTaskService;
+        this.dashboardService = dashboardService;
+        this.menuService = menuService;
     }
 
     public Flux<String> chat(ChatDto chatDto, User currentUser) {
@@ -239,6 +252,15 @@ public class DihChatApplicationService {
         }
         if (DataVisualizationAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
+            Optional<Flux<String>> demoResponse = dataVisualizationDemoResponseService.findResponse(
+                    chatSession,
+                    chatId,
+                    prompt,
+                    currentUser
+            );
+            if (demoResponse.isPresent()) {
+                return demoResponse.get();
+            }
             return dataVisualizationAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (isPlaceholderBuiltinAgent(chatType)) {
@@ -365,7 +387,7 @@ public class DihChatApplicationService {
         }
         try {
             ChatSession savedSession = chatSessionService.appendMessage(chatSession, aiMessage, currentUser);
-            mergeDataAccessExtraData(savedSession, parts, currentUser);
+            mergeStructuredExtraData(savedSession, parts, currentUser);
             log.info("保存AI响应到会话，消息类型: {}, 富消息片段: {}", aiMessage.getType(), withParts);
         } catch (Exception e) {
             log.error("保存模型响应到会话失败: {}", e.getMessage(), e);
@@ -373,17 +395,19 @@ public class DihChatApplicationService {
         return aiMessage;
     }
 
-    private void mergeDataAccessExtraData(ChatSession chatSession, List<ChatMessagePart> parts, User currentUser) {
-        Map<String, Object> patch = buildDataAccessExtraDataPatch(parts);
+    private void mergeStructuredExtraData(ChatSession chatSession, List<ChatMessagePart> parts, User currentUser) {
+        Map<String, Object> patch = buildStructuredExtraDataPatch(parts);
         if (chatSession == null || patch == null || patch.isEmpty()) {
             return;
         }
         Map<String, Object> extraData = new LinkedHashMap<>(parseJsonObject(chatSession.getExtraData()));
-        Map<String, Object> dataAccess = mapValue(extraData.get("dataAccess"));
-        Map<String, Object> patchDataAccess = mapValue(patch.get("dataAccess"));
-        mergeRecordList(dataAccess, patchDataAccess, "metadataConfigs");
-        mergeRecordList(dataAccess, patchDataAccess, "dataPushServices");
-        extraData.put("dataAccess", dataAccess);
+        mergeSectionRecords(extraData, patch, "dataAccess", List.of("metadataConfigs", "dataPushServices"));
+        mergeSectionRecords(extraData, patch, "dataVisualization", List.of(
+                "chartLibrary",
+                "visualizationConfigs",
+                "dashboardConfigs",
+                "menuConfigs"
+        ));
 
         String extraDataJson = JacksonUtil.toJson(extraData);
         ChatSessionDto chatSessionDto = new ChatSessionDto();
@@ -392,10 +416,23 @@ public class DihChatApplicationService {
         chatSession.setExtraData(extraDataJson);
     }
 
-    private Map<String, Object> buildDataAccessExtraDataPatch(List<ChatMessagePart> parts) {
+    private Map<String, Object> buildStructuredExtraDataPatch(List<ChatMessagePart> parts) {
         if (parts == null || parts.isEmpty()) {
             return null;
         }
+        Map<String, Object> patch = new LinkedHashMap<>();
+        Map<String, Object> dataAccessPatch = buildDataAccessExtraDataPatch(parts);
+        if (dataAccessPatch != null && !dataAccessPatch.isEmpty()) {
+            patch.putAll(dataAccessPatch);
+        }
+        Map<String, Object> dataVisualizationPatch = buildDataVisualizationExtraDataPatch(parts);
+        if (dataVisualizationPatch != null && !dataVisualizationPatch.isEmpty()) {
+            patch.putAll(dataVisualizationPatch);
+        }
+        return patch.isEmpty() ? null : patch;
+    }
+
+    private Map<String, Object> buildDataAccessExtraDataPatch(List<ChatMessagePart> parts) {
         List<Map<String, Object>> metadataConfigs = new ArrayList<>();
         List<Map<String, Object>> dataPushServices = new ArrayList<>();
         for (ChatMessagePart part : parts) {
@@ -428,6 +465,266 @@ public class DihChatApplicationService {
         return metadata;
     }
 
+    private Map<String, Object> buildDataVisualizationExtraDataPatch(List<ChatMessagePart> parts) {
+        List<Map<String, Object>> chartLibrary = new ArrayList<>();
+        List<Map<String, Object>> visualizationConfigs = new ArrayList<>();
+        List<Map<String, Object>> dashboardConfigs = new ArrayList<>();
+        List<Map<String, Object>> menuConfigs = new ArrayList<>();
+
+        for (ChatMessagePart part : parts) {
+            if ("visualization-chart-record".equals(part.getType())) {
+                chartLibrary.add(buildVisualizationChartRecord(part));
+            } else if ("visualization-config-record".equals(part.getType())) {
+                Map<String, Object> record = buildVisualizationConfigRecord(part);
+                if (isVisualizationConfigRecordPresent(record)) {
+                    visualizationConfigs.add(record);
+                }
+            } else if ("dashboard-config-record".equals(part.getType())) {
+                Map<String, Object> record = buildDashboardConfigRecord(part);
+                if (isDashboardConfigRecordPresent(record)) {
+                    dashboardConfigs.add(record);
+                }
+            } else if ("menu-config-record".equals(part.getType())) {
+                Map<String, Object> record = buildMenuConfigRecord(part);
+                if (isMenuConfigRecordPresent(record)) {
+                    menuConfigs.add(record);
+                }
+            }
+        }
+        if (chartLibrary.isEmpty() && visualizationConfigs.isEmpty()
+                && dashboardConfigs.isEmpty() && menuConfigs.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> dataVisualization = new LinkedHashMap<>();
+        if (!chartLibrary.isEmpty()) {
+            dataVisualization.put("chartLibrary", chartLibrary);
+        }
+        if (!visualizationConfigs.isEmpty()) {
+            dataVisualization.put("visualizationConfigs", visualizationConfigs);
+        }
+        if (!dashboardConfigs.isEmpty()) {
+            dataVisualization.put("dashboardConfigs", dashboardConfigs);
+        }
+        if (!menuConfigs.isEmpty()) {
+            dataVisualization.put("menuConfigs", menuConfigs);
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("dataVisualization", dataVisualization);
+        return metadata;
+    }
+
+    private Map<String, Object> buildVisualizationChartRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> record = baseVisualizationRecord(raw, part, "临时可视化图表");
+        record.put("chartType", firstNonBlank(stringValue(raw, "chartType", null), stringValue(raw, "chart_type", null)));
+        record.put("entity", firstNonBlank(stringValue(raw, "entity", null), stringValue(raw, "entityName", null)));
+        record.put("api", firstNonBlank(stringValue(raw, "api", null), stringValue(raw, "apiUrl", null), stringValue(raw, "url", null)));
+        record.put("status", stringValue(raw, "status", "temporary"));
+        record.put("source", "session");
+        Object config = raw.get("config");
+        record.put("config", config == null ? parseJsonObject(part.getContent()) : config);
+        record.put("raw", raw);
+        return record;
+    }
+
+    private Map<String, Object> buildVisualizationConfigRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> record = baseVisualizationRecord(raw, part, "可视化配置");
+        String configKind = firstNonBlank(
+                stringValue(raw, "configKind", null),
+                stringValue(raw, "kind", null),
+                stringValue(raw, "type", null)
+        );
+        String configIndex = firstNonBlank(stringValue(raw, "configIndex", null), stringValue(raw, "config_index", null));
+        String configType = firstNonBlank(
+                stringValue(raw, "configType", null),
+                stringValue(raw, "config_type", null),
+                configIndex
+        );
+        String fileName = firstNonBlank(
+                stringValue(raw, "fileName", null),
+                stringValue(raw, "file_name", null),
+                defaultVisualizationConfigFile(configKind)
+        );
+        record.put("configKind", configKind);
+        record.put("configType", configType);
+        record.put("configIndex", configIndex);
+        record.put("fileName", fileName);
+        record.put("routeName", visualizationRouteName(configKind));
+        record.put("menuParams", firstNonBlank(configIndex, configType));
+        record.put("status", stringValue(raw, "status", "applied"));
+        record.put("source", "open_config");
+        record.put("content", part.getContent());
+        record.put("raw", raw);
+        return record;
+    }
+
+    private Map<String, Object> buildDashboardConfigRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> record = baseVisualizationRecord(raw, part, "数据看板配置");
+        String dashboardId = firstNonBlank(stringValue(raw, "dashboardId", null), stringValue(raw, "dashboard_id", null), stringValue(raw, "id", null));
+        String code = firstNonBlank(stringValue(raw, "code", null), stringValue(raw, "dashboardCode", null), stringValue(raw, "dashboard_code", null));
+        record.put("dashboardId", dashboardId);
+        record.put("code", code);
+        record.put("dashboardType", firstNonBlank(stringValue(raw, "dashboardType", null), stringValue(raw, "type", null)));
+        record.put("url", stringValue(raw, "url", ""));
+        record.put("configIndex", firstNonBlank(stringValue(raw, "configIndex", null), stringValue(raw, "config_index", null)));
+        record.put("htmlPath", firstNonBlank(stringValue(raw, "htmlPath", null), stringValue(raw, "html_path", null)));
+        record.put("status", stringValue(raw, "status", "created"));
+        record.put("source", "dashboard");
+        record.put("raw", raw);
+        return record;
+    }
+
+    private Map<String, Object> buildMenuConfigRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> record = baseVisualizationRecord(raw, part, "菜单配置");
+        String menuId = firstNonBlank(stringValue(raw, "menuId", null), stringValue(raw, "menu_id", null), stringValue(raw, "id", null));
+        record.put("menuId", menuId);
+        record.put("route", stringValue(raw, "route", ""));
+        record.put("params", stringValue(raw, "params", ""));
+        record.put("menuType", firstNonBlank(stringValue(raw, "menuType", null), stringValue(raw, "type", null)));
+        record.put("source", firstNonBlank(stringValue(raw, "source", null), "menu"));
+        record.put("sourceKey", stringValue(raw, "source", null));
+        record.put("status", stringValue(raw, "status", "created"));
+        record.put("raw", raw);
+        return record;
+    }
+
+    private Map<String, Object> baseVisualizationRecord(Map<String, Object> raw, ChatMessagePart part, String defaultName) {
+        Map<String, Object> record = new LinkedHashMap<>();
+        String name = firstNonBlank(stringValue(raw, "name", null), stringValue(raw, "title", null), part.getContent(), defaultName);
+        record.put("id", firstNonBlank(
+                stringValue(raw, "recordId", null),
+                stringValue(raw, "record_id", null),
+                stringValue(raw, "id", null),
+                stringValue(raw, "fileName", null),
+                stringValue(raw, "configIndex", null),
+                stringValue(raw, "code", null),
+                stringValue(raw, "dashboardId", null),
+                stringValue(raw, "menuId", null),
+                name,
+                java.util.UUID.randomUUID().toString()
+        ));
+        record.put("name", name);
+        record.put("description", stringValue(raw, "description", ""));
+        return record;
+    }
+
+    private String defaultVisualizationConfigFile(String configKind) {
+        if ("low-code-app".equals(configKind)) {
+            return "site.json";
+        }
+        if ("html-page".equals(configKind) || "static-html".equals(configKind)) {
+            return null;
+        }
+        return "index.json";
+    }
+
+    private String visualizationRouteName(String configKind) {
+        if ("low-code-app".equals(configKind)) {
+            return "low-code-app";
+        }
+        if ("html-page".equals(configKind) || "static-html".equals(configKind)) {
+            return "html-page";
+        }
+        return "low-code-page";
+    }
+
+    private boolean isVisualizationConfigRecordPresent(Map<String, Object> record) {
+        String configType = stringValue(record, "configType", null);
+        String fileName = stringValue(record, "fileName", null);
+        if (!StringUtils.hasText(configType) || !StringUtils.hasText(fileName)) {
+            log.warn("忽略未验证的可视化配置记录：缺少 configType/fileName，record={}", record);
+            return false;
+        }
+        try {
+            boolean exists = configService.fileExistsInConfigPath(configType, fileName);
+            if (!exists) {
+                log.warn("忽略未验证的可视化配置记录：{}_config 中不存在文件 {}", configType, fileName);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("忽略未验证的可视化配置记录：校验 {}/{} 失败: {}", configType, fileName, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    private boolean isDashboardConfigRecordPresent(Map<String, Object> record) {
+        String dashboardId = stringValue(record, "dashboardId", null);
+        String code = stringValue(record, "code", null);
+        String name = stringValue(record, "name", null);
+        try {
+            if (StringUtils.hasText(dashboardId)) {
+                try {
+                    DashboardVo dashboard = dashboardService.info(Long.parseLong(dashboardId));
+                    if (dashboard != null) {
+                        return true;
+                    }
+                } catch (NumberFormatException ignored) {
+                    log.warn("数据看板记录 dashboardId 不是数字，将继续按 code/name 校验：{}", dashboardId);
+                }
+            }
+            List<DashboardVo> dashboards = dashboardService.findAll();
+            boolean matched = dashboards != null && dashboards.stream().anyMatch(item ->
+                    (StringUtils.hasText(code) && code.equals(item.getCode()))
+                            || (StringUtils.hasText(name) && name.equals(item.getName())));
+            if (!matched) {
+                log.warn("忽略未验证的数据看板记录：未找到 dashboardId/code/name 对应看板，record={}", record);
+            }
+            return matched;
+        } catch (Exception e) {
+            log.warn("忽略未验证的数据看板记录：校验失败: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    private boolean isMenuConfigRecordPresent(Map<String, Object> record) {
+        String menuId = stringValue(record, "menuId", null);
+        String name = stringValue(record, "name", null);
+        String source = stringValue(record, "sourceKey", null);
+        try {
+            if (StringUtils.hasText(menuId)) {
+                try {
+                    MenuVo menu = menuService.info(Long.parseLong(menuId));
+                    if (menu != null) {
+                        return true;
+                    }
+                } catch (NumberFormatException ignored) {
+                    log.warn("菜单配置记录 menuId 不是数字，将继续按 name/source 校验：{}", menuId);
+                }
+            }
+            List<MenuVo> menus = menuService.findAll();
+            boolean matched = menus != null && menus.stream().anyMatch(item ->
+                    (StringUtils.hasText(name) && name.equals(item.getName()))
+                            || (StringUtils.hasText(source) && source.equals(item.getSource())));
+            if (!matched) {
+                log.warn("忽略未验证的菜单配置记录：未找到 menuId/name/source 对应菜单，record={}", record);
+            }
+            return matched;
+        } catch (Exception e) {
+            log.warn("忽略未验证的菜单配置记录：校验失败: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    private void mergeSectionRecords(Map<String, Object> extraData,
+                                     Map<String, Object> patch,
+                                     String sectionKey,
+                                     List<String> recordKeys) {
+        Map<String, Object> section = mapValue(extraData.get(sectionKey));
+        Map<String, Object> patchSection = mapValue(patch.get(sectionKey));
+        for (String recordKey : recordKeys) {
+            mergeRecordList(section, patchSection, recordKey);
+        }
+        if (!section.isEmpty()) {
+            extraData.put(sectionKey, section);
+        }
+    }
+
     private void mergeRecordList(Map<String, Object> dataAccess,
                                  Map<String, Object> patchDataAccess,
                                  String key) {
@@ -444,6 +741,11 @@ public class DihChatApplicationService {
         String id = firstNonBlank(
                 stringValue(record, "id", null),
                 stringValue(record, "fileName", null),
+                stringValue(record, "configType", null),
+                stringValue(record, "configIndex", null),
+                stringValue(record, "code", null),
+                stringValue(record, "dashboardId", null),
+                stringValue(record, "menuId", null),
                 stringValue(record, "taskId", null),
                 stringValue(record, "name", null)
         );
@@ -451,6 +753,11 @@ public class DihChatApplicationService {
             records.removeIf(item -> id.equals(firstNonBlank(
                     stringValue(item, "id", null),
                     stringValue(item, "fileName", null),
+                    stringValue(item, "configType", null),
+                    stringValue(item, "configIndex", null),
+                    stringValue(item, "code", null),
+                    stringValue(item, "dashboardId", null),
+                    stringValue(item, "menuId", null),
                     stringValue(item, "taskId", null),
                     stringValue(item, "name", null)
             )));

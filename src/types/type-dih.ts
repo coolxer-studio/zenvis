@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'notice' | 'confirm' | 'info-steps' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'info-steps' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -61,6 +61,35 @@ export type ChatSession = {
   onlineSearch: boolean;
   updateTime: string;
   pin: boolean;
+};
+
+export type ReportDocument = {
+  id?: string;
+  documentId?: string;
+  title?: string;
+  name?: string;
+  format?: 'markdown' | 'html' | string;
+  version?: string;
+  status?: string;
+  source?: string;
+  updatedAt?: string;
+  content?: string;
+  outline?: Array<Record<string, unknown>>;
+  sourceAttachments?: Array<Record<string, unknown>>;
+  raw?: Record<string, unknown>;
+};
+
+export type ReportArtifact = {
+  id?: string;
+  artifactId?: string;
+  documentId?: string;
+  name?: string;
+  title?: string;
+  format?: 'markdown' | 'html' | string;
+  version?: string;
+  status?: string;
+  createdAt?: string;
+  content?: string;
 };
 
 export type ModelInfo = {

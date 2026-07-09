@@ -85,6 +85,52 @@
         <pre v-if="isCodeExpanded(part)" class="code-content"><code>{{ part.content }}</code></pre>
       </div>
 
+      <div v-else-if="part.type === 'report-document'" class="config-part report-document-part">
+        <div class="config-card-header">
+          <div class="config-card-title">
+            <el-icon><Document /></el-icon>
+            <span class="config-card-name">{{ part.title || metadataText(part, 'title') || '报表文档' }}</span>
+            <el-tag size="small" effect="plain">{{ reportDocumentFormatText(part) }}</el-tag>
+          </div>
+          <div class="config-card-tools">
+            <el-tooltip content="复制文档" placement="top">
+              <el-button
+                class="config-copy-btn"
+                size="small"
+                :icon="CopyDocument"
+                circle
+                @click="copyPart(part.content || '')"
+              />
+            </el-tooltip>
+            <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+              <el-button
+                class="card-toggle-btn"
+                size="small"
+                :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+                circle
+                @click="toggleZenvisCard(part)"
+              />
+            </el-tooltip>
+          </div>
+        </div>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div class="config-card-meta">
+            <span>已同步到右侧报表编辑器</span>
+          </div>
+          <iframe
+            v-if="isReportDocumentHtml(part)"
+            class="config-html-preview"
+            :srcdoc="part.content || ''"
+            sandbox="allow-same-origin"
+          ></iframe>
+          <div
+            v-else
+            class="message-content markdown-body report-document-preview"
+            v-html="parseMarkdown(part.content || '')"
+          ></div>
+        </template>
+      </div>
+
       <div v-else-if="part.type === 'config'" class="config-part">
         <div class="config-card-header">
           <div class="config-card-title">
@@ -746,6 +792,18 @@ const configKindText = (part: ChatMessagePart) => {
   if (kind === 'disposal-policy') return '处置策略';
   if (kind === 'report-document') return '报表文档';
   return kind || '配置';
+};
+
+const reportDocumentFormat = (part: ChatMessagePart) => {
+  return metadataText(part, 'format') || part.language || 'markdown';
+};
+
+const reportDocumentFormatText = (part: ChatMessagePart) => {
+  return reportDocumentFormat(part) === 'html' ? 'HTML 文档' : 'Markdown 文档';
+};
+
+const isReportDocumentHtml = (part: ChatMessagePart) => {
+  return reportDocumentFormat(part) === 'html';
 };
 
 const defaultConfigFileName = (part: ChatMessagePart) => {
@@ -1674,6 +1732,19 @@ onBeforeUnmount(() => {
   width: 100%;
   min-height: 520px;
   border: 0;
+  background: #ffffff;
+}
+
+.report-document-part {
+  border-color: #c8d5ef;
+  background: #fbfcff;
+}
+
+.report-document-preview {
+  margin: 10px 12px 12px;
+  padding: 14px 16px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
   background: #ffffff;
 }
 

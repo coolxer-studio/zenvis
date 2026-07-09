@@ -264,6 +264,11 @@ type InfoStepAnswer = {
 
 const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
+const DATA_REPORT_RECORD_EVENT = 'dihReportRecordsUpdated';
+const DATA_REPORT_RECORD_REQUEST_EVENT = 'dihReportRecordsRequested';
+const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested';
+const REPORT_EXTRA_DATA_CHANGED_EVENT = 'dihReportExtraDataChanged';
+const REPORT_SELECTION_REWRITE_COMPLETED_EVENT = 'dihReportSelectionRewriteCompleted';
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const MAX_FILES_PER_PICK = 10;
 const UPLOAD_CONCURRENCY = 3;
@@ -488,6 +493,18 @@ const extractDataVisualizationRecords = () => {
   };
 };
 
+const extractReportRecords = () => {
+  const report = asObject(parseSessionExtraData().report);
+  return {
+    currentDocument: asObject(report.currentDocument),
+    documents: asRecordList(report.documents),
+    artifacts: asRecordList(report.artifacts),
+    extraData: chatSessionExtraData.value,
+    sessionRecordId: chatSessionRecordId.value,
+    sessionId: chatSessionId.value,
+  };
+};
+
 const publishDataAccessRecords = () => {
   window.dispatchEvent(new CustomEvent(DATA_ACCESS_RECORD_EVENT, {
     detail: extractDataAccessRecords(),
@@ -500,9 +517,16 @@ const publishDataVisualizationRecords = () => {
   }));
 };
 
+const publishReportRecords = () => {
+  window.dispatchEvent(new CustomEvent(DATA_REPORT_RECORD_EVENT, {
+    detail: extractReportRecords(),
+  }));
+};
+
 watch(chatSessionExtraData, () => {
   publishDataAccessRecords();
   publishDataVisualizationRecords();
+  publishReportRecords();
 });
 
 const showSuggestionBtn = ref(true);
@@ -1098,6 +1122,88 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
     }
   }
 }
+
+type ReportQuickActionEventDetail = {
+  displayContent?: string;
+  requestContent?: string;
+  target?: 'document' | 'selection';
+  actionKey?: string;
+  selectionId?: string;
+};
+
+type ReportExtraDataChangedEventDetail = {
+  extraData?: string;
+};
+
+const handleReportRecordsRequested = () => {
+  publishReportRecords();
+};
+
+const handleReportExtraDataChanged = (event: Event) => {
+  const detail = (event as CustomEvent<ReportExtraDataChangedEventDetail>).detail || {};
+  if (typeof detail.extraData === 'string') {
+    chatSessionExtraData.value = detail.extraData;
+  }
+};
+
+const stripSelectionRewriteFence = (content = '') => {
+  const trimmed = content.trim();
+  const match = trimmed.match(/^```(?:[\w:-]+)?\s*\n?([\s\S]*?)\n?```$/);
+  return (match?.[1] || trimmed).trim();
+};
+
+const extractSelectionRewriteContent = (message?: ChatMessage) => {
+  if (!message) {
+    return '';
+  }
+  const preferredPart = message.parts?.find(part => {
+    return ['report-document', 'markdown', 'code'].includes(part.type) && !!part.content?.trim();
+  });
+  return stripSelectionRewriteFence(preferredPart?.content || message.content || '');
+};
+
+const handleReportQuickActionRequested = async (event: Event) => {
+  const detail = (event as CustomEvent<ReportQuickActionEventDetail>).detail || {};
+  const requestContent = detail.requestContent?.trim();
+  if (!requestContent) {
+    ElMessage.warning('快捷写作指令为空');
+    return;
+  }
+  if (isStreamingResponse.value) {
+    ElMessage.warning('当前正在生成，请稍后再试');
+    return;
+  }
+  const messageStartIndex = messages.value.length;
+  await sendMessage({
+    content: detail.displayContent || '请根据右侧文档执行 AI 写作操作。',
+    requestContent,
+  });
+  if (detail.target === 'selection') {
+    const responseMessage = [...messages.value.slice(messageStartIndex)]
+      .reverse()
+      .find(message => message.sender === 'ai' && !message.loading && !message.isError);
+    window.dispatchEvent(new CustomEvent(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, {
+      detail: {
+        selectionId: detail.selectionId,
+        actionKey: detail.actionKey,
+        content: extractSelectionRewriteContent(responseMessage),
+      },
+    }));
+  }
+};
+
+onMounted(() => {
+  window.addEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
+  window.addEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
+  window.addEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
+  nextTick(() => publishReportRecords());
+});
+
+onUnmounted(() => {
+  window.removeEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
+  window.removeEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
+  window.removeEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
+});
 
 const confirmAction = (part: ChatMessagePart) => {
   const action = part.metadata?.action;

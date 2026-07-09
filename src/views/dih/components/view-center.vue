@@ -30,8 +30,10 @@
                 @copy-code="copyMessage"
                 @decide-action="handleActionDecision(message, $event)"
                 @submit-info-steps="handleInfoStepsSubmit(message, $event)"
+                @add-chart-library="handleAddChartLibrary(message, $event)"
                 @choose-analysis-decision="handleAnalysisDecision(message, $event)"
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
+                @select-prompt-suggestion="fillPromptSuggestion"
               />
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：AI消息的交互按钮 -->
@@ -194,6 +196,7 @@ import { DihService } from '@/service/api'
 import { useRouter } from 'vue-router'
 import { generateUUID } from '@/utils/util-common'
 import {getCurrentFormattedDate} from '@/utils/util-time'
+import { copyTextToClipboard } from '@/utils/clipboard';
 import { withBaseUrl } from '@/utils/url';
 import ChatMessageRenderer from './chat-message-renderer.vue';
 import type { ChatAttachment, ChatMessage, ChatMessagePart, ChatSession } from '@/types/type-dih';
@@ -260,6 +263,7 @@ type InfoStepAnswer = {
 };
 
 const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
+const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const MAX_FILES_PER_PICK = 10;
 const UPLOAD_CONCURRENCY = 3;
@@ -295,11 +299,14 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'policy.apply_to_production',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
+  'data_visualization.add_chart_library',
+  'data_visualization.apply_config',
 ])
 
 const AUTO_REJECT_ACTIONS = new Set([
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
+  'data_visualization.apply_config',
 ])
 
 // 添加一个变量来跟踪Enter按键次数
@@ -401,6 +408,60 @@ const parseSessionExtraData = () => {
   }
 };
 
+const textValue = (value: unknown, fallback = '') => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  return String(value);
+};
+
+const buildChartLibraryRecord = (part: ChatMessagePart): DataAccessRecord => {
+  const metadata = asObject(part.metadata);
+  const name = textValue(metadata.title || part.title, '临时可视化图表');
+  const entity = textValue(metadata.entity, '');
+  const chartType = textValue(metadata.chartType, '');
+  return {
+    id: textValue(metadata.id, `chart:${entity || 'unknown'}:${name}`),
+    title: '图表库记录已创建',
+    name,
+    description: textValue(metadata.content || part.content || metadata.description, ''),
+    entity,
+    chartType,
+    api: textValue(metadata.api, ''),
+    status: 'temporary',
+    source: 'session',
+    config: metadata.amisConfig || metadata.config || {},
+  };
+};
+
+const ensureChatSessionRecordId = async () => {
+  if (chatSessionRecordId.value) {
+    return chatSessionRecordId.value;
+  }
+  if (!chatSessionId.value) {
+    return '';
+  }
+  const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
+  chatSessionRecordId.value = data.id || '';
+  if (data.extraData && !chatSessionExtraData.value) {
+    chatSessionExtraData.value = data.extraData;
+  }
+  return chatSessionRecordId.value;
+};
+
+const addChartRecordToExtraData = (record: DataAccessRecord) => {
+  const extraData = asObject(parseSessionExtraData());
+  const dataVisualization = asObject(extraData.dataVisualization);
+  extraData.dataVisualization = {
+    ...dataVisualization,
+    chartLibrary: upsertById(asRecordList(dataVisualization.chartLibrary), record),
+  };
+  return JSON.stringify(extraData);
+};
+
 const extractDataAccessRecords = () => {
   const metadataConfigs: DataAccessRecord[] = [];
   const dataPushServices: DataAccessRecord[] = [];
@@ -417,17 +478,37 @@ const extractDataAccessRecords = () => {
   };
 };
 
+const extractDataVisualizationRecords = () => {
+  const dataVisualization = asObject(parseSessionExtraData().dataVisualization);
+  return {
+    chartLibrary: asRecordList(dataVisualization.chartLibrary),
+    visualizationConfigs: asRecordList(dataVisualization.visualizationConfigs),
+    dashboardConfigs: asRecordList(dataVisualization.dashboardConfigs),
+    menuConfigs: asRecordList(dataVisualization.menuConfigs),
+  };
+};
+
 const publishDataAccessRecords = () => {
   window.dispatchEvent(new CustomEvent(DATA_ACCESS_RECORD_EVENT, {
     detail: extractDataAccessRecords(),
   }));
 };
 
-watch(chatSessionExtraData, publishDataAccessRecords);
+const publishDataVisualizationRecords = () => {
+  window.dispatchEvent(new CustomEvent(DATA_VISUALIZATION_RECORD_EVENT, {
+    detail: extractDataVisualizationRecords(),
+  }));
+};
+
+watch(chatSessionExtraData, () => {
+  publishDataAccessRecords();
+  publishDataVisualizationRecords();
+});
 
 const showSuggestionBtn = ref(true);
 const chatSessionTitle = ref('新的会话');
 const chatSessionId = ref('');
+const chatSessionRecordId = ref('');
 const chatSessionType = ref('');
 
 /**
@@ -657,6 +738,7 @@ const refreshChatSessionExtraData = async () => {
   }
   try {
     const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
+    chatSessionRecordId.value = data.id || chatSessionRecordId.value;
     chatSessionExtraData.value = data.extraData || '';
   } catch (error) {
     console.error('刷新会话附加数据失败:', error);
@@ -697,6 +779,7 @@ const getChatSession = async () => {
   if (chatSessionId.value) {
     try {
       const data = await DihService.getChatSession(chatSessionId.value,{type:chatSessionType.value});
+      chatSessionRecordId.value = data.id || '';
       messages.value = data.messageList;
       chatSessionExtraData.value = data.extraData || '';
       
@@ -718,6 +801,7 @@ const getChatSession = async () => {
         time: getCurrentFormattedDate()
       }];
       chatSessionExtraData.value = '';
+      chatSessionRecordId.value = '';
       chatSessionTitle.value = '新的会话';
     }
   } else {
@@ -727,6 +811,7 @@ const getChatSession = async () => {
         time: getCurrentFormattedDate()
       }];
     chatSessionExtraData.value = '';
+    chatSessionRecordId.value = '';
     chatSessionTitle.value = '新的会话';
   }
 
@@ -865,9 +950,10 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
 
   if (canSend) {
     // 清空输入框 
-    const sendMessage = explicitRequestMessage || explicitMessage || inputMessage.value.trim();
+    const currentInputMessage = inputMessage.value.trim();
+    const sendMessage = explicitRequestMessage || explicitMessage || currentInputMessage;
     const messageAttachments = explicitMessage ? [] : pendingAttachments.value.slice();
-    const displayMessage = explicitMessage || sendMessage || '请分析上传的附件内容。';
+    const displayMessage = explicitMessage || currentInputMessage || '请分析上传的附件内容。';
     if (!explicitMessage) {
       inputMessage.value = ''
       pendingAttachments.value = []
@@ -969,6 +1055,8 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
         let createdSession: ChatSession | null = null;
         try {
           createdSession = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
+          chatSessionRecordId.value = createdSession?.id || chatSessionRecordId.value;
+          chatSessionExtraData.value = createdSession?.extraData || chatSessionExtraData.value;
         } catch (error) {
           console.warn('获取新会话真实ID失败，将使用sessionId作为临时ID:', error);
         }
@@ -1029,6 +1117,12 @@ const autoConfirmMessage = (action: string) => {
   if (action === 'data_access.create_demo_push_task') {
     return '我已确认创建用户事件数据推送服务，请根据上一条确认卡和数据推送配置创建并启动数据推送服务。';
   }
+  if (action === 'data_visualization.apply_config') {
+    return '我已确认并授权应用上一轮数据可视化配置。请根据上一条确认卡和已生成的配置内容，按需调用配置、看板和菜单 MCP 工具写入系统；写入或创建成功后，请输出 zenvis:visualization-config-record、zenvis:dashboard-config-record、zenvis:menu-config-record 等记录围栏。';
+  }
+  if (action === 'data_visualization.add_chart_library') {
+    return '我已确认把上一轮临时图表加入图表库，请记录该图表的 amis 配置并输出 zenvis:visualization-chart-record。';
+  }
   return '我已确认研判分析方案，请根据上一条确认卡开始执行一次性研判分析。';
 };
 
@@ -1039,7 +1133,20 @@ const autoRejectMessage = (action: string) => {
   if (action === 'data_access.create_demo_push_task') {
     return '我已取消创建用户事件数据推送服务。请记录数据推送配置已生成但未添加到系统，不要创建或启动数据推送服务。';
   }
+  if (action === 'data_visualization.apply_config') {
+    return '我选择放弃本次数据可视化配置。请记录本次配置已放弃，不要写入 open_config，不要创建菜单，也不要创建看板。';
+  }
   return '我已取消本次操作。';
+};
+
+const dataVisualizationDecisionMessage = (decision: 'revise', detail?: string) => {
+  const focus = detail?.trim() || '请基于上一轮数据可视化配置继续优化展示字段、图表布局、菜单或看板配置。';
+  return `我需要补充信息继续更新数据可视化配置。调整要求如下：\n${focus}\n请基于上一轮数据可视化配置重新生成完整配置，并再次展示完整配置和后续选择。`;
+};
+
+const dataVisualizationDecisionDisplayMessage = (decision: 'revise', detail?: string) => {
+  const focus = detail?.trim() || '继续优化数据可视化配置。';
+  return `我已补充数据可视化配置调整要求：\n${focus}`;
 };
 
 const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', detail?: string) => {
@@ -1200,10 +1307,17 @@ const handleMouseLeave = (type: string) => {
 };
 
 // 复制消息到剪贴板
-const copyMessage = (content: string) => {
-  navigator.clipboard.writeText(content).then(() => {
-  }, () => {
-  });
+const copyMessage = async (content: string) => {
+  const copied = await copyTextToClipboard(content);
+  if (copied) {
+    ElMessage.success('已复制到剪贴板');
+  } else {
+    ElMessage.error('复制失败，请手动复制');
+  }
+};
+
+const fillPromptSuggestion = (prompt: string) => {
+  inputMessage.value = prompt;
 };
 
 const infoStepsDisplayMessage = (part: ChatMessagePart, answers: InfoStepAnswer[]) => {
@@ -1256,7 +1370,7 @@ const handleInfoStepsSubmit = async (
 
 const handleActionDecision = async (
   message: ChatMessage,
-  payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' }
+  payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' | 'revise'; detail?: string }
 ) => {
   if (!chatSessionId.value || !message.id || !payload.part.id) {
     ElMessage.warning('缺少确认记录标识，无法记录操作结果');
@@ -1274,14 +1388,55 @@ const handleActionDecision = async (
     console.error('记录确认结果失败:', error);
   }
   payload.part.status = payload.decision;
-  ElMessage.success(payload.decision === 'approved' ? '已确认执行' : '已取消操作');
   const action = confirmAction(payload.part);
+  if (payload.decision === 'revise' && action === 'data_visualization.apply_config') {
+    ElMessage.success('已提交配置调整要求');
+    await nextTick();
+    await sendMessage({
+      content: dataVisualizationDecisionDisplayMessage(payload.decision, payload.detail),
+      requestContent: dataVisualizationDecisionMessage(payload.decision, payload.detail),
+    });
+    return;
+  }
+  ElMessage.success(payload.decision === 'approved' ? '已确认执行' : '已取消操作');
   if (payload.decision === 'approved' && AUTO_CONFIRM_ACTIONS.has(action)) {
     await nextTick();
     await sendMessage({ content: autoConfirmMessage(action) });
   } else if (payload.decision === 'rejected' && AUTO_REJECT_ACTIONS.has(action)) {
     await nextTick();
     await sendMessage({ content: autoRejectMessage(action) });
+  }
+};
+
+const handleAddChartLibrary = async (_message: ChatMessage, part: ChatMessagePart) => {
+  const action = confirmAction(part);
+  if (action !== 'data_visualization.add_chart_library') {
+    ElMessage.warning('当前图表不支持加入图表库');
+    return;
+  }
+  if (part.status === 'submitted' || part.status === 'added') {
+    ElMessage.info('该图表已加入图表库');
+    return;
+  }
+  const previousExtraData = chatSessionExtraData.value;
+  const previousStatus = part.status;
+  try {
+    const sessionRecordId = await ensureChatSessionRecordId();
+    if (!sessionRecordId) {
+      ElMessage.warning('当前会话尚未创建完成，无法加入图表库');
+      return;
+    }
+    const record = buildChartLibraryRecord(part);
+    const nextExtraData = addChartRecordToExtraData(record);
+    part.status = 'added';
+    chatSessionExtraData.value = nextExtraData;
+    await DihService.updateChatSession(sessionRecordId, { extra_data: nextExtraData });
+    ElMessage.success('已加入图表库');
+  } catch (error) {
+    console.error('加入图表库失败:', error);
+    part.status = previousStatus;
+    chatSessionExtraData.value = previousExtraData;
+    ElMessage.error('加入图表库失败');
   }
 };
 

@@ -40,6 +40,22 @@
         v-html="parseMarkdown(part.content || '')"
       ></div>
 
+      <div v-else-if="part.type === 'prompt-suggestions'" class="prompt-suggestions-part">
+        <div v-if="part.title" class="prompt-suggestions-title">{{ part.title }}</div>
+        <div class="prompt-suggestion-list">
+          <el-button
+            v-for="(example, exampleIndex) in promptSuggestionExamples(part)"
+            :key="`${partKey(part)}-${exampleIndex}`"
+            class="prompt-suggestion-bubble"
+            size="small"
+            round
+            @click="selectPromptSuggestion(example.prompt)"
+          >
+            {{ example.label }}
+          </el-button>
+        </div>
+      </div>
+
       <div v-else-if="part.type === 'code'" class="code-part">
         <div class="code-header">
           <div class="code-title">
@@ -77,6 +93,15 @@
             <el-tag size="small" effect="plain">{{ configKindText(part) }}</el-tag>
           </div>
           <div class="config-card-tools">
+            <el-tooltip v-if="isConfigPreviewable(part)" :content="isConfigPreviewMode(part) ? '查看源码' : '预览最终效果'" placement="top">
+              <el-button
+                class="config-copy-btn"
+                size="small"
+                :icon="configPreviewButtonIcon(part)"
+                circle
+                @click="toggleConfigPreview(part)"
+              />
+            </el-tooltip>
             <el-tooltip content="复制配置" placement="top">
               <el-button
                 class="config-copy-btn"
@@ -97,10 +122,21 @@
             </el-tooltip>
           </div>
         </div>
-        <div v-if="isZenvisCardExpanded(part)" class="config-card-meta">
-          <span>默认文件：{{ defaultConfigFileName(part) }}</span>
-        </div>
-        <pre v-if="isZenvisCardExpanded(part)" class="config-card-content"><code>{{ part.content }}</code></pre>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div class="config-card-meta">
+            <span>默认文件：{{ defaultConfigFileName(part) }}</span>
+          </div>
+          <div v-if="isConfigPreviewMode(part)" class="config-preview">
+            <iframe
+              v-if="isHtmlConfig(part)"
+              class="config-html-preview"
+              :srcdoc="part.content || ''"
+              sandbox="allow-scripts allow-forms allow-same-origin"
+            ></iframe>
+            <div v-else class="config-low-code-preview" v-html="lowCodePreviewHtml(part)"></div>
+          </div>
+          <pre v-else class="config-card-content"><code>{{ part.content }}</code></pre>
+        </template>
       </div>
 
       <div v-else-if="part.type === 'notice'" class="notice-part" :class="noticeClass(part)">
@@ -144,6 +180,29 @@
               确认执行
             </el-button>
             <el-button size="small" @click="requestDecision(part, 'rejected')">取消</el-button>
+            <el-button
+              v-if="supportsConfirmRevise(part)"
+              size="small"
+              type="warning"
+              plain
+              @click="showConfirmRevise(part)"
+            >
+              补充信息继续更新
+            </el-button>
+          </div>
+          <div v-if="isConfirmReviseInputVisible(part) && (!part.status || part.status === 'pending')" class="confirm-revise-box">
+            <el-input
+              v-model="confirmDecisionInputs[partKey(part)]"
+              type="textarea"
+              :rows="3"
+              maxlength="1000"
+              show-word-limit
+              placeholder="输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标"
+            />
+            <div class="confirm-revise-actions">
+              <el-button size="small" type="primary" @click="submitConfirmRevise(part)">继续更新</el-button>
+              <el-button size="small" @click="hideConfirmRevise(part)">取消</el-button>
+            </div>
           </div>
         </template>
       </div>
@@ -313,6 +372,58 @@
         </template>
       </div>
 
+      <div v-else-if="part.type === 'visualization-chart-preview'" class="visualization-chart-preview-part">
+        <div class="visualization-chart-preview-header">
+          <div class="visualization-chart-preview-title">
+            <el-icon><DataAnalysis /></el-icon>
+            <span class="card-title-text">{{ part.title || '临时图表预览' }}</span>
+            <el-tag size="small" effect="plain">{{ metadataText(part, 'chartType') || 'chart' }}</el-tag>
+          </div>
+          <div class="visualization-chart-preview-tools">
+            <el-tooltip :content="isChartLibraryAdded(part) ? '已加入图表库' : '加入图表库'" placement="top">
+              <el-button
+                class="config-copy-btn"
+                size="small"
+                :icon="isChartLibraryAdded(part) ? CircleCheckFilled : Plus"
+                circle
+                :disabled="isChartLibraryAdded(part) || !chartLibraryAction(part)"
+                @click="requestAddChartLibrary(part)"
+              />
+            </el-tooltip>
+            <el-tooltip content="复制 amis 配置" placement="top">
+              <el-button
+                class="config-copy-btn"
+                size="small"
+                :icon="CopyDocument"
+                circle
+                @click="copyPart(chartPreviewConfigText(part))"
+              />
+            </el-tooltip>
+          </div>
+        </div>
+        <div v-if="part.content" class="visualization-chart-preview-desc">{{ part.content }}</div>
+        <div :ref="(el) => setChartPreviewRef(part, el)" class="visualization-chart-preview-canvas"></div>
+      </div>
+
+      <div v-else-if="isDataVisualizationRecord(part)" class="notice-part notice-info">
+        <div class="notice-title">
+          <el-icon><DataAnalysis /></el-icon>
+          <span class="card-title-text">{{ dataVisualizationRecordTitle(part) }}</span>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
+        </div>
+        <div v-if="isZenvisCardExpanded(part)" class="notice-content">
+          {{ part.content || metadataText(part, 'description') || '已记录到右侧数据可视化面板。' }}
+        </div>
+      </div>
+
       <div v-else-if="part.type === 'chart'" class="chart-part">
         <el-icon><DataAnalysis /></el-icon>
         <span>图表数据已加载，请在右侧面板查看可视化结果。</span>
@@ -324,7 +435,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   CaretBottom,
@@ -336,11 +447,14 @@ import {
   Document,
   InfoFilled,
   Loading,
+  Plus,
   QuestionFilled,
+  View,
   WarningFilled,
 } from '@element-plus/icons-vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import * as echarts from 'echarts';
 import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
 
 type InfoStepSuggestion = {
@@ -365,6 +479,11 @@ type InfoStepAnswer = {
   source: 'suggestion' | 'custom';
 };
 
+type PromptSuggestionExample = {
+  label: string;
+  prompt: string;
+};
+
 marked.setOptions({
   gfm: true,
   breaks: true,
@@ -376,22 +495,29 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'copyCode', content: string): void;
-  (e: 'decideAction', payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' }): void;
+  (e: 'decideAction', payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' | 'revise'; detail?: string }): void;
   (e: 'submitInfoSteps', payload: { part: ChatMessagePart; answers: InfoStepAnswer[] }): void;
+  (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chooseAnalysisDecision', payload: { part: ChatMessagePart; decision: 'dispose' | 'ignore' | 'continue'; detail?: string }): void;
   (e: 'chooseDataAccessDecision', payload: { part: ChatMessagePart; decision: 'apply_config' | 'abandon' | 'revise'; detail?: string }): void;
+  (e: 'selectPromptSuggestion', prompt: string): void;
 }>();
 
 const expandedThinking = reactive<Record<string, boolean>>({});
 const hiddenThinking = reactive<Record<string, boolean>>({});
 const expandedCode = reactive<Record<string, boolean>>({});
 const expandedZenvisCards = reactive<Record<string, boolean>>({});
+const configPreviewModes = reactive<Record<string, boolean>>({});
 const infoStepSelectedValues = reactive<Record<string, string>>({});
 const infoStepCustomInputs = reactive<Record<string, string>>({});
 const continueInputVisible = reactive<Record<string, boolean>>({});
 const analysisDecisionInputs = reactive<Record<string, string>>({});
+const confirmReviseInputVisible = reactive<Record<string, boolean>>({});
+const confirmDecisionInputs = reactive<Record<string, string>>({});
 const dataAccessReviseInputVisible = reactive<Record<string, boolean>>({});
 const dataAccessDecisionInputs = reactive<Record<string, string>>({});
+const chartPreviewEls = new Map<string, HTMLElement>();
+const chartPreviewInstances = new Map<string, ReturnType<typeof echarts.init>>();
 
 const renderParts = computed<ChatMessagePart[]>(() => {
   if (props.message.parts && props.message.parts.length > 0) {
@@ -401,6 +527,13 @@ const renderParts = computed<ChatMessagePart[]>(() => {
 });
 
 const partKey = (part: ChatMessagePart) => part.id || `${part.type}-${part.content || ''}`;
+
+const setChartPreviewRef = (part: ChatMessagePart, el: unknown) => {
+  if (el instanceof HTMLElement) {
+    chartPreviewEls.set(partKey(part), el);
+    void nextTick(renderChartPreviews);
+  }
+};
 
 const isTruthyMetadata = (part: ChatMessagePart, key: string) => {
   const value = part.metadata?.[key];
@@ -501,9 +634,103 @@ const copyPart = (content: string) => {
   emit('copyCode', content);
 };
 
+const promptSuggestionExamples = (part: ChatMessagePart): PromptSuggestionExample[] => {
+  const examples = part.metadata?.examples;
+  if (!Array.isArray(examples)) {
+    return [];
+  }
+  return examples
+    .filter(example => example && typeof example === 'object')
+    .map(example => {
+      const raw = example as Record<string, unknown>;
+      const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
+      const label = typeof raw.label === 'string' ? raw.label : prompt;
+      return {
+        label: label || '示例',
+        prompt,
+      };
+    })
+    .filter(example => example.prompt);
+};
+
+const selectPromptSuggestion = (prompt: string) => {
+  emit('selectPromptSuggestion', prompt);
+};
+
 const metadataText = (part: ChatMessagePart, key: string) => {
   const value = part.metadata?.[key];
   return typeof value === 'string' ? value : '';
+};
+
+const metadataJsonText = (part: ChatMessagePart, key: string) => {
+  const value = part.metadata?.[key];
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value, null, 2);
+  }
+  return '';
+};
+
+const chartPreviewConfigText = (part: ChatMessagePart) => {
+  return metadataJsonText(part, 'amisConfig') || part.content || '';
+};
+
+const chartLibraryAction = (part: ChatMessagePart) => {
+  const action = metadataText(part, 'action');
+  return action === 'data_visualization.add_chart_library' ? action : '';
+};
+
+const isChartLibraryAdded = (part: ChatMessagePart) => {
+  return part.status === 'submitted' || part.status === 'added';
+};
+
+const requestAddChartLibrary = (part: ChatMessagePart) => {
+  if (!chartLibraryAction(part) || isChartLibraryAdded(part)) {
+    return;
+  }
+  emit('addChartLibrary', part);
+};
+
+const chartPreviewOption = (part: ChatMessagePart) => {
+  const value = part.metadata?.echartsOption || part.metadata?.option;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (value && typeof value === 'object') {
+    return value;
+  }
+  return null;
+};
+
+const renderChartPreview = (part: ChatMessagePart) => {
+  const el = chartPreviewEls.get(partKey(part));
+  const option = chartPreviewOption(part);
+  if (!el || !option) {
+    return;
+  }
+  let instance = chartPreviewInstances.get(partKey(part));
+  if (!instance) {
+    instance = echarts.init(el);
+    chartPreviewInstances.set(partKey(part), instance);
+  }
+  instance.setOption(option, true);
+  instance.resize();
+};
+
+const renderChartPreviews = () => {
+  renderParts.value
+    .filter(part => part.type === 'visualization-chart-preview')
+    .forEach(renderChartPreview);
+};
+
+const resizeChartPreviews = () => {
+  chartPreviewInstances.forEach(instance => instance.resize());
 };
 
 const configKindText = (part: ChatMessagePart) => {
@@ -523,6 +750,314 @@ const configKindText = (part: ChatMessagePart) => {
 
 const defaultConfigFileName = (part: ChatMessagePart) => {
   return metadataText(part, 'defaultFileName') || '-';
+};
+
+const configKind = (part: ChatMessagePart) => metadataText(part, 'configKind');
+
+const isHtmlConfig = (part: ChatMessagePart) => configKind(part) === 'html-page';
+
+const isLowCodeConfig = (part: ChatMessagePart) => {
+  return ['low-code-page', 'low-code-app'].includes(configKind(part));
+};
+
+const isConfigPreviewable = (part: ChatMessagePart) => {
+  return isHtmlConfig(part) || isLowCodeConfig(part);
+};
+
+const isConfigPreviewMode = (part: ChatMessagePart) => {
+  return configPreviewModes[partKey(part)] === true;
+};
+
+const toggleConfigPreview = (part: ChatMessagePart) => {
+  const key = partKey(part);
+  configPreviewModes[key] = !isConfigPreviewMode(part);
+  if (configPreviewModes[key]) {
+    expandedZenvisCards[key] = true;
+  }
+};
+
+const configPreviewButtonIcon = (part: ChatMessagePart) => {
+  return isConfigPreviewMode(part) ? Document : View;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  return isRecord(value) ? value : {};
+};
+
+const asRecordArray = (value: unknown): Record<string, unknown>[] => {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+};
+
+const stringValue = (value: unknown) => {
+  return typeof value === 'string' ? value : '';
+};
+
+const escapeHtml = (value: unknown) => {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  };
+  return String(value ?? '').replace(/[&<>"']/g, char => map[char] || char);
+};
+
+const parseLowCodeConfig = (part: ChatMessagePart) => {
+  try {
+    return JSON.parse(part.content || '{}');
+  } catch {
+    return null;
+  }
+};
+
+const lowCodePreviewHtml = (part: ChatMessagePart) => {
+  const schema = parseLowCodeConfig(part);
+  if (!schema) {
+    return '<div class="amis-preview-empty">配置内容不是有效 JSON，无法生成预览。</div>';
+  }
+  return DOMPurify.sanitize(renderLowCodePreview(schema, configKind(part)));
+};
+
+const renderLowCodePreview = (schema: unknown, kind: string): string => {
+  if (kind === 'low-code-app') {
+    return renderLowCodeAppPreview(asRecord(schema));
+  }
+  return renderLowCodeNode(asRecord(schema));
+};
+
+const renderLowCodeAppPreview = (schema: Record<string, unknown>) => {
+  const data = asRecord(schema.data);
+  const pages = asRecordArray(data.pages);
+  const menuItems = pages.flatMap(page => {
+    const children = asRecordArray(page.children);
+    return children.length > 0 ? children : [page];
+  }).filter(page => stringValue(page.label));
+  const menus = menuItems.length > 0 ? menuItems : [
+    { label: '首页', url: 'index' },
+    { label: '管理页面', url: 'manage' },
+  ];
+  return `
+    <div class="amis-preview-app">
+      <aside class="amis-preview-sidebar">
+        <div class="amis-preview-brand">用户事件应用</div>
+        ${menus.map((menu, index) => `
+          <div class="amis-preview-nav-item ${index === 0 ? 'active' : ''}">
+            <span>${escapeHtml(menu.label)}</span>
+            <small>${escapeHtml(menu.url)}</small>
+          </div>
+        `).join('')}
+      </aside>
+      <main class="amis-preview-app-main">
+        <div class="amis-preview-page-title">低代码应用预览</div>
+        <div class="amis-preview-grid">
+          <section class="amis-preview-panel">
+            <div class="amis-preview-panel-title">首页</div>
+            <p>展示用户事件总览、上报趋势和常用入口。</p>
+          </section>
+          <section class="amis-preview-panel">
+            <div class="amis-preview-panel-title">管理页面</div>
+            <p>提供用户事件查询、新增、编辑和删除操作。</p>
+          </section>
+        </div>
+      </main>
+    </div>
+  `;
+};
+
+const renderLowCodeNode = (node: unknown): string => {
+  if (Array.isArray(node)) {
+    return node.map(renderLowCodeNode).join('');
+  }
+  const schema = asRecord(node);
+  const type = stringValue(schema.type);
+  if (!type && Object.keys(schema).length === 0) {
+    return '<div class="amis-preview-empty">暂无可预览内容。</div>';
+  }
+  if (type === 'page') {
+    return `
+      <div class="amis-preview-page">
+        <header class="amis-preview-page-header">
+          <div class="amis-preview-page-title">${escapeHtml(schema.title || '低代码页面')}</div>
+          ${renderLowCodeToolbar(schema.toolbar)}
+        </header>
+        <div class="amis-preview-page-body">${renderLowCodeNode(schema.body)}</div>
+      </div>
+    `;
+  }
+  if (type === 'crud') {
+    return renderCrudPreview(schema);
+  }
+  if (type === 'chart') {
+    return renderChartSchemaPreview(schema);
+  }
+  if (type === 'grid') {
+    const columns = asRecordArray(schema.columns);
+    return `
+      <div class="amis-preview-grid">
+        ${columns.map(column => `<section class="amis-preview-panel">${renderLowCodeNode(column.body || column)}</section>`).join('')}
+      </div>
+    `;
+  }
+  if (type === 'service') {
+    return `
+      <section class="amis-preview-service">
+        <div class="amis-preview-api">${escapeHtml(schema.api || 'service api')}</div>
+        ${renderLowCodeNode(schema.body)}
+      </section>
+    `;
+  }
+  if (type === 'panel') {
+    return `
+      <section class="amis-preview-panel">
+        <div class="amis-preview-panel-title">${escapeHtml(schema.title || '面板')}</div>
+        ${renderLowCodeNode(schema.body)}
+      </section>
+    `;
+  }
+  if (type === 'form') {
+    return renderFormPreview(schema);
+  }
+  if (type === 'tpl' || type === 'static') {
+    return `<div class="amis-preview-text">${escapeHtml(stripTemplateText(schema.tpl || schema.value || schema.label || '文本内容'))}</div>`;
+  }
+  if (type === 'divider') {
+    return '<div class="amis-preview-divider"></div>';
+  }
+  return `
+    <section class="amis-preview-panel">
+      <div class="amis-preview-panel-title">${escapeHtml(configTypeLabel(type))}</div>
+      ${renderLowCodeNode(schema.body)}
+    </section>
+  `;
+};
+
+const renderLowCodeToolbar = (toolbar: unknown) => {
+  const buttons = asRecordArray(toolbar);
+  if (buttons.length === 0) {
+    return '';
+  }
+  return `
+    <div class="amis-preview-toolbar">
+      ${buttons.map(button => `<button type="button">${escapeHtml(button.label || configTypeLabel(stringValue(button.type)))}</button>`).join('')}
+    </div>
+  `;
+};
+
+const renderCrudPreview = (schema: Record<string, unknown>) => {
+  const columns = asRecordArray(schema.columns).slice(0, 8);
+  const visibleColumns = columns.length > 0 ? columns : [
+    { name: 'id', label: '事件ID' },
+    { name: 'user', label: '用户' },
+    { name: 'event_type', label: '事件类型' },
+    { name: 'reliability', label: '可信度' },
+    { name: 'server_time', label: '入库时间' },
+  ];
+  return `
+    <section class="amis-preview-crud">
+      <div class="amis-preview-crud-header">
+        <div>
+          <div class="amis-preview-panel-title">用户事件列表</div>
+          <div class="amis-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/entity/user-event/list')}</div>
+        </div>
+        <button type="button">查询</button>
+      </div>
+      <div class="amis-preview-filter">
+        <span>用户</span>
+        <span>事件类型</span>
+        <span>入库时间</span>
+      </div>
+      <div class="amis-preview-table-wrap">
+        <table class="amis-preview-table">
+          <thead>
+            <tr>${visibleColumns.map(column => `<th>${escapeHtml(column.label || column.name || configTypeLabel(stringValue(column.type)))}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            <tr>${visibleColumns.map(column => `<td>${escapeHtml(sampleColumnValue(column))}</td>`).join('')}</tr>
+            <tr>${visibleColumns.map(column => `<td>${escapeHtml(sampleColumnValue(column, true))}</td>`).join('')}</tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+};
+
+const renderChartSchemaPreview = (schema: Record<string, unknown>) => {
+  const config = asRecord(schema.config);
+  const title = asRecord(config.title);
+  return `
+    <section class="amis-preview-chart">
+      <div class="amis-preview-chart-title">${escapeHtml(title.text || schema.title || '用户事件上报趋势')}</div>
+      <div class="amis-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/retrieval/aggregate/trend')}</div>
+      <div class="amis-preview-chart-canvas">
+        <span class="amis-preview-bar bar-1"></span>
+        <span class="amis-preview-bar bar-2"></span>
+        <span class="amis-preview-bar bar-3"></span>
+        <span class="amis-preview-bar bar-4"></span>
+        <span class="amis-preview-bar bar-5"></span>
+        <span class="amis-preview-bar bar-6"></span>
+      </div>
+    </section>
+  `;
+};
+
+const renderFormPreview = (schema: Record<string, unknown>) => {
+  const fields = asRecordArray(schema.body).slice(0, 8);
+  return `
+    <section class="amis-preview-form">
+      <div class="amis-preview-panel-title">${escapeHtml(schema.title || '表单')}</div>
+      <div class="amis-preview-form-grid">
+        ${fields.map(field => `
+          <label>
+            <span>${escapeHtml(field.label || field.name || configTypeLabel(stringValue(field.type)))}</span>
+            <input readonly value="${escapeHtml(sampleColumnValue(field))}" />
+          </label>
+        `).join('')}
+      </div>
+    </section>
+  `;
+};
+
+const stripTemplateText = (value: unknown) => {
+  return String(value ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\$\{[^}]+}/g, '示例值')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const sampleColumnValue = (column: Record<string, unknown>, secondRow = false) => {
+  const name = stringValue(column.name).toLowerCase();
+  const label = stringValue(column.label);
+  if (stringValue(column.type) === 'operation' || label === '操作') {
+    return secondRow ? '编辑 / 删除' : '查看 / 编辑';
+  }
+  if (name.includes('id')) return secondRow ? 'evt-2026070902' : 'evt-2026070901';
+  if (name.includes('procid')) return secondRow ? '108' : '101';
+  if (name.includes('user')) return secondRow ? 'operator-b' : 'demo-user';
+  if (name.includes('event_type')) return secondRow ? '点击' : '登录';
+  if (name.includes('reliability')) return secondRow ? '7.6' : '8.8';
+  if (name.includes('server_time') || name.includes('time')) return secondRow ? '2026-07-09 11:20:00' : '2026-07-09 10:00:00';
+  if (name.includes('tag')) return secondRow ? '运营' : '演示, 可视化';
+  if (name.includes('detail')) return secondRow ? '{"path":"/event"}' : '{"method":"POST"}';
+  return secondRow ? '示例值 B' : '示例值 A';
+};
+
+const configTypeLabel = (type: string) => {
+  const labels: Record<string, string> = {
+    button: '按钮',
+    input: '输入框',
+    'input-text': '文本输入',
+    select: '选择器',
+    textarea: '多行文本',
+    mapping: '映射',
+    operation: '操作',
+  };
+  return labels[type] || type || '组件';
 };
 
 const infoSteps = (part: ChatMessagePart): InfoStepItem[] => {
@@ -620,6 +1155,35 @@ const submitInfoSteps = (part: ChatMessagePart) => {
     })
     .filter(answer => answer.value);
   emit('submitInfoSteps', { part, answers });
+};
+
+const metadataStringList = (part: ChatMessagePart, key: string) => {
+  const value = part.metadata?.[key];
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string') as string[] : [];
+};
+
+const supportsConfirmRevise = (part: ChatMessagePart) => {
+  return metadataStringList(part, 'actions').includes('revise');
+};
+
+const showConfirmRevise = (part: ChatMessagePart) => {
+  confirmReviseInputVisible[partKey(part)] = true;
+};
+
+const isConfirmReviseInputVisible = (part: ChatMessagePart) => {
+  return confirmReviseInputVisible[partKey(part)] === true;
+};
+
+const hideConfirmRevise = (part: ChatMessagePart) => {
+  confirmReviseInputVisible[partKey(part)] = false;
+};
+
+const submitConfirmRevise = (part: ChatMessagePart) => {
+  emit('decideAction', {
+    part,
+    decision: 'revise',
+    detail: (confirmDecisionInputs[partKey(part)] || '').trim(),
+  });
 };
 
 const requestDecision = async (part: ChatMessagePart, decision: 'approved' | 'rejected') => {
@@ -750,12 +1314,14 @@ const noticeIcon = (part: ChatMessagePart) => {
 const confirmTagType = (status?: string) => {
   if (status === 'approved') return 'success';
   if (status === 'rejected') return 'info';
+  if (status === 'revise') return 'warning';
   return 'warning';
 };
 
 const confirmStatusText = (status?: string) => {
   if (status === 'approved') return '已确认';
   if (status === 'rejected') return '已取消';
+  if (status === 'revise') return '继续更新';
   return '待确认';
 };
 
@@ -796,6 +1362,40 @@ const dataAccessDecisionStatusText = (status?: string) => {
   if (status === 'revise') return '继续更新';
   return '待选择';
 };
+
+const isDataVisualizationRecord = (part: ChatMessagePart) => {
+  return [
+    'visualization-chart-record',
+    'visualization-config-record',
+    'dashboard-config-record',
+    'menu-config-record',
+  ].includes(part.type);
+};
+
+const dataVisualizationRecordTitle = (part: ChatMessagePart) => {
+  if (part.type === 'visualization-chart-record') return part.title || '图表库记录';
+  if (part.type === 'visualization-config-record') return part.title || '可视化配置记录';
+  if (part.type === 'dashboard-config-record') return part.title || '数据看板配置记录';
+  if (part.type === 'menu-config-record') return part.title || '菜单配置记录';
+  return part.title || '数据可视化记录';
+};
+
+watch(
+  renderParts,
+  () => {
+    void nextTick(renderChartPreviews);
+  },
+  { deep: true, immediate: true },
+);
+
+window.addEventListener('resize', resizeChartPreviews);
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeChartPreviews);
+  chartPreviewInstances.forEach(instance => instance.dispose());
+  chartPreviewInstances.clear();
+  chartPreviewEls.clear();
+});
 </script>
 
 <style scoped>
@@ -852,6 +1452,33 @@ const dataAccessDecisionStatusText = (status?: string) => {
   display: block;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.prompt-suggestions-part {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.prompt-suggestions-title {
+  margin-bottom: 8px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.prompt-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prompt-suggestion-bubble {
+  max-width: 100%;
+  white-space: normal;
+  height: auto;
+  min-height: 32px;
+  padding: 7px 12px;
+  line-height: 1.35;
 }
 
 .thinking-part {
@@ -1034,11 +1661,319 @@ const dataAccessDecisionStatusText = (status?: string) => {
   overflow-wrap: anywhere;
 }
 
+.config-preview {
+  margin: 10px 12px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.config-html-preview {
+  display: block;
+  width: 100%;
+  min-height: 520px;
+  border: 0;
+  background: #ffffff;
+}
+
+.config-low-code-preview {
+  padding: 14px;
+  background: #f6f8fb;
+}
+
+.config-low-code-preview :deep(.amis-preview-page),
+.config-low-code-preview :deep(.amis-preview-app) {
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.config-low-code-preview :deep(.amis-preview-page-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #ebeef5;
+  background: #ffffff;
+}
+
+.config-low-code-preview :deep(.amis-preview-page-title),
+.config-low-code-preview :deep(.amis-preview-brand),
+.config-low-code-preview :deep(.amis-preview-panel-title),
+.config-low-code-preview :deep(.amis-preview-chart-title) {
+  min-width: 0;
+  color: #303133;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.config-low-code-preview :deep(.amis-preview-page-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.config-low-code-preview :deep(.amis-preview-toolbar) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.config-low-code-preview :deep(button) {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #409eff;
+  border-radius: 6px;
+  background: #409eff;
+  color: #ffffff;
+  font-size: 13px;
+  cursor: default;
+}
+
+.config-low-code-preview :deep(.amis-preview-app) {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  min-height: 360px;
+}
+
+.config-low-code-preview :deep(.amis-preview-sidebar) {
+  padding: 14px 10px;
+  border-right: 1px solid #ebeef5;
+  background: #ffffff;
+}
+
+.config-low-code-preview :deep(.amis-preview-brand) {
+  margin: 0 8px 14px;
+}
+
+.config-low-code-preview :deep(.amis-preview-nav-item) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  color: #606266;
+  font-size: 13px;
+}
+
+.config-low-code-preview :deep(.amis-preview-nav-item.active) {
+  background: #ecf5ff;
+  color: #1d6fd9;
+  font-weight: 600;
+}
+
+.config-low-code-preview :deep(.amis-preview-nav-item small) {
+  color: #909399;
+  font-size: 11px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.config-low-code-preview :deep(.amis-preview-app-main) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.config-low-code-preview :deep(.amis-preview-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.config-low-code-preview :deep(.amis-preview-panel),
+.config-low-code-preview :deep(.amis-preview-service),
+.config-low-code-preview :deep(.amis-preview-crud),
+.config-low-code-preview :deep(.amis-preview-chart),
+.config-low-code-preview :deep(.amis-preview-form),
+.config-low-code-preview :deep(.amis-preview-empty) {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.config-low-code-preview :deep(.amis-preview-panel p),
+.config-low-code-preview :deep(.amis-preview-text),
+.config-low-code-preview :deep(.amis-preview-empty) {
+  margin: 8px 0 0;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.config-low-code-preview :deep(.amis-preview-api) {
+  margin-top: 6px;
+  color: #909399;
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.config-low-code-preview :deep(.amis-preview-crud-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.config-low-code-preview :deep(.amis-preview-filter) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.config-low-code-preview :deep(.amis-preview-filter span) {
+  padding: 6px 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: #606266;
+  font-size: 12px;
+}
+
+.config-low-code-preview :deep(.amis-preview-table-wrap) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.config-low-code-preview :deep(.amis-preview-table) {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.config-low-code-preview :deep(.amis-preview-table th),
+.config-low-code-preview :deep(.amis-preview-table td) {
+  padding: 9px 10px;
+  border-bottom: 1px solid #ebeef5;
+  color: #303133;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.config-low-code-preview :deep(.amis-preview-table th) {
+  background: #f7f8fa;
+  color: #606266;
+  font-weight: 600;
+}
+
+.config-low-code-preview :deep(.amis-preview-chart-canvas) {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  height: 220px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.config-low-code-preview :deep(.amis-preview-bar) {
+  flex: 1;
+  min-width: 18px;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, #67c23a 0%, #409eff 100%);
+}
+
+.config-low-code-preview :deep(.amis-preview-bar.bar-1) {
+  height: 38%;
+}
+
+.config-low-code-preview :deep(.amis-preview-bar.bar-2) {
+  height: 52%;
+}
+
+.config-low-code-preview :deep(.amis-preview-bar.bar-3) {
+  height: 76%;
+}
+
+.config-low-code-preview :deep(.amis-preview-bar.bar-4) {
+  height: 88%;
+}
+
+.config-low-code-preview :deep(.amis-preview-bar.bar-5) {
+  height: 68%;
+}
+
+.config-low-code-preview :deep(.amis-preview-bar.bar-6) {
+  height: 47%;
+}
+
+.config-low-code-preview :deep(.amis-preview-form-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.config-low-code-preview :deep(.amis-preview-form-grid label) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #606266;
+  font-size: 12px;
+}
+
+.config-low-code-preview :deep(.amis-preview-form-grid input) {
+  height: 30px;
+  min-width: 0;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  padding: 0 9px;
+  background: #f7f8fa;
+  color: #303133;
+}
+
+.config-low-code-preview :deep(.amis-preview-divider) {
+  height: 1px;
+  margin: 10px 0;
+  background: #ebeef5;
+}
+
+@media (max-width: 640px) {
+  .config-low-code-preview :deep(.amis-preview-app) {
+    grid-template-columns: 1fr;
+  }
+
+  .config-low-code-preview :deep(.amis-preview-sidebar) {
+    border-right: 0;
+    border-bottom: 1px solid #ebeef5;
+  }
+
+  .config-low-code-preview :deep(.amis-preview-page-header),
+  .config-low-code-preview :deep(.amis-preview-crud-header) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .config-html-preview {
+    min-height: 420px;
+  }
+}
+
 .notice-part,
 .confirm-part,
 .info-steps-part,
 .analysis-decision-part,
 .data-access-decision-part,
+.visualization-chart-preview-part,
 .chart-part {
   max-width: 100%;
   min-width: 0;
@@ -1054,6 +1989,7 @@ const dataAccessDecisionStatusText = (status?: string) => {
 .info-steps-title,
 .analysis-decision-title,
 .data-access-decision-title,
+.visualization-chart-preview-header,
 .chart-part {
   display: flex;
   align-items: center;
@@ -1061,6 +1997,31 @@ const dataAccessDecisionStatusText = (status?: string) => {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
+}
+
+.visualization-chart-preview-header {
+  justify-content: space-between;
+}
+
+.visualization-chart-preview-title,
+.visualization-chart-preview-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.visualization-chart-preview-desc {
+  margin: 8px 0 10px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.visualization-chart-preview-canvas {
+  width: 100%;
+  height: 320px;
+  min-height: 260px;
 }
 
 .card-title-text {
@@ -1112,8 +2073,19 @@ const dataAccessDecisionStatusText = (status?: string) => {
 
 .confirm-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.confirm-revise-box {
+  margin-top: 12px;
+}
+
+.confirm-revise-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .info-steps-part {

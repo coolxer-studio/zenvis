@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'notice' | 'confirm' | 'info-steps' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'notice' | 'confirm' | 'info-steps' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 

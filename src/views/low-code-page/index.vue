@@ -24,6 +24,15 @@ const buildIframeUrl = () => {
     config: getConfigType(),
     baseUrl: appBaseUrl,
   });
+  Object.entries(route.query).forEach(([key, value]) => {
+    if (key === 'config' || key === 'baseUrl') {
+      return;
+    }
+    const normalizedValue = Array.isArray(value) ? value[0] : value;
+    if (normalizedValue !== undefined && normalizedValue !== null) {
+      params.set(key, String(normalizedValue));
+    }
+  });
   return sanitizeIframeUrl(`${baseUrl.value}?${params.toString()}`);
 };
 
@@ -32,7 +41,7 @@ const iframeUrl = ref<string>(buildIframeUrl());
 
 // 监听路由变化
 watch(
-  () => route.params['menuParams'], // 只监听 route.params['menuParams'] 的变化
+  () => [route.params['menuParams'], route.query], // 监听路径参数和透传查询参数
   () => {
     iframeUrl.value = buildIframeUrl();
   },

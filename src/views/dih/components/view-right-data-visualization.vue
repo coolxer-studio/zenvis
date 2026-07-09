@@ -1,114 +1,75 @@
 <template>
   <div class="panel right-panel">
-    <!-- 选项卡 -->
     <div class="tab-container">
       <el-tabs v-model="activeTab" class="right-tabs">
-        <el-tab-pane label="图表库" name="visualization">
-          <!-- 动态图表区域 -->
-          <div v-if="chartData.option" class="visualization-container">
-            <div class="visualization-header">
-              <h4>数据分析图表</h4>
-            </div>
-            <div class="visualization-content">
-              <BaseChart
-                ref="dynamicChartRef"
-                :option="chartData.option"
-                height="300px"
-                :loading="chartLoading"
-              />
-            </div>
-            <!-- 原始数据表格 -->
-            <div v-if="chartData.rawData && chartData.rawData.length > 0" class="data-table-container">
-              <div class="data-table-header">
-                <h4>原始数据</h4>
-              </div>
-              <el-table :data="chartData.rawData" stripe table-layout="fixed" style="width: 100%" max-height="250">
-                <el-table-column
-                  v-for="col in chartData.columns"
-                  :key="col"
-                  :prop="col"
-                  :label="col"
-                  show-overflow-tooltip
-                />
-              </el-table>
-            </div>
-          </div>
-          <!-- 默认占位图表 -->
-          <div
-            v-for="(chart, index) in visualizationCharts"
-            :key="index"
-            class="visualization-container"
-          >
-            <div class="visualization-header">
-              <h4>{{ chart.title }}</h4>
-            </div>
-            <div class="visualization-content">
-              <div class="placeholder-chart">
-                <el-icon><component :is="chart.icon" /></el-icon>
-                <p>{{ chart.description }}</p>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="可视化页面配置" name="visualPageConfigs">
+        <el-tab-pane
+          v-for="section in sections"
+          :key="section.name"
+          :label="section.label"
+          :name="section.name"
+        >
           <div class="resource-container">
-            <el-table :data="visualPageConfigs" stripe table-layout="fixed" style="width: 100%">
-              <el-table-column prop="id" label="ID" show-overflow-tooltip />
-              <el-table-column prop="name" label="名称" show-overflow-tooltip />
-              <el-table-column label="跳转链接" show-overflow-tooltip>
+            <el-empty v-if="!section.items.length" class="empty-state" description="暂无记录" />
+            <el-table v-else :data="section.items" stripe table-layout="fixed" style="width: 100%">
+              <el-table-column prop="name" label="名称" show-overflow-tooltip>
                 <template #default="scope">
-                  <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
-                    {{ scope.row.jumpLink }}
-                  </el-link>
+                  <span class="record-name">
+                    {{ scope.row.name || scope.row.id || '-' }}
+                  </span>
                 </template>
               </el-table-column>
-            </el-table>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="可视化应用配置" name="visualAppConfigs">
-          <div class="resource-container">
-            <el-table :data="visualAppConfigs" stripe table-layout="fixed" style="width: 100%">
-              <el-table-column prop="id" label="ID" show-overflow-tooltip />
-              <el-table-column prop="name" label="名称" show-overflow-tooltip />
-              <el-table-column label="跳转链接" show-overflow-tooltip>
+              <el-table-column :prop="section.keyProp" :label="section.keyLabel" show-overflow-tooltip />
+              <el-table-column label="状态" width="96">
                 <template #default="scope">
-                  <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
-                    {{ scope.row.jumpLink }}
-                  </el-link>
+                  <el-tag :type="statusTagType(scope.row.status)" effect="plain">
+                    {{ statusLabel(scope.row.status) }}
+                  </el-tag>
                 </template>
               </el-table-column>
-            </el-table>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="数据看板配置" name="dashboardConfigs">
-          <div class="resource-container">
-            <el-table :data="dashboardConfigs" stripe table-layout="fixed" style="width: 100%">
-              <el-table-column prop="id" label="ID" show-overflow-tooltip />
-              <el-table-column prop="name" label="名称" show-overflow-tooltip />
-              <el-table-column label="跳转链接" show-overflow-tooltip>
+              <el-table-column label="操作" width="188" class-name="record-actions-column">
                 <template #default="scope">
-                  <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
-                    {{ scope.row.jumpLink }}
-                  </el-link>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="菜单配置" name="menuConfigs">
-          <div class="resource-container">
-            <el-table :data="menuConfigs" stripe table-layout="fixed" style="width: 100%">
-              <el-table-column prop="id" label="ID" show-overflow-tooltip />
-              <el-table-column prop="name" label="名称" show-overflow-tooltip />
-              <el-table-column label="跳转链接" show-overflow-tooltip>
-                <template #default="scope">
-                  <el-link type="primary" :href="scope.row.jumpLink" :underline="false">
-                    {{ scope.row.jumpLink }}
-                  </el-link>
+                  <div class="record-actions">
+                    <el-tooltip v-if="canViewConfig(section.name, scope.row)" :content="configButtonTip(section.name)" placement="top">
+                      <el-button
+                        size="small"
+                        :icon="Document"
+                        circle
+                        @click.stop="viewRecordConfig(section.name, scope.row)"
+                      />
+                    </el-tooltip>
+                    <el-tooltip v-if="canPreview(section.name, scope.row)" content="预览视图效果" placement="top">
+                      <el-button
+                        size="small"
+                        :icon="View"
+                        circle
+                        @click.stop="previewRecord(section.name, scope.row)"
+                      />
+                    </el-tooltip>
+                    <el-tooltip v-if="section.name === 'dashboardConfigs'" content="打开数据看板页面" placement="top">
+                      <el-button
+                        size="small"
+                        :icon="View"
+                        circle
+                        @click.stop="openDashboardPage(scope.row)"
+                      />
+                    </el-tooltip>
+                    <el-tooltip v-if="section.name === 'menuConfigs' && canOpenMenuPage(scope.row)" content="打开菜单页面" placement="top">
+                      <el-button
+                        size="small"
+                        :icon="View"
+                        circle
+                        @click.stop="openMenuPage(scope.row)"
+                      />
+                    </el-tooltip>
+                    <el-tooltip content="复制记录" placement="top">
+                      <el-button
+                        size="small"
+                        :icon="CopyDocument"
+                        circle
+                        @click.stop="copyRecord(scope.row)"
+                      />
+                    </el-tooltip>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -116,279 +77,558 @@
         </el-tab-pane>
       </el-tabs>
     </div>
+    <el-dialog v-model="configDialogVisible" :title="configDialogTitle" width="720px" append-to-body>
+      <pre class="record-config-content"><code>{{ configDialogText }}</code></pre>
+    </el-dialog>
+    <el-dialog v-model="previewDialogVisible" :title="previewDialogTitle" width="860px" append-to-body>
+      <iframe
+        v-if="previewDialogMode === 'html'"
+        class="record-html-preview"
+        :srcdoc="previewDialogSrcdoc"
+        sandbox="allow-scripts allow-forms allow-same-origin"
+      ></iframe>
+      <div v-else class="record-preview-content" v-html="previewDialogHtml"></div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
-import {
-  Document, Files, PieChart, Connection
-} from '@element-plus/icons-vue'
-import * as monaco from 'monaco-editor'
-import BaseChart from '@/components/echarts/base-chart.vue'
-import { setupMonacoWorkers } from '@u/monaco-workers'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { CopyDocument, Document, View } from '@element-plus/icons-vue'
+import DOMPurify from 'dompurify'
+import { copyTextToClipboard } from '@/utils/clipboard'
+import { PolicyService } from '@/service/api'
 
-// 定义可视化图表接口
-interface VisualizationChart {
-  title: string
-  description: string
-  icon: any
+type VisualizationRecord = Record<string, unknown> & {
+  id?: string
+  name?: string
+  status?: string
+  chartType?: string
+  configType?: string
+  fileName?: string
+  configIndex?: string
+  routeName?: string
+  menuParams?: string
+  menuType?: string
+  dashboardId?: string
+  code?: string
+  menuId?: string
+  params?: string
+  route?: string
+  type?: string
+  config?: unknown
+  api?: string
+  htmlPath?: string
 }
 
-// 定义产物接口
-interface Artifact {
-  name: string
-  path: string
-  icon: any
+type DataVisualizationRecordEventDetail = {
+  chartLibrary?: unknown[]
+  visualizationConfigs?: unknown[]
+  dashboardConfigs?: unknown[]
+  menuConfigs?: unknown[]
 }
 
-// 定义资源项接口
-interface ResourceItem {
-  id: string
-  name: string
-  jumpLink: string
+const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated'
+
+const activeTab = ref('chartLibrary')
+const chartLibrary = ref<VisualizationRecord[]>([])
+const visualizationConfigs = ref<VisualizationRecord[]>([])
+const dashboardConfigs = ref<VisualizationRecord[]>([])
+const menuConfigs = ref<VisualizationRecord[]>([])
+const router = useRouter()
+const configDialogVisible = ref(false)
+const configDialogTitle = ref('配置内容')
+const configDialogText = ref('')
+const previewDialogVisible = ref(false)
+const previewDialogTitle = ref('视图效果预览')
+const previewDialogHtml = ref('')
+const previewDialogMode = ref<'low-code' | 'html'>('low-code')
+const previewDialogSrcdoc = ref('')
+
+const asRecordList = (value: unknown): VisualizationRecord[] => {
+  return Array.isArray(value)
+    ? value.filter(item => item && typeof item === 'object').map(item => item as VisualizationRecord)
+    : []
 }
 
-// 当前激活的选项卡
-const activeTab = ref('visualization')
+const sections = computed(() => [
+  { name: 'chartLibrary', label: '图表库', items: chartLibrary.value, keyProp: 'chartType', keyLabel: '图表类型' },
+  { name: 'visualizationConfigs', label: '可视化配置', items: visualizationConfigs.value, keyProp: 'configType', keyLabel: '配置类型' },
+  { name: 'dashboardConfigs', label: '数据看板配置', items: dashboardConfigs.value, keyProp: 'code', keyLabel: '看板编码' },
+  { name: 'menuConfigs', label: '菜单配置', items: menuConfigs.value, keyProp: 'menuId', keyLabel: '菜单ID' },
+])
 
-// 图表相关
-const dynamicChartRef = ref()
-const chartLoading = ref(false)
-
-// 图表数据
-interface ChartData {
-  chartType: string
-  option: any | null
-  rawData: any[]
-  columns: string[]
+const statusLabel = (status?: string) => {
+  const labels: Record<string, string> = {
+    temporary: '临时',
+    generated: '已生成',
+    applied: '已应用',
+    created: '已创建',
+    error: '异常',
+  }
+  return status ? labels[status] || status : '未记录'
 }
 
-const chartData = reactive<ChartData>({
-  chartType: '',
-  option: null,
-  rawData: [],
-  columns: []
-})
-
-// 处理图表数据事件
-const handleDataVisualizationChartData = (event: CustomEvent) => {
-  const { chartType, option, rawData, columns } = event.detail
-  chartData.chartType = chartType || 'line'
-  chartData.option = option
-  chartData.rawData = rawData || []
-  chartData.columns = columns || []
+const statusTagType = (status?: string) => {
+  if (status === 'applied' || status === 'created') return 'success'
+  if (status === 'temporary' || status === 'generated') return 'info'
+  if (status === 'error') return 'danger'
+  return 'info'
 }
 
-// Monaco Editor 相关
-const editorContainer = ref<HTMLElement | null>(null)
-let editor: monaco.editor.IStandaloneCodeEditor | null = null
+const openRouteInNewTab = (routeLocation: Parameters<typeof router.resolve>[0]) => {
+  const route = router.resolve(routeLocation)
+  window.open(route.href, '_blank', 'noopener,noreferrer')
+}
 
-// 示例配置文件内容
-const configContent = `# frpc.toml 配置文件
-serverAddr = "10.106.108.110"
-serverPort = 8080
-token = "12345678"
-
-[web]
-type = "http"
-localPort = 80
-customDomains = ["example.com"]
-
-[ssh]
-type = "tcp"
-localIP = "127.0.0.1"
-localPort = 22
-remotePort = 6000
-
-[plugin.unix_domain_socket]
-type = "unix_domain_socket"
-remotePort = 6001
-socketPath = "/tmp/docker.sock"
-
-[plugin.registry]
-type = "tcp"
-remotePort = 6002
-plugin = "http_proxy"
-pluginOpts = { host = "0.0.0.0", port = "9001" }
-`
-
-// 可视化图表数据
-const visualizationCharts = ref<VisualizationChart[]>([
-  {
-    title: '网络连接可视化',
-    description: '网络连接流量图',
-    icon: PieChart
-  },
-  {
-    title: '进程关系图',
-    description: '进程调用关系图',
-    icon: Connection
+const openVisualizationConfig = (record: VisualizationRecord) => {
+  const configType = String(record.configType || record.configIndex || '')
+  if (!configType) {
+    copyRecord(record)
+    return
   }
-])
+  openRouteInNewTab({
+    name: 'policy-config',
+    params: { menuParams: configType },
+    query: { fileName: String(record.fileName || '') },
+  })
+}
 
-// 可视化页面配置数据
-const visualPageConfigs = ref<ResourceItem[]>([
-  {
-    id: 'page-config-001',
-    name: '主机行为可视化页面配置',
-    jumpLink: '/visualization/page-configs/host-behavior'
-  },
-  {
-    id: 'page-config-002',
-    name: '网络连接可视化页面配置',
-    jumpLink: '/visualization/page-configs/network-connection'
-  },
-  {
-    id: 'page-config-003',
-    name: '风险事件可视化页面配置',
-    jumpLink: '/visualization/page-configs/risk-analysis'
-  }
-])
+const openDashboardConfig = (record: VisualizationRecord) => {
+  openRouteInNewTab({
+    name: 'low-code-page',
+    params: { menuParams: 'dashboard' },
+    query: {
+      id: String(record.dashboardId || record.id || ''),
+      name: String(record.name || ''),
+      code: String(record.code || ''),
+      configIndex: String(record.configIndex || ''),
+    },
+  })
+}
 
-// 可视化应用配置数据
-const visualAppConfigs = ref<ResourceItem[]>([
-  {
-    id: 'app-config-001',
-    name: '主机行为可视化应用配置',
-    jumpLink: '/visualization/app-configs/host-behavior'
-  },
-  {
-    id: 'app-config-002',
-    name: '网络连接可视化应用配置',
-    jumpLink: '/visualization/app-configs/network-connection'
-  },
-  {
-    id: 'app-config-003',
-    name: '风险事件可视化应用配置',
-    jumpLink: '/visualization/app-configs/risk-analysis'
-  }
-])
+const openDashboardPage = (record: VisualizationRecord) => {
+  openRouteInNewTab({
+    name: 'dashboard',
+    query: {
+      id: String(record.dashboardId || record.id || ''),
+      name: String(record.name || ''),
+      code: String(record.code || ''),
+    },
+  })
+}
 
-// 数据看板配置数据
-const dashboardConfigs = ref<ResourceItem[]>([
-  {
-    id: 'dashboard-001',
-    name: '安全态势总览配置',
-    jumpLink: '/dashboard/configs/security-overview'
-  },
-  {
-    id: 'dashboard-002',
-    name: '数据可视化指标看板配置',
-    jumpLink: '/dashboard/configs/data-visualization-metrics'
-  },
-  {
-    id: 'dashboard-003',
-    name: '资产风险看板配置',
-    jumpLink: '/dashboard/configs/asset-risk'
-  }
-])
+const openMenuConfig = (record: VisualizationRecord) => {
+  openRouteInNewTab({
+    name: 'low-code-page',
+    params: { menuParams: 'menu' },
+    query: {
+      id: String(record.menuId || record.id || ''),
+      name: String(record.name || ''),
+      params: String(record.params || ''),
+    },
+  })
+}
 
-// 菜单配置数据
-const menuConfigs = ref<ResourceItem[]>([
-  {
-    id: 'menu-001',
-    name: '数据可视化总览菜单配置',
-    jumpLink: '/visualization/menu-configs/overview'
-  },
-  {
-    id: 'menu-002',
-    name: '图表库菜单配置',
-    jumpLink: '/visualization/menu-configs/chart-library'
-  },
-  {
-    id: 'menu-003',
-    name: '数据看板菜单配置',
-    jumpLink: '/visualization/menu-configs/dashboard'
-  }
-])
+type RouteLocation = Parameters<typeof router.resolve>[0]
 
-// 产物数据
-const artifacts = ref<Artifact[]>([
-  {
-    name: 'frpc.toml',
-    path: 'c:\\windows\\temp\\frpc.toml',
-    icon: Document
-  },
-  {
-    name: '网络连接日志',
-    path: 'network_connections.log',
-    icon: Files
-  },
-  {
-    name: '进程创建事件',
-    path: 'process_creation_events.json',
-    icon: Document
+const encodeBase64 = (value: string) => {
+  try {
+    return window.btoa(value)
+  } catch {
+    return window.btoa(unescape(encodeURIComponent(value)))
   }
-])
+}
+
+const menuTypeOf = (record: VisualizationRecord) => {
+  return String(record.menuType || record.type || '').toUpperCase()
+}
+
+const menuParamsOf = (record: VisualizationRecord) => {
+  return String(record.params || record.menuParams || '').trim()
+}
+
+const buildMenuTargetRoute = (record: VisualizationRecord): RouteLocation | null => {
+  const menuType = menuTypeOf(record)
+  const route = String(record.route || '').trim()
+  const params = menuParamsOf(record)
+  const routeKey = route || {
+    LOW_CODE_APP: 'low-code-app',
+    LOW_CODE_PAGE: 'low-code-page',
+    HTML_PAGE: 'html-page',
+    POLICY_CONFIG: 'policy-config',
+    EXTERNAL_APP: 'external-app',
+  }[menuType]
+
+  if (!routeKey) {
+    return null
+  }
+  if (routeKey === 'low-code-app') {
+    return params ? { name: 'low-code-app', params: { menuParams: params } } : null
+  }
+  if (routeKey === 'low-code-page') {
+    return params ? { name: 'low-code-page', params: { menuParams: params } } : null
+  }
+  if (routeKey === 'html-page') {
+    return params ? { name: 'html-page', params: { menuParams: encodeBase64(params) } } : null
+  }
+  if (routeKey === 'policy-config') {
+    return params ? { name: 'policy-config', params: { menuParams: params } } : null
+  }
+  if (routeKey === 'external-app') {
+    return params ? { name: 'external-app', params: { menuParams: encodeBase64(params) } } : null
+  }
+  if (routeKey.startsWith('/')) {
+    return { path: routeKey }
+  }
+  return null
+}
+
+const canOpenMenuPage = (record: VisualizationRecord) => {
+  return Boolean(buildMenuTargetRoute(record))
+}
+
+const openMenuPage = (record: VisualizationRecord) => {
+  const routeLocation = buildMenuTargetRoute(record)
+  if (!routeLocation) {
+    ElMessage.warning('缺少菜单类型或参数，无法打开菜单页面')
+    return
+  }
+  openRouteInNewTab(routeLocation)
+}
+
+const canViewConfig = (sectionName: string, record: VisualizationRecord) => {
+  if (sectionName === 'chartLibrary') return Boolean(record.config)
+  if (sectionName === 'visualizationConfigs') return Boolean(record.configType || record.configIndex)
+  if (sectionName === 'dashboardConfigs') return true
+  if (sectionName === 'menuConfigs') return true
+  return false
+}
+
+const canPreview = (sectionName: string, record: VisualizationRecord) => {
+  if (sectionName === 'chartLibrary') return Boolean(record.config)
+  if (sectionName === 'visualizationConfigs') return Boolean(record.configIndex || record.configType)
+  return false
+}
+
+const configButtonTip = (sectionName: string) => {
+  if (sectionName === 'chartLibrary') return '查看 amis 配置'
+  if (sectionName === 'visualizationConfigs') return '打开配置管理'
+  if (sectionName === 'dashboardConfigs') return '打开看板管理'
+  if (sectionName === 'menuConfigs') return '打开菜单管理'
+  return '查看配置'
+}
+
+const viewRecordConfig = (sectionName: string, record: VisualizationRecord) => {
+  if (sectionName === 'chartLibrary') {
+    configDialogTitle.value = String(record.name || '图表配置')
+    configDialogText.value = JSON.stringify(normalizeConfig(record.config) || record, null, 2)
+    configDialogVisible.value = true
+    return
+  }
+  if (sectionName === 'visualizationConfigs') {
+    openVisualizationConfig(record)
+    return
+  }
+  if (sectionName === 'dashboardConfigs') {
+    openDashboardConfig(record)
+    return
+  }
+  if (sectionName === 'menuConfigs') {
+    openMenuConfig(record)
+  }
+}
+
+const previewRecord = async (sectionName: string, record: VisualizationRecord) => {
+  if (sectionName === 'chartLibrary') {
+    previewChartRecord(record)
+    return
+  }
+  if (sectionName === 'visualizationConfigs') {
+    await previewVisualizationConfig(record)
+  }
+}
+
+const previewChartRecord = (record: VisualizationRecord) => {
+  previewDialogTitle.value = String(record.name || '图表预览')
+  previewDialogMode.value = 'low-code'
+  previewDialogSrcdoc.value = ''
+  previewDialogHtml.value = DOMPurify.sanitize(renderLowCodePreview(normalizeConfig(record.config)))
+  previewDialogVisible.value = true
+}
+
+const previewVisualizationConfig = async (record: VisualizationRecord) => {
+  const configType = String(record.configType || configTypeFromRecord(record) || '')
+  const fileName = configFileName(record)
+  if (!configType || !fileName) {
+    ElMessage.warning('缺少配置类型或文件名，无法预览')
+    return
+  }
+  try {
+    const content = await PolicyService.textContent(configType, { file_name: fileName })
+    previewDialogTitle.value = `${record.name || '可视化配置'}预览`
+    if (isHtmlRecord(record) || looksLikeHtml(content)) {
+      previewDialogMode.value = 'html'
+      previewDialogSrcdoc.value = content
+      previewDialogHtml.value = ''
+    } else {
+      previewDialogMode.value = 'low-code'
+      previewDialogSrcdoc.value = ''
+      previewDialogHtml.value = DOMPurify.sanitize(renderLowCodePreview(normalizeConfig(content)))
+    }
+    previewDialogVisible.value = true
+  } catch (error) {
+    console.error('读取可视化配置失败:', error)
+    ElMessage.error('读取配置失败，无法预览')
+  }
+}
+
+const configTypeFromRecord = (record: VisualizationRecord) => {
+  const type = String(record.type || '').toUpperCase()
+  if (type === 'HTML_PAGE') return 'html-page'
+  return String(record.configIndex || '')
+}
+
+const configFileName = (record: VisualizationRecord) => {
+  const explicitFileName = String(record.fileName || '').trim()
+  if (explicitFileName) return explicitFileName
+  const type = String(record.type || '').toUpperCase()
+  if (type === 'LOW_CODE_APP') return 'site.json'
+  if (type === 'LOW_CODE_PAGE') return 'index.json'
+  if (type === 'HTML_PAGE') {
+    const path = String(record.htmlPath || record.configIndex || '').trim()
+    const segments = path.split('/').filter(Boolean)
+    return segments.length ? segments[segments.length - 1] : ''
+  }
+  return ''
+}
+
+const isHtmlRecord = (record: VisualizationRecord) => {
+  return String(record.type || '').toUpperCase() === 'HTML_PAGE'
+}
+
+const looksLikeHtml = (content: string) => {
+  const normalized = content.trim().toLowerCase()
+  return normalized.startsWith('<!doctype html') || normalized.startsWith('<html')
+}
+
+const normalizeConfig = (value: unknown) => {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return {}
+    }
+  }
+  return value || {}
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  return isRecord(value) ? value : {}
+}
+
+const asRecordArray = (value: unknown): Record<string, unknown>[] => {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+const escapeHtml = (value: unknown) => {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }
+  return String(value ?? '').replace(/[&<>"']/g, char => map[char] || char)
+}
+
+const renderLowCodePreview = (schema: unknown): string => {
+  const record = asRecord(schema)
+  if (record.status !== undefined && asRecordArray(asRecord(record.data).pages).length > 0) {
+    return renderLowCodeAppPreview(record)
+  }
+  return renderLowCodeNode(asRecord(schema))
+}
+
+const renderLowCodeAppPreview = (schema: Record<string, unknown>) => {
+  const pages = asRecordArray(asRecord(schema.data).pages)
+  const menus = pages.flatMap(page => {
+    const children = asRecordArray(page.children)
+    return children.length ? children : [page]
+  }).filter(page => typeof page.label === 'string' && page.label)
+  return `
+    <div class="dv-preview-app">
+      <aside class="dv-preview-sidebar">
+        <div class="dv-preview-title">低代码应用</div>
+        ${menus.map((menu, index) => `
+          <div class="dv-preview-nav-item ${index === 0 ? 'active' : ''}">
+            <span>${escapeHtml(menu.label)}</span>
+            <small>${escapeHtml(menu.url || '')}</small>
+          </div>
+        `).join('')}
+      </aside>
+      <main class="dv-preview-app-main">
+        <section class="dv-preview-panel">
+          <div class="dv-preview-panel-title">应用首页</div>
+          <div class="dv-preview-text">展示应用入口、数据概览和常用操作。</div>
+        </section>
+        <section class="dv-preview-panel">
+          <div class="dv-preview-panel-title">数据管理</div>
+          <div class="dv-preview-text">提供查询、新增、编辑和删除等数据操作。</div>
+        </section>
+      </main>
+    </div>
+  `
+}
+
+const renderLowCodeNode = (node: unknown): string => {
+  if (Array.isArray(node)) {
+    return node.map(renderLowCodeNode).join('')
+  }
+  const schema = asRecord(node)
+  const type = typeof schema.type === 'string' ? schema.type : ''
+  if (!type && Object.keys(schema).length === 0) {
+    return '<div class="dv-preview-empty">暂无可预览内容。</div>'
+  }
+  if (type === 'page') {
+    return `
+      <div class="dv-preview-page">
+        <header class="dv-preview-header">
+          <div class="dv-preview-title">${escapeHtml(schema.title || '可视化页面')}</div>
+        </header>
+        <div class="dv-preview-body">${renderLowCodeNode(schema.body)}</div>
+      </div>
+    `
+  }
+  if (type === 'chart') {
+    return renderChartPreview(schema)
+  }
+  if (type === 'crud') {
+    return renderCrudPreview(schema)
+  }
+  if (type === 'grid') {
+    const columns = asRecordArray(schema.columns)
+    return `<div class="dv-preview-grid">${columns.map(column => `<section class="dv-preview-panel">${renderLowCodeNode(column.body || column)}</section>`).join('')}</div>`
+  }
+  if (type === 'service' || type === 'panel') {
+    return `
+      <section class="dv-preview-panel">
+        <div class="dv-preview-panel-title">${escapeHtml(schema.title || (type === 'service' ? '服务组件' : '面板'))}</div>
+        ${schema.api ? `<div class="dv-preview-api">${escapeHtml(schema.api)}</div>` : ''}
+        ${renderLowCodeNode(schema.body)}
+      </section>
+    `
+  }
+  if (type === 'tpl') {
+    return `<div class="dv-preview-text">${escapeHtml(stripTemplateText(schema.tpl || '文本内容'))}</div>`
+  }
+  return `
+    <section class="dv-preview-panel">
+      <div class="dv-preview-panel-title">${escapeHtml(type || '组件')}</div>
+      ${renderLowCodeNode(schema.body)}
+    </section>
+  `
+}
+
+const renderChartPreview = (schema: Record<string, unknown>) => {
+  const config = asRecord(schema.config)
+  const title = asRecord(config.title)
+  return `
+    <section class="dv-preview-chart">
+      <div class="dv-preview-panel-title">${escapeHtml(title.text || schema.title || '图表预览')}</div>
+      <div class="dv-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/retrieval/aggregate/trend')}</div>
+      <div class="dv-preview-bars">
+        <span style="height:42%"></span>
+        <span style="height:58%"></span>
+        <span style="height:82%"></span>
+        <span style="height:72%"></span>
+        <span style="height:64%"></span>
+        <span style="height:48%"></span>
+      </div>
+    </section>
+  `
+}
+
+const renderCrudPreview = (schema: Record<string, unknown>) => {
+  const columns = asRecordArray(schema.columns).slice(0, 6)
+  const visibleColumns = columns.length > 0 ? columns : [
+    { name: 'id', label: '事件ID' },
+    { name: 'user', label: '用户' },
+    { name: 'event_type', label: '事件类型' },
+    { name: 'server_time', label: '入库时间' },
+  ]
+  return `
+    <section class="dv-preview-panel">
+      <div class="dv-preview-panel-title">数据列表</div>
+      <div class="dv-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/entity/user-event/list')}</div>
+      <div class="dv-preview-table-wrap">
+        <table class="dv-preview-table">
+          <thead><tr>${visibleColumns.map(column => `<th>${escapeHtml(column.label || column.name || '-')}</th>`).join('')}</tr></thead>
+          <tbody>
+            <tr>${visibleColumns.map(column => `<td>${escapeHtml(sampleValue(column))}</td>`).join('')}</tr>
+            <tr>${visibleColumns.map(column => `<td>${escapeHtml(sampleValue(column, true))}</td>`).join('')}</tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `
+}
+
+const sampleValue = (column: Record<string, unknown>, secondRow = false) => {
+  const name = String(column.name || '').toLowerCase()
+  if (name.includes('id')) return secondRow ? 'evt-002' : 'evt-001'
+  if (name.includes('user')) return secondRow ? 'operator-b' : 'demo-user'
+  if (name.includes('event_type')) return secondRow ? '点击' : '登录'
+  if (name.includes('time')) return secondRow ? '2026-07-09 11:20:00' : '2026-07-09 10:00:00'
+  if (name.includes('reliability')) return secondRow ? '7.6' : '8.8'
+  return secondRow ? '示例值 B' : '示例值 A'
+}
+
+const stripTemplateText = (value: unknown) => {
+  return String(value ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\$\{[^}]+}/g, '示例值')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const copyRecord = async (record: VisualizationRecord) => {
+  const copied = await copyTextToClipboard(JSON.stringify(record, null, 2))
+  if (copied) {
+    ElMessage.success('已复制记录')
+  } else {
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+const handleRecordsUpdated = (event: Event) => {
+  const detail = (event as CustomEvent<DataVisualizationRecordEventDetail>).detail || {}
+  chartLibrary.value = asRecordList(detail.chartLibrary)
+  visualizationConfigs.value = asRecordList(detail.visualizationConfigs)
+  dashboardConfigs.value = asRecordList(detail.dashboardConfigs)
+  menuConfigs.value = asRecordList(detail.menuConfigs)
+  const firstNonEmpty = sections.value.find(section => section.items.length)
+  if (firstNonEmpty) {
+    activeTab.value = firstNonEmpty.name
+  }
+}
 
 onMounted(() => {
-  // 监听图表数据事件
-  window.addEventListener('dataVisualizationChartData', handleDataVisualizationChartData as EventListener)
-
-  // 初始化Monaco编辑器
-  if (editorContainer.value) {
-    setupMonacoWorkers()
-    editor = monaco.editor.create(editorContainer.value, {
-      value: configContent,
-      language: 'ini',
-      theme: 'vs-dark',
-      automaticLayout: true,
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      fontSize: 14,
-      tabSize: 2,
-      readOnly: false,
-    })
-  }
+  window.addEventListener(DATA_VISUALIZATION_RECORD_EVENT, handleRecordsUpdated)
 })
 
-onBeforeUnmount(() => {
-  // 移除事件监听
-  window.removeEventListener('dataVisualizationChartData', handleDataVisualizationChartData as EventListener)
-
-  // 销毁编辑器
-  if (editor) {
-    editor.dispose()
-  }
+onUnmounted(() => {
+  window.removeEventListener(DATA_VISUALIZATION_RECORD_EVENT, handleRecordsUpdated)
 })
-
-// 保存配置
-const saveConfig = () => {
-  if (editor) {
-    const value = editor.getValue()
-    console.log('保存配置:', value)
-    // 这里可以添加实际的保存逻辑
-  }
-}
-
-// 重置配置
-const resetConfig = () => {
-  if (editor) {
-    editor.setValue(configContent)
-    console.log('重置配置')
-    // 这里可以添加实际的重置逻辑
-  }
-}
-
-// 下载产物
-const downloadArtifact = (index: number) => {
-  const artifact = artifacts.value[index]
-  console.log(`下载产物: ${artifact.name}`)
-  // 这里可以添加实际的下载逻辑
-}
-
-// 查看产物
-const viewArtifact = (index: number) => {
-  const artifact = artifacts.value[index]
-  console.log(`查看产物: ${artifact.name}`)
-  // 这里可以添加实际的查看逻辑
-}
-
 </script>
 
 <style scoped>
-/* 面板样式 */
 .panel {
   display: flex;
   flex-direction: column;
@@ -408,7 +648,6 @@ const viewArtifact = (index: number) => {
   overflow-y: auto;
 }
 
-/* 选项卡样式 */
 .tab-container {
   flex: 1;
   overflow: hidden;
@@ -426,7 +665,7 @@ const viewArtifact = (index: number) => {
 
 :deep(.el-tabs__nav) {
   background-color: #fff;
-  padding: 0px 30px;
+  padding: 0 18px;
   width: 100%;
 }
 
@@ -440,140 +679,223 @@ const viewArtifact = (index: number) => {
   font-weight: bold;
 }
 
-/* 可视化面板样式 */
-.visualization-container {
-  margin: 12px;
-  background-color: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.visualization-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
-}
-
-.visualization-header h4 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.visualization-content {
-  padding: 20px;
-  min-height: 200px;
-}
-
-.placeholder-chart {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  color: #909399;
-}
-
-.placeholder-chart .el-icon {
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-/* 产物面板样式 */
-.artifacts-container {
-  padding: 12px;
-}
-
-.artifact-item {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  margin-bottom: 8px;
-  background-color: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.artifact-icon {
-  font-size: 24px;
-  margin-right: 12px;
-  color: #409eff;
-}
-
-.artifact-info {
-  flex: 1;
-}
-
-.artifact-name {
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.artifact-path {
-  font-size: 12px;
-  color: #909399;
-}
-
-.artifact-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* 资源列表样式 */
 .resource-container {
   padding: 12px;
 }
 
-/* 配置面板样式 */
-.config-container {
+.empty-state {
+  height: 220px;
+}
+
+.record-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+:deep(.record-actions-column .cell) {
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.record-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.record-actions :deep(.el-button) {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.record-config-content {
+  max-height: 560px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #1f2329;
+  color: #f5f7fa;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.record-config-content code {
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+.record-preview-content {
+  min-height: 360px;
+  max-height: 640px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #f6f8fb;
+}
+
+.record-html-preview {
+  display: block;
+  width: 100%;
+  min-height: 560px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.record-preview-content :deep(.dv-preview-page) {
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.record-preview-content :deep(.dv-preview-app) {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.record-preview-content :deep(.dv-preview-sidebar) {
+  padding: 14px 10px;
+  border-right: 1px solid #ebeef5;
+  background: #fff;
+}
+
+.record-preview-content :deep(.dv-preview-nav-item) {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 0;
-}
-
-.config-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background-color: #2d2d30;
-  color: #e0e0e0;
-}
-
-.config-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.config-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.editor-container {
-  flex: 1;
-  min-height: 500px;
-}
-
-/* 数据表格样式 */
-.data-table-container {
-  margin-top: 16px;
-  border-top: 1px solid #eee;
-  padding-top: 16px;
-}
-
-.data-table-header {
-  padding: 0 16px 12px;
-}
-
-.data-table-header h4 {
-  margin: 0;
-  font-size: 14px;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 6px;
   color: #606266;
+  font-size: 13px;
+}
+
+.record-preview-content :deep(.dv-preview-nav-item.active) {
+  background: #ecf5ff;
+  color: #1d6fd9;
+  font-weight: 600;
+}
+
+.record-preview-content :deep(.dv-preview-nav-item small) {
+  color: #909399;
+  font-size: 11px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.record-preview-content :deep(.dv-preview-app-main) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.record-preview-content :deep(.dv-preview-header) {
+  padding: 14px 16px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.record-preview-content :deep(.dv-preview-title),
+.record-preview-content :deep(.dv-preview-panel-title) {
+  color: #303133;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.record-preview-content :deep(.dv-preview-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.record-preview-content :deep(.dv-preview-panel),
+.record-preview-content :deep(.dv-preview-chart),
+.record-preview-content :deep(.dv-preview-empty) {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.record-preview-content :deep(.dv-preview-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.record-preview-content :deep(.dv-preview-api) {
+  margin-top: 6px;
+  color: #909399;
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.record-preview-content :deep(.dv-preview-bars) {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  height: 220px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.record-preview-content :deep(.dv-preview-bars span) {
+  flex: 1;
+  min-width: 18px;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, #67c23a 0%, #409eff 100%);
+}
+
+.record-preview-content :deep(.dv-preview-table-wrap) {
+  max-width: 100%;
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.record-preview-content :deep(.dv-preview-table) {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.record-preview-content :deep(.dv-preview-table th),
+.record-preview-content :deep(.dv-preview-table td) {
+  padding: 9px 10px;
+  border-bottom: 1px solid #ebeef5;
+  color: #303133;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.record-preview-content :deep(.dv-preview-table th) {
+  background: #f7f8fa;
+  color: #606266;
+  font-weight: 600;
 }
 </style>

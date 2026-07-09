@@ -35,7 +35,8 @@
   </div>
 </template>
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import { ArrowRight, ArrowLeft } from '@element-plus/icons-vue';
 
@@ -47,6 +48,7 @@ import msgBoard from './components/msg-board/index.vue';
 import { SystemService } from '@/service/api';
 
 const visible = ref(false);
+const route = useRoute();
 const currentDashboard = ref({
   type: '',
   code: '',
@@ -64,11 +66,26 @@ const onClose = () => {
 const getDashboardList = () => {
   SystemService.getDashboardList()
       .then(data => {
-        currentDashboard.value.type = data[0].type;
-      currentDashboard.value.code = data[0].code;
       dashboardListData.value = data;
+      selectDashboardFromRoute();
     })
     .finally(() => {});
+};
+
+const selectDashboardFromRoute = () => {
+  if (!dashboardListData.value.length) {
+    currentDashboard.value = { type: '', code: '' };
+    return;
+  }
+  const targetId = route.query.id?.toString() || '';
+  const targetCode = route.query.code?.toString() || '';
+  const targetName = route.query.name?.toString() || '';
+  const matched = dashboardListData.value.find(item => {
+    return (targetId && String(item.id) === targetId)
+      || (targetCode && item.code === targetCode)
+      || (targetName && item.name === targetName);
+  });
+  currentDashboard.value = matched || dashboardListData.value[0];
 };
 
 const setDashboard = item => {
@@ -78,6 +95,13 @@ const setDashboard = item => {
 onMounted(() => {
   getDashboardList();
 });
+
+watch(
+  () => [route.query.id, route.query.code, route.query.name],
+  () => {
+    selectDashboardFromRoute();
+  },
+);
 </script>
 
 <style lang="scss">

@@ -20,6 +20,11 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_INCIDENT_REVIEW_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_OPERATION_WEEKLY_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_VISUALIZATION_ARCHIVE_EXAMPLE_PROMPT;
+
 /**
  * 会话管理
  */
@@ -228,6 +233,7 @@ public class ChatSessionController extends BaseController {
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\n" +
             " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
+    private static final String PROLOGUE_AGENT_REPORT_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词，并生成可编辑报表草稿。";
 
     @GetMapping({"/{sessionId}/session"})
     public ResponseWrap<ChatSessionVo> sessionInfo(@PathVariable("sessionId") String sessionId, @RequestParam(value = "type", required = false) String type) {
@@ -306,6 +312,38 @@ public class ChatSessionController extends BaseController {
                                             Map.of("label", "单页面应用", "prompt", DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT),
                                             Map.of("label", "带侧边栏应用", "prompt", DATA_VISUALIZATION_APP_EXAMPLE_PROMPT),
                                             Map.of("label", "数据看板", "prompt", DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT)
+                                    )
+                            ))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_report".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_REPORT
+                    + "\n\n"
+                    + PROLOGUE_AGENT_REPORT_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "用户事件分析报告｜运营周报｜风险事件复盘｜可视化结论归档报告";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_REPORT)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_REPORT_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title("报表生成示例")
+                            .metadata(Map.of(
+                                    "examples",
+                                    List.of(
+                                            Map.of("label", "用户事件分析报告", "prompt", REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT),
+                                            Map.of("label", "运营周报", "prompt", REPORT_OPERATION_WEEKLY_EXAMPLE_PROMPT),
+                                            Map.of("label", "风险事件复盘", "prompt", REPORT_INCIDENT_REVIEW_EXAMPLE_PROMPT),
+                                            Map.of("label", "可视化结论归档报告", "prompt", REPORT_VISUALIZATION_ARCHIVE_EXAMPLE_PROMPT)
                                     )
                             ))
                             .build()

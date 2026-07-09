@@ -33,6 +33,9 @@ public class ChatTitleService {
         if (DataVisualizationDemoResponseService.isUserEventVisualizationDemoPrompt(userMessage)) {
             return DataVisualizationDemoResponseService.USER_EVENT_VISUALIZATION_DEMO_TITLE;
         }
+        if (ReportDemoResponseService.isReportDemoPrompt(userMessage)) {
+            return ReportDemoResponseService.REPORT_DEMO_TITLE;
+        }
         try {
             String title = chatClient.prompt()
                     .options(OpenAiChatOptions.builder().temperature(0.2).build())

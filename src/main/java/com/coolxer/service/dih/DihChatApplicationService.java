@@ -58,6 +58,7 @@ public class DihChatApplicationService {
     private final FixedPromptResponseService fixedPromptResponseService;
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
+    private final ReportDemoResponseService reportDemoResponseService;
     private final AnalysisAgent analysisAgent;
     private final DisposeAgent disposeAgent;
     private final ReportAgent reportAgent;
@@ -79,6 +80,7 @@ public class DihChatApplicationService {
                                      FixedPromptResponseService fixedPromptResponseService,
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
                                      DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
+                                     ReportDemoResponseService reportDemoResponseService,
                                      AnalysisAgent analysisAgent,
                                      DisposeAgent disposeAgent,
                                      ReportAgent reportAgent,
@@ -99,6 +101,7 @@ public class DihChatApplicationService {
         this.fixedPromptResponseService = fixedPromptResponseService;
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
+        this.reportDemoResponseService = reportDemoResponseService;
         this.analysisAgent = analysisAgent;
         this.disposeAgent = disposeAgent;
         this.reportAgent = reportAgent;
@@ -136,6 +139,24 @@ public class DihChatApplicationService {
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
+        Optional<Flux<String>> reportDemoResponse = findReportDemoResponse(
+                chatType,
+                chatId,
+                userMessage,
+                currentUser,
+                null
+        );
+        if (reportDemoResponse.isPresent()) {
+            ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+            return emitAndSaveTextResponse(
+                    reportDemoResponse.get(),
+                    chatSession,
+                    currentUser,
+                    eventStream,
+                    new AtomicReference<>(MessageType.TEXT),
+                    BooleanUtils.isTrue(chatDto.getDeepThink())
+            );
+        }
         if (!baseService.isModelSupported(model)) {
             return errorResponse(eventStream, "Input model not support.");
         }
@@ -160,7 +181,6 @@ public class DihChatApplicationService {
         String prompt = chatAttachmentService.appendAttachmentContext(userMessage, chatDto.getAttachments(), currentUser);
         ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
 
-        StringBuilder modelResponse = new StringBuilder();
         AtomicReference<MessageType> messageType = new AtomicReference<>(MessageType.TEXT);
 
         String resolvedModel = model;
@@ -184,31 +204,14 @@ public class DihChatApplicationService {
             );
         }
 
-        if (eventStream) {
-            return fluxResponse
-                    .doOnNext(modelResponse::append)
-                    .map(s -> toNdjson(ChatStreamEvent.delta(s)))
-                    .concatWith(Flux.defer(() -> {
-                        Message aiMessage = saveAiResponse(
-                                chatSession,
-                                currentUser,
-                                modelResponse.toString(),
-                                messageType.get(),
-                                true,
-                                BooleanUtils.isTrue(chatDto.getDeepThink())
-                        );
-                        return Flux.just(toNdjson(ChatStreamEvent.done(aiMessage)));
-                    }))
-                    .onErrorResume(e -> {
-                        log.error("聊天事件流返回失败: {}", e.getMessage(), e);
-                        persistErrorResponse(chatSession, currentUser);
-                        return Flux.just(toNdjson(ChatStreamEvent.error(CHAT_ERROR_MESSAGE)));
-                    });
-        }
-
-        return fluxResponse.doOnNext(modelResponse::append)
-                .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(), messageType.get(), false, false))
-                .doOnError(e -> persistErrorResponse(chatSession, currentUser));
+        return emitAndSaveTextResponse(
+                fluxResponse,
+                chatSession,
+                currentUser,
+                eventStream,
+                messageType,
+                BooleanUtils.isTrue(chatDto.getDeepThink())
+        );
     }
 
     public boolean isEventStream(ChatDto chatDto) {
@@ -248,6 +251,16 @@ public class DihChatApplicationService {
         }
         if (ReportAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
+            Optional<Flux<String>> demoResponse = findReportDemoResponse(
+                    chatType,
+                    chatId,
+                    prompt,
+                    currentUser,
+                    chatSession
+            );
+            if (demoResponse.isPresent()) {
+                return demoResponse.get();
+            }
             return reportAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (DataVisualizationAgent.AGENT_TYPE.equals(chatType)) {
@@ -295,6 +308,51 @@ public class DihChatApplicationService {
                 mcpToolContext.toolCallbackProvider(),
                 mcpToolContext.systemPrompt()
         );
+    }
+
+    private Optional<Flux<String>> findReportDemoResponse(String chatType,
+                                                          String chatId,
+                                                          String prompt,
+                                                          User currentUser,
+                                                          ChatSession chatSession) {
+        if (!ReportAgent.AGENT_TYPE.equals(chatType) || reportDemoResponseService == null) {
+            return Optional.empty();
+        }
+        return reportDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
+    }
+
+    private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
+                                                 ChatSession chatSession,
+                                                 User currentUser,
+                                                 boolean eventStream,
+                                                 AtomicReference<MessageType> messageType,
+                                                 boolean deepThinkRequested) {
+        StringBuilder modelResponse = new StringBuilder();
+        if (eventStream) {
+            return fluxResponse
+                    .doOnNext(modelResponse::append)
+                    .map(s -> toNdjson(ChatStreamEvent.delta(s)))
+                    .concatWith(Flux.defer(() -> {
+                        Message aiMessage = saveAiResponse(
+                                chatSession,
+                                currentUser,
+                                modelResponse.toString(),
+                                messageType.get(),
+                                true,
+                                deepThinkRequested
+                        );
+                        return Flux.just(toNdjson(ChatStreamEvent.done(aiMessage)));
+                    }))
+                    .onErrorResume(e -> {
+                        log.error("聊天事件流返回失败: {}", e.getMessage(), e);
+                        persistErrorResponse(chatSession, currentUser);
+                        return Flux.just(toNdjson(ChatStreamEvent.error(CHAT_ERROR_MESSAGE)));
+                    });
+        }
+
+        return fluxResponse.doOnNext(modelResponse::append)
+                .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(), messageType.get(), false, false))
+                .doOnError(e -> persistErrorResponse(chatSession, currentUser));
     }
 
     private ChatSession appendUserMessage(ChatDto chatDto, String chatType, String userMessage, User currentUser) {
@@ -408,6 +466,7 @@ public class DihChatApplicationService {
                 "dashboardConfigs",
                 "menuConfigs"
         ));
+        mergeReportRecords(extraData, patch);
 
         String extraDataJson = JacksonUtil.toJson(extraData);
         ChatSessionDto chatSessionDto = new ChatSessionDto();
@@ -428,6 +487,10 @@ public class DihChatApplicationService {
         Map<String, Object> dataVisualizationPatch = buildDataVisualizationExtraDataPatch(parts);
         if (dataVisualizationPatch != null && !dataVisualizationPatch.isEmpty()) {
             patch.putAll(dataVisualizationPatch);
+        }
+        Map<String, Object> reportPatch = buildReportExtraDataPatch(parts);
+        if (reportPatch != null && !reportPatch.isEmpty()) {
+            patch.putAll(reportPatch);
         }
         return patch.isEmpty() ? null : patch;
     }
@@ -513,6 +576,113 @@ public class DihChatApplicationService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("dataVisualization", dataVisualization);
         return metadata;
+    }
+
+    private Map<String, Object> buildReportExtraDataPatch(List<ChatMessagePart> parts) {
+        List<Map<String, Object>> documents = new ArrayList<>();
+        List<Map<String, Object>> artifacts = new ArrayList<>();
+        Map<String, Object> currentDocument = null;
+
+        for (ChatMessagePart part : parts) {
+            if (!isReportDocumentPart(part)) {
+                continue;
+            }
+            Map<String, Object> document = buildReportDocumentRecord(part);
+            documents.add(document);
+            artifacts.add(buildReportArtifactRecord(document));
+            currentDocument = document;
+        }
+
+        if (documents.isEmpty() && artifacts.isEmpty() && currentDocument == null) {
+            return null;
+        }
+
+        Map<String, Object> report = new LinkedHashMap<>();
+        if (currentDocument != null) {
+            report.put("currentDocument", currentDocument);
+        }
+        if (!documents.isEmpty()) {
+            report.put("documents", documents);
+        }
+        if (!artifacts.isEmpty()) {
+            report.put("artifacts", artifacts);
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("report", report);
+        return metadata;
+    }
+
+    private boolean isReportDocumentPart(ChatMessagePart part) {
+        if (part == null) {
+            return false;
+        }
+        if ("report-document".equals(part.getType())) {
+            return true;
+        }
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        return "config".equals(part.getType()) && "report-document".equals(stringValue(raw, "configKind", null));
+    }
+
+    private Map<String, Object> buildReportDocumentRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        String format = firstNonBlank(
+                stringValue(raw, "format", null),
+                stringValue(raw, "language", null),
+                part.getLanguage(),
+                "markdown"
+        );
+        String title = firstNonBlank(
+                stringValue(raw, "title", null),
+                part.getTitle(),
+                extractMarkdownTitle(part.getContent()),
+                "报表文档"
+        );
+        String version = firstNonBlank(stringValue(raw, "version", null), "v1.0.0");
+        String updatedAt = firstNonBlank(stringValue(raw, "updatedAt", null), java.time.OffsetDateTime.now().toString());
+        String id = firstNonBlank(
+                stringValue(raw, "documentId", null),
+                stringValue(raw, "document_id", null),
+                stringValue(raw, "recordId", null),
+                stringValue(raw, "id", null),
+                java.util.UUID.randomUUID().toString()
+        );
+
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("id", id);
+        record.put("documentId", id);
+        record.put("title", title);
+        record.put("name", title);
+        record.put("format", format);
+        record.put("version", version);
+        record.put("status", stringValue(raw, "status", "generated"));
+        record.put("source", "agent_report");
+        record.put("updatedAt", updatedAt);
+        record.put("content", part.getContent());
+        record.put("outline", raw.getOrDefault("outline", List.of()));
+        record.put("sourceAttachments", raw.getOrDefault("sourceAttachments", List.of()));
+        record.put("raw", raw);
+        return record;
+    }
+
+    private Map<String, Object> buildReportArtifactRecord(Map<String, Object> document) {
+        Map<String, Object> artifact = new LinkedHashMap<>();
+        String id = firstNonBlank(
+                stringValue(document, "artifactId", null),
+                stringValue(document, "id", null),
+                java.util.UUID.randomUUID().toString()
+        );
+        artifact.put("id", id);
+        artifact.put("artifactId", id);
+        artifact.put("documentId", stringValue(document, "documentId", id));
+        artifact.put("name", stringValue(document, "title", "报表文档"));
+        artifact.put("title", stringValue(document, "title", "报表文档"));
+        artifact.put("format", stringValue(document, "format", "markdown"));
+        artifact.put("version", stringValue(document, "version", "v1.0.0"));
+        artifact.put("status", "generated");
+        artifact.put("createdAt", stringValue(document, "updatedAt", java.time.OffsetDateTime.now().toString()));
+        artifact.put("content", stringValue(document, "content", ""));
+        return artifact;
     }
 
     private Map<String, Object> buildVisualizationChartRecord(ChatMessagePart part) {
@@ -737,9 +907,29 @@ public class DihChatApplicationService {
         }
     }
 
+    private void mergeReportRecords(Map<String, Object> extraData, Map<String, Object> patch) {
+        Map<String, Object> report = mapValue(extraData.get("report"));
+        Map<String, Object> patchReport = mapValue(patch.get("report"));
+        if (patchReport.isEmpty()) {
+            return;
+        }
+
+        mergeRecordList(report, patchReport, "documents");
+        mergeRecordList(report, patchReport, "artifacts");
+        Map<String, Object> currentDocument = mapValue(patchReport.get("currentDocument"));
+        if (!currentDocument.isEmpty()) {
+            report.put("currentDocument", currentDocument);
+        }
+        if (!report.isEmpty()) {
+            extraData.put("report", report);
+        }
+    }
+
     private void upsertRecord(List<Map<String, Object>> records, Map<String, Object> record) {
         String id = firstNonBlank(
                 stringValue(record, "id", null),
+                stringValue(record, "documentId", null),
+                stringValue(record, "artifactId", null),
                 stringValue(record, "fileName", null),
                 stringValue(record, "configType", null),
                 stringValue(record, "configIndex", null),
@@ -747,11 +937,14 @@ public class DihChatApplicationService {
                 stringValue(record, "dashboardId", null),
                 stringValue(record, "menuId", null),
                 stringValue(record, "taskId", null),
+                stringValue(record, "version", null),
                 stringValue(record, "name", null)
         );
         if (id != null) {
             records.removeIf(item -> id.equals(firstNonBlank(
                     stringValue(item, "id", null),
+                    stringValue(item, "documentId", null),
+                    stringValue(item, "artifactId", null),
                     stringValue(item, "fileName", null),
                     stringValue(item, "configType", null),
                     stringValue(item, "configIndex", null),
@@ -759,10 +952,24 @@ public class DihChatApplicationService {
                     stringValue(item, "dashboardId", null),
                     stringValue(item, "menuId", null),
                     stringValue(item, "taskId", null),
+                    stringValue(item, "version", null),
                     stringValue(item, "name", null)
             )));
         }
         records.add(record);
+    }
+
+    private String extractMarkdownTitle(String content) {
+        if (!StringUtils.hasText(content)) {
+            return null;
+        }
+        for (String line : content.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#")) {
+                return trimmed.replaceFirst("^#+\\s*", "").trim();
+            }
+        }
+        return null;
     }
 
     private Map<String, Object> buildMetaConfigRecord(ChatMessagePart part, String defaultStatus) {

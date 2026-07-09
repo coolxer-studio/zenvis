@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class ChatMessagePartParserTest {
@@ -283,7 +284,7 @@ class ChatMessagePartParserTest {
     }
 
     @Test
-    @DisplayName("报表文档围栏应解析为配置片段")
+    @DisplayName("报表文档围栏应解析为结构化报表片段")
     void parseReportDocumentConfigFence() {
         String content = """
                 ```zenvis:report-document-config
@@ -298,11 +299,14 @@ class ChatMessagePartParserTest {
         List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
 
         assertEquals(1, parts.size());
-        assertEquals("config", parts.get(0).getType());
-        assertEquals("报表文档", parts.get(0).getTitle());
+        assertEquals("report-document", parts.get(0).getType());
+        assertEquals("巡检研判报告", parts.get(0).getTitle());
         assertEquals("markdown", parts.get(0).getLanguage());
         assertEquals("report-document", parts.get(0).getMetadata().get("configKind"));
         assertEquals("report.md", parts.get(0).getMetadata().get("defaultFileName"));
+        assertEquals("巡检研判报告", parts.get(0).getMetadata().get("title"));
+        assertNotNull(parts.get(0).getMetadata().get("updatedAt"));
+        assertFalse(((List<?>) parts.get(0).getMetadata().get("outline")).isEmpty());
     }
 
     @Test
@@ -311,17 +315,18 @@ class ChatMessagePartParserTest {
         String content = """
                 ```zenvis:report-document-config
                 <!DOCTYPE html>
-                <html lang="zh-CN"><body>报告</body></html>
+                <html lang="zh-CN"><body><h1>HTML 报告</h1></body></html>
                 ```
                 """;
 
         List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
 
         assertEquals(1, parts.size());
-        assertEquals("config", parts.get(0).getType());
-        assertEquals("报表文档", parts.get(0).getTitle());
+        assertEquals("report-document", parts.get(0).getType());
+        assertEquals("HTML 报告", parts.get(0).getTitle());
         assertEquals("html", parts.get(0).getLanguage());
         assertEquals("report-document", parts.get(0).getMetadata().get("configKind"));
+        assertEquals("report.html", parts.get(0).getMetadata().get("defaultFileName"));
     }
 
     @Test

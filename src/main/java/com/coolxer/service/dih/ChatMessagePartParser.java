@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +21,8 @@ public class ChatMessagePartParser {
 
     private static final Pattern FENCE_PATTERN = Pattern.compile("```([^\\r\\n]*)\\R([\\s\\S]*?)\\R?```");
     private static final Pattern THINK_PATTERN = Pattern.compile("<think>([\\s\\S]*?)</think>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MARKDOWN_HEADING_PATTERN = Pattern.compile("(?m)^(#{1,6})\\s+(.+?)\\s*$");
+    private static final Pattern HTML_HEADING_PATTERN = Pattern.compile("<h([1-6])[^>]*>([\\s\\S]*?)</h\\1>", Pattern.CASE_INSENSITIVE);
 
     public List<ChatMessagePart> parse(String content, MessageType messageType) {
         if (messageType == MessageType.CHART) {
@@ -220,16 +223,29 @@ public class ChatMessagePartParser {
                     "punish_config/<stable-name>.json",
                     info
             );
-            case "zenvis:report-document-config" -> configPart(
-                    body,
-                    "报表文档",
-                    detectReportLanguage(body),
-                    "report-document",
-                    "report.md",
-                    info
-            );
+            case "zenvis:report-document-config" -> reportDocumentPart(body, info);
             default -> null;
         };
+    }
+
+    private ChatMessagePart reportDocumentPart(String body, String fence) {
+        String format = detectReportLanguage(body);
+        String title = firstNonBlank(extractReportTitle(body, format), "报表文档");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("configKind", "report-document");
+        metadata.put("defaultFileName", "html".equals(format) ? "report.html" : "report.md");
+        metadata.put("fence", fence);
+        metadata.put("title", title);
+        metadata.put("format", format);
+        metadata.put("version", "v1.0.0");
+        metadata.put("updatedAt", java.time.OffsetDateTime.now().toString());
+        metadata.put("outline", extractReportOutline(body, format));
+        return part("report-document")
+                .title(title)
+                .language(format)
+                .content(body)
+                .metadata(metadata)
+                .build();
     }
 
     private String detectReportLanguage(String body) {
@@ -238,6 +254,56 @@ public class ChatMessagePartParser {
             return "html";
         }
         return "markdown";
+    }
+
+    private String extractReportTitle(String body, String format) {
+        if (!StringUtils.hasText(body)) {
+            return null;
+        }
+        Matcher matcher = "html".equals(format)
+                ? HTML_HEADING_PATTERN.matcher(body)
+                : MARKDOWN_HEADING_PATTERN.matcher(body);
+        if (matcher.find()) {
+            String title = "html".equals(format) ? stripHtml(matcher.group(2)) : matcher.group(2);
+            return StringUtils.hasText(title) ? title.trim() : null;
+        }
+        return null;
+    }
+
+    private List<Map<String, Object>> extractReportOutline(String body, String format) {
+        if (!StringUtils.hasText(body)) {
+            return List.of();
+        }
+        List<Map<String, Object>> outline = new ArrayList<>();
+        Matcher matcher = "html".equals(format)
+                ? HTML_HEADING_PATTERN.matcher(body)
+                : MARKDOWN_HEADING_PATTERN.matcher(body);
+        while (matcher.find()) {
+            int level;
+            String text;
+            if ("html".equals(format)) {
+                level = Integer.parseInt(matcher.group(1));
+                text = stripHtml(matcher.group(2));
+            } else {
+                level = matcher.group(1).length();
+                text = matcher.group(2);
+            }
+            if (StringUtils.hasText(text)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", "heading-" + (outline.size() + 1));
+                item.put("level", level);
+                item.put("text", text.trim());
+                outline.add(item);
+            }
+        }
+        return outline;
+    }
+
+    private String stripHtml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("<[^>]+>", "").replace("&nbsp;", " ").trim();
     }
 
     private ChatMessagePart configPart(String body,
@@ -273,6 +339,15 @@ public class ChatMessagePartParser {
     private String firstTextValue(JsonNode node, String... fieldNames) {
         for (String fieldName : fieldNames) {
             String value = textValue(node, fieldName);
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
             if (StringUtils.hasText(value)) {
                 return value;
             }

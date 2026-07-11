@@ -136,12 +136,6 @@ Controller 会做几类前置检查：
 
 最终保存 AI 消息时，`ChatMessagePartParser` 会把 `<think>` 内容转为 `thinking` part。如果用户请求了深度思考但模型没有返回可解析思考内容，后端会补一个“已完成深度思考，当前模型未返回可展示的思考过程。”的 thinking 片段。
 
-### 固定回复
-
-`FixedPromptResponseService` 会加载 `src/main/resources/fixed-chat-responses.json`。如果用户输入完全命中 key，后端不请求大模型，直接返回固定文本。
-
-这个机制看起来主要用于测试或演示。例如 `ping` 会返回 `pong`。
-
 ### 数据接入 Agent
 
 `type=agent_data_access` 时调用 `DataAccessAgent`。

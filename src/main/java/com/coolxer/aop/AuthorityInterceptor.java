@@ -37,8 +37,7 @@ public class AuthorityInterceptor extends AbstractInterceptor {
             "/api/v1/system/login/kaptcha",
             "/api/v1/system/login/encrypt/key",
             "/api/v1/system/login/sign-out",
-            "/api/v1/dih/health",
-            "/api/v1/lubinsun/tasks/ingest"
+            "/api/v1/dih/health"
     );
 
     @Override

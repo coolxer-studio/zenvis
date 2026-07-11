@@ -55,7 +55,6 @@ public class DihChatApplicationService {
     private final AIChatService chatService;
     private final AIBaseService baseService;
     private final ChatSessionService chatSessionService;
-    private final FixedPromptResponseService fixedPromptResponseService;
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
     private final ReportDemoResponseService reportDemoResponseService;
@@ -77,7 +76,6 @@ public class DihChatApplicationService {
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
                                      ChatSessionService chatSessionService,
-                                     FixedPromptResponseService fixedPromptResponseService,
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
                                      DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
                                      ReportDemoResponseService reportDemoResponseService,
@@ -98,7 +96,6 @@ public class DihChatApplicationService {
         this.chatService = chatService;
         this.baseService = baseService;
         this.chatSessionService = chatSessionService;
-        this.fixedPromptResponseService = fixedPromptResponseService;
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
         this.reportDemoResponseService = reportDemoResponseService;
@@ -227,7 +224,6 @@ public class DihChatApplicationService {
                                       ChatSession chatSession,
                                       McpToolContext mcpToolContext,
                                       AtomicReference<MessageType> messageType) {
-        Optional<String> fixedResponse = fixedPromptResponseService.findResponse(resolveUserMessage(chatDto));
         if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
             Optional<Flux<String>> demoResponse = dataAccessDemoResponseService.findResponse(
@@ -279,11 +275,6 @@ public class DihChatApplicationService {
         if (isPlaceholderBuiltinAgent(chatType)) {
             messageType.set(MessageType.TEXT);
             return Flux.just(skillService.getBuiltinAgentPlaceholder(chatType));
-        }
-        if (fixedResponse.isPresent()) {
-            log.info("固定提示词命中，直接返回测试文件中的预期回答。chatId={}", chatId);
-            messageType.set(MessageType.TEXT);
-            return Flux.just(fixedResponse.get());
         }
         if (BooleanUtils.isTrue(chatDto.getDeepThink())) {
             messageType.set(MessageType.TEXT);

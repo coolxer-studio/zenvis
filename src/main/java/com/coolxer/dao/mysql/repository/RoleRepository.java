@@ -23,6 +23,22 @@ public interface RoleRepository extends BaseRepository<Role, Integer> {
     Role findById(Integer id);
 
     /**
+     * 根据名称查询角色
+     *
+     * @param name 角色名称
+     * @return 角色
+     */
+    List<Role> findByName(String name);
+
+    /**
+     * 查询超级管理员角色
+     *
+     * @param isSuperAdmin 是否超级管理员角色
+     * @return 角色列表
+     */
+    List<Role> findByIsSuperAdmin(Boolean isSuperAdmin);
+
+    /**
      * 查询角色名
      *
      * @param ids 角色id列表
@@ -43,4 +59,20 @@ public interface RoleRepository extends BaseRepository<Role, Integer> {
             countQuery = "SELECT count(*) FROM " + MysqlFinalTableName.T_SYS_ROLE + " a WHERE " +
                     "(:name IS NULL OR a.name like concat('%',:name,'%')) ")
     Page<Role> findByPage(Pageable pageable, @Param("name") String name);
+
+    /**
+     * 分页查询，排除超级管理员角色
+     *
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    @Query(nativeQuery = true,
+            value = "SELECT a.* FROM " + MysqlFinalTableName.T_SYS_ROLE + " a WHERE " +
+                    "(a.is_super_admin IS NULL OR a.is_super_admin = false) AND " +
+                    "(:name IS NULL OR a.name like concat('%',:name,'%')) " +
+                    "ORDER BY a.update_time DESC",
+            countQuery = "SELECT count(*) FROM " + MysqlFinalTableName.T_SYS_ROLE + " a WHERE " +
+                    "(a.is_super_admin IS NULL OR a.is_super_admin = false) AND " +
+                    "(:name IS NULL OR a.name like concat('%',:name,'%')) ")
+    Page<Role> findByPageWithoutSuperAdmin(Pageable pageable, @Param("name") String name);
 }

@@ -1,5 +1,6 @@
 package com.coolxer.component;
 
+import com.coolxer.commons.constant.SystemBuiltInConstants;
 import com.coolxer.commons.enums.DashboardType;
 import com.coolxer.commons.enums.MenuLevel;
 import com.coolxer.commons.enums.MenuType;
@@ -12,9 +13,12 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 系统数据初始化
@@ -61,6 +65,9 @@ public class DataInitiator {
 
         // 初始化管理员账号
         initDefaultAdminUser();
+
+        // 初始化超级管理员账号
+        initDefaultSuperAdminUser();
 
         // 初始化系统信息
         initDefaultSystemInfo();
@@ -126,7 +133,7 @@ public class DataInitiator {
             // 初始化机构管理员角色
             String adminRole = "机构管理员";
             // admin@!QAZ2wsx
-            String defaultAdminPassword = "$2a$10$kCtgK9s26iFIZJXFQpO6DeLjLMd59xcHq/77DDLAZ9J8bZ5XxZAda";
+            String defaultAdminPassword = SystemBuiltInConstants.DEFAULT_ADMIN_PASSWORD;
 
             Role role = new Role();
             role.setName(adminRole);
@@ -160,6 +167,92 @@ public class DataInitiator {
 
         }
 
+    }
+
+    /**
+     * 默认创建超级管理员
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void initDefaultSuperAdminUser() {
+        Role role = findOrCreateSuperAdminRole();
+        User user = findOrCreateSuperAdminUser();
+        UserRole userRole = userRoleRepository.findByUserId(user.getId());
+        if (userRole == null) {
+            userRole = new UserRole();
+            userRole.setUserId(user.getId());
+        }
+        if (userRole.getRoleId() != role.getId()) {
+            userRole.setRoleId(role.getId());
+            userRoleRepository.save(userRole);
+        }
+        syncSuperAdminRolePermissions(role.getId());
+    }
+
+    private Role findOrCreateSuperAdminRole() {
+        List<Role> namedRoles = roleRepository.findByName(SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME);
+        List<Role> roles = roleRepository.findByIsSuperAdmin(true);
+        Role role = CollectionUtils.isEmpty(namedRoles)
+                ? (CollectionUtils.isEmpty(roles) ? null : roles.get(0))
+                : namedRoles.get(0);
+        if (role == null) {
+            role = new Role();
+            role.setName(SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME);
+            role.setIsSuperAdmin(true);
+            return roleRepository.save(role);
+        }
+        boolean needSave = false;
+        if (!SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME.equals(role.getName())) {
+            role.setName(SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME);
+            needSave = true;
+        }
+        if (!Boolean.TRUE.equals(role.getIsSuperAdmin())) {
+            role.setIsSuperAdmin(true);
+            needSave = true;
+        }
+        return needSave ? roleRepository.save(role) : role;
+    }
+
+    private User findOrCreateSuperAdminUser() {
+        User user = userRepository.findByEmail(SystemBuiltInConstants.SUPER_ADMIN_EMAIL);
+        List<User> users = userRepository.findByIsSuperAdmin(true);
+        if (user == null && CollectionUtils.isNotEmpty(users)) {
+            user = users.get(0);
+        }
+        if (user == null) {
+            user = new User();
+            user.setEmail(SystemBuiltInConstants.SUPER_ADMIN_EMAIL);
+            user.setName(SystemBuiltInConstants.SUPER_ADMIN_NAME);
+            user.setPassword(SystemBuiltInConstants.DEFAULT_ADMIN_PASSWORD);
+            user.setIsSuperAdmin(true);
+            return userRepository.save(user);
+        }
+        boolean needSave = false;
+        if (!SystemBuiltInConstants.SUPER_ADMIN_EMAIL.equals(user.getEmail())) {
+            user.setEmail(SystemBuiltInConstants.SUPER_ADMIN_EMAIL);
+            needSave = true;
+        }
+        if (!SystemBuiltInConstants.SUPER_ADMIN_NAME.equals(user.getName())) {
+            user.setName(SystemBuiltInConstants.SUPER_ADMIN_NAME);
+            needSave = true;
+        }
+        if (!Boolean.TRUE.equals(user.getIsSuperAdmin())) {
+            user.setIsSuperAdmin(true);
+            needSave = true;
+        }
+        return needSave ? userRepository.save(user) : user;
+    }
+
+    private void syncSuperAdminRolePermissions(Integer roleId) {
+        List<Menu> menuList = menuRepository.findAll();
+        Set<Integer> existingPermissionIds = new HashSet<>(rolePermissionRepository.findByRoleId(roleId)
+                .stream()
+                .map(RolePermission::getPermissionId)
+                .toList());
+        List<RolePermission> missingPermissions = menuList.stream()
+                .filter(menu -> !existingPermissionIds.contains(menu.getId()))
+                .map(menu -> new RolePermission(roleId, menu.getId()))
+                .toList();
+        rolePermissionRepository.saveAll(missingPermissions);
     }
 
     /**

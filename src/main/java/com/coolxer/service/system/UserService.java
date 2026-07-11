@@ -41,7 +41,7 @@ public interface UserService {
      * @param id 用户id
      * @return 结果
      */
-    UserVo info(Long id);
+    UserVo info(Long id, User currentUser);
 
     /**
      * 获取用户列表
@@ -49,7 +49,7 @@ public interface UserService {
      * @param userSearchDto 搜索参数
      * @return 用户列表
      */
-    PageRowsVo<UserVo> getPageList(UserSearchDto userSearchDto);
+    PageRowsVo<UserVo> getPageList(UserSearchDto userSearchDto, User currentUser);
 
     /**
      * 修改密码校验

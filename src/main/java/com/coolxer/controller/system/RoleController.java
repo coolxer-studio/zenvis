@@ -4,6 +4,7 @@ package com.coolxer.controller.system;
 import cn.hutool.core.lang.tree.Tree;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.controller.BaseController;
+import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.system.dto.RoleDto;
@@ -102,7 +103,7 @@ public class RoleController extends BaseController {
     @GetMapping({"/list"})
     public ResponseWrap<?> list(RoleSearchDto roleSearchDto) {
         try {
-            PageRowsVo<RoleVo> pageDataVo = roleService.getPageList(roleSearchDto);
+            PageRowsVo<RoleVo> pageDataVo = roleService.getPageList(roleSearchDto, getSessionUser());
             return ResponseWrap.success(pageDataVo);
         } catch (Exception e) {
             return ResponseWrap.fail(e);
@@ -113,7 +114,7 @@ public class RoleController extends BaseController {
     @GetMapping({"/{id}/view"})
     public ResponseWrap<RoleVo> query(@PathVariable("id") Long id) {
         try {
-            RoleVo roleVo = roleService.info(id);
+            RoleVo roleVo = roleService.info(id, getSessionUser());
             if (roleVo == null) {
                 return ResponseWrap.fail();
             } else {
@@ -132,8 +133,9 @@ public class RoleController extends BaseController {
     public ResponseWrap<?> listAllRoles() {
         try {
             Map<String, List<Map<String, String>>> result = new HashMap<>();
+            User currentUser = getSessionUser();
             result.put("options", CommonUtil.createOptions(
-                    roleService.findAll(),
+                    roleService.findAll(currentUser),
                     item -> item.getName(),
                     item -> String.valueOf(item.getId())
             ));

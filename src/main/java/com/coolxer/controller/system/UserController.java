@@ -80,7 +80,7 @@ public class UserController extends BaseController {
     @GetMapping({"/list"})
     public ResponseWrap<?> list(UserSearchDto userSearchDto) {
         try {
-            PageRowsVo<UserVo> pageDataVo = userService.getPageList(userSearchDto);
+            PageRowsVo<UserVo> pageDataVo = userService.getPageList(userSearchDto, getSessionUser());
             return ResponseWrap.success(pageDataVo);
         } catch (Exception e) {
             return ResponseWrap.fail(e);
@@ -91,7 +91,7 @@ public class UserController extends BaseController {
     @GetMapping({"/{id}/view"})
     public ResponseWrap<UserVo> query(@PathVariable("id") Long id) {
         try {
-            UserVo userVo = userService.info(id);
+            UserVo userVo = userService.info(id, getSessionUser());
             if (userVo == null) {
                 return ResponseWrap.fail();
             } else {

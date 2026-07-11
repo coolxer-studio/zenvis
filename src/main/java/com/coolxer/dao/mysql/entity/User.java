@@ -34,4 +34,16 @@ public class User extends BaseEntity {
     @Column
     private String password;
 
+    public User(String email, String name, String password) {
+        this.email = email;
+        this.name = name;
+        this.password = password;
+    }
+
+    /**
+     * 是否超级管理员
+     */
+    @Column(name = "is_super_admin", columnDefinition = "boolean default false")
+    private Boolean isSuperAdmin = false;
+
 }

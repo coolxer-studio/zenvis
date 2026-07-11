@@ -45,6 +45,15 @@ public class UserVo implements Serializable {
      */
     private Date updateTime;
 
+    /**
+     * 是否超级管理员
+     */
+    private Boolean isSuperAdmin;
+
+    public UserVo(int id, String email, String name, int roleId, String roleName, Date updateTime) {
+        this(id, email, name, roleId, roleName, updateTime, false);
+    }
+
     public UserVo(User user, Role role) {
         this.id = user.getId();
         this.email = user.getEmail();
@@ -52,6 +61,7 @@ public class UserVo implements Serializable {
         this.updateTime = user.getUpdateTime();
         this.roleId = role.getId();
         this.roleName = role.getName();
+        this.isSuperAdmin = user.getIsSuperAdmin();
     }
 
 }

@@ -114,6 +114,21 @@ public enum ResultCodeEnum {
     ROLE_ID_MUST_NOT_NULL(126, "角色ID不能为空！"),
 
     /**
+     * 超级管理员用户不允许修改或删除
+     */
+    SUPER_ADMIN_USER_NOT_ALLOWED(127, "超级管理员用户不允许修改或删除！"),
+
+    /**
+     * 超级管理员角色不允许修改或删除
+     */
+    SUPER_ADMIN_ROLE_NOT_ALLOWED(134, "超级管理员角色不允许修改或删除！"),
+
+    /**
+     * 超级管理员角色不允许手动分配
+     */
+    SUPER_ADMIN_ROLE_ASSIGN_NOT_ALLOWED(137, "超级管理员角色不允许手动分配！"),
+
+    /**
      * 无效的时间范围！
      */
     INVALID_TIME_RANGE(130, "无效的时间范围！"),

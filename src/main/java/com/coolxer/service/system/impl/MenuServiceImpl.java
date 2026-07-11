@@ -1,11 +1,16 @@
 package com.coolxer.service.system.impl;
 
+import com.coolxer.commons.constant.SystemBuiltInConstants;
 import com.coolxer.commons.enums.MenuLevel;
 import com.coolxer.commons.enums.MenuType;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.Menu;
+import com.coolxer.dao.mysql.entity.Role;
+import com.coolxer.dao.mysql.entity.RolePermission;
 import com.coolxer.dao.mysql.repository.MenuRepository;
+import com.coolxer.dao.mysql.repository.RolePermissionRepository;
+import com.coolxer.dao.mysql.repository.RoleRepository;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.system.dto.MenuOrderRowDto;
@@ -38,6 +43,12 @@ public class MenuServiceImpl implements MenuService {
 
     @Autowired
     private ConfigService configService;
+
+    @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
+    private RolePermissionRepository rolePermissionRepository;
 
     @Override
     public List<MenuVo> findAll() {
@@ -90,7 +101,9 @@ public class MenuServiceImpl implements MenuService {
             // 创建根路径
             configService.addRootPath(menu.getParams());
         }
-        return menuRepository.save(menu);
+        menu = menuRepository.save(menu);
+        grantToSuperAdmin(menu);
+        return menu;
     }
 
     @Override
@@ -216,6 +229,21 @@ public class MenuServiceImpl implements MenuService {
     private static void checkCreateOrUpdate(MenuDto menuDto) {
         if (StringUtils.isEmpty(menuDto.getName()) || menuDto.getType() == null) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+    }
+
+    private void grantToSuperAdmin(Menu menu) {
+        List<Role> roles = roleRepository.findByIsSuperAdmin(true);
+        if (roles.isEmpty()) {
+            return;
+        }
+        Role role = roles.get(0);
+        if (!SystemBuiltInConstants.isSuperAdmin(role)) {
+            return;
+        }
+        RolePermission existing = rolePermissionRepository.findByRoleIdAndPermissionId(role.getId(), menu.getId());
+        if (existing == null) {
+            rolePermissionRepository.save(new RolePermission(role.getId(), menu.getId()));
         }
     }
 

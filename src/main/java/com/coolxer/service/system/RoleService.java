@@ -1,6 +1,7 @@
 package com.coolxer.service.system;
 
 import com.coolxer.dao.mysql.entity.Role;
+import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.system.dto.RoleDto;
 import com.coolxer.model.system.dto.RoleSearchDto;
@@ -19,7 +20,7 @@ public interface RoleService {
      *
      * @return 结果
      */
-    List<RoleVo> findAll();
+    List<RoleVo> findAll(User currentUser);
 
     /**
      * 创建角色
@@ -54,7 +55,7 @@ public interface RoleService {
      * @param id 角色id
      * @return 结果
      */
-    RoleVo info(Long id);
+    RoleVo info(Long id, User currentUser);
 
     /**
      * 获取角色列表
@@ -62,7 +63,7 @@ public interface RoleService {
      * @param roleSearchDto 搜索参数
      * @return 角色列表
      */
-    PageRowsVo<RoleVo> getPageList(RoleSearchDto roleSearchDto);
+    PageRowsVo<RoleVo> getPageList(RoleSearchDto roleSearchDto, User currentUser);
 
 
 }

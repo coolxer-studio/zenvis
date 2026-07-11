@@ -1,5 +1,6 @@
 package com.coolxer.service.system.impl;
 
+import com.coolxer.commons.constant.SystemBuiltInConstants;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.Role;
@@ -90,12 +91,16 @@ public class UserServiceImpl implements UserService {
     public CryptService cryptService;
 
     @Override
-    public PageRowsVo<UserVo> getPageList(UserSearchDto userSearchDto) {
+    public PageRowsVo<UserVo> getPageList(UserSearchDto userSearchDto, User currentUser) {
 
         try {
             Pageable pageable = PageRequest.of(userSearchDto.getPage() - 1, userSearchDto.getPerPage());
             Page<User> byPage;
-            byPage = userRepository.findByPage(pageable, userSearchDto.getName(), userSearchDto.getEmail());
+            if (SystemBuiltInConstants.isSuperAdmin(currentUser)) {
+                byPage = userRepository.findByPage(pageable, userSearchDto.getName(), userSearchDto.getEmail());
+            } else {
+                byPage = userRepository.findByPageWithoutSuperAdmin(pageable, userSearchDto.getName(), userSearchDto.getEmail());
+            }
 
             // 用户id列表
             List<Integer> userIdList = byPage.stream().map(User::getId).toList();
@@ -119,7 +124,7 @@ public class UserServiceImpl implements UserService {
                         UserRole userRole = userRoleMap.get(user.getId());
                         Integer roleId = userRole.getRoleId();
                         return new UserVo(user.getId(), user.getEmail(), user.getName(), roleId,
-                                roleMap.get(roleId), user.getUpdateTime());
+                                roleMap.get(roleId), user.getUpdateTime(), user.getIsSuperAdmin());
                     }).toList(),
                     byPage.getTotalElements()
             );
@@ -139,6 +144,10 @@ public class UserServiceImpl implements UserService {
         User existUser = userRepository.findByEmail(userDto.getEmail());
         if (Objects.nonNull(existUser)) {
             throw new ApiException(ResultCodeEnum.EMAIL_IS_EXIST);
+        }
+        Role role = roleRepository.findById(userDto.getRoleId());
+        if (SystemBuiltInConstants.isSuperAdmin(role)) {
+            throw new ApiException(ResultCodeEnum.SUPER_ADMIN_ROLE_ASSIGN_NOT_ALLOWED);
         }
 
         // 前端传输密码加密时的处理
@@ -183,6 +192,9 @@ public class UserServiceImpl implements UserService {
         Optional<User> optionalUser = userRepository.findById(id);
         if (optionalUser.isPresent()) {
             User user = optionalUser.get();
+            if (SystemBuiltInConstants.isSuperAdmin(user)) {
+                throw new ApiException(ResultCodeEnum.SUPER_ADMIN_USER_NOT_ALLOWED);
+            }
 
             // 修改邮箱，校验邮箱，系统唯一
             User existUser = userRepository.findByEmail(userDto.getEmail());
@@ -285,17 +297,24 @@ public class UserServiceImpl implements UserService {
         if (Objects.isNull(id)) {
             throw new ApiException(ResultCodeEnum.ERROR_USER_ID_MUST_NOT_NULL);
         }
+        Optional<User> optionalUser = userRepository.findById(id);
+        if (optionalUser.isPresent() && SystemBuiltInConstants.isSuperAdmin(optionalUser.get())) {
+            throw new ApiException(ResultCodeEnum.SUPER_ADMIN_USER_NOT_ALLOWED);
+        }
         userRepository.deleteById(id);
         userRoleRepository.deleteByUserId(id.intValue());
 
     }
 
     @Override
-    public UserVo info(Long id) {
+    public UserVo info(Long id, User currentUser) {
         try {
             Optional<User> optionalUser = userRepository.findById(id);
             if (optionalUser.isPresent()) {
                 User user = optionalUser.get();
+                if (SystemBuiltInConstants.isSuperAdmin(user) && !SystemBuiltInConstants.isSuperAdmin(currentUser)) {
+                    return null;
+                }
                 UserRole userRole = userRoleRepository.findByUserId(id.intValue());
                 Role role = roleRepository.findById(userRole.getRoleId());
                 return new UserVo(user, role);

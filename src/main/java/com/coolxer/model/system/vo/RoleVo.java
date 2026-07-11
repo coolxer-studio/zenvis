@@ -43,6 +43,11 @@ public class RoleVo implements Serializable {
      */
     private List<String> menuNames;
 
+    /**
+     * 是否超级管理员角色
+     */
+    private Boolean isSuperAdmin;
+
     public RoleVo(Role role, List<Integer> menuIds, List<String> menuNames) {
         this.id = role.getId();
         this.name = role.getName();
@@ -50,6 +55,7 @@ public class RoleVo implements Serializable {
         this.updateTime = role.getUpdateTime();
         this.menuIds = menuIds;
         this.menuNames = menuNames;
+        this.isSuperAdmin = role.getIsSuperAdmin();
     }
 
 }

@@ -1,10 +1,12 @@
 package com.coolxer.service.system.impl;
 
+import com.coolxer.commons.constant.SystemBuiltInConstants;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.Menu;
 import com.coolxer.dao.mysql.entity.Role;
 import com.coolxer.dao.mysql.entity.RolePermission;
+import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.dao.mysql.entity.UserRole;
 import com.coolxer.dao.mysql.repository.MenuRepository;
 import com.coolxer.dao.mysql.repository.RolePermissionRepository;
@@ -46,8 +48,8 @@ public class RoleServiceImpl implements RoleService {
     private MenuRepository menuRepository;
 
     @Override
-    public List<RoleVo> findAll() {
-        return roleRepository.findAll().stream().map(role -> {
+    public List<RoleVo> findAll(User currentUser) {
+        return roleRepository.findAll().stream().filter(role -> isVisible(role, currentUser)).map(role -> {
             List<Integer> menuIdList = rolePermissionRepository.findByRoleId(role.getId()).stream().map(RolePermission::getPermissionId).toList();
             List<String> menuNameList = menuRepository.findByIdIn(menuIdList).stream().map(Menu::getName).toList();
             return new RoleVo(role, menuIdList, menuNameList);
@@ -55,11 +57,15 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    public PageRowsVo<RoleVo> getPageList(RoleSearchDto roleSearchDto) {
+    public PageRowsVo<RoleVo> getPageList(RoleSearchDto roleSearchDto, User currentUser) {
         try {
             Pageable pageable = PageRequest.of(roleSearchDto.getPage() - 1, roleSearchDto.getPerPage());
             Page<Role> byPage;
-            byPage = roleRepository.findByPage(pageable, roleSearchDto.getName());
+            if (SystemBuiltInConstants.isSuperAdmin(currentUser)) {
+                byPage = roleRepository.findByPage(pageable, roleSearchDto.getName());
+            } else {
+                byPage = roleRepository.findByPageWithoutSuperAdmin(pageable, roleSearchDto.getName());
+            }
             return new PageRowsVo<>(
                     byPage.getContent().stream().map(role -> {
                         List<Integer> menuIdList = rolePermissionRepository.findByRoleId(role.getId()).stream().map(RolePermission::getPermissionId).toList();
@@ -77,6 +83,9 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public Role create(RoleDto roleDto) {
         checkCreateOrUpdate(roleDto);
+        if (SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME.equals(roleDto.getName())) {
+            throw new ApiException(ResultCodeEnum.SUPER_ADMIN_ROLE_NOT_ALLOWED);
+        }
         Role role = new Role();
         role.updateFromDto(roleDto);
         role = roleRepository.save(role);
@@ -102,6 +111,10 @@ public class RoleServiceImpl implements RoleService {
             Optional<Role> optionalRole = roleRepository.findById(id);
             if (optionalRole.isPresent()) {
                 Role role = optionalRole.get();
+                if (SystemBuiltInConstants.isSuperAdmin(role)
+                        || SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME.equals(roleDto.getName())) {
+                    throw new ApiException(ResultCodeEnum.SUPER_ADMIN_ROLE_NOT_ALLOWED);
+                }
                 role.updateFromDto(roleDto);
                 roleRepository.save(role);
 
@@ -119,6 +132,8 @@ public class RoleServiceImpl implements RoleService {
                 return true;
             }
             return false;
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("更新对象失败, id: {}", id, e);
             return false;
@@ -129,6 +144,10 @@ public class RoleServiceImpl implements RoleService {
     public void delete(Long id) {
         if (Objects.isNull(id)) {
             throw new ApiException(ResultCodeEnum.ROLE_ID_MUST_NOT_NULL);
+        }
+        Optional<Role> optionalRole = roleRepository.findById(id);
+        if (optionalRole.isPresent() && SystemBuiltInConstants.isSuperAdmin(optionalRole.get())) {
+            throw new ApiException(ResultCodeEnum.SUPER_ADMIN_ROLE_NOT_ALLOWED);
         }
         // 存在绑定的用户，不能删除角色
         List<UserRole> userRoleList = userRoleRepository.findByRoleId(id.intValue());
@@ -147,10 +166,13 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    public RoleVo info(Long id) {
+    public RoleVo info(Long id, User currentUser) {
         try {
             Optional<Role> optionalRole = roleRepository.findById(id);
             return optionalRole.map(role -> {
+                if (!isVisible(role, currentUser)) {
+                    return null;
+                }
                 List<Integer> menuIdList = rolePermissionRepository.findByRoleId(role.getId()).stream().map(RolePermission::getPermissionId).toList();
                 List<String> menuNameList = menuRepository.findByIdIn(menuIdList).stream().map(Menu::getName).toList();
                 return new RoleVo(role, menuIdList, menuNameList);
@@ -168,6 +190,10 @@ public class RoleServiceImpl implements RoleService {
         if (StringUtils.isEmpty(roleDto.getMenuIds())) {
             throw new ApiException(ResultCodeEnum.PERMISSION_MUST_NOT_NULL);
         }
+    }
+
+    private boolean isVisible(Role role, User currentUser) {
+        return !SystemBuiltInConstants.isSuperAdmin(role) || SystemBuiltInConstants.isSuperAdmin(currentUser);
     }
 
 }

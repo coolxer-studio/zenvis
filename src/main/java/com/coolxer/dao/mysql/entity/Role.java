@@ -29,6 +29,12 @@ public class Role extends BaseEntity {
     @Column
     private String name;
 
+    /**
+     * 是否超级管理员角色
+     */
+    @Column(name = "is_super_admin", columnDefinition = "boolean default false")
+    private Boolean isSuperAdmin = false;
+
 
     public void updateFromDto(RoleDto roleDto) {
         this.name = roleDto.getName();

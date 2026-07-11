@@ -1,5 +1,6 @@
 package com.coolxer.service.system.impl;
 
+import com.coolxer.commons.enums.DashboardType;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.Dashboard;
@@ -101,8 +102,20 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private static void checkCreateOrUpdate(DashboardDto dashboardDto) {
-        if (StringUtils.isEmpty(dashboardDto.getName()) || StringUtils.isEmpty(dashboardDto.getCode())) {
+        if (StringUtils.isBlank(dashboardDto.getName()) || dashboardDto.getType() == null) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        if (dashboardDto.getType() == DashboardType.BUILT && StringUtils.isBlank(dashboardDto.getCode())) {
+            throw new ApiException(ResultCodeEnum.DASHBOARD_PARAMETER_MISS_ERROR);
+        }
+        if (dashboardDto.getType() == DashboardType.LOW_CODE_PAGE && StringUtils.isBlank(dashboardDto.getConfigIndex())) {
+            throw new ApiException(ResultCodeEnum.DASHBOARD_PARAMETER_MISS_ERROR);
+        }
+        if (dashboardDto.getType() == DashboardType.HTML_PAGE && StringUtils.isBlank(dashboardDto.getHtmlPath())) {
+            throw new ApiException(ResultCodeEnum.DASHBOARD_PARAMETER_MISS_ERROR);
+        }
+        if (dashboardDto.getType() == DashboardType.LINK && StringUtils.isBlank(dashboardDto.getUrl())) {
+            throw new ApiException(ResultCodeEnum.DASHBOARD_PARAMETER_MISS_ERROR);
         }
     }
 

@@ -22,17 +22,18 @@
               "required": true
             },
             {
-              "label": "路由编码",
-              "name": "code",
-              "type": "input-text",
-              "required": true
-            },
-            {
               "label": "看板类型",
               "name": "type",
               "type": "select",
               "required": true,
               "source": "/zenvis/api/v1/system/dashboard/type/list"
+            },
+            {
+              "label": "路由编码",
+              "name": "code",
+              "type": "input-text",
+              "requiredOn": "data.type == 'BUILT'",
+              "hiddenOn": "data.type != 'BUILT'"
             },
             {
               "type": "input-text",
@@ -150,7 +151,8 @@
                       "label": "路由编码",
                       "name": "code",
                       "type": "input-text",
-                      "required": true
+                      "requiredOn": "data.type == 'BUILT'",
+                      "hiddenOn": "data.type != 'BUILT'"
                     },
                     {
                       "label": "看板类型",

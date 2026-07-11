@@ -63,11 +63,11 @@ public class DataInitiator {
         // 初始化菜单权限
         initDefaultPermission();
 
-        // 初始化管理员账号
-        initDefaultAdminUser();
-
         // 初始化超级管理员账号
         initDefaultSuperAdminUser();
+
+        // 初始化管理员账号
+        initDefaultAdminUser();
 
         // 初始化系统信息
         initDefaultSystemInfo();

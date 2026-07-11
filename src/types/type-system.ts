@@ -16,7 +16,7 @@ export type SystemInfo = {
 export type Dashboard = {
   id: number;
   name: string;
-  code: string;
+  code?: string;
   type: string;
   typeDescription: string;
   url: string;

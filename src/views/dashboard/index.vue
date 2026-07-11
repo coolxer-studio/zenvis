@@ -6,19 +6,20 @@
       direction="ltr"
       :closable="false"
       v-model="visible"
-      :show-mask="false"
+      :close-on-click-modal="true"
       :withHeader="false"
-      :modal="false"
+      :modal="true"
       :modal-append-to-body="false"
+      modal-class="dashboard-drawer-modal"
       class="dashboard-drawer"
       @close="onClose"
     >
       <el-icon class="double-left-outlined" @click="onClose"><ArrowLeft /></el-icon>
       <div>
-        <template v-for="(item, index) in dashboardListData">
+        <template v-for="item in dashboardListData" :key="item.id">
           <div
             :class="
-              'dashboard-div ' + (currentDashboard.code == item.code ? 'active-dashboard' : '')
+              'dashboard-div ' + (isCurrentDashboard(item) ? 'active-dashboard' : '')
             "
             @click="setDashboard(item)"
           >
@@ -31,11 +32,18 @@
     <linkBoard v-if="currentDashboard.type == 'LINK'" :data="currentDashboard" />
     <lowCodeBoard v-if="currentDashboard.type == 'LOW_CODE_PAGE'" :data="currentDashboard" />
     <htmlBoard v-if="currentDashboard.type == 'HTML_PAGE'" :data="currentDashboard" />
-    <msgBoard v-if="currentDashboard.type == 'BUILT'" :data="currentDashboard" />
+    <component
+      v-if="currentDashboard.type == 'BUILT' && currentBuiltInDashboard"
+      :is="currentBuiltInDashboard"
+      :data="currentDashboard"
+    />
+    <div v-else-if="currentDashboard.type == 'BUILT'" class="dashboard-empty">
+      内置看板不存在或未配置
+    </div>
   </div>
 </template>
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import { ArrowRight, ArrowLeft } from '@element-plus/icons-vue';
@@ -47,13 +55,19 @@ import msgBoard from './components/msg-board/index.vue';
 
 import { SystemService } from '@/service/api';
 
+const builtInDashboardMap = {
+  'msg-board': msgBoard,
+};
+
 const visible = ref(false);
 const route = useRoute();
 const currentDashboard = ref({
+  id: '',
   type: '',
   code: '',
 });
 const dashboardListData = ref([]);
+const currentBuiltInDashboard = computed(() => builtInDashboardMap[currentDashboard.value?.code || ''] || null);
 
 const onOpen = () => {
   visible.value = true;
@@ -74,7 +88,7 @@ const getDashboardList = () => {
 
 const selectDashboardFromRoute = () => {
   if (!dashboardListData.value.length) {
-    currentDashboard.value = { type: '', code: '' };
+    currentDashboard.value = { id: '', type: '', code: '' };
     return;
   }
   const targetId = route.query.id?.toString() || '';
@@ -90,6 +104,10 @@ const selectDashboardFromRoute = () => {
 
 const setDashboard = item => {
   currentDashboard.value = item;
+};
+
+const isCurrentDashboard = item => {
+  return String(currentDashboard.value?.id ?? '') === String(item?.id ?? '');
 };
 
 onMounted(() => {
@@ -145,6 +163,14 @@ watch(
     background-color: #3495fa;
     color: #fff;
   }
+  .dashboard-empty {
+    height: calc(100vh - 60px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    font-size: 14px;
+  }
 }
 
 // 重写抽屉el-drawer 底色为透明
@@ -155,5 +181,9 @@ watch(
 .dashboard .dashboard-drawer .el-drawer__body {
   background-color: rgba(0, 0, 0, 0.3) !important;
   padding: 0;
+}
+
+.dashboard-drawer-modal {
+  background-color: transparent !important;
 }
 </style>

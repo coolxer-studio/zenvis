@@ -411,6 +411,40 @@
       return Boolean(item && hasCriteriaValue(item))
     })
   }
+  const resetCriteriaState = () => {
+    senior.value = false
+    sql.value = ''
+    filterSelected.value = []
+    filterKeySelected.value = []
+    filterKeySelectedCopy.value = []
+    criteriaObject.value = {}
+    criteriaLogic.value = 'and'
+  }
+  const emitCurrentQuery = (search: boolean) => {
+    if (senior.value) {
+      const advancedSql = sql.value.trim()
+      if (!advancedSql) {
+        return
+      }
+      const queryData: RetrievalSearchRequest = {
+        entity: entitySelected.value,
+        type: 'advanced',
+        sql: advancedSql,
+      }
+      if (search) {
+        emit('on-query2', queryData)
+      } else {
+        emit('on-query', queryData)
+      }
+      return
+    }
+    const queryData = getQueryData()
+    if (search) {
+      emit('on-query1', toRaw(queryData))
+    } else {
+      emit('on-query', toRaw(queryData))
+    }
+  }
   const handleCriteriaLogicChange = () => {
     if (filterKeySelected.value.length && hasCompleteSelectedCriteria()) {
       sendQuery1()
@@ -587,27 +621,27 @@
       ElMessage.warning('请完善搜索条件！');
     }
   }
-  const getAttributeList = (val) => {
+  const getAttributeList = (val, searchAfterLoad = false, resetBeforeLoad = false) => {
     let params = {}
     if (ruleId.value) {
       params = {entity: val, rule_id: ruleId.value}
     } else {
       params = {entity: val}
     }
-    RetrievalService.getAttribute(params).then((res: AttributeResponse) => {
+    return RetrievalService.getAttribute(params).then((res: AttributeResponse) => {
       AttributeListData.value = res.attribute_list
       AttributeListDataCopy.value = res.attribute_list
       criteriaLogic.value = res.criteria_logic === 'or' ? 'or' : 'and'
+      if (resetBeforeLoad) {
+        resetCriteriaState()
+      }
+      criteriaLogic.value = res.criteria_logic === 'or' ? 'or' : 'and'
       if (res.select_attribute_list && res.select_attribute_list.length && res.attribute_list && res.attribute_list.length) {
-        filterSelected.value = []
-        filterKeySelected.value = []
         if (res.criteria_logic === 'expression' && res.sql) {
           senior.value = true
           sql.value = res.sql
           return
         }
-        senior.value = false
-        sql.value = ''
         res.select_attribute_list.map((e: SelectAttributeItem) => {
           res.attribute_list.map((a: any) => {
             if (e.name == a.name) {
@@ -654,17 +688,16 @@
           })
         })
       }
+    }).then(() => {
+      if (searchAfterLoad) {
+        emitCurrentQuery(true)
+      }
     })
   }
   const handleChangeEntity = (val) => {
     autoCompleteFetchers.clear()
+    resetCriteriaState()
     getAttributeList(val)
-    filterSelected.value = []
-    filterKeySelected.value = []
-    filterKeySelectedCopy.value = []
-    criteriaObject.value = {}
-    criteriaLogic.value = 'and'
-    sql.value = ''
     sendQuery()
     if (ruleId.value) {
       emit('on-col', {entity: val, rule_id: ruleId.value});
@@ -683,10 +716,14 @@
     }
     RetrievalService.getEntity(params).then((res: EntityResponse) => {
       entityListData.value = res.entity_list
-      const currentLs = ls.get('__filter__')
-      entitySelected.value = currentLs.entity ? currentLs.entity : ((res.selected_entity && res.selected_entity.length) ? res.selected_entity[0] : res.entity_list[0].name)
-      getAttributeList(entitySelected.value)
-      sendQuery()
+      const currentLs = ls.get('__filter__') || {}
+      entitySelected.value = ruleId.value
+        ? ((res.selected_entity && res.selected_entity.length) ? res.selected_entity[0] : res.entity_list[0].name)
+        : (currentLs.entity ? currentLs.entity : ((res.selected_entity && res.selected_entity.length) ? res.selected_entity[0] : res.entity_list[0].name))
+      getAttributeList(entitySelected.value, Boolean(ruleId.value), Boolean(ruleId.value))
+      if (!ruleId.value) {
+        sendQuery()
+      }
       if (ruleId.value) {
         emit('on-col', {entity: entitySelected.value, rule_id: ruleId.value});
       } else {
@@ -706,13 +743,7 @@
     () => props.resetNum,
     (newVal, oldVal) => {
       ruleId.value = 0
-      senior.value = false
-      sql.value = ''
-      filterSelected.value = []
-      filterKeySelected.value = []
-      filterKeySelectedCopy.value = []
-      criteriaObject.value = {}
-      criteriaLogic.value = 'and'
+      resetCriteriaState()
       getEntityList()
     }
   )

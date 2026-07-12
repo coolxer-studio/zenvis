@@ -6,10 +6,11 @@
       direction="ltr"
       :closable="false"
       v-model="visible"
-      :show-mask="false"
+      :close-on-click-modal="true"
       :withHeader="false"
-      :modal="false"
+      :modal="true"
       :modal-append-to-body="false"
+      modal-class="rule-drawer-modal"
       class="rule-drawer"
       @close="onClose"
     >
@@ -432,6 +433,10 @@
     font-size: 16px;
     padding-left: 20px;
     line-height: 35px;
+  }
+
+  :global(.rule-drawer-modal) {
+    background-color: transparent !important;
   }
 
 </style>

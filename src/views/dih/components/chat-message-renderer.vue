@@ -492,6 +492,28 @@
         </div>
       </div>
 
+      <div v-else-if="part.type === 'policy-record'" class="notice-part notice-info">
+        <div class="notice-title">
+          <el-icon><DataAnalysis /></el-icon>
+          <span class="card-title-text">{{ policyRecordTitle(part) }}</span>
+          <el-tag size="small" :type="policyRecordTagType(part)" effect="plain">
+            {{ policyRecordStatusText(part) }}
+          </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
+        </div>
+        <div v-if="isZenvisCardExpanded(part)" class="notice-content">
+          {{ part.content || metadataText(part, 'changeDescription') || '策略记录已同步到右侧面板。' }}
+        </div>
+      </div>
+
       <div v-else-if="part.type === 'chart'" class="chart-part">
         <el-icon><DataAnalysis /></el-icon>
         <span>图表数据已加载，请在右侧面板查看可视化结果。</span>
@@ -1259,6 +1281,9 @@ const confirmRevisePlaceholder = (part: ChatMessagePart) => {
   if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
     return '输入需要继续研判的重点，例如：复核文件落地时间、重点确认异常外联是否成功';
   }
+  if (action === 'policy.confirm_trial' || action === 'policy_demo.confirm_trial' || action === 'policy_demo.confirm_retry_trial') {
+    return '输入需要补充的策略调整要求，例如：增加回滚前置确认、扩大来源匹配范围、降低自动处置强度';
+  }
   return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';
 };
 
@@ -1501,6 +1526,31 @@ const analysisRecordStatusText = (part: ChatMessagePart) => {
   if (status === 'failed' || status === 'error') return '失败';
   if (status === 'running' || status === 'processing') return '进行中';
   return status || '待开始';
+};
+
+const policyTypeText = (type: string) => {
+  if (type === 'collection') return '采集策略';
+  if (type === 'tagging') return '标记策略';
+  if (type === 'disposal') return '处置策略';
+  return '策略记录';
+};
+
+const policyRecordTitle = (part: ChatMessagePart) => {
+  return part.title || metadataText(part, 'title') || policyTypeText(metadataText(part, 'policyType'));
+};
+
+const policyRecordTagType = (part: ChatMessagePart) => {
+  const status = metadataText(part, 'validationStatus');
+  if (status === 'success') return 'success';
+  if (status === 'failed') return 'danger';
+  return 'info';
+};
+
+const policyRecordStatusText = (part: ChatMessagePart) => {
+  const status = metadataText(part, 'validationStatus');
+  if (status === 'success') return '验证成功';
+  if (status === 'failed') return '验证失败';
+  return '未验证';
 };
 
 watch(

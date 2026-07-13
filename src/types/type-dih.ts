@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'info-steps' | 'analysis-record' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'info-steps' | 'analysis-record' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'policy-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -120,6 +120,33 @@ export type AnalysisExtraData = {
   aggregatedLogs?: Array<Record<string, unknown>>;
   sandboxResults?: Array<Record<string, unknown>>;
   conclusionTimeline?: Array<Record<string, unknown>>;
+};
+
+export type PolicyType = 'collection' | 'tagging' | 'disposal' | string;
+export type PolicyChangeMode = 'add' | 'modify' | string;
+export type PolicyValidationStatus = 'unverified' | 'success' | 'failed' | string;
+export type PolicyEffectiveStatus = 'yes' | 'no' | string;
+
+export type PolicyRecord = {
+  id?: string;
+  recordId?: string;
+  policyType?: PolicyType;
+  changeDescription?: string;
+  changeMode?: PolicyChangeMode;
+  configType?: string;
+  fileName?: string;
+  oldConfig?: unknown;
+  newConfig?: unknown;
+  validationStatus?: PolicyValidationStatus;
+  effectiveStatus?: PolicyEffectiveStatus;
+  trialResult?: unknown;
+  applyResult?: unknown;
+  updatedAt?: string;
+  [key: string]: unknown;
+};
+
+export type PolicyExtraData = {
+  records?: PolicyRecord[];
 };
 
 export type ModelInfo = {

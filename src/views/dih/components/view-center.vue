@@ -199,7 +199,7 @@ import {getCurrentFormattedDate} from '@/utils/util-time'
 import { copyTextToClipboard } from '@/utils/clipboard';
 import { withBaseUrl } from '@/utils/url';
 import ChatMessageRenderer from './chat-message-renderer.vue';
-import type { AnalysisRecord, ChatAttachment, ChatMessage, ChatMessagePart, ChatSession } from '@/types/type-dih';
+import type { AnalysisRecord, ChatAttachment, ChatMessage, ChatMessagePart, ChatSession, PolicyRecord } from '@/types/type-dih';
 
 const router = useRouter();
 
@@ -266,6 +266,9 @@ const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
 const DATA_ANALYSIS_RECORD_EVENT = 'dihAnalysisRecordsUpdated';
 const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihAnalysisRecordsRequested';
+const POLICY_RECORD_EVENT = 'dihPolicyRecordsUpdated';
+const POLICY_RECORD_REQUEST_EVENT = 'dihPolicyRecordsRequested';
+const POLICY_RECORD_ACTION_EVENT = 'dihPolicyRecordActionRequested';
 const DATA_REPORT_RECORD_EVENT = 'dihReportRecordsUpdated';
 const DATA_REPORT_RECORD_REQUEST_EVENT = 'dihReportRecordsRequested';
 const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested';
@@ -307,6 +310,11 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'analysis.confirm_sandbox_result',
   'analysis_demo.confirm_log_aggregation',
   'analysis_demo.confirm_sandbox_result',
+  'policy.confirm_trial',
+  'policy.confirm_apply',
+  'policy_demo.confirm_trial',
+  'policy_demo.confirm_retry_trial',
+  'policy_demo.confirm_apply',
   'policy.apply_to_production',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
@@ -319,6 +327,11 @@ const AUTO_REJECT_ACTIONS = new Set([
   'analysis.confirm_sandbox_result',
   'analysis_demo.confirm_log_aggregation',
   'analysis_demo.confirm_sandbox_result',
+  'policy.confirm_trial',
+  'policy.confirm_apply',
+  'policy_demo.confirm_trial',
+  'policy_demo.confirm_retry_trial',
+  'policy_demo.confirm_apply',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
   'data_visualization.apply_config',
@@ -564,6 +577,15 @@ const extractAnalysisRecords = () => {
   };
 };
 
+const extractPolicyRecords = () => {
+  const records: PolicyRecord[] = [];
+  const policy = asObject(parseSessionExtraData().policy);
+  asRecordList(policy.records).forEach(record => {
+    upsertInto(records as DataAccessRecord[], record);
+  });
+  return { records };
+};
+
 const latestRecord = (records: Record<string, unknown>[]) => records.length ? records[records.length - 1] : {};
 
 const findTimelineContent = (timeline: Record<string, unknown>[], keywords: string[]) => {
@@ -674,6 +696,12 @@ const publishAnalysisRecords = () => {
   }));
 };
 
+const publishPolicyRecords = () => {
+  window.dispatchEvent(new CustomEvent(POLICY_RECORD_EVENT, {
+    detail: extractPolicyRecords(),
+  }));
+};
+
 const publishReportRecords = () => {
   window.dispatchEvent(new CustomEvent(DATA_REPORT_RECORD_EVENT, {
     detail: extractReportRecords(),
@@ -684,6 +712,7 @@ watch(chatSessionExtraData, () => {
   publishDataAccessRecords();
   publishDataVisualizationRecords();
   publishAnalysisRecords();
+  publishPolicyRecords();
   publishReportRecords();
 });
 
@@ -1293,12 +1322,80 @@ type ReportExtraDataChangedEventDetail = {
   extraData?: string;
 };
 
+type PolicyRecordActionEventDetail = {
+  action?: 'trial' | 'apply';
+  record?: PolicyRecord;
+};
+
 const handleReportRecordsRequested = () => {
   publishReportRecords();
 };
 
 const handleAnalysisRecordsRequested = () => {
   publishAnalysisRecords();
+};
+
+const handlePolicyRecordsRequested = () => {
+  publishPolicyRecords();
+};
+
+const policyRecordLabel = (record?: PolicyRecord) => {
+  return textValue(record?.fileName || record?.id || record?.recordId, '当前策略记录');
+};
+
+const policyRecordActionMessage = (action: 'trial' | 'apply', record: PolicyRecord) => {
+  const recordId = textValue(record.id || record.recordId);
+  const configText = prettyTextValue(record.newConfig);
+  if (action === 'trial') {
+    const retry = textValue(record.id || record.recordId).includes('v2') || record.changeMode === 'modify';
+    const firstLine = retry ? '我已确认重新进入试验场验证。' : '我已确认进入试验场验证。';
+    return [
+      firstLine,
+      `请基于策略记录 ${recordId || policyRecordLabel(record)} 执行试验场验证，并在验证完成后输出 zenvis:policy-record 更新验证状态。`,
+      '',
+      JSON.stringify({
+        recordId,
+        policyType: record.policyType,
+        configType: record.configType,
+        fileName: record.fileName,
+        newConfig: record.newConfig,
+      }, null, 2),
+      configText ? `\n策略配置：\n${configText}` : '',
+    ].filter(Boolean).join('\n');
+  }
+  return [
+    '我已确认下发策略到系统正式生效。',
+    `请基于策略记录 ${recordId || policyRecordLabel(record)} 调用配置管理 MCP 写入并应用策略，成功后输出 zenvis:policy-record 将生效状态更新为 yes。`,
+    '',
+    JSON.stringify({
+      recordId,
+      policyType: record.policyType,
+      configType: record.configType,
+      fileName: record.fileName,
+      validationStatus: record.validationStatus,
+      newConfig: record.newConfig,
+    }, null, 2),
+  ].join('\n');
+};
+
+const handlePolicyRecordActionRequested = async (event: Event) => {
+  const detail = (event as CustomEvent<PolicyRecordActionEventDetail>).detail || {};
+  const action = detail.action;
+  const record = detail.record;
+  if (!action || !record) {
+    ElMessage.warning('缺少策略记录，无法执行操作');
+    return;
+  }
+  if (isStreamingResponse.value) {
+    ElMessage.warning('当前正在生成，请稍后再试');
+    return;
+  }
+  await sendMessage({
+    content: action === 'trial'
+      ? `我已确认将「${policyRecordLabel(record)}」推送到试验场验证。`
+      : `我已确认下发「${policyRecordLabel(record)}」到系统正式生效。`,
+    requestContent: policyRecordActionMessage(action, record),
+  });
 };
 
 const handleReportExtraDataChanged = (event: Event) => {
@@ -1356,15 +1453,20 @@ const handleReportQuickActionRequested = async (event: Event) => {
 
 onMounted(() => {
   window.addEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
+  window.addEventListener(POLICY_RECORD_REQUEST_EVENT, handlePolicyRecordsRequested);
+  window.addEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
   window.addEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
   window.addEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
   window.addEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
   nextTick(() => publishAnalysisRecords());
+  nextTick(() => publishPolicyRecords());
   nextTick(() => publishReportRecords());
 });
 
 onUnmounted(() => {
   window.removeEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
+  window.removeEventListener(POLICY_RECORD_REQUEST_EVENT, handlePolicyRecordsRequested);
+  window.removeEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
   window.removeEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
   window.removeEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
   window.removeEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
@@ -1381,6 +1483,15 @@ const autoConfirmMessage = (action: string) => {
   }
   if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
     return '我已确认沙箱研判结果，结果满意，请进入分析结论阶段。';
+  }
+  if (action === 'policy.confirm_trial' || action === 'policy_demo.confirm_trial') {
+    return '我已确认进入试验场验证，请将当前策略记录推送到试验场做测试验证，并输出 zenvis:policy-record 更新验证状态。';
+  }
+  if (action === 'policy_demo.confirm_retry_trial') {
+    return '我已确认重新进入试验场验证，请将修复后的策略记录推送到试验场重新测试验证，并输出 zenvis:policy-record 更新验证状态。';
+  }
+  if (action === 'policy.confirm_apply' || action === 'policy_demo.confirm_apply') {
+    return '我已确认下发策略到系统正式生效，请调用配置管理 MCP 写入并应用策略，成功后输出 zenvis:policy-record 将生效状态更新为 yes。';
   }
   if (action === 'analysis.create_continuous_task') {
     return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与 AI 分析任务。';
@@ -1412,6 +1523,16 @@ const autoRejectMessage = (action: string) => {
   }
   if (action === 'analysis_demo.confirm_log_aggregation' || action === 'analysis_demo.confirm_sandbox_result') {
     return '我已取消研判演示流程，请暂停当前研判演示，不要进入下一阶段。';
+  }
+  if (action === 'policy.confirm_trial' || action === 'policy.confirm_apply') {
+    return '我已取消当前策略控制流程，请暂停当前策略操作，不要进入下一阶段。';
+  }
+  if (
+    action === 'policy_demo.confirm_trial'
+    || action === 'policy_demo.confirm_retry_trial'
+    || action === 'policy_demo.confirm_apply'
+  ) {
+    return '我已取消策略控制演示流程，请暂停当前策略控制演示，不要进入下一阶段。';
   }
   if (action === 'data_access.generate_demo_push_config') {
     return '我已取消生成用户事件数据推送服务配置。请记录本次演示到元数据配置阶段结束，不要生成数据推送配置，也不要创建数据推送服务。';
@@ -1455,6 +1576,16 @@ const analysisDemoConfirmReviseDisplayMessage = (action: string, detail?: string
     return `我已补充沙箱研判信息：\n${focus}`;
   }
   return focus;
+};
+
+const policyConfirmReviseMessage = (detail?: string) => {
+  const focus = detail?.trim() || '请基于上一轮策略配置继续补充更新。';
+  return `我需要补充更新策略配置。调整要求如下：\n${focus}\n请基于上一轮策略记录重新生成策略配置，并再次输出 zenvis:policy-record 后让我确认是否进入试验场验证。`;
+};
+
+const policyConfirmReviseDisplayMessage = (detail?: string) => {
+  const focus = detail?.trim() || '继续补充更新策略配置。';
+  return `我已补充策略更新要求：\n${focus}`;
 };
 
 const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', detail?: string) => {
@@ -1717,6 +1848,19 @@ const handleActionDecision = async (
     await sendMessage({
       content: analysisDemoConfirmReviseDisplayMessage(action, payload.detail),
       requestContent: analysisDemoConfirmReviseMessage(action, payload.detail),
+    });
+    return;
+  }
+  if (payload.decision === 'revise' && (
+    action === 'policy.confirm_trial'
+    || action === 'policy_demo.confirm_trial'
+    || action === 'policy_demo.confirm_retry_trial'
+  )) {
+    ElMessage.success('已提交策略更新要求');
+    await nextTick();
+    await sendMessage({
+      content: policyConfirmReviseDisplayMessage(payload.detail),
+      requestContent: policyConfirmReviseMessage(payload.detail),
     });
     return;
   }

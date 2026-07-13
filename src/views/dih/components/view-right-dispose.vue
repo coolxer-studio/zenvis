@@ -1,369 +1,419 @@
 <template>
   <div class="panel right-panel">
-    <!-- 选项卡 -->
-    <div class="tab-container">
-      <el-tabs v-model="activeTab" class="right-tabs">
-        <el-tab-pane label="控制台" name="config">
-          <div class="config-container">
-            <div class="config-header">
-              <div class="config-title">
-                <el-icon><Document /></el-icon>
-                策略配置
-              </div>
-              <div class="config-actions">
-                <el-button size="small" type="primary" @click="saveConfig">保存</el-button>
-                <el-button size="small" @click="resetConfig">重置</el-button>
-              </div>
+    <el-tabs v-model="activeTab" class="right-tabs">
+      <el-tab-pane label="策略记录" name="records">
+        <div class="policy-section">
+          <div class="section-toolbar">
+            <div>
+              <div class="section-title">策略更新记录</div>
+              <div class="section-subtitle">共 {{ records.length }} 条</div>
             </div>
-            <div class="editor-container" ref="editorContainer"></div>
+            <el-tag :type="records.length ? 'success' : 'info'" effect="plain">
+              {{ records.length ? '已记录' : '暂无记录' }}
+            </el-tag>
           </div>
-        </el-tab-pane>
-        
-        <el-tab-pane label="试验场" name="visualization">
-          <div class="simulation-container">
-            <div class="simulation-header">
-              <h3>策略模拟试验</h3>
-              <p>在此进行策略的模拟测试和验证</p>
-            </div>
-            <div class="simulation-content">
-              <div class="simulation-controls">
-                <el-button type="primary" @click="runSimulation">运行模拟</el-button>
-                <el-button @click="clearResults">清空结果</el-button>
-              </div>
-              <div class="simulation-results">
-                <div class="results-placeholder" v-if="!simulationResults.length">
-                  <el-icon><Files /></el-icon>
-                  <p>点击"运行模拟"开始策略测试</p>
+
+          <el-empty v-if="!records.length" description="暂无策略记录" :image-size="72" />
+          <el-table v-else :data="records" stripe table-layout="fixed" class="record-table">
+            <el-table-column label="策略类型" min-width="92">
+              <template #default="scope">
+                <el-tag size="small" effect="plain">{{ policyTypeText(scope.row.policyType) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="变更说明" min-width="180" show-overflow-tooltip>
+              <template #default="scope">{{ cellText(scope.row.changeDescription) }}</template>
+            </el-table-column>
+            <el-table-column label="变更方式" width="88">
+              <template #default="scope">{{ changeModeText(scope.row.changeMode) }}</template>
+            </el-table-column>
+            <el-table-column label="旧配置" min-width="120" show-overflow-tooltip>
+              <template #default="scope">{{ compactConfig(scope.row.oldConfig) }}</template>
+            </el-table-column>
+            <el-table-column label="新配置" min-width="120" show-overflow-tooltip>
+              <template #default="scope">{{ compactConfig(scope.row.newConfig) }}</template>
+            </el-table-column>
+            <el-table-column label="验证状态" width="104">
+              <template #default="scope">
+                <el-tag size="small" :type="validationTagType(scope.row.validationStatus)" effect="plain">
+                  {{ validationStatusText(scope.row.validationStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="生效状态" width="92">
+              <template #default="scope">
+                <el-tag size="small" :type="effectiveTagType(scope.row.effectiveStatus)" effect="plain">
+                  {{ effectiveStatusText(scope.row.effectiveStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="224" fixed="right">
+              <template #default="scope">
+                <div class="record-actions">
+                  <el-button size="small" @click="showDiff(scope.row)">对比</el-button>
+                  <el-button size="small" type="primary" plain :disabled="isEffective(scope.row)" @click="requestTrial(scope.row)">试验</el-button>
+                  <el-button size="small" type="success" plain :disabled="!canApply(scope.row)" @click="requestApply(scope.row)">下发</el-button>
                 </div>
-                <div v-else>
-                  <div 
-                    v-for="(result, index) in simulationResults" 
-                    :key="index" 
-                    class="result-item"
-                  >
-                    <div class="result-header">
-                      <span class="result-title">{{ result.title }}</span>
-                      <span class="result-status" :class="result.status">{{ result.status }}</span>
-                    </div>
-                    <div class="result-content">
-                      {{ result.content }}
-                    </div>
-                  </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="试验场" name="trial">
+        <div class="policy-section">
+          <el-empty v-if="!trialRecords.length" description="暂无试验结果" :image-size="72" />
+          <div v-else class="trial-list">
+            <div v-for="record in trialRecords" :key="recordKey(record)" class="trial-item">
+              <div class="trial-header">
+                <div>
+                  <div class="section-title">{{ cellText(record.fileName, '策略试验') }}</div>
+                  <div class="section-subtitle">{{ cellText(record.changeDescription) }}</div>
                 </div>
+                <el-tag :type="validationTagType(record.validationStatus)" effect="plain">
+                  {{ validationStatusText(record.validationStatus) }}
+                </el-tag>
               </div>
+              <pre class="json-result">{{ prettyJson(record.trialResult || {}) }}</pre>
             </div>
           </div>
-        </el-tab-pane>
-      </el-tabs>
-    </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-dialog
+      v-model="diffVisible"
+      title="配置差异对比"
+      width="86vw"
+      class="diff-dialog"
+      @opened="renderDiffEditor"
+      @closed="disposeDiffEditor"
+    >
+      <div class="diff-meta">
+        <span>旧配置：{{ diffFileName }}</span>
+        <span>新配置：{{ diffFileName }}</span>
+      </div>
+      <div ref="diffEditorContainer" class="diff-editor"></div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, reactive, computed } from 'vue'
-import { 
-  Document, Files
-} from '@element-plus/icons-vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as monaco from 'monaco-editor'
+import type { PolicyRecord } from '@/types/type-dih'
 import { setupMonacoWorkers } from '@u/monaco-workers'
 
-// 当前激活的选项卡
-const activeTab = ref('config')
+const POLICY_RECORD_EVENT = 'dihPolicyRecordsUpdated'
+const POLICY_RECORD_REQUEST_EVENT = 'dihPolicyRecordsRequested'
+const POLICY_RECORD_ACTION_EVENT = 'dihPolicyRecordActionRequested'
 
-// Monaco Editor 相关
-const editorContainer = ref<HTMLElement | null>(null)
-let editor: monaco.editor.IStandaloneCodeEditor | null = null
+const activeTab = ref('records')
+const records = ref<PolicyRecord[]>([])
+const diffVisible = ref(false)
+const diffFileName = ref('policy-config.json')
+const oldConfigText = ref('')
+const newConfigText = ref('')
+const diffEditorContainer = ref<HTMLElement | null>(null)
 
-// 模拟结果接口
-interface SimulationResult {
-  title: string
-  status: '成功' | '失败' | '运行中'
-  content: string
+let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null
+let originalModel: monaco.editor.ITextModel | null = null
+let modifiedModel: monaco.editor.ITextModel | null = null
+
+const trialRecords = computed(() => records.value.filter(record => record.validationStatus && record.validationStatus !== 'unverified'))
+
+const cellText = (value: unknown, fallback = '') => {
+  if (value === undefined || value === null || value === '') return fallback
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return fallback
+  }
 }
 
-// 模拟结果数据
-const simulationResults = ref<SimulationResult[]>([])
+const prettyJson = (value: unknown) => {
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2)
+    } catch {
+      return value
+    }
+  }
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return cellText(value)
+  }
+}
 
-// 示例配置文件内容
-const configContent = `# 策略配置文件
-[策略配置]
-# 网络访问控制
-[[rules]]
-name = "允许内部访问"
-source = "192.168.1.0/24"
-destination = "internal"
-action = "allow"
+const compactConfig = (value: unknown) => {
+  const text = prettyJson(value)
+  if (!text || text === '""') return '-'
+  return text.replace(/\s+/g, ' ').slice(0, 80)
+}
 
-[[rules]]
-name = "阻止外部FTP"
-source = "external"
-destination_port = "21"
-action = "deny"
+const recordKey = (record: PolicyRecord) => cellText(record.id || record.recordId || record.fileName || record.updatedAt)
 
-# 进程监控
-[process_monitor]
-enabled = true
-monitor_paths = ["/usr/bin", "/bin"]
-alert_on_execution = true
+const policyTypeText = (type?: string) => {
+  if (type === 'collection') return '采集'
+  if (type === 'tagging') return '标记'
+  if (type === 'disposal') return '处置'
+  return type || '未知'
+}
 
-# 文件保护
-[file_protection]
-protected_paths = ["/etc/passwd", "/etc/shadow"]
-allow_processes = ["vim", "nano"]
-`
+const changeModeText = (mode?: string) => {
+  if (mode === 'add') return '新增'
+  if (mode === 'modify') return '修改'
+  return mode || '-'
+}
+
+const validationStatusText = (status?: string) => {
+  if (status === 'success') return '验证成功'
+  if (status === 'failed') return '验证失败'
+  return '未验证'
+}
+
+const validationTagType = (status?: string) => {
+  if (status === 'success') return 'success'
+  if (status === 'failed') return 'danger'
+  return 'info'
+}
+
+const effectiveStatusText = (status?: string) => status === 'yes' ? '是' : '否'
+
+const effectiveTagType = (status?: string) => status === 'yes' ? 'success' : 'info'
+
+const isEffective = (record: PolicyRecord) => record.effectiveStatus === 'yes'
+
+const canApply = (record: PolicyRecord) => record.validationStatus === 'success' && record.effectiveStatus !== 'yes'
+
+const configText = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2)
+    } catch {
+      return value
+    }
+  }
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+const disposeDiffModels = () => {
+  originalModel?.dispose()
+  modifiedModel?.dispose()
+  originalModel = null
+  modifiedModel = null
+}
+
+const disposeDiffEditor = () => {
+  diffEditor?.dispose()
+  diffEditor = null
+  disposeDiffModels()
+}
+
+const renderDiffEditor = async () => {
+  await nextTick()
+  if (!diffEditorContainer.value) return
+
+  setupMonacoWorkers()
+  disposeDiffEditor()
+
+  originalModel = monaco.editor.createModel(oldConfigText.value, 'json')
+  modifiedModel = monaco.editor.createModel(newConfigText.value, 'json')
+  diffEditor = monaco.editor.createDiffEditor(diffEditorContainer.value, {
+    automaticLayout: true,
+    readOnly: true,
+    originalEditable: false,
+    renderSideBySide: true,
+    enableSplitViewResizing: true,
+    ignoreTrimWhitespace: false,
+    renderIndicators: true,
+    scrollBeyondLastLine: false,
+    minimap: { enabled: false },
+    fontSize: 13,
+    lineNumbersMinChars: 3,
+    diffAlgorithm: 'advanced',
+  })
+  diffEditor.setModel({
+    original: originalModel,
+    modified: modifiedModel,
+  })
+}
+
+const showDiff = (record: PolicyRecord) => {
+  diffFileName.value = record.fileName || 'policy-config.json'
+  oldConfigText.value = configText(record.oldConfig)
+  newConfigText.value = configText(record.newConfig)
+  diffVisible.value = true
+  if (diffEditor) renderDiffEditor()
+}
+
+const requestTrial = (record: PolicyRecord) => {
+  activeTab.value = 'trial'
+  window.dispatchEvent(new CustomEvent(POLICY_RECORD_ACTION_EVENT, {
+    detail: { action: 'trial', record },
+  }))
+}
+
+const requestApply = (record: PolicyRecord) => {
+  window.dispatchEvent(new CustomEvent(POLICY_RECORD_ACTION_EVENT, {
+    detail: { action: 'apply', record },
+  }))
+}
+
+const handleRecordsUpdated = (event: Event) => {
+  const detail = (event as CustomEvent<{ records?: PolicyRecord[] }>).detail || {}
+  records.value = Array.isArray(detail.records) ? detail.records : []
+}
 
 onMounted(() => {
-  // 初始化Monaco编辑器
-  if (editorContainer.value) {
-    setupMonacoWorkers()
-    editor = monaco.editor.create(editorContainer.value, {
-      value: configContent,
-      language: 'toml',
-      theme: 'vs-dark',
-      automaticLayout: true,
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      fontSize: 14,
-      tabSize: 2,
-      readOnly: false,
-    })
-  }
+  window.addEventListener(POLICY_RECORD_EVENT, handleRecordsUpdated)
+  window.dispatchEvent(new CustomEvent(POLICY_RECORD_REQUEST_EVENT))
 })
 
 onBeforeUnmount(() => {
-  // 销毁编辑器
-  if (editor) {
-    editor.dispose()
-  }
+  window.removeEventListener(POLICY_RECORD_EVENT, handleRecordsUpdated)
+  disposeDiffEditor()
 })
-
-// 保存配置
-const saveConfig = () => {
-  if (editor) {
-    const value = editor.getValue()
-    console.log('保存配置:', value)
-    // 这里可以添加实际的保存逻辑
-    alert('配置已保存')
-  }
-}
-
-// 重置配置
-const resetConfig = () => {
-  if (editor) {
-    editor.setValue(configContent)
-    console.log('重置配置')
-    // 这里可以添加实际的重置逻辑
-    alert('配置已重置')
-  }
-}
-
-// 运行模拟
-const runSimulation = () => {
-  console.log('运行模拟')
-  // 模拟测试过程
-  simulationResults.value = [
-    {
-      title: '网络策略测试',
-      status: '成功',
-      content: '所有网络访问规则验证通过'
-    },
-    {
-      title: '进程监控测试',
-      status: '成功',
-      content: '进程监控功能正常运行'
-    },
-    {
-      title: '文件保护测试',
-      status: '运行中',
-      content: '正在验证文件访问控制规则...'
-    }
-  ]
-}
-
-// 清空结果
-const clearResults = () => {
-  simulationResults.value = []
-}
 </script>
 
 <style scoped>
-/* 面板样式 */
 .panel {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 10px;
   box-sizing: border-box;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.right-panel {
-  background-color: #f5f7fa;
-  color: #333;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-/* 选项卡样式 */
-.tab-container {
-  flex: 1;
+  background: #f5f7fa;
+  color: #303133;
   overflow: hidden;
 }
 
+.right-panel {
+  padding: 0;
+}
+
 .right-tabs {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
 }
 
 :deep(.el-tabs__content) {
-  padding: 0;
   height: calc(100% - 40px);
   overflow-y: auto;
 }
 
 :deep(.el-tabs__nav) {
-  background-color: #fff;
-  padding: 0px 30px;
-  width: 100%;
+  padding: 0 12px;
 }
 
 :deep(.el-tabs__item) {
-  font-size: 14px;
   height: 40px;
   line-height: 40px;
 }
 
-:deep(.el-tabs__item.is-active) {
-  font-weight: bold;
+.policy-section {
+  padding: 12px;
 }
 
-/* 配置面板样式 */
-.config-container {
+.section-toolbar,
+.trial-header {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 0;
-}
-
-.config-header {
-  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background-color: #2d2d30;
-  color: #e0e0e0;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.config-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
+.section-title {
+  color: #303133;
+  font-weight: 600;
 }
 
-.config-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.editor-container {
-  flex: 1;
-  min-height: 500px;
-}
-
-/* 试验场样式 */
-.simulation-container {
-  padding: 20px;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.simulation-header {
-  margin-bottom: 20px;
-}
-
-.simulation-header h3 {
-  margin: 0 0 10px 0;
-  font-size: 18px;
-  color: #333;
-}
-
-.simulation-header p {
-  margin: 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.simulation-controls {
-  margin-bottom: 20px;
-}
-
-.simulation-results {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  min-height: 300px;
-  background: #fff;
-}
-
-.results-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
-  color: #999;
-}
-
-.results-placeholder .el-icon {
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-.result-item {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-}
-
-.result-item:last-child {
-  border-bottom: none;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.result-title {
-  font-weight: 500;
-}
-
-.result-status {
-  padding: 2px 8px;
-  border-radius: 4px;
+.section-subtitle {
+  margin-top: 4px;
+  color: #909399;
   font-size: 12px;
 }
 
-.result-status.成功 {
-  background-color: #f0f9eb;
-  color: #67c23a;
+.record-table {
+  width: 100%;
 }
 
-.result-status.失败 {
-  background-color: #fef0f0;
-  color: #f56c6c;
+.record-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
-.result-status.运行中 {
-  background-color: #ecf5ff;
-  color: #409eff;
+.record-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
-.result-content {
-  color: #666;
-  font-size: 14px;
+.trial-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trial-item {
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.json-result {
+  max-height: 420px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: #303133;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-bottom: 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  overflow: hidden;
+  color: #606266;
+  font-size: 12px;
+}
+
+.diff-meta span {
+  padding: 8px 10px;
+  overflow: hidden;
+  background: #f5f7fa;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-editor {
+  height: min(68vh, 640px);
+  min-height: 420px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+:deep(.diff-dialog .el-dialog__body) {
+  padding-top: 10px;
 }
 </style>

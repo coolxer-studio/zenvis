@@ -1253,10 +1253,10 @@ const confirmReviseLabel = (part: ChatMessagePart) => {
 
 const confirmRevisePlaceholder = (part: ChatMessagePart) => {
   const action = part.metadata?.action;
-  if (action === 'analysis_demo.confirm_log_aggregation') {
+  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
     return '输入需要补充的日志线索，例如：继续关联文件变更记录、补查近 10 分钟网络连接日志';
   }
-  if (action === 'analysis_demo.confirm_sandbox_result') {
+  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
     return '输入需要继续研判的重点，例如：复核文件落地时间、重点确认异常外联是否成功';
   }
   return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';

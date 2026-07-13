@@ -303,6 +303,8 @@ const canSendMessage = computed(() => {
 const AUTO_CONFIRM_ACTIONS = new Set([
   'analysis.start',
   'analysis.create_continuous_task',
+  'analysis.confirm_log_aggregation',
+  'analysis.confirm_sandbox_result',
   'analysis_demo.confirm_log_aggregation',
   'analysis_demo.confirm_sandbox_result',
   'policy.apply_to_production',
@@ -313,6 +315,8 @@ const AUTO_CONFIRM_ACTIONS = new Set([
 ])
 
 const AUTO_REJECT_ACTIONS = new Set([
+  'analysis.confirm_log_aggregation',
+  'analysis.confirm_sandbox_result',
   'analysis_demo.confirm_log_aggregation',
   'analysis_demo.confirm_sandbox_result',
   'data_access.generate_demo_push_config',
@@ -429,6 +433,53 @@ const textValue = (value: unknown, fallback = '') => {
   return String(value);
 };
 
+const queryTextValue = (value: unknown) => {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== 'string') {
+    return '';
+  }
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const queryPromptValue = (query: Record<string, unknown>) => {
+  const msgRef = queryTextValue(query.msgRef);
+  if (msgRef) {
+    const storageKey = `dih:prefill:${msgRef}`;
+    try {
+      const stored = window.sessionStorage?.getItem(storageKey) || '';
+      if (stored) {
+        window.sessionStorage?.removeItem(storageKey);
+        return stored;
+      }
+    } catch {
+      // ignore storage failures and fall back to msg query
+    }
+  }
+  return queryTextValue(query.msg);
+};
+
+const prettyTextValue = (value: unknown, fallback = '') => {
+  if (typeof value === 'string') {
+    return value.trim() || fallback;
+  }
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const truncateText = (value: string, maxLength = 4000) => {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...` : value;
+};
+
 const buildChartLibraryRecord = (part: ChatMessagePart): DataAccessRecord => {
   const metadata = asObject(part.metadata);
   const name = textValue(metadata.title || part.title, '临时可视化图表');
@@ -511,6 +562,86 @@ const extractAnalysisRecords = () => {
     sandboxResults: asRecordList(analysis.sandboxResults),
     conclusionTimeline: asRecordList(analysis.conclusionTimeline),
   };
+};
+
+const latestRecord = (records: Record<string, unknown>[]) => records.length ? records[records.length - 1] : {};
+
+const findTimelineContent = (timeline: Record<string, unknown>[], keywords: string[]) => {
+  const matched = [...timeline].reverse().find(item => {
+    const title = textValue(item.title).toLowerCase();
+    const id = textValue(item.id).toLowerCase();
+    return keywords.some(keyword => title.includes(keyword.toLowerCase()) || id.includes(keyword.toLowerCase()));
+  });
+  return prettyTextValue(matched?.content);
+};
+
+const findLatestDisposalStrategyConfig = () => {
+  const disposalPart = [...messages.value]
+    .reverse()
+    .flatMap(message => [...(message.parts || [])].reverse())
+    .find(part => part.type === 'config' && textValue(part.metadata?.configKind) === 'disposal-strategy');
+  return disposalPart?.content?.trim() || '';
+};
+
+const buildDisposeAgentPrompt = (detail?: string) => {
+  const analysisData = extractAnalysisRecords();
+  const timeline = analysisData.conclusionTimeline;
+  const reportRecord = latestRecord(analysisData.records.filter(record => textValue(record.stage) === 'report_output') as Record<string, unknown>[]);
+  const sandboxRecord = latestRecord(analysisData.sandboxResults);
+  const disposalSuggestion = findTimelineContent(timeline, ['处置建议', 'disposal', 'recommendation'])
+    || prettyTextValue((reportRecord.recommendations as unknown[] | undefined)?.join?.('\n'))
+    || '请基于上一轮研判结论生成处置方案。';
+  const analysisTarget = findTimelineContent(timeline, ['分析目标', 'target']);
+  const analysisProcess = findTimelineContent(timeline, ['分析过程', 'process']);
+  const analysisConclusion = findTimelineContent(timeline, ['分析结论', 'conclusion']);
+  const disposalStrategyConfig = findLatestDisposalStrategyConfig();
+  const extraDetail = detail?.trim();
+
+  return truncateText([
+    '请基于以下研判分析结果进入策略控制流程，生成可执行前需确认的处置方案。',
+    '',
+    '## 处置建议',
+    disposalSuggestion,
+    '',
+    '## 研判上下文',
+    analysisTarget ? `分析目标：${analysisTarget}` : '',
+    analysisProcess ? `分析过程：${analysisProcess}` : '',
+    analysisConclusion ? `分析结论：${analysisConclusion}` : '',
+    `聚合日志数量：${analysisData.aggregatedLogs.length}`,
+    sandboxRecord.result ? `沙箱研判结果：\n${prettyTextValue(sandboxRecord.result)}` : '',
+    disposalStrategyConfig ? `处置策略建议配置：\n${disposalStrategyConfig}` : '',
+    extraDetail ? `用户补充要求：\n${extraDetail}` : '',
+    '',
+    '## 输出要求',
+    '1. 先说明拟执行处置动作、影响范围、前置检查和回滚方案。',
+    '2. 生成策略控制智能体可确认的处置配置或策略配置。',
+    '3. 不要直接执行写入、发布、阻断、隔离等副作用动作，必须先等待用户确认。',
+  ].filter(Boolean).join('\n'));
+};
+
+const openDisposeAgentSession = async (prompt: string) => {
+  const nextChatSessionId = generateUUID();
+  const promptRef = generateUUID();
+  try {
+    window.sessionStorage?.setItem(`dih:prefill:${promptRef}`, prompt);
+  } catch {
+    // ignore storage failures and fall back to query string below
+  }
+  let storedPrompt = false;
+  try {
+    storedPrompt = window.sessionStorage?.getItem(`dih:prefill:${promptRef}`) === prompt;
+  } catch {
+    storedPrompt = false;
+  }
+  await router.push({
+    name: 'service-dih',
+    query: {
+      type: 'agent_dispose',
+      chatSessionId: nextChatSessionId,
+      createSession: 1,
+      ...(storedPrompt ? { msgRef: promptRef } : { msg: encodeURIComponent(prompt) }),
+    },
+  });
 };
 
 const extractReportRecords = () => {
@@ -902,7 +1033,7 @@ const fetchModelList = async () => {
 watch(
   () => router.currentRoute.value.query,
   (newQuery, oldQuery) => {
-    inputMessage.value = newQuery.msg ? decodeURIComponent(newQuery.msg.toString()) : ''
+    inputMessage.value = queryPromptValue(newQuery as Record<string, unknown>)
   },
   // 首次进入组件时也执行一次
   { immediate: true }     
@@ -1245,10 +1376,10 @@ const confirmAction = (part: ChatMessagePart) => {
 };
 
 const autoConfirmMessage = (action: string) => {
-  if (action === 'analysis_demo.confirm_log_aggregation') {
+  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
     return '我已确认日志聚合结果，请进入沙箱研判阶段。';
   }
-  if (action === 'analysis_demo.confirm_sandbox_result') {
+  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
     return '我已确认沙箱研判结果，结果满意，请进入分析结论阶段。';
   }
   if (action === 'analysis.create_continuous_task') {
@@ -1273,6 +1404,12 @@ const autoConfirmMessage = (action: string) => {
 };
 
 const autoRejectMessage = (action: string) => {
+  if (
+    action === 'analysis.confirm_log_aggregation'
+    || action === 'analysis.confirm_sandbox_result'
+  ) {
+    return '我已取消研判流程，请暂停当前研判，不要进入下一阶段。';
+  }
   if (action === 'analysis_demo.confirm_log_aggregation' || action === 'analysis_demo.confirm_sandbox_result') {
     return '我已取消研判演示流程，请暂停当前研判演示，不要进入下一阶段。';
   }
@@ -1300,10 +1437,10 @@ const dataVisualizationDecisionDisplayMessage = (decision: 'revise', detail?: st
 
 const analysisDemoConfirmReviseMessage = (action: string, detail?: string) => {
   const focus = detail?.trim() || '请基于上一阶段结果补充更多关联数据。';
-  if (action === 'analysis_demo.confirm_log_aggregation') {
+  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
     return `我需要补充更多日志聚合数据。补充内容如下：\n${focus}\n请基于上一轮日志聚合结果继续补充相关日志，并再次展示日志聚合结果让我确认。`;
   }
-  if (action === 'analysis_demo.confirm_sandbox_result') {
+  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
     return `我需要补充信息继续沙箱研判。补充研判重点如下：\n${focus}\n请基于上一轮沙箱研判结果继续补充分析，并再次展示沙箱研判结果让我确认。`;
   }
   return focus;
@@ -1311,10 +1448,10 @@ const analysisDemoConfirmReviseMessage = (action: string, detail?: string) => {
 
 const analysisDemoConfirmReviseDisplayMessage = (action: string, detail?: string) => {
   const focus = detail?.trim() || '继续补充研判信息。';
-  if (action === 'analysis_demo.confirm_log_aggregation') {
+  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
     return `我已补充日志聚合数据：\n${focus}`;
   }
-  if (action === 'analysis_demo.confirm_sandbox_result') {
+  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
     return `我已补充沙箱研判信息：\n${focus}`;
   }
   return focus;
@@ -1570,7 +1707,9 @@ const handleActionDecision = async (
     return;
   }
   if (payload.decision === 'revise' && (
-    action === 'analysis_demo.confirm_log_aggregation'
+    action === 'analysis.confirm_log_aggregation'
+    || action === 'analysis.confirm_sandbox_result'
+    || action === 'analysis_demo.confirm_log_aggregation'
     || action === 'analysis_demo.confirm_sandbox_result'
   )) {
     ElMessage.success('已提交补充信息');
@@ -1650,6 +1789,10 @@ const handleAnalysisDecision = async (
   };
   ElMessage.success(toastMap[payload.decision]);
   await nextTick();
+  if (payload.decision === 'dispose') {
+    await openDisposeAgentSession(buildDisposeAgentPrompt(payload.detail));
+    return;
+  }
   await sendMessage({ content: analysisDecisionMessage(payload.decision, payload.detail) });
 };
 

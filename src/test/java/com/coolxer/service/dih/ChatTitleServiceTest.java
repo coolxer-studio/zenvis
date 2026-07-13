@@ -7,6 +7,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_DEMO_TITLE;
+import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_DEMO_TITLE;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,6 +23,17 @@ class ChatTitleServiceTest {
         String title = service.generateTitle(REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT);
 
         assertThat(title).isEqualTo(REPORT_DEMO_TITLE);
+        assertThat(chatModel.calls.get()).isZero();
+    }
+
+    @Test
+    void analysisDemoPromptUsesLocalTitleWithoutCallingModel() {
+        ThrowingChatModel chatModel = new ThrowingChatModel();
+        ChatTitleService service = new ChatTitleService(chatModel);
+
+        String title = service.generateTitle(ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT);
+
+        assertThat(title).isEqualTo(ANALYSIS_DEMO_TITLE);
         assertThat(chatModel.calls.get()).isZero();
     }
 

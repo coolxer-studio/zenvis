@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_INCIDENT_REVIEW_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_OPERATION_WEEKLY_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
@@ -224,9 +225,10 @@ public class ChatSessionController extends BaseController {
     private static final String DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT = "请根据用户事件数据生成一个单页面应用。";
     private static final String DATA_VISUALIZATION_APP_EXAMPLE_PROMPT = "请生成一个带侧边栏的用户事件数据应用。";
     private static final String DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT = "请生成一个用户事件数据看板。";
-    private static final String PROLOGUE_AGENT_ANALYSIS = "我是研判智能体，专注于风险事件的深度分析与等级评估。\n" +
-            " 通过数据聚合、情报关联、规则匹配及动态执行等多维度研判手段，精准评估风险等级合理性。\n" +
-            " 所有研判过程均调用外部工具进行证据链验证，所有分析依据与取证结果将完整存档，确保研判结论可追溯、可复现。";
+    private static final String PROLOGUE_AGENT_ANALYSIS = "我是研判分析智能体，面向用户提供的告警信息完成综合研判并输出分析结果。\n" +
+            "我会按三个阶段工作：先根据当前告警关联系统内相关告警日志，再通过 MCP 将聚合日志提交给独立沙箱分析服务，最后形成包含分析目标、分析过程、分析结论和处置建议的研判报告。\n" +
+            "如果告警信息不足，我会先补充询问必要字段；如果缺少沙箱分析 MCP 能力，我会明确说明缺失项，不伪造沙箱结果。";
+    private static final String PROLOGUE_AGENT_ANALYSIS_EXAMPLE_INTRO = "可以点击下面的示例快速体验一次完整告警研判演示。";
     private static final String PROLOGUE_AGENT_DISPOSE = "我是策略智能体，负责系统策略的全生命周期管理。\n" +
             " 涵盖探针数据采集、动态标记引擎、处置响应、设备指纹、风险评定、数据推送及可视化等策略配置。\n" +
             " 所有策略变更需经管理员审批后生效，确保系统配置安全可控、合规有效。";
@@ -312,6 +314,35 @@ public class ChatSessionController extends BaseController {
                                             Map.of("label", "单页面应用", "prompt", DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT),
                                             Map.of("label", "带侧边栏应用", "prompt", DATA_VISUALIZATION_APP_EXAMPLE_PROMPT),
                                             Map.of("label", "数据看板", "prompt", DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT)
+                                    )
+                            ))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_analysis".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_ANALYSIS
+                    + "\n\n"
+                    + PROLOGUE_AGENT_ANALYSIS_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "WebShell 告警研判演示";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_ANALYSIS)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_ANALYSIS_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title("研判分析示例")
+                            .metadata(Map.of(
+                                    "examples",
+                                    List.of(
+                                            Map.of("label", "WebShell 告警研判", "prompt", ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT)
                                     )
                             ))
                             .build()

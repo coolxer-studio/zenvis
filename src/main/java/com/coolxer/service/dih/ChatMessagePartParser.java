@@ -99,6 +99,7 @@ public class ChatMessagePartParser {
                 && !"zenvis:confirm".equals(info)
                 && !"zenvis:info-steps".equals(info)
                 && !"zenvis:analysis-decision".equals(info)
+                && !"zenvis:analysis-record".equals(info)
                 && !"zenvis:data-access-decision".equals(info)
                 && !"zenvis:meta-config-record".equals(info)
                 && !"zenvis:vectum-task-record".equals(info)
@@ -121,6 +122,7 @@ public class ChatMessagePartParser {
                 case "zenvis:notice" -> "notice";
                 case "zenvis:info-steps" -> "info-steps";
                 case "zenvis:analysis-decision" -> "analysis-decision";
+                case "zenvis:analysis-record" -> "analysis-record";
                 case "zenvis:data-access-decision" -> "data-access-decision";
                 case "zenvis:meta-config-record" -> "metadata-config-record";
                 case "zenvis:vectum-task-record" -> "data-push-service-record";

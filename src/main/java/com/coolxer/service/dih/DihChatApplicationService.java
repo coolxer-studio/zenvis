@@ -57,6 +57,7 @@ public class DihChatApplicationService {
     private final ChatSessionService chatSessionService;
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
+    private final AnalysisDemoResponseService analysisDemoResponseService;
     private final ReportDemoResponseService reportDemoResponseService;
     private final AnalysisAgent analysisAgent;
     private final DisposeAgent disposeAgent;
@@ -78,6 +79,7 @@ public class DihChatApplicationService {
                                      ChatSessionService chatSessionService,
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
                                      DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
+                                     AnalysisDemoResponseService analysisDemoResponseService,
                                      ReportDemoResponseService reportDemoResponseService,
                                      AnalysisAgent analysisAgent,
                                      DisposeAgent disposeAgent,
@@ -98,6 +100,7 @@ public class DihChatApplicationService {
         this.chatSessionService = chatSessionService;
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
+        this.analysisDemoResponseService = analysisDemoResponseService;
         this.reportDemoResponseService = reportDemoResponseService;
         this.analysisAgent = analysisAgent;
         this.disposeAgent = disposeAgent;
@@ -135,6 +138,24 @@ public class DihChatApplicationService {
         }
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
+        }
+        Optional<Flux<String>> analysisDemoResponse = findAnalysisDemoResponse(
+                chatType,
+                chatId,
+                userMessage,
+                currentUser,
+                null
+        );
+        if (analysisDemoResponse.isPresent()) {
+            ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+            return emitAndSaveTextResponse(
+                    analysisDemoResponse.get(),
+                    chatSession,
+                    currentUser,
+                    eventStream,
+                    new AtomicReference<>(MessageType.TEXT),
+                    BooleanUtils.isTrue(chatDto.getDeepThink())
+            );
         }
         Optional<Flux<String>> reportDemoResponse = findReportDemoResponse(
                 chatType,
@@ -312,6 +333,17 @@ public class DihChatApplicationService {
         return reportDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
     }
 
+    private Optional<Flux<String>> findAnalysisDemoResponse(String chatType,
+                                                            String chatId,
+                                                            String prompt,
+                                                            User currentUser,
+                                                            ChatSession chatSession) {
+        if (!AnalysisAgent.AGENT_TYPE.equals(chatType) || analysisDemoResponseService == null) {
+            return Optional.empty();
+        }
+        return analysisDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
+    }
+
     private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
                                                  ChatSession chatSession,
                                                  User currentUser,
@@ -457,6 +489,12 @@ public class DihChatApplicationService {
                 "dashboardConfigs",
                 "menuConfigs"
         ));
+        mergeSectionRecords(extraData, patch, "analysis", List.of(
+                "records",
+                "aggregatedLogs",
+                "sandboxResults",
+                "conclusionTimeline"
+        ));
         mergeReportRecords(extraData, patch);
 
         String extraDataJson = JacksonUtil.toJson(extraData);
@@ -483,7 +521,53 @@ public class DihChatApplicationService {
         if (reportPatch != null && !reportPatch.isEmpty()) {
             patch.putAll(reportPatch);
         }
+        Map<String, Object> analysisPatch = buildAnalysisExtraDataPatch(parts);
+        if (analysisPatch != null && !analysisPatch.isEmpty()) {
+            patch.putAll(analysisPatch);
+        }
         return patch.isEmpty() ? null : patch;
+    }
+
+    private Map<String, Object> buildAnalysisExtraDataPatch(List<ChatMessagePart> parts) {
+        List<Map<String, Object>> records = new ArrayList<>();
+        List<Map<String, Object>> aggregatedLogs = new ArrayList<>();
+        List<Map<String, Object>> sandboxResults = new ArrayList<>();
+        List<Map<String, Object>> conclusionTimeline = new ArrayList<>();
+        for (ChatMessagePart part : parts) {
+            if (!"analysis-record".equals(part.getType())) {
+                continue;
+            }
+            Map<String, Object> record = buildAnalysisRecord(part);
+            records.add(record);
+            String stage = stringValue(record, "stage", "");
+            Map<String, Object> raw = mapValue(record.get("raw"));
+            if ("log_aggregation".equals(stage)) {
+                aggregatedLogs.addAll(extractAnalysisLogRecords(raw));
+            } else if ("sandbox_analysis".equals(stage)) {
+                sandboxResults.add(buildSandboxAnalysisResult(record, raw));
+            } else if ("report_output".equals(stage)) {
+                conclusionTimeline.addAll(extractAnalysisConclusionTimeline(record, raw));
+            }
+        }
+        if (records.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> analysis = new LinkedHashMap<>();
+        analysis.put("records", records);
+        if (!aggregatedLogs.isEmpty()) {
+            analysis.put("aggregatedLogs", aggregatedLogs);
+        }
+        if (!sandboxResults.isEmpty()) {
+            analysis.put("sandboxResults", sandboxResults);
+        }
+        if (!conclusionTimeline.isEmpty()) {
+            analysis.put("conclusionTimeline", conclusionTimeline);
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("analysis", analysis);
+        return metadata;
     }
 
     private Map<String, Object> buildDataAccessExtraDataPatch(List<ChatMessagePart> parts) {
@@ -602,6 +686,190 @@ public class DihChatApplicationService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("report", report);
         return metadata;
+    }
+
+    private Map<String, Object> buildAnalysisRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        String stage = firstNonBlank(stringValue(raw, "stage", null), "report_output");
+        String title = firstNonBlank(
+                stringValue(raw, "title", null),
+                part.getTitle(),
+                defaultAnalysisStageTitle(stage)
+        );
+        String id = firstNonBlank(
+                stringValue(raw, "recordId", null),
+                stringValue(raw, "record_id", null),
+                stringValue(raw, "id", null),
+                stage
+        );
+
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("id", id);
+        record.put("recordId", id);
+        record.put("stage", stage);
+        record.put("status", stringValue(raw, "status", "completed"));
+        record.put("title", title);
+        record.put("content", firstNonBlank(
+                stringValue(raw, "content", null),
+                stringValue(raw, "message", null),
+                stringValue(raw, "description", null),
+                part.getContent()
+        ));
+        record.put("startedAt", firstNonBlank(stringValue(raw, "startedAt", null), stringValue(raw, "started_at", null)));
+        record.put("completedAt", firstNonBlank(stringValue(raw, "completedAt", null), stringValue(raw, "completed_at", null)));
+        record.put("alarm", raw.getOrDefault("alarm", Map.of()));
+        record.put("evidenceCount", raw.getOrDefault("evidenceCount", raw.getOrDefault("evidence_count", 0)));
+        record.put("riskLevel", firstNonBlank(stringValue(raw, "riskLevel", null), stringValue(raw, "risk_level", null)));
+        record.put("confidence", raw.get("confidence"));
+        record.put("keyFindings", raw.getOrDefault("keyFindings", raw.getOrDefault("key_findings", List.of())));
+        record.put("recommendations", raw.getOrDefault("recommendations", List.of()));
+        record.put("sandboxTaskId", firstNonBlank(stringValue(raw, "sandboxTaskId", null), stringValue(raw, "sandbox_task_id", null)));
+        record.put("toolNames", raw.getOrDefault("toolNames", raw.getOrDefault("tool_names", List.of())));
+        record.put("source", "agent_analysis");
+        record.put("raw", raw);
+        return record;
+    }
+
+    private String defaultAnalysisStageTitle(String stage) {
+        return switch (StringUtils.hasText(stage) ? stage : "") {
+            case "log_aggregation" -> "日志聚合";
+            case "sandbox_analysis" -> "研判分析";
+            case "report_output" -> "输出分析结论";
+            default -> "研判记录";
+        };
+    }
+
+    private List<Map<String, Object>> extractAnalysisLogRecords(Map<String, Object> raw) {
+        List<Map<String, Object>> logs = firstNonEmptyListOfMaps(
+                raw.get("logs"),
+                raw.get("aggregatedLogs"),
+                raw.get("aggregated_logs"),
+                raw.get("relatedLogs"),
+                raw.get("related_logs")
+        );
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        for (int i = 0; i < logs.size(); i++) {
+            Map<String, Object> logRecord = new LinkedHashMap<>(logs.get(i));
+            logRecord.putIfAbsent("id", firstNonBlank(
+                    stringValue(logRecord, "id", null),
+                    stringValue(logRecord, "logId", null),
+                    stringValue(logRecord, "log_id", null),
+                    stringValue(logRecord, "eventId", null),
+                    stringValue(logRecord, "event_id", null),
+                    "analysis-log-" + (i + 1)
+            ));
+            normalized.add(logRecord);
+        }
+        return normalized;
+    }
+
+    private Map<String, Object> buildSandboxAnalysisResult(Map<String, Object> record, Map<String, Object> raw) {
+        Object result = firstNonNull(
+                raw.get("sandboxResult"),
+                raw.get("sandbox_result"),
+                raw.get("result"),
+                raw.get("jsonResult"),
+                raw.get("json_result")
+        );
+        Map<String, Object> sandboxRecord = new LinkedHashMap<>();
+        sandboxRecord.put("id", firstNonBlank(
+                stringValue(raw, "sandboxTaskId", null),
+                stringValue(raw, "sandbox_task_id", null),
+                stringValue(record, "recordId", null),
+                java.util.UUID.randomUUID().toString()
+        ));
+        sandboxRecord.put("taskId", firstNonBlank(stringValue(raw, "sandboxTaskId", null), stringValue(raw, "sandbox_task_id", null)));
+        sandboxRecord.put("status", stringValue(record, "status", "completed"));
+        sandboxRecord.put("title", firstNonBlank(stringValue(record, "title", null), "沙箱研判结果"));
+        sandboxRecord.put("completedAt", stringValue(record, "completedAt", ""));
+        sandboxRecord.put("result", result == null ? raw : result);
+        sandboxRecord.put("raw", raw);
+        return sandboxRecord;
+    }
+
+    private List<Map<String, Object>> extractAnalysisConclusionTimeline(Map<String, Object> record, Map<String, Object> raw) {
+        List<Map<String, Object>> timeline = firstNonEmptyListOfMaps(
+                raw.get("timeline"),
+                raw.get("conclusionTimeline"),
+                raw.get("conclusion_timeline")
+        );
+        if (!timeline.isEmpty()) {
+            return normalizeAnalysisTimeline(timeline, record);
+        }
+
+        List<Map<String, Object>> generated = new ArrayList<>();
+        addAnalysisTimelineItem(generated, "analysis_target", "分析目标", firstNonBlank(
+                stringValue(raw, "analysisTarget", null),
+                stringValue(raw, "analysis_target", null)
+        ), record);
+        addAnalysisTimelineItem(generated, "analysis_process", "分析过程", firstNonBlank(
+                stringValue(raw, "analysisProcess", null),
+                stringValue(raw, "analysis_process", null),
+                stringValue(record, "content", null)
+        ), record);
+        addAnalysisTimelineItem(generated, "analysis_conclusion", "分析结论", firstNonBlank(
+                stringValue(raw, "analysisConclusion", null),
+                stringValue(raw, "analysis_conclusion", null),
+                stringValue(raw, "conclusion", null)
+        ), record);
+        Object recommendationValue = firstNonNull(raw.get("disposalSuggestion"), raw.get("disposal_suggestion"), raw.get("recommendations"));
+        addAnalysisTimelineItem(generated, "disposal_recommendation", "处置建议", timelineContent(recommendationValue), record);
+        return generated;
+    }
+
+    private List<Map<String, Object>> normalizeAnalysisTimeline(List<Map<String, Object>> timeline, Map<String, Object> record) {
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        for (int i = 0; i < timeline.size(); i++) {
+            Map<String, Object> item = new LinkedHashMap<>(timeline.get(i));
+            item.putIfAbsent("id", firstNonBlank(stringValue(item, "id", null), "analysis-timeline-" + (i + 1)));
+            item.putIfAbsent("time", firstNonBlank(
+                    stringValue(item, "time", null),
+                    stringValue(item, "completedAt", null),
+                    stringValue(record, "completedAt", null),
+                    stringValue(record, "startedAt", null)
+            ));
+            item.putIfAbsent("title", "分析结论");
+            item.putIfAbsent("content", firstNonBlank(stringValue(item, "content", null), stringValue(item, "description", null)));
+            normalized.add(item);
+        }
+        return normalized;
+    }
+
+    private void addAnalysisTimelineItem(List<Map<String, Object>> timeline,
+                                         String id,
+                                         String title,
+                                         String content,
+                                         Map<String, Object> record) {
+        if (!StringUtils.hasText(content)) {
+            return;
+        }
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", id);
+        item.put("title", title);
+        item.put("content", content);
+        item.put("time", firstNonBlank(stringValue(record, "completedAt", null), stringValue(record, "startedAt", null)));
+        item.put("type", "success");
+        timeline.add(item);
+    }
+
+    private String timelineContent(Object value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(item -> item instanceof Map<?, ?> map
+                            ? firstNonBlank(
+                                    map.get("content") == null ? "" : String.valueOf(map.get("content")),
+                                    map.get("title") == null ? "" : String.valueOf(map.get("title")),
+                                    map.get("name") == null ? "" : String.valueOf(map.get("name"))
+                            )
+                            : String.valueOf(item))
+                    .filter(StringUtils::hasText)
+                    .reduce((left, right) -> left + "\n" + right)
+                    .orElse("");
+        }
+        return String.valueOf(value);
     }
 
     private boolean isReportDocumentPart(ChatMessagePart part) {
@@ -1123,6 +1391,31 @@ public class DihChatApplicationService {
             }
         }
         return result;
+    }
+
+    private List<Map<String, Object>> firstNonEmptyListOfMaps(Object... values) {
+        if (values == null) {
+            return new ArrayList<>();
+        }
+        for (Object value : values) {
+            List<Map<String, Object>> records = listOfMaps(value);
+            if (!records.isEmpty()) {
+                return records;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    private Object firstNonNull(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

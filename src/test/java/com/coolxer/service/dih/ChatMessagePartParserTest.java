@@ -382,6 +382,26 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("研判阶段记录围栏应解析为记录片段")
+    void parseAnalysisRecordFence() {
+        String content = """
+                ```zenvis:analysis-record
+                {"recordId":"analysis-log-001","stage":"log_aggregation","status":"completed","title":"日志聚合完成","content":"已关联 12 条告警日志。","evidenceCount":12,"riskLevel":"高危","confidence":0.86,"toolNames":["retrieval_search"]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("analysis-record", parts.get(0).getType());
+        assertEquals("日志聚合完成", parts.get(0).getTitle());
+        assertEquals("已关联 12 条告警日志。", parts.get(0).getContent());
+        assertEquals("log_aggregation", parts.get(0).getMetadata().get("stage"));
+        assertEquals(12, parts.get(0).getMetadata().get("evidenceCount"));
+        assertEquals("高危", parts.get(0).getMetadata().get("riskLevel"));
+    }
+
+    @Test
     @DisplayName("数据接入后续选择围栏应解析为待选择片段")
     void parseDataAccessDecisionFence() {
         String content = """

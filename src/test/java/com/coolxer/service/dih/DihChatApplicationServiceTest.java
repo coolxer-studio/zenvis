@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_DEMO_TITLE;
+import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,6 +46,7 @@ class DihChatApplicationServiceTest {
     @SuppressWarnings("unchecked")
     void buildStructuredExtraDataPatchIncludesDataVisualizationChartLibrary() {
         DihChatApplicationService service = new DihChatApplicationService(
+                null,
                 null,
                 null,
                 null,
@@ -109,6 +112,7 @@ class DihChatApplicationServiceTest {
                 sessionService,
                 null,
                 null,
+                null,
                 new ReportDemoResponseService(),
                 (AnalysisAgent) null,
                 (DisposeAgent) null,
@@ -147,6 +151,65 @@ class DihChatApplicationServiceTest {
                 .contains("用户事件数据分析报告");
     }
 
+    @Test
+    void analysisDemoChatUsesTemplateWithoutCallingModelAgent() {
+        FakeChatSessionService sessionService = new FakeChatSessionService();
+        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
+        CountingAnalysisAgent analysisAgent = new CountingAnalysisAgent();
+        ThrowingChatModel titleModel = new ThrowingChatModel();
+
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                baseService,
+                sessionService,
+                null,
+                null,
+                new AnalysisDemoResponseService(),
+                null,
+                analysisAgent,
+                (DisposeAgent) null,
+                (ReportAgent) null,
+                (DataAccessAgent) null,
+                (DataVisualizationAgent) null,
+                new ChatMessagePartParser(),
+                null,
+                new ChatTitleService(titleModel),
+                null,
+                new EnabledSkillService(),
+                null,
+                (PushTaskService) null,
+                (DashboardService) null,
+                (MenuService) null
+        );
+
+        ChatDto chatDto = new ChatDto();
+        chatDto.setType(AnalysisAgent.AGENT_TYPE);
+        chatDto.setChatId("analysis-demo-chat");
+        chatDto.setModel("unsupported-model-should-not-be-checked");
+        chatDto.setMessage(ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT);
+        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+
+        String response = String.join("", service.chat(chatDto, null).collectList().block());
+
+        assertThat(response)
+                .contains("zenvis:analysis-record")
+                .contains("analysis_demo.confirm_log_aggregation")
+                .contains("log_aggregation")
+                .doesNotContain("sandbox_analysis")
+                .doesNotContain("zenvis:report-document-config");
+        assertThat(analysisAgent.calls.get()).isZero();
+        assertThat(baseService.isModelSupportedCalls.get()).isZero();
+        assertThat(baseService.resolveChatModelCalls.get()).isZero();
+        assertThat(titleModel.calls.get()).isZero();
+        assertThat(sessionService.session.getTitle()).isEqualTo(ANALYSIS_DEMO_TITLE);
+        assertThat(sessionService.session.getExtraData())
+                .contains("\"analysis\"")
+                .contains("\"aggregatedLogs\"")
+                .doesNotContain("\"sandboxResults\"")
+                .doesNotContain("\"conclusionTimeline\"")
+                .doesNotContain("\"report\"");
+    }
+
     private static class ThrowingAIBaseService extends AIBaseService {
         private final AtomicInteger isModelSupportedCalls = new AtomicInteger();
         private final AtomicInteger resolveChatModelCalls = new AtomicInteger();
@@ -180,6 +243,21 @@ class DihChatApplicationServiceTest {
                                  McpToolContext mcpToolContext) {
             calls.incrementAndGet();
             throw new AssertionError("报表示例不应调用 ReportAgent");
+        }
+    }
+
+    private static class CountingAnalysisAgent extends AnalysisAgent {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        private CountingAnalysisAgent() {
+            super(null, null);
+        }
+
+        @Override
+        public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                                 McpToolContext mcpToolContext) {
+            calls.incrementAndGet();
+            throw new AssertionError("研判示例不应调用 AnalysisAgent");
         }
     }
 

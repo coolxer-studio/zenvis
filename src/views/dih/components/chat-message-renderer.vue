@@ -233,7 +233,7 @@
               plain
               @click="showConfirmRevise(part)"
             >
-              补充信息继续更新
+              {{ confirmReviseLabel(part) }}
             </el-button>
           </div>
           <div v-if="isConfirmReviseInputVisible(part) && (!part.status || part.status === 'pending')" class="confirm-revise-box">
@@ -243,7 +243,7 @@
               :rows="3"
               maxlength="1000"
               show-word-limit
-              placeholder="输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标"
+              :placeholder="confirmRevisePlaceholder(part)"
             />
             <div class="confirm-revise-actions">
               <el-button size="small" type="primary" @click="submitConfirmRevise(part)">继续更新</el-button>
@@ -467,6 +467,28 @@
         </div>
         <div v-if="isZenvisCardExpanded(part)" class="notice-content">
           {{ part.content || metadataText(part, 'description') || '已记录到右侧数据可视化面板。' }}
+        </div>
+      </div>
+
+      <div v-else-if="part.type === 'analysis-record'" class="notice-part notice-info">
+        <div class="notice-title">
+          <el-icon><DataAnalysis /></el-icon>
+          <span class="card-title-text">{{ analysisRecordTitle(part) }}</span>
+          <el-tag size="small" :type="analysisRecordTagType(part)" effect="plain">
+            {{ analysisRecordStatusText(part) }}
+          </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
+        </div>
+        <div v-if="isZenvisCardExpanded(part)" class="notice-content">
+          {{ part.content || metadataText(part, 'description') || '研判阶段记录已同步到右侧面板。' }}
         </div>
       </div>
 
@@ -1224,6 +1246,22 @@ const supportsConfirmRevise = (part: ChatMessagePart) => {
   return metadataStringList(part, 'actions').includes('revise');
 };
 
+const confirmReviseLabel = (part: ChatMessagePart) => {
+  const value = part.metadata?.reviseLabel;
+  return typeof value === 'string' && value.trim() ? value : '补充信息继续更新';
+};
+
+const confirmRevisePlaceholder = (part: ChatMessagePart) => {
+  const action = part.metadata?.action;
+  if (action === 'analysis_demo.confirm_log_aggregation') {
+    return '输入需要补充的日志线索，例如：继续关联文件变更记录、补查近 10 分钟网络连接日志';
+  }
+  if (action === 'analysis_demo.confirm_sandbox_result') {
+    return '输入需要继续研判的重点，例如：复核文件落地时间、重点确认异常外联是否成功';
+  }
+  return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';
+};
+
 const showConfirmRevise = (part: ChatMessagePart) => {
   confirmReviseInputVisible[partKey(part)] = true;
 };
@@ -1436,6 +1474,33 @@ const dataVisualizationRecordTitle = (part: ChatMessagePart) => {
   if (part.type === 'dashboard-config-record') return part.title || '数据看板配置记录';
   if (part.type === 'menu-config-record') return part.title || '菜单配置记录';
   return part.title || '数据可视化记录';
+};
+
+const analysisStageText = (stage: string) => {
+  if (stage === 'log_aggregation') return '日志聚合';
+  if (stage === 'sandbox_analysis') return '研判分析';
+  if (stage === 'report_output') return '输出分析结论';
+  return '研判记录';
+};
+
+const analysisRecordTitle = (part: ChatMessagePart) => {
+  return part.title || metadataText(part, 'title') || analysisStageText(metadataText(part, 'stage'));
+};
+
+const analysisRecordTagType = (part: ChatMessagePart) => {
+  const status = metadataText(part, 'status');
+  if (status === 'completed' || status === 'success') return 'success';
+  if (status === 'failed' || status === 'error') return 'danger';
+  if (status === 'running' || status === 'processing') return 'warning';
+  return 'info';
+};
+
+const analysisRecordStatusText = (part: ChatMessagePart) => {
+  const status = metadataText(part, 'status');
+  if (status === 'completed' || status === 'success') return '已完成';
+  if (status === 'failed' || status === 'error') return '失败';
+  if (status === 'running' || status === 'processing') return '进行中';
+  return status || '待开始';
 };
 
 watch(

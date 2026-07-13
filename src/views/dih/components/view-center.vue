@@ -199,7 +199,7 @@ import {getCurrentFormattedDate} from '@/utils/util-time'
 import { copyTextToClipboard } from '@/utils/clipboard';
 import { withBaseUrl } from '@/utils/url';
 import ChatMessageRenderer from './chat-message-renderer.vue';
-import type { ChatAttachment, ChatMessage, ChatMessagePart, ChatSession } from '@/types/type-dih';
+import type { AnalysisRecord, ChatAttachment, ChatMessage, ChatMessagePart, ChatSession } from '@/types/type-dih';
 
 const router = useRouter();
 
@@ -264,6 +264,8 @@ type InfoStepAnswer = {
 
 const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
+const DATA_ANALYSIS_RECORD_EVENT = 'dihAnalysisRecordsUpdated';
+const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihAnalysisRecordsRequested';
 const DATA_REPORT_RECORD_EVENT = 'dihReportRecordsUpdated';
 const DATA_REPORT_RECORD_REQUEST_EVENT = 'dihReportRecordsRequested';
 const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested';
@@ -301,6 +303,8 @@ const canSendMessage = computed(() => {
 const AUTO_CONFIRM_ACTIONS = new Set([
   'analysis.start',
   'analysis.create_continuous_task',
+  'analysis_demo.confirm_log_aggregation',
+  'analysis_demo.confirm_sandbox_result',
   'policy.apply_to_production',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
@@ -309,6 +313,8 @@ const AUTO_CONFIRM_ACTIONS = new Set([
 ])
 
 const AUTO_REJECT_ACTIONS = new Set([
+  'analysis_demo.confirm_log_aggregation',
+  'analysis_demo.confirm_sandbox_result',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
   'data_visualization.apply_config',
@@ -493,6 +499,20 @@ const extractDataVisualizationRecords = () => {
   };
 };
 
+const extractAnalysisRecords = () => {
+  const records: AnalysisRecord[] = [];
+  const analysis = asObject(parseSessionExtraData().analysis);
+  asRecordList(analysis.records).forEach(record => {
+    upsertInto(records as DataAccessRecord[], record);
+  });
+  return {
+    records,
+    aggregatedLogs: asRecordList(analysis.aggregatedLogs),
+    sandboxResults: asRecordList(analysis.sandboxResults),
+    conclusionTimeline: asRecordList(analysis.conclusionTimeline),
+  };
+};
+
 const extractReportRecords = () => {
   const report = asObject(parseSessionExtraData().report);
   return {
@@ -517,6 +537,12 @@ const publishDataVisualizationRecords = () => {
   }));
 };
 
+const publishAnalysisRecords = () => {
+  window.dispatchEvent(new CustomEvent(DATA_ANALYSIS_RECORD_EVENT, {
+    detail: extractAnalysisRecords(),
+  }));
+};
+
 const publishReportRecords = () => {
   window.dispatchEvent(new CustomEvent(DATA_REPORT_RECORD_EVENT, {
     detail: extractReportRecords(),
@@ -526,6 +552,7 @@ const publishReportRecords = () => {
 watch(chatSessionExtraData, () => {
   publishDataAccessRecords();
   publishDataVisualizationRecords();
+  publishAnalysisRecords();
   publishReportRecords();
 });
 
@@ -1139,6 +1166,10 @@ const handleReportRecordsRequested = () => {
   publishReportRecords();
 };
 
+const handleAnalysisRecordsRequested = () => {
+  publishAnalysisRecords();
+};
+
 const handleReportExtraDataChanged = (event: Event) => {
   const detail = (event as CustomEvent<ReportExtraDataChangedEventDetail>).detail || {};
   if (typeof detail.extraData === 'string') {
@@ -1193,13 +1224,16 @@ const handleReportQuickActionRequested = async (event: Event) => {
 };
 
 onMounted(() => {
+  window.addEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
   window.addEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
   window.addEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
   window.addEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
+  nextTick(() => publishAnalysisRecords());
   nextTick(() => publishReportRecords());
 });
 
 onUnmounted(() => {
+  window.removeEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
   window.removeEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
   window.removeEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
   window.removeEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
@@ -1211,6 +1245,12 @@ const confirmAction = (part: ChatMessagePart) => {
 };
 
 const autoConfirmMessage = (action: string) => {
+  if (action === 'analysis_demo.confirm_log_aggregation') {
+    return '我已确认日志聚合结果，请进入沙箱研判阶段。';
+  }
+  if (action === 'analysis_demo.confirm_sandbox_result') {
+    return '我已确认沙箱研判结果，结果满意，请进入分析结论阶段。';
+  }
   if (action === 'analysis.create_continuous_task') {
     return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与 AI 分析任务。';
   }
@@ -1233,6 +1273,9 @@ const autoConfirmMessage = (action: string) => {
 };
 
 const autoRejectMessage = (action: string) => {
+  if (action === 'analysis_demo.confirm_log_aggregation' || action === 'analysis_demo.confirm_sandbox_result') {
+    return '我已取消研判演示流程，请暂停当前研判演示，不要进入下一阶段。';
+  }
   if (action === 'data_access.generate_demo_push_config') {
     return '我已取消生成用户事件数据推送服务配置。请记录本次演示到元数据配置阶段结束，不要生成数据推送配置，也不要创建数据推送服务。';
   }
@@ -1253,6 +1296,28 @@ const dataVisualizationDecisionMessage = (decision: 'revise', detail?: string) =
 const dataVisualizationDecisionDisplayMessage = (decision: 'revise', detail?: string) => {
   const focus = detail?.trim() || '继续优化数据可视化配置。';
   return `我已补充数据可视化配置调整要求：\n${focus}`;
+};
+
+const analysisDemoConfirmReviseMessage = (action: string, detail?: string) => {
+  const focus = detail?.trim() || '请基于上一阶段结果补充更多关联数据。';
+  if (action === 'analysis_demo.confirm_log_aggregation') {
+    return `我需要补充更多日志聚合数据。补充内容如下：\n${focus}\n请基于上一轮日志聚合结果继续补充相关日志，并再次展示日志聚合结果让我确认。`;
+  }
+  if (action === 'analysis_demo.confirm_sandbox_result') {
+    return `我需要补充信息继续沙箱研判。补充研判重点如下：\n${focus}\n请基于上一轮沙箱研判结果继续补充分析，并再次展示沙箱研判结果让我确认。`;
+  }
+  return focus;
+};
+
+const analysisDemoConfirmReviseDisplayMessage = (action: string, detail?: string) => {
+  const focus = detail?.trim() || '继续补充研判信息。';
+  if (action === 'analysis_demo.confirm_log_aggregation') {
+    return `我已补充日志聚合数据：\n${focus}`;
+  }
+  if (action === 'analysis_demo.confirm_sandbox_result') {
+    return `我已补充沙箱研判信息：\n${focus}`;
+  }
+  return focus;
 };
 
 const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', detail?: string) => {
@@ -1501,6 +1566,18 @@ const handleActionDecision = async (
     await sendMessage({
       content: dataVisualizationDecisionDisplayMessage(payload.decision, payload.detail),
       requestContent: dataVisualizationDecisionMessage(payload.decision, payload.detail),
+    });
+    return;
+  }
+  if (payload.decision === 'revise' && (
+    action === 'analysis_demo.confirm_log_aggregation'
+    || action === 'analysis_demo.confirm_sandbox_result'
+  )) {
+    ElMessage.success('已提交补充信息');
+    await nextTick();
+    await sendMessage({
+      content: analysisDemoConfirmReviseDisplayMessage(action, payload.detail),
+      requestContent: analysisDemoConfirmReviseMessage(action, payload.detail),
     });
     return;
   }

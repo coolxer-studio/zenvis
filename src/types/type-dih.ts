@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'info-steps' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'info-steps' | 'analysis-record' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -90,6 +90,36 @@ export type ReportArtifact = {
   status?: string;
   createdAt?: string;
   content?: string;
+};
+
+export type AnalysisStage = 'log_aggregation' | 'sandbox_analysis' | 'report_output' | string;
+
+export type AnalysisRecord = {
+  id?: string;
+  recordId?: string;
+  stage?: AnalysisStage;
+  status?: string;
+  title?: string;
+  content?: string;
+  startedAt?: string;
+  completedAt?: string;
+  alarm?: Record<string, unknown>;
+  evidenceCount?: number;
+  riskLevel?: string;
+  confidence?: number | string;
+  keyFindings?: unknown[];
+  recommendations?: unknown[];
+  sandboxTaskId?: string;
+  toolNames?: unknown[];
+  raw?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type AnalysisExtraData = {
+  records?: AnalysisRecord[];
+  aggregatedLogs?: Array<Record<string, unknown>>;
+  sandboxResults?: Array<Record<string, unknown>>;
+  conclusionTimeline?: Array<Record<string, unknown>>;
 };
 
 export type ModelInfo = {

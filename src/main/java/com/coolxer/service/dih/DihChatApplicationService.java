@@ -58,6 +58,7 @@ public class DihChatApplicationService {
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
     private final AnalysisDemoResponseService analysisDemoResponseService;
+    private final DisposeDemoResponseService disposeDemoResponseService;
     private final ReportDemoResponseService reportDemoResponseService;
     private final AnalysisAgent analysisAgent;
     private final DisposeAgent disposeAgent;
@@ -80,6 +81,7 @@ public class DihChatApplicationService {
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
                                      DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
                                      AnalysisDemoResponseService analysisDemoResponseService,
+                                     DisposeDemoResponseService disposeDemoResponseService,
                                      ReportDemoResponseService reportDemoResponseService,
                                      AnalysisAgent analysisAgent,
                                      DisposeAgent disposeAgent,
@@ -101,6 +103,7 @@ public class DihChatApplicationService {
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
         this.analysisDemoResponseService = analysisDemoResponseService;
+        this.disposeDemoResponseService = disposeDemoResponseService;
         this.reportDemoResponseService = reportDemoResponseService;
         this.analysisAgent = analysisAgent;
         this.disposeAgent = disposeAgent;
@@ -168,6 +171,24 @@ public class DihChatApplicationService {
             ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
             return emitAndSaveTextResponse(
                     reportDemoResponse.get(),
+                    chatSession,
+                    currentUser,
+                    eventStream,
+                    new AtomicReference<>(MessageType.TEXT),
+                    BooleanUtils.isTrue(chatDto.getDeepThink())
+            );
+        }
+        Optional<Flux<String>> disposeDemoResponse = findDisposeDemoResponse(
+                chatType,
+                chatId,
+                userMessage,
+                currentUser,
+                null
+        );
+        if (disposeDemoResponse.isPresent()) {
+            ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+            return emitAndSaveTextResponse(
+                    disposeDemoResponse.get(),
                     chatSession,
                     currentUser,
                     eventStream,
@@ -260,10 +281,30 @@ public class DihChatApplicationService {
         }
         if (AnalysisAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
+            Optional<Flux<String>> demoResponse = findAnalysisDemoResponse(
+                    chatType,
+                    chatId,
+                    prompt,
+                    currentUser,
+                    chatSession
+            );
+            if (demoResponse.isPresent()) {
+                return demoResponse.get();
+            }
             return analysisAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (DisposeAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
+            Optional<Flux<String>> demoResponse = findDisposeDemoResponse(
+                    chatType,
+                    chatId,
+                    prompt,
+                    currentUser,
+                    chatSession
+            );
+            if (demoResponse.isPresent()) {
+                return demoResponse.get();
+            }
             return disposeAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
         }
         if (ReportAgent.AGENT_TYPE.equals(chatType)) {
@@ -342,6 +383,17 @@ public class DihChatApplicationService {
             return Optional.empty();
         }
         return analysisDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
+    }
+
+    private Optional<Flux<String>> findDisposeDemoResponse(String chatType,
+                                                           String chatId,
+                                                           String prompt,
+                                                           User currentUser,
+                                                           ChatSession chatSession) {
+        if (!DisposeAgent.AGENT_TYPE.equals(chatType) || disposeDemoResponseService == null) {
+            return Optional.empty();
+        }
+        return disposeDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
     }
 
     private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
@@ -495,6 +547,7 @@ public class DihChatApplicationService {
                 "sandboxResults",
                 "conclusionTimeline"
         ));
+        mergeSectionRecords(extraData, patch, "policy", List.of("records"));
         mergeReportRecords(extraData, patch);
 
         String extraDataJson = JacksonUtil.toJson(extraData);
@@ -525,7 +578,110 @@ public class DihChatApplicationService {
         if (analysisPatch != null && !analysisPatch.isEmpty()) {
             patch.putAll(analysisPatch);
         }
+        Map<String, Object> policyPatch = buildPolicyExtraDataPatch(parts);
+        if (policyPatch != null && !policyPatch.isEmpty()) {
+            patch.putAll(policyPatch);
+        }
         return patch.isEmpty() ? null : patch;
+    }
+
+    private Map<String, Object> buildPolicyExtraDataPatch(List<ChatMessagePart> parts) {
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (ChatMessagePart part : parts) {
+            if (!"policy-record".equals(part.getType())) {
+                continue;
+            }
+            Map<String, Object> record = buildPolicyRecord(part);
+            if (!record.isEmpty()) {
+                records.add(record);
+            }
+        }
+        if (records.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> policy = new LinkedHashMap<>();
+        policy.put("records", records);
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("policy", policy);
+        return metadata;
+    }
+
+    private Map<String, Object> buildPolicyRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        String policyType = firstNonBlank(
+                stringValue(raw, "policyType", null),
+                stringValue(raw, "policy_type", null),
+                stringValue(raw, "type", null)
+        );
+        String configType = firstNonBlank(
+                stringValue(raw, "configType", null),
+                stringValue(raw, "config_type", null),
+                policyConfigType(policyType)
+        );
+        String fileName = firstNonBlank(
+                stringValue(raw, "fileName", null),
+                stringValue(raw, "file_name", null),
+                stringValue(raw, "targetFile", null)
+        );
+        String id = firstNonBlank(
+                stringValue(raw, "recordId", null),
+                stringValue(raw, "record_id", null),
+                stringValue(raw, "id", null),
+                configType != null && fileName != null ? configType + ":" + fileName : null,
+                java.util.UUID.randomUUID().toString()
+        );
+
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("id", id);
+        record.put("recordId", id);
+        record.put("policyType", firstNonBlank(policyType, "disposal"));
+        record.put("changeDescription", firstNonBlank(
+                stringValue(raw, "changeDescription", null),
+                stringValue(raw, "change_description", null),
+                stringValue(raw, "description", null),
+                part.getContent()
+        ));
+        record.put("changeMode", firstNonBlank(
+                stringValue(raw, "changeMode", null),
+                stringValue(raw, "change_mode", null),
+                stringValue(raw, "operation", null),
+                "add"
+        ));
+        record.put("configType", configType);
+        record.put("fileName", fileName);
+        record.put("oldConfig", raw.getOrDefault("oldConfig", raw.getOrDefault("old_config", "")));
+        record.put("newConfig", raw.getOrDefault("newConfig", raw.getOrDefault("new_config", Map.of())));
+        record.put("validationStatus", firstNonBlank(
+                stringValue(raw, "validationStatus", null),
+                stringValue(raw, "validation_status", null),
+                "unverified"
+        ));
+        record.put("effectiveStatus", firstNonBlank(
+                stringValue(raw, "effectiveStatus", null),
+                stringValue(raw, "effective_status", null),
+                "no"
+        ));
+        record.put("trialResult", raw.getOrDefault("trialResult", raw.getOrDefault("trial_result", Map.of())));
+        record.put("applyResult", raw.getOrDefault("applyResult", raw.getOrDefault("apply_result", Map.of())));
+        record.put("updatedAt", firstNonBlank(
+                stringValue(raw, "updatedAt", null),
+                stringValue(raw, "updated_at", null),
+                java.time.OffsetDateTime.now().toString()
+        ));
+        record.put("source", "agent_dispose");
+        record.put("raw", raw);
+        return record;
+    }
+
+    private String policyConfigType(String policyType) {
+        return switch (StringUtils.hasText(policyType) ? policyType : "") {
+            case "collection" -> "checker";
+            case "tagging" -> "rating";
+            case "disposal" -> "punish";
+            default -> null;
+        };
     }
 
     private Map<String, Object> buildAnalysisExtraDataPatch(List<ChatMessagePart> parts) {

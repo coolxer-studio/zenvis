@@ -284,6 +284,24 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("策略记录围栏应解析为策略记录片段")
+    void parsePolicyRecordFence() {
+        String content = """
+                ```zenvis:policy-record
+                {"recordId":"policy-001","policyType":"disposal","changeDescription":"新增处置策略","validationStatus":"unverified","effectiveStatus":"no"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("policy-record", parts.get(0).getType());
+        assertEquals("新增处置策略", parts.get(0).getContent());
+        assertEquals("policy-001", parts.get(0).getMetadata().get("recordId"));
+        assertEquals("disposal", parts.get(0).getMetadata().get("policyType"));
+    }
+
+    @Test
     @DisplayName("报表文档围栏应解析为结构化报表片段")
     void parseReportDocumentConfigFence() {
         String content = """

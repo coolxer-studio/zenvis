@@ -37,6 +37,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_DEMO_TITLE;
 import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.DisposeDemoResponseService.DISPOSE_DEMO_TITLE;
+import static com.coolxer.service.dih.DisposeDemoResponseService.DISPOSE_WEBSHELL_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,6 +48,7 @@ class DihChatApplicationServiceTest {
     @SuppressWarnings("unchecked")
     void buildStructuredExtraDataPatchIncludesDataVisualizationChartLibrary() {
         DihChatApplicationService service = new DihChatApplicationService(
+                null,
                 null,
                 null,
                 null,
@@ -100,6 +103,68 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void buildStructuredExtraDataPatchIncludesPolicyRecords() {
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                (AnalysisAgent) null,
+                (DisposeAgent) null,
+                (ReportAgent) null,
+                (DataAccessAgent) null,
+                (DataVisualizationAgent) null,
+                null,
+                null,
+                null,
+                (AgentMcpToolService) null,
+                (SkillService) null,
+                null,
+                (PushTaskService) null,
+                (DashboardService) null,
+                (MenuService) null
+        );
+
+        ChatMessagePart part = ChatMessagePart.builder()
+                .type("policy-record")
+                .content("新增 WebShell 处置策略")
+                .metadata(Map.of(
+                        "recordId", "policy-001",
+                        "policyType", "disposal",
+                        "changeMode", "add",
+                        "configType", "punish",
+                        "fileName", "webshell.json",
+                        "newConfig", List.of(Map.of("tag", "webshell_high_risk")),
+                        "validationStatus", "unverified",
+                        "effectiveStatus", "no"
+                ))
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service,
+                "buildStructuredExtraDataPatch",
+                List.of(part)
+        );
+
+        assertThat(patch).isNotNull();
+        Map<String, Object> policy = (Map<String, Object>) patch.get("policy");
+        assertThat(policy).isNotNull();
+        List<Map<String, Object>> records = (List<Map<String, Object>>) policy.get("records");
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0))
+                .containsEntry("id", "policy-001")
+                .containsEntry("policyType", "disposal")
+                .containsEntry("configType", "punish")
+                .containsEntry("validationStatus", "unverified")
+                .containsEntry("effectiveStatus", "no");
+    }
+
+    @Test
     void reportDemoChatUsesTemplateWithoutCallingModelAgent() {
         FakeChatSessionService sessionService = new FakeChatSessionService();
         ThrowingAIBaseService baseService = new ThrowingAIBaseService();
@@ -110,6 +175,7 @@ class DihChatApplicationServiceTest {
                 null,
                 baseService,
                 sessionService,
+                null,
                 null,
                 null,
                 null,
@@ -166,6 +232,7 @@ class DihChatApplicationServiceTest {
                 null,
                 new AnalysisDemoResponseService(),
                 null,
+                null,
                 analysisAgent,
                 (DisposeAgent) null,
                 (ReportAgent) null,
@@ -208,6 +275,64 @@ class DihChatApplicationServiceTest {
                 .doesNotContain("\"sandboxResults\"")
                 .doesNotContain("\"conclusionTimeline\"")
                 .doesNotContain("\"report\"");
+    }
+
+    @Test
+    void disposeDemoChatUsesTemplateWithoutCallingModelAgent() {
+        FakeChatSessionService sessionService = new FakeChatSessionService();
+        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
+        CountingDisposeAgent disposeAgent = new CountingDisposeAgent();
+        ThrowingChatModel titleModel = new ThrowingChatModel();
+
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                baseService,
+                sessionService,
+                null,
+                null,
+                null,
+                new DisposeDemoResponseService(),
+                null,
+                (AnalysisAgent) null,
+                disposeAgent,
+                (ReportAgent) null,
+                (DataAccessAgent) null,
+                (DataVisualizationAgent) null,
+                new ChatMessagePartParser(),
+                null,
+                new ChatTitleService(titleModel),
+                null,
+                new EnabledSkillService(),
+                null,
+                (PushTaskService) null,
+                (DashboardService) null,
+                (MenuService) null
+        );
+
+        ChatDto chatDto = new ChatDto();
+        chatDto.setType(DisposeAgent.AGENT_TYPE);
+        chatDto.setChatId("dispose-demo-chat");
+        chatDto.setModel("unsupported-model-should-not-be-checked");
+        chatDto.setMessage(DISPOSE_WEBSHELL_EXAMPLE_PROMPT);
+        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+
+        String response = String.join("", service.chat(chatDto, null).collectList().block());
+
+        assertThat(response)
+                .contains("zenvis:policy-record")
+                .contains("policy_demo.confirm_trial")
+                .contains("webshell-high-risk-isolate.json")
+                .doesNotContain("policy_demo.confirm_apply");
+        assertThat(disposeAgent.calls.get()).isZero();
+        assertThat(baseService.isModelSupportedCalls.get()).isZero();
+        assertThat(baseService.resolveChatModelCalls.get()).isZero();
+        assertThat(titleModel.calls.get()).isZero();
+        assertThat(sessionService.session.getTitle()).isEqualTo(DISPOSE_DEMO_TITLE);
+        assertThat(sessionService.session.getExtraData())
+                .contains("\"policy\"")
+                .contains("\"records\"")
+                .contains("\"validationStatus\":\"unverified\"")
+                .contains("\"effectiveStatus\":\"no\"");
     }
 
     private static class ThrowingAIBaseService extends AIBaseService {
@@ -258,6 +383,21 @@ class DihChatApplicationServiceTest {
                                  McpToolContext mcpToolContext) {
             calls.incrementAndGet();
             throw new AssertionError("研判示例不应调用 AnalysisAgent");
+        }
+    }
+
+    private static class CountingDisposeAgent extends DisposeAgent {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        private CountingDisposeAgent() {
+            super(null, null);
+        }
+
+        @Override
+        public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                                 McpToolContext mcpToolContext) {
+            calls.incrementAndGet();
+            throw new AssertionError("策略控制示例不应调用 DisposeAgent");
         }
     }
 

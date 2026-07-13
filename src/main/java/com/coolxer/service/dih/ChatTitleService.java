@@ -36,6 +36,9 @@ public class ChatTitleService {
         if (AnalysisDemoResponseService.isAnalysisDemoPrompt(userMessage)) {
             return AnalysisDemoResponseService.ANALYSIS_DEMO_TITLE;
         }
+        if (DisposeDemoResponseService.isDisposeDemoPrompt(userMessage)) {
+            return DisposeDemoResponseService.DISPOSE_DEMO_TITLE;
+        }
         if (ReportDemoResponseService.isReportDemoPrompt(userMessage)) {
             return ReportDemoResponseService.REPORT_DEMO_TITLE;
         }

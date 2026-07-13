@@ -66,7 +66,7 @@ public class AgentMcpToolService {
             只能调用下方“可用 MCP 工具”中明确列出的工具名。`zenvis:*` 是前端 UI 代码块协议，
             例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:analysis-record`、`zenvis:analysis-decision`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
             `zenvis:vectum-task-record`、`zenvis:visualization-chart-preview`、`zenvis:visualization-chart-record`、`zenvis:visualization-config-record`、
-            `zenvis:dashboard-config-record`、`zenvis:menu-config-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
+            `zenvis:dashboard-config-record`、`zenvis:menu-config-record`、`zenvis:policy-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
 
             【可用 MCP 工具】
             %s

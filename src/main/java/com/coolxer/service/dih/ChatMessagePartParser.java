@@ -107,7 +107,8 @@ public class ChatMessagePartParser {
                 && !"zenvis:visualization-chart-record".equals(info)
                 && !"zenvis:visualization-config-record".equals(info)
                 && !"zenvis:dashboard-config-record".equals(info)
-                && !"zenvis:menu-config-record".equals(info)) {
+                && !"zenvis:menu-config-record".equals(info)
+                && !"zenvis:policy-record".equals(info)) {
             return null;
         }
 
@@ -131,11 +132,13 @@ public class ChatMessagePartParser {
                 case "zenvis:visualization-config-record" -> "visualization-config-record";
                 case "zenvis:dashboard-config-record" -> "dashboard-config-record";
                 case "zenvis:menu-config-record" -> "menu-config-record";
+                case "zenvis:policy-record" -> "policy-record";
                 default -> "confirm";
             };
             ChatMessagePart.ChatMessagePartBuilder builder = part(type)
                     .title(textValue(node, "title"))
-                    .content(firstTextValue(node, "content", "message", "description", "name", "entityLabel", "fileName", "taskId",
+                    .content(firstTextValue(node, "content", "message", "description", "changeDescription", "change_description",
+                            "name", "entityLabel", "fileName", "taskId",
                             "configIndex", "dashboardId", "dashboardCode", "menuId"))
                     .level(firstTextValue(node, "level", "type"))
                     .metadata(metadata);

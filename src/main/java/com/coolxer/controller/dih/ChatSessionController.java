@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.DisposeDemoResponseService.DISPOSE_WEBSHELL_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_INCIDENT_REVIEW_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_OPERATION_WEEKLY_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
@@ -229,9 +230,10 @@ public class ChatSessionController extends BaseController {
             "我会按三个阶段工作：先根据当前告警关联系统内相关告警日志，再通过 MCP 将聚合日志提交给独立沙箱分析服务，最后形成包含分析目标、分析过程、分析结论和处置建议的研判报告。\n" +
             "如果告警信息不足，我会先补充询问必要字段；如果缺少沙箱分析 MCP 能力，我会明确说明缺失项，不伪造沙箱结果。";
     private static final String PROLOGUE_AGENT_ANALYSIS_EXAMPLE_INTRO = "可以点击下面的示例快速体验一次完整告警研判演示。";
-    private static final String PROLOGUE_AGENT_DISPOSE = "我是策略智能体，负责系统策略的全生命周期管理。\n" +
-            " 涵盖探针数据采集、动态标记引擎、处置响应、设备指纹、风险评定、数据推送及可视化等策略配置。\n" +
-            " 所有策略变更需经管理员审批后生效，确保系统配置安全可控、合规有效。";
+    private static final String PROLOGUE_AGENT_DISPOSE = "我是策略控制智能体，负责根据策略控制需求生成符合系统要求的策略配置。\n" +
+            "我会按三个阶段工作：先生成策略配置并记录到右侧策略记录 tab，再按需进入试验场验证，验证成功且你认可后再下发到系统正式生效。\n" +
+            "支持采集、标记和处置三类策略，所有正式生效动作都会先确认。";
+    private static final String PROLOGUE_AGENT_DISPOSE_EXAMPLE_INTRO = "可以点击下面的示例快速体验一次策略控制演示。";
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\n" +
             " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
@@ -343,6 +345,35 @@ public class ChatSessionController extends BaseController {
                                     "examples",
                                     List.of(
                                             Map.of("label", "WebShell 告警研判", "prompt", ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT)
+                                    )
+                            ))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_dispose".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_DISPOSE
+                    + "\n\n"
+                    + PROLOGUE_AGENT_DISPOSE_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "WebShell 高危处置策略演示";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_DISPOSE)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_DISPOSE_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title("策略控制示例")
+                            .metadata(Map.of(
+                                    "examples",
+                                    List.of(
+                                            Map.of("label", "WebShell 高危处置策略", "prompt", DISPOSE_WEBSHELL_EXAMPLE_PROMPT)
                                     )
                             ))
                             .build()

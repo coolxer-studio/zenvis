@@ -1,5 +1,6 @@
 package com.coolxer.configuration;
 
+import com.coolxer.aop.AuthorityInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,16 @@ public class JpaAuditingConfiguration implements AuditorAware<Integer> {
             HashOperations<String, String, String> hashOperations = stringRedisTemplate.opsForHash();
             RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
             if (requestAttributes != null) {
+                Object bearerUserId = requestAttributes.getAttribute(
+                        AuthorityInterceptor.API_BEARER_USER_ID_ATTR,
+                        RequestAttributes.SCOPE_REQUEST);
+                if (bearerUserId instanceof Integer userId) {
+                    return Optional.of(userId);
+                }
+                if (bearerUserId instanceof String userId && StringUtils.isNotEmpty(userId)) {
+                    return Optional.of(Integer.valueOf(userId));
+                }
+
                 String sessionId = requestAttributes instanceof ServletRequestAttributes servletRequestAttributes
                         ? servletRequestAttributes.getRequest().getRequestedSessionId()
                         : requestAttributes.getSessionId();

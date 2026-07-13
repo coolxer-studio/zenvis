@@ -245,13 +245,17 @@ PUSH_IMAGE=true ./build.sh
 | `spring.data.redis.port`                 | `6379`      | Redis 端口              |
 | `spring.ai.openai.base-url`              | -           | OpenAI 兼容模型服务地址；未配置不影响启动，调用 AI 功能时报错 |
 | `spring.ai.openai.api-key`               | -           | OpenAI API Key           |
+| `app.security.api.bearer-token`          | -           | 普通 REST API Bearer Token；配置后 `/api/v1/**` 支持 `Authorization: Bearer <token>` |
+| `app.security.api.bearer-user`           | `admin@admin.com` | Bearer Token 调用映射到的系统用户邮箱，用于权限上下文和审计 |
 | `app.security.mcp.bearer-token`          | -           | MCP Server Bearer Token，未配置时 MCP 接口返回 401 |
 | `spring.servlet.multipart.max-file-size` | `300MB`     | 最大上传文件大小              |
 | `server.servlet.session.timeout`         | `3600S`     | 会话超时时间                |
 
+第三方系统调用普通 REST API 时，既可以按前端方式先登录拿 `JSESSIONID`，也可以配置 `API_BEARER_TOKEN` 后直接携带请求头：`Authorization: Bearer <app.security.api.bearer-token>`。Bearer Token 调用会以 `app.security.api.bearer-user` 对应用户身份执行。
+
 MCP 客户端访问 Spring AI MCP Server 接口时需要携带请求头：`Authorization: Bearer <app.security.mcp.bearer-token>`。
 
-本地开发不要把数据库、Redis、LLM 或 MCP 密钥写入已提交的 profile 配置。可以使用环境变量，也可以在 `zenvis-backend/config/local-secrets.properties` 中放本机密钥；该文件已加入 `.gitignore`，应用启动时会自动读取。例如：
+本地开发不要把数据库、Redis、LLM、REST API 或 MCP 密钥写入已提交的 profile 配置。可以使用环境变量，也可以在 `zenvis-backend/config/local-secrets.properties` 中放本机密钥；该文件已加入 `.gitignore`，应用启动时会自动读取。例如：
 
 ```properties
 MYSQL_PASSWORD=your_mysql_password
@@ -260,6 +264,8 @@ REDIS_PASSWORD=your_redis_password
 OPENAI_BASE_URL=https://your-llm-endpoint
 OPENAI_API_KEY=your_api_key
 OPENAI_CHAT_MODEL=your_chat_model
+API_BEARER_TOKEN=your_api_token
+API_BEARER_USER=admin@admin.com
 MCP_BEARER_TOKEN=your_mcp_token
 ```
 

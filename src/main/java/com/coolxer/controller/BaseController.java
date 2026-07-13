@@ -1,10 +1,12 @@
 package com.coolxer.controller;
 
+import com.coolxer.aop.AuthorityInterceptor;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.dao.mysql.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -32,9 +34,25 @@ public class BaseController {
 
 
     protected User getSessionUser() {
+        Object bearerUserId = request.getAttribute(AuthorityInterceptor.API_BEARER_USER_ID_ATTR);
+        if (bearerUserId instanceof Integer userId) {
+            return userRepository.findById(userId);
+        }
+        if (bearerUserId instanceof String userId && StringUtils.isNotEmpty(userId)) {
+            return userRepository.findById(Integer.valueOf(userId));
+        }
+
+        String sessionId = request.getRequestedSessionId();
+        if (StringUtils.isEmpty(sessionId)) {
+            return null;
+        }
         HashOperations<String, String, String> hashOperations = stringRedisTemplate.opsForHash();
-        Map<String, String> mapSession = hashOperations.entries(request.getRequestedSessionId());
-        return userRepository.findById(Integer.valueOf(mapSession.get("strUid")));
+        Map<String, String> mapSession = hashOperations.entries(sessionId);
+        String userId = mapSession.get("strUid");
+        if (StringUtils.isEmpty(userId)) {
+            return null;
+        }
+        return userRepository.findById(Integer.valueOf(userId));
     }
 
     protected void resetSessionId(HttpServletRequest request) {

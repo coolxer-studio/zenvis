@@ -2,14 +2,21 @@ package com.coolxer.aop;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.configuration.CustomWebConfig;
+import com.coolxer.dao.mysql.entity.User;
+import com.coolxer.dao.mysql.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.List;
@@ -22,11 +29,25 @@ import java.util.List;
 @Order(2)
 public class AuthorityInterceptor extends AbstractInterceptor {
 
+    public static final String API_BEARER_USER_ID_ATTR = "zenvis.apiBearer.userId";
+    public static final String API_BEARER_USER_NAME_ATTR = "zenvis.apiBearer.userName";
+
+    private static final String BEARER_SCHEME = "Bearer";
+
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
     @Autowired
     private CustomWebConfig customWebConfig;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Value("${app.security.api.bearer-token:}")
+    private String apiBearerToken;
+
+    @Value("${app.security.api.bearer-user:admin@admin.com}")
+    private String apiBearerUser;
 
     /**
      * 需要放行的url集合
@@ -68,6 +89,14 @@ public class AuthorityInterceptor extends AbstractInterceptor {
 
         if (requestUri.contains(customWebConfig.getNeedCheckPath())) {
 
+            BearerAuthResult bearerAuthResult = authenticateByBearerToken(request, response);
+            if (bearerAuthResult == BearerAuthResult.AUTHENTICATED) {
+                return true;
+            }
+            if (bearerAuthResult == BearerAuthResult.REJECTED) {
+                return false;
+            }
+
             if (request.getRequestedSessionId() == null) {
                 writErrorInfoToResponse(response, ResultCodeEnum.PLEASE_LOGIN);
                 return false;
@@ -86,6 +115,63 @@ public class AuthorityInterceptor extends AbstractInterceptor {
 
         }
         return true;
+    }
+
+    private BearerAuthResult authenticateByBearerToken(HttpServletRequest request, HttpServletResponse response)
+            throws Exception {
+        String requestToken = resolveBearerToken(request.getHeader(HttpHeaders.AUTHORIZATION));
+        if (!StringUtils.hasText(requestToken)) {
+            return BearerAuthResult.NOT_PRESENT;
+        }
+
+        if (!StringUtils.hasText(apiBearerToken)) {
+            log.warn("API Bearer Token未配置，拒绝访问: uri={}", request.getRequestURI());
+            writErrorInfoToResponse(response, ResultCodeEnum.NO_AUTHORITY);
+            return BearerAuthResult.REJECTED;
+        }
+
+        if (!constantTimeEquals(apiBearerToken.trim(), requestToken)) {
+            writErrorInfoToResponse(response, ResultCodeEnum.PLEASE_LOGIN);
+            return BearerAuthResult.REJECTED;
+        }
+
+        User user = userRepository.findByEmail(apiBearerUser);
+        if (user == null) {
+            log.warn("API Bearer Token用户不存在: user={}, uri={}", apiBearerUser, request.getRequestURI());
+            writErrorInfoToResponse(response, ResultCodeEnum.NO_AUTHORITY);
+            return BearerAuthResult.REJECTED;
+        }
+
+        request.setAttribute(API_BEARER_USER_ID_ATTR, user.getId());
+        request.setAttribute(API_BEARER_USER_NAME_ATTR, user.getName());
+        return BearerAuthResult.AUTHENTICATED;
+    }
+
+    private static String resolveBearerToken(String authorizationHeader) {
+        if (!StringUtils.hasText(authorizationHeader)) {
+            return "";
+        }
+
+        String header = authorizationHeader.trim();
+        if (header.length() <= BEARER_SCHEME.length()
+                || !header.regionMatches(true, 0, BEARER_SCHEME, 0, BEARER_SCHEME.length())
+                || !Character.isWhitespace(header.charAt(BEARER_SCHEME.length()))) {
+            return "";
+        }
+
+        return header.substring(BEARER_SCHEME.length()).trim();
+    }
+
+    private static boolean constantTimeEquals(String expected, String actual) {
+        byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
+        byte[] actualBytes = actual.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(expectedBytes, actualBytes);
+    }
+
+    private enum BearerAuthResult {
+        AUTHENTICATED,
+        NOT_PRESENT,
+        REJECTED
     }
 
 

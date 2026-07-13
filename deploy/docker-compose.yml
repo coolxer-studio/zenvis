@@ -254,6 +254,8 @@ services:
     container_name: zenvis-backend
     environment:
       TZ: Asia/Shanghai
+      API_BEARER_TOKEN: "${API_BEARER_TOKEN:-sk-zenvis-token}"
+      API_BEARER_USER: "${API_BEARER_USER:-admin@admin.com}"
       MCP_BEARER_TOKEN: sk-zenvis-token
       OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
     ports:

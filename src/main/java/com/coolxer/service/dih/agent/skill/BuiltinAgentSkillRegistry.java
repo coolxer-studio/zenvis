@@ -34,7 +34,7 @@ public final class BuiltinAgentSkillRegistry {
                     AGENT_ANALYSIS,
                     "研判分析",
                     30,
-                    "研判分析智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+                    "研判分析智能体根据用户提供的告警信息，按日志聚合、沙箱研判、分析结论三阶段完成综合研判。"
             ),
             new BuiltinAgentSkill(
                     "dispose-agent",

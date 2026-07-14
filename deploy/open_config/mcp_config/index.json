@@ -119,6 +119,374 @@
     },
     {
       "type": "button",
+      "label": "工具审批策略",
+      "icon": "fa fa-shield",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "MCP 工具审批策略",
+        "size": "xl",
+        "body": {
+          "name": "mcp_tool_policy_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/mcp/tools/policies/list",
+          "defaultParams": {
+            "page": 1,
+            "perPage": 20
+          },
+          "primaryField": "tool_key",
+          "multiple": true,
+          "keepItemSelectionOnPageChange": true,
+          "bulkActions": [
+            {
+              "type": "button",
+              "label": "批量允许",
+              "level": "success",
+              "actionType": "ajax",
+              "confirmText": "确认将选中的 MCP 工具批量设置为允许直接执行？",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": "ALLOW"
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            },
+            {
+              "type": "button",
+              "label": "批量询问",
+              "level": "warning",
+              "actionType": "ajax",
+              "confirmText": "确认将选中的 MCP 工具批量设置为调用前询问？",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": "ASK"
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            },
+            {
+              "type": "button",
+              "label": "批量禁止",
+              "level": "danger",
+              "actionType": "ajax",
+              "confirmText": "确认批量禁止选中的 MCP 工具？禁止后 Agent 将不再获得这些工具。",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": "DENY"
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            },
+            {
+              "type": "button",
+              "label": "批量恢复默认",
+              "actionType": "ajax",
+              "confirmText": "确认将选中的 MCP 工具批量恢复为默认审批策略？",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": null
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            }
+          ],
+          "filter": {
+            "body": [
+              {
+                "label": "关键词",
+                "type": "input-text",
+                "name": "keyword",
+                "clearable": true
+              },
+              {
+                "label": "来源",
+                "type": "select",
+                "name": "sourceType",
+                "clearable": true,
+                "options": [
+                  { "label": "本地", "value": "LOCAL" },
+                  { "label": "外部 MCP", "value": "EXTERNAL" }
+                ]
+              },
+              {
+                "label": "有效策略",
+                "type": "select",
+                "name": "policy",
+                "clearable": true,
+                "options": [
+                  { "label": "ALLOW", "value": "ALLOW" },
+                  { "label": "ASK", "value": "ASK" },
+                  { "label": "DENY", "value": "DENY" }
+                ]
+              }
+            ],
+            "actions": [
+              { "type": "reset", "label": "重置" },
+              { "type": "submit", "label": "查询", "level": "primary" }
+            ]
+          },
+          "columns": [
+            { "name": "tool_key", "label": "工具唯一键", "type": "text" },
+            { "name": "description", "label": "描述", "type": "text" },
+            { "name": "server_name", "label": "MCP 服务", "type": "text", "placeholder": "本地" },
+            {
+              "name": "effective_approval_policy",
+              "label": "有效策略",
+              "type": "mapping",
+              "map": {
+                "ALLOW": "<span class='label label-success'>ALLOW</span>",
+                "ASK": "<span class='label label-warning'>ASK</span>",
+                "DENY": "<span class='label label-danger'>DENY</span>"
+              }
+            },
+            { "name": "default_approval_policy", "label": "默认策略", "type": "text" },
+            { "name": "risk_level", "label": "风险", "type": "text" },
+            {
+              "name": "available",
+              "label": "可用",
+              "type": "mapping",
+              "map": {
+                "true": "<span class='label label-success'>可用</span>",
+                "false": "<span class='label label-default'>不可用</span>",
+                "*": "<span class='label label-default'>未知</span>"
+              }
+            },
+            {
+              "type": "operation",
+              "label": "设置策略",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "允许",
+                  "level": "success",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": "ALLOW" } },
+                  "reload": "mcp_tool_policy_list"
+                },
+                {
+                  "type": "button",
+                  "label": "询问",
+                  "level": "warning",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": "ASK" } },
+                  "reload": "mcp_tool_policy_list"
+                },
+                {
+                  "type": "button",
+                  "label": "禁止",
+                  "level": "danger",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": "DENY" } },
+                  "reload": "mcp_tool_policy_list"
+                },
+                {
+                  "type": "button",
+                  "label": "恢复默认",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": null } },
+                  "reload": "mcp_tool_policy_list"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "待审批队列",
+      "icon": "fa fa-clock-o",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "MCP 审批队列",
+        "size": "xl",
+        "body": {
+          "name": "mcp_approval_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/mcp/approvals/list",
+          "interval": 3000,
+          "silentPolling": true,
+          "defaultParams": { "page": 1, "perPage": 20 },
+          "placeholder": "暂无待审批的 MCP 工具调用",
+          "columns": [
+            { "name": "request_id", "label": "请求 ID", "type": "text" },
+            { "name": "tool_name", "label": "工具", "type": "text" },
+            { "name": "server_name", "label": "服务", "type": "text", "placeholder": "本地" },
+            { "name": "requester_user_id", "label": "发起用户", "type": "text" },
+            { "name": "status", "label": "状态", "type": "text" },
+            { "name": "create_time", "label": "创建时间", "type": "datetime" },
+            { "name": "expire_time", "label": "过期时间", "type": "datetime" },
+            {
+              "type": "operation",
+              "label": "操作",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "允许本次",
+                  "level": "primary",
+                  "visibleOn": "${status === 'PENDING'}",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/approvals/${request_id}/decision", "data": { "decision": "approved" } },
+                  "reload": "mcp_approval_list"
+                },
+                {
+                  "type": "button",
+                  "label": "拒绝",
+                  "visibleOn": "${status === 'PENDING'}",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/approvals/${request_id}/decision", "data": { "decision": "rejected" } },
+                  "reload": "mcp_approval_list"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "调用审计",
+      "icon": "fa fa-history",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "MCP 工具调用审计",
+        "size": "xl",
+        "body": {
+          "name": "mcp_invocation_audit_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/mcp/invocations/list",
+          "defaultParams": { "page": 1, "perPage": 20 },
+          "syncLocation": false,
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 20,
+          "perPageAvailable": [10, 20, 50, 100],
+          "autoJumpToTopOnPagerChange": true,
+          "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+          "filter": {
+            "title": "审计检索",
+            "body": [
+              {
+                "label": "关键词",
+                "type": "input-text",
+                "name": "keyword",
+                "clearable": true,
+                "placeholder": "请求 ID、工具、服务、会话或 Agent"
+              },
+              {
+                "label": "渠道",
+                "type": "select",
+                "name": "channel",
+                "clearable": true,
+                "options": [
+                  { "label": "DIH Chat", "value": "CHAT_AGENT" },
+                  { "label": "后台 Agent", "value": "BACKGROUND_AGENT" },
+                  { "label": "MCP Server", "value": "MCP_SERVER" },
+                  { "label": "手工测试", "value": "MANUAL" }
+                ]
+              },
+              {
+                "label": "状态",
+                "type": "select",
+                "name": "status",
+                "clearable": true,
+                "options": [
+                  { "label": "等待审批", "value": "PENDING" },
+                  { "label": "已批准", "value": "APPROVED" },
+                  { "label": "执行中", "value": "RUNNING" },
+                  { "label": "成功", "value": "SUCCEEDED" },
+                  { "label": "失败", "value": "FAILED" },
+                  { "label": "已拒绝", "value": "REJECTED" },
+                  { "label": "策略禁止", "value": "DENIED" },
+                  { "label": "已超时", "value": "EXPIRED" },
+                  { "label": "已取消", "value": "CANCELLED" }
+                ]
+              },
+              {
+                "label": "策略快照",
+                "type": "select",
+                "name": "policy",
+                "clearable": true,
+                "options": [
+                  { "label": "ALLOW", "value": "ALLOW" },
+                  { "label": "ASK", "value": "ASK" },
+                  { "label": "DENY", "value": "DENY" }
+                ]
+              },
+              {
+                "label": "审批范围",
+                "type": "select",
+                "name": "approvalScope",
+                "clearable": true,
+                "options": [
+                  { "label": "允许本次", "value": "ONCE" },
+                  { "label": "本会话允许", "value": "SESSION" },
+                  { "label": "分析任务自动批准", "value": "TASK_AUTO" },
+                  { "label": "本次任务允许", "value": "TASK_RUN" }
+                ]
+              },
+              {
+                "label": "发起用户 ID",
+                "type": "input-number",
+                "name": "requesterUserId",
+                "clearable": true
+              },
+              {
+                "label": "审批人 ID",
+                "type": "input-number",
+                "name": "decisionBy",
+                "clearable": true
+              },
+              {
+                "label": "分析任务 ID",
+                "type": "input-number",
+                "name": "analysisTaskId",
+                "clearable": true
+              },
+              {
+                "label": "Execution ID",
+                "type": "input-text",
+                "name": "executionId",
+                "clearable": true
+              }
+            ],
+            "actions": [
+              { "type": "reset", "label": "重置" },
+              { "type": "submit", "label": "查询", "level": "primary" }
+            ]
+          },
+          "columns": [
+            { "name": "request_id", "label": "请求 ID", "type": "text" },
+            { "name": "tool_key", "label": "工具", "type": "text" },
+            { "name": "analysis_task_id", "label": "分析任务", "type": "text", "placeholder": "-" },
+            { "name": "task_execution_id", "label": "Execution ID", "type": "text", "placeholder": "-", "toggled": false },
+            { "name": "channel", "label": "渠道", "type": "text" },
+            { "name": "policy", "label": "策略快照", "type": "text" },
+            { "name": "approval_scope", "label": "审批范围", "type": "text", "placeholder": "无需审批" },
+            { "name": "status", "label": "状态", "type": "text" },
+            { "name": "decision_by", "label": "审批人", "type": "text" },
+            { "name": "duration_millis", "label": "耗时(ms)", "type": "text" },
+            { "name": "arguments_summary", "label": "参数摘要", "type": "json" },
+            { "name": "result_summary", "label": "结果摘要", "type": "json" },
+            { "name": "error_summary", "label": "错误摘要", "type": "text" },
+            { "name": "create_time", "label": "创建时间", "type": "datetime" }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
       "label": "刷新",
       "icon": "fa fa-repeat",
       "actionType": "reload",

@@ -1,9 +1,13 @@
 package com.coolxer.model.system.dto;
 
+import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 /**
  * AI分析任务传输对象
@@ -42,4 +46,15 @@ public class AnalysisTaskDto {
      * 计划执行时间，为空表示立即进入队列
      */
     private Date scheduledTime;
+
+    /**
+     * MCP 工具审批模式，创建和编辑时必须明确设置。
+     */
+    @NotNull(message = "请选择MCP审批模式")
+    private AnalysisTaskApprovalMode approvalMode;
+
+    /**
+     * 任务要额外加载的已启用 Skill ID。
+     */
+    private List<String> skillIds = new ArrayList<>();
 }

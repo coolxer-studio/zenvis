@@ -19,6 +19,16 @@ public enum AnalysisTaskStatus {
     RUNNING("执行中"),
 
     /**
+     * 等待 MCP 工具审批
+     */
+    WAITING_APPROVAL("等待审批"),
+
+    /**
+     * 取消请求已提交，等待后台执行线程退出
+     */
+    CANCELING("取消中"),
+
+    /**
      * 执行成功
      */
     SUCCESS("执行成功"),
@@ -40,6 +50,10 @@ public enum AnalysisTaskStatus {
     }
 
     public boolean isRunning() {
-        return this == RUNNING;
+        return this == RUNNING || this == WAITING_APPROVAL || this == CANCELING;
+    }
+
+    public boolean isTerminal() {
+        return this == SUCCESS || this == FAILED || this == CANCELED;
     }
 }

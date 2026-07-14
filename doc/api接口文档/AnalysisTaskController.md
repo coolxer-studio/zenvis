@@ -1,115 +1,114 @@
-# AnalysisTask AI分析任务接口文档
+# AnalysisTaskController 分析任务接口
 
-**基础信息**
-- **模块名称**: AI分析任务
-- **基础路径**: `/api/v1/system/analysis-task`
-- **协议**: HTTP/HTTPS
-- **数据格式**: JSON
-- **默认端口**: `11002`
+## 1. 基础信息
 
----
+- 模块：一次性后台 Agent 分析任务
+- 基础路径：`/api/v1/system/analysis-task`
+- 数据格式：JSON，wire 字段使用 `snake_case`
+- 鉴权：登录用户；任务 MCP 审批仅任务创建人或超级管理员
 
-## 数据模型定义
+分析任务提交后在后台运行，关闭页面不会中断。任务可以指定一次性计划时间，也可以按优先级进入普通队列。
 
-### 1. AnalysisTaskDto (AI分析任务传输对象)
+## 2. 创建/更新模型
 
 ```json
 {
-  "name": "最近7天API调用分析",
-  "description": "分析接口调用趋势和异常点",
+  "name": "最近7天 API 调用分析",
+  "description": "分析调用趋势和异常点",
   "model": "auto",
-  "prompt": "请分析最近7天API调用次数、失败率和异常峰值，并给出优化建议。",
+  "prompt": "分析最近7天调用量、失败率和异常峰值，并给出建议。",
   "priority": 10,
-  "scheduledTime": "2026-06-28T10:00:00.000+08:00"
+  "scheduled_time": null,
+  "approval_mode": "MANUAL",
+  "skill_ids": ["analysis-agent"]
 }
 ```
 
-**字段说明**:
 | 字段 | 类型 | 必填 | 说明 |
-|-----|------|-----|------|
-| name | String | 是 | 任务名称 |
-| description | String | 否 | 任务描述 |
-| model | String | 否 | 模型名称，为空或 `auto` 时使用系统默认模型 |
-| prompt | String | 是 | 分析提示词，会作为AI分析任务的核心输入存储 |
-| priority | Integer | 否 | 队列优先级，数值越大越先执行，默认 `0` |
-| scheduledTime | Date | 否 | 计划执行时间，为空表示立即进入待执行队列 |
+|---|---|---|---|
+| `name` | String | 是 | 任务名称 |
+| `description` | String | 否 | 任务说明 |
+| `model` | String | 否 | 模型名称；`auto` 或空值由系统自动选择 |
+| `prompt` | String | 是 | Agent 分析指令 |
+| `priority` | Integer | 否 | 越大越先执行，默认 0 |
+| `scheduled_time` | Date | 否 | 一次性计划时间；空值表示进入普通队列 |
+| `approval_mode` | Enum | 是 | `AUTO` 或 `MANUAL` |
+| `skill_ids` | String[] | 否 | 完整替换语义，只允许已扫描且启用的 Skill |
 
-### 2. AnalysisTaskVo (AI分析任务视图对象)
+创建和编辑页面的模型来自：
+
+```http
+GET /api/v1/dih/model/list
+```
+
+Skill 选项来自：
+
+```http
+GET /api/v1/dih/skills/options?enabled=true
+```
+
+更新接口采用完整替换语义，`scheduled_time` 和 `skill_ids` 可以显式清空，`approval_mode` 不允许为空。
+
+## 3. 返回模型
+
+任务详情示例：
 
 ```json
 {
   "id": 1,
-  "name": "最近7天API调用分析",
-  "description": "分析接口调用趋势和异常点",
+  "name": "最近7天 API 调用分析",
+  "description": "分析调用趋势和异常点",
   "model": "auto",
-  "prompt": "请分析最近7天API调用次数、失败率和异常峰值，并给出优化建议。",
-  "result": "AI分析返回结果",
-  "errorMessage": null,
-  "status": "SUCCESS",
-  "statusDescription": "执行成功",
+  "prompt": "分析最近7天调用量、失败率和异常峰值，并给出建议。",
+  "result": null,
+  "error_message": null,
+  "status": "WAITING_APPROVAL",
+  "status_description": "等待审批",
   "priority": 10,
-  "scheduledTime": "2026-06-28T10:00:00.000+08:00",
-  "startTime": "2026-06-28T10:00:05.000+08:00",
-  "finishTime": "2026-06-28T10:00:20.000+08:00",
-  "runCount": 1,
-  "createTime": "2026-06-28T09:58:00.000+08:00",
-  "updateTime": "2026-06-28T10:00:20.000+08:00",
-  "createBy": 1
+  "approval_mode": "MANUAL",
+  "execution_id": "c26a0ce0-7d4c-4a5e-bb84-d205c9c5ac31",
+  "skill_ids": ["analysis-agent"],
+  "pending_approval_count": 1,
+  "scheduled_time": null,
+  "start_time": "2026-07-14T15:00:00.000+08:00",
+  "finish_time": null,
+  "run_count": 1,
+  "create_time": "2026-07-14T14:59:00.000+08:00",
+  "update_time": "2026-07-14T15:00:05.000+08:00",
+  "create_by": 1
 }
 ```
 
-**状态说明**:
-| 状态值 | 说明 | 是否可重新入队 | 是否可取消 | 是否可删除 |
-|-------|------|---------------|-----------|-----------|
-| PENDING | 等待执行 | 是 | 是 | 是 |
-| RUNNING | 执行中 | 否 | 否 | 否 |
-| SUCCESS | 执行成功 | 是 | 是 | 是 |
-| FAILED | 执行失败 | 是 | 是 | 是 |
-| CANCELED | 已取消 | 是 | 是 | 是 |
+### 状态
 
-### 3. AnalysisTaskSearchDto (AI分析任务搜索对象)
+| 状态 | 说明 | 允许取消 | 允许编辑/删除/重新入队 |
+|---|---|---:|---:|
+| `PENDING` | 等待计划时间或执行槽 | 是 | 是 |
+| `RUNNING` | 后台 Agent 正在运行 | 是 | 否 |
+| `WAITING_APPROVAL` | MCP 调用等待人工审批 | 是 | 否 |
+| `CANCELING` | 已发出取消请求 | 否 | 否 |
+| `SUCCESS` | 执行成功 | 否 | 是 |
+| `FAILED` | 执行失败 | 否 | 是 |
+| `CANCELED` | 已取消 | 无需再次取消 | 是 |
 
-```json
-{
-  "name": "API",
-  "status": "PENDING",
-  "model": "gpt-4.1",
-  "page": 1,
-  "perPage": 10,
-  "orderBy": "updateTime",
-  "orderDir": "desc"
-}
-```
+## 4. 接口总览
 
-**查询字段说明**:
-| 字段 | 类型 | 必填 | 说明 |
-|-----|------|-----|------|
-| name | String | 否 | 按任务名称模糊搜索 |
-| status | AnalysisTaskStatus | 否 | 按任务状态过滤 |
-| model | String | 否 | 按模型名称过滤 |
-| page | Integer | 否 | 页码，默认 `1` |
-| perPage | Integer | 否 | 每页条数，默认 `10` |
-| orderBy | String | 否 | 当前接口保留字段 |
-| orderDir | String | 否 | 当前接口保留字段 |
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/add` | 创建任务并进入队列 |
+| POST | `/{id}/update` | 完整更新非活动任务 |
+| DELETE | `/{id}` | 删除非活动任务 |
+| DELETE | `/bulk/{ids}` | 批量删除非活动任务 |
+| GET | `/list` | 分页查询任务 |
+| GET | `/{id}/view` | 查询任务详情和结果 |
+| POST | `/{id}/enqueue` | 生成新 execution 并重新入队 |
+| POST | `/{id}/cancel` | 取消等待、运行或待审批任务 |
+| POST | `/queue/run-once` | 认领一个到期任务并异步提交 |
+| GET | `/queue/status` | 查询队列、执行槽和挂起容量 |
+| GET | `/{id}/approvals/list` | 查询任务当前待审批请求 |
+| POST | `/{id}/approvals/{requestId}/decision` | 提交任务 MCP 审批决定 |
 
-### 4. AnalysisTaskQueueVo (队列状态对象)
-
-```json
-{
-  "runningTask": null,
-  "nextTask": {
-    "id": 1,
-    "name": "最近7天API调用分析",
-    "status": "PENDING"
-  },
-  "pendingCount": 3,
-  "readyCount": 2,
-  "runningCount": 0,
-  "checkedAt": "2026-06-28T10:00:00.000+08:00"
-}
-```
-
-### 5. ResponseWrap (统一响应格式)
+所有响应使用统一包装：
 
 ```json
 {
@@ -119,457 +118,201 @@
 }
 ```
 
----
+HTTP 200 不代表业务成功，调用方必须检查 `status === 0`。
 
-## 接口总览
+## 5. 创建任务
 
-| 序号 | HTTP方法 | 接口路径 | 接口名称 | 功能描述 |
-|:---:|:-------:|---------|---------|---------|
-| 1 | POST | `/api/v1/system/analysis-task/add` | 创建分析任务 | 创建任务并进入等待队列 |
-| 2 | DELETE | `/api/v1/system/analysis-task/{id}` | 删除分析任务 | 删除非执行中的任务 |
-| 3 | DELETE | `/api/v1/system/analysis-task/bulk/{ids}` | 批量删除分析任务 | 批量删除非执行中的任务 |
-| 4 | POST | `/api/v1/system/analysis-task/{id}/update` | 更新分析任务 | 更新非执行中的任务 |
-| 5 | GET | `/api/v1/system/analysis-task/list` | 查询任务列表 | 分页查询任务 |
-| 6 | GET | `/api/v1/system/analysis-task/{id}/view` | 查询任务详情 | 查询任务提示词、结果和状态 |
-| 7 | POST | `/api/v1/system/analysis-task/{id}/enqueue` | 重新入队 | 将任务状态重置为 `PENDING` |
-| 8 | POST | `/api/v1/system/analysis-task/{id}/cancel` | 取消任务 | 取消非执行中的任务 |
-| 9 | POST | `/api/v1/system/analysis-task/queue/run-once` | 手动执行一次 | 立即尝试取出一个到期任务执行 |
-| 10 | GET | `/api/v1/system/analysis-task/queue/status` | 查询队列状态 | 查询当前执行任务、下一个任务和队列数量 |
+```http
+POST /api/v1/system/analysis-task/add
+Content-Type: application/json
+```
 
----
-
-## 接口详情
-
-### 1. 创建分析任务
-
-**接口地址**: `POST /api/v1/system/analysis-task/add`
-
-**功能描述**: 创建一个AI分析任务，任务默认进入 `PENDING` 状态。定时调度器每分钟扫描一次，到期后按优先级取出执行。
-
-**请求参数**:
-- Content-Type: `application/json`
-- Body: AnalysisTaskDto
-
-**请求示例**:
 ```bash
-curl -X POST http://localhost:11001/api/v1/system/analysis-task/add \
+curl -X POST "http://localhost:11001/api/v1/system/analysis-task/add" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "最近7天API调用分析",
-    "description": "分析接口调用趋势和异常点",
+    "name": "每日风险分析",
+    "description": "后台分析示例",
     "model": "auto",
-    "prompt": "请分析最近7天API调用次数、失败率和异常峰值，并给出优化建议。",
-    "priority": 10
+    "prompt": "分析最近24小时高风险事件并给出建议。",
+    "priority": 50,
+    "scheduled_time": null,
+    "approval_mode": "MANUAL",
+    "skill_ids": ["analysis-agent"]
   }'
 ```
 
-**成功响应**:
+创建时会校验所选 Skill 存在且启用，并生成首个 `execution_id`。任务初始状态为 `PENDING`。
+
+## 6. 更新任务
+
+```http
+POST /api/v1/system/analysis-task/{id}/update
+```
+
+请求体与创建相同。`RUNNING`、`WAITING_APPROVAL` 和 `CANCELING` 状态不能更新。
+
+## 7. 查询任务
+
+### 分页列表
+
+```http
+GET /api/v1/system/analysis-task/list
+```
+
+| 查询参数 | 类型 | 说明 |
+|---|---|---|
+| `name` | String | 任务名称模糊匹配 |
+| `status` | Enum | 任务状态 |
+| `model` | String | 模型名称 |
+| `approvalMode` | Enum | `AUTO` 或 `MANUAL` |
+| `page` | Integer | 页码，从 1 开始 |
+| `perPage` | Integer | 每页数量 |
+
+```bash
+curl "http://localhost:11001/api/v1/system/analysis-task/list?page=1&perPage=10&status=WAITING_APPROVAL&approvalMode=MANUAL"
+```
+
+### 任务详情
+
+```http
+GET /api/v1/system/analysis-task/{id}/view
+```
+
+返回提示词、结果、错误、Skill、审批数量、executionId 和时间信息。
+
+## 8. 重新入队、取消和删除
+
+### 重新入队
+
+```http
+POST /api/v1/system/analysis-task/{id}/enqueue
+```
+
+重新入队会：
+
+- 校验任务选择的 Skill 当前仍启用。
+- 清理旧 execution 的任务工具授权。
+- 生成新的 `execution_id`。
+- 清空上一次结果、错误和执行时间。
+- 将状态改为 `PENDING`。
+
+### 取消
+
+```http
+POST /api/v1/system/analysis-task/{id}/cancel
+```
+
+- `PENDING` 直接进入 `CANCELED`。
+- `RUNNING` 或 `WAITING_APPROVAL` 先进入 `CANCELING`，后台线程退出后进入 `CANCELED`。
+- 取消会终止待审批请求并清理当前 execution 的工具授权。
+- 已结束任务不需要取消。
+
+### 删除
+
+```http
+DELETE /api/v1/system/analysis-task/{id}
+DELETE /api/v1/system/analysis-task/bulk/{ids}
+```
+
+活动状态任务不能删除。
+
+## 9. 队列接口
+
+### 手动触发一次调度
+
+```http
+POST /api/v1/system/analysis-task/queue/run-once
+```
+
+接口只负责原子认领一个到期任务并提交后台执行，不等待模型完成。成功认领时通常返回 `RUNNING` 任务；没有到期任务、没有执行槽或挂起容量已满时 `data` 为空。
+
+### 队列状态
+
+```http
+GET /api/v1/system/analysis-task/queue/status
+```
+
 ```json
 {
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "id": 1,
-    "name": "最近7天API调用分析",
-    "status": "PENDING",
-    "statusDescription": "等待执行",
-    "priority": 10,
-    "runCount": 0
-  }
+  "running_task": null,
+  "next_task": {"id": 2, "name": "每日风险分析", "status": "PENDING"},
+  "pending_count": 3,
+  "ready_count": 2,
+  "running_count": 0,
+  "waiting_approval_count": 1,
+  "available_slots": 1,
+  "max_suspended": 20,
+  "checked_at": "2026-07-14T15:00:00.000+08:00"
 }
 ```
 
----
+调度规则：到期计划任务优先；普通任务按优先级降序、创建时间升序。后台调度间隔由 `app.ai.analysis-task.dispatch-delay-ms` 控制。
 
-### 2. 删除分析任务
+## 10. 任务 MCP 审批
 
-**接口地址**: `DELETE /api/v1/system/analysis-task/{id}`
+### 查询待审批请求
 
-**功能描述**: 根据ID删除任务。`RUNNING` 状态任务不允许删除。
-
-**路径参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| id | Long | 是 | 任务ID |
-
-**请求示例**:
-```bash
-curl -X DELETE http://localhost:11001/api/v1/system/analysis-task/1
+```http
+GET /api/v1/system/analysis-task/{id}/approvals/list?page=1&perPage=20
 ```
 
-**成功响应**:
+只返回该任务当前处于 `PENDING` 的 MCP 调用。任务创建人和超级管理员可以访问。
+
+### 提交决定
+
+```http
+POST /api/v1/system/analysis-task/{id}/approvals/{requestId}/decision
+Content-Type: application/json
+```
+
 ```json
 {
-  "status": 0,
-  "msg": "请求成功",
-  "data": "删除成功"
+  "decision": "approved_task",
+  "comment": "本次任务允许持续查询此工具"
 }
 ```
 
----
+| 决定 | 说明 |
+|---|---|
+| `approved` | 只允许当前 requestId |
+| `approved_task` | 当前 execution、精确 toolKey 持续允许 |
+| `rejected` | 拒绝当前调用，底层工具不执行，Agent 继续运行 |
 
-### 3. 批量删除分析任务
+`approved_task` 只适用于分析任务接口。任务审批不设置五分钟超时，会一直等待决定或任务取消。
 
-**接口地址**: `DELETE /api/v1/system/analysis-task/bulk/{ids}`
+## 11. 审批模式
 
-**功能描述**: 批量删除任务。任一任务处于 `RUNNING` 状态时，该任务不允许删除。
+- `AUTO`：`ALLOW` 直接执行；`ASK` 自动批准并记录 `TASK_AUTO`；`DENY` 禁止。
+- `MANUAL`：`ASK` 进入 `WAITING_APPROVAL`；批准后的当前 execution 授权记录为 `TASK_RUN`。
 
-**路径参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| ids | List\<Long\> | 是 | 任务ID列表，多个ID用英文逗号分隔 |
+拒绝不会直接把任务标记为失败。MCP 层返回结构化拒绝结果，Agent 可以继续解释并保存最终分析结果。
 
-**请求示例**:
-```bash
-curl -X DELETE http://localhost:11001/api/v1/system/analysis-task/bulk/1,2,3
+## 12. Skill 与服务重启
+
+- 创建、编辑、重新入队和实际执行前都校验 Skill。
+- 任务只保存 Skill ID，运行时读取最新内容。
+- Skill 被停用或删除后，任务会进入 `FAILED`，错误信息列出具体 Skill。
+- 服务重启时，`RUNNING` 和 `WAITING_APPROVAL` 任务会生成新 execution 并从头重新入队。
+- 旧审批和旧任务授权失效；重启前已执行的外部副作用无法自动回滚。
+
+## 13. 配置
+
+```properties
+app.ai.analysis-task.max-concurrency=1
+app.ai.analysis-task.max-suspended=20
+app.ai.analysis-task.dispatch-delay-ms=5000
 ```
 
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": "删除成功"
-}
-```
-
----
-
-### 4. 更新分析任务
-
-**接口地址**: `POST /api/v1/system/analysis-task/{id}/update`
-
-**功能描述**: 更新非执行中的任务信息。`RUNNING` 状态任务不允许更新。
-
-**路径参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| id | Long | 是 | 任务ID |
-
-**请求参数**:
-- Content-Type: `application/json`
-- Body: AnalysisTaskDto
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:11001/api/v1/system/analysis-task/1/update \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "最近30天API调用分析",
-    "description": "扩大统计窗口，补充趋势分析",
-    "model": "auto",
-    "prompt": "请分析最近30天API调用趋势、失败率、异常峰值和优化建议。",
-    "priority": 20
-  }'
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": "修改成功"
-}
-```
-
----
-
-### 5. 查询任务列表
-
-**接口地址**: `GET /api/v1/system/analysis-task/list`
-
-**功能描述**: 分页查询AI分析任务，支持按名称、状态、模型过滤。
-
-**查询参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| name | String | 否 | 任务名称模糊搜索 |
-| status | AnalysisTaskStatus | 否 | 状态过滤，如 `PENDING`、`SUCCESS` |
-| model | String | 否 | 模型过滤 |
-| page | Integer | 否 | 页码，默认 `1` |
-| perPage | Integer | 否 | 每页条数，默认 `10` |
-
-**请求示例**:
-```bash
-curl -X GET "http://localhost:11001/api/v1/system/analysis-task/list?page=1&perPage=10&status=PENDING"
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "rows": [
-      {
-        "id": 1,
-        "name": "最近7天API调用分析",
-        "status": "PENDING",
-        "statusDescription": "等待执行",
-        "priority": 10,
-        "runCount": 0
-      }
-    ],
-    "total": 1
-  }
-}
-```
-
----
-
-### 6. 查询任务详情
-
-**接口地址**: `GET /api/v1/system/analysis-task/{id}/view`
-
-**功能描述**: 根据ID查询任务详情，包括提示词、AI返回结果、错误信息和执行时间。
-
-**路径参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| id | Long | 是 | 任务ID |
-
-**请求示例**:
-```bash
-curl -X GET http://localhost:11001/api/v1/system/analysis-task/1/view
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "id": 1,
-    "name": "最近7天API调用分析",
-    "prompt": "请分析最近7天API调用次数、失败率和异常峰值，并给出优化建议。",
-    "result": "AI分析返回结果",
-    "errorMessage": null,
-    "status": "SUCCESS",
-    "runCount": 1
-  }
-}
-```
-
----
-
-### 7. 重新入队
-
-**接口地址**: `POST /api/v1/system/analysis-task/{id}/enqueue`
-
-**功能描述**: 将任务重新放回队列，状态重置为 `PENDING`，并清空上一次结果、错误和执行时间。`RUNNING` 状态任务不允许重新入队。
-
-**路径参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| id | Long | 是 | 任务ID |
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:11001/api/v1/system/analysis-task/1/enqueue
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "id": 1,
-    "status": "PENDING",
-    "result": null,
-    "errorMessage": null
-  }
-}
-```
-
----
-
-### 8. 取消任务
-
-**接口地址**: `POST /api/v1/system/analysis-task/{id}/cancel`
-
-**功能描述**: 取消非执行中的任务，状态变为 `CANCELED`。`RUNNING` 状态任务不允许取消。
-
-**路径参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|-------|------|-----|------|
-| id | Long | 是 | 任务ID |
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:11001/api/v1/system/analysis-task/1/cancel
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "id": 1,
-    "status": "CANCELED",
-    "statusDescription": "已取消"
-  }
-}
-```
-
----
-
-### 9. 手动执行一次队列
-
-**接口地址**: `POST /api/v1/system/analysis-task/queue/run-once`
-
-**功能描述**: 立即尝试从队列中取出一个到期的 `PENDING` 任务执行。若当前已有 `RUNNING` 任务，或没有到期任务，则返回成功但 `data` 为空。
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:11001/api/v1/system/analysis-task/queue/run-once
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "id": 1,
-    "status": "SUCCESS",
-    "result": "AI分析返回结果",
-    "runCount": 1
-  }
-}
-```
-
----
-
-### 10. 查询队列状态
-
-**接口地址**: `GET /api/v1/system/analysis-task/queue/status`
-
-**功能描述**: 查询当前队列状态，包括当前执行任务、下一个等待任务、等待任务数、到期可执行任务数和执行中任务数。
-
-**请求示例**:
-```bash
-curl -X GET http://localhost:11001/api/v1/system/analysis-task/queue/status
-```
-
-**成功响应**:
-```json
-{
-  "status": 0,
-  "msg": "请求成功",
-  "data": {
-    "runningTask": null,
-    "nextTask": {
-      "id": 1,
-      "name": "最近7天API调用分析",
-      "status": "PENDING"
-    },
-    "pendingCount": 1,
-    "readyCount": 1,
-    "runningCount": 0,
-    "checkedAt": "2026-06-28T10:00:00.000+08:00"
-  }
-}
-```
-
----
-
-## 接口测试
-
-以下脚本覆盖创建、列表、队列状态、手动执行、详情、重新入队、取消和删除。若环境开启登录认证，请先登录并将 Cookie 写入 `COOKIE` 变量。
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-BASE_URL="${BASE_URL:-http://localhost:11001}"
-COOKIE="${COOKIE:-}"
-
-AUTH_ARGS=()
-if [ -n "$COOKIE" ]; then
-  AUTH_ARGS=(-b "$COOKIE")
-fi
-
-echo "1. 创建立即执行的分析任务"
-CREATE_RESPONSE=$(curl -sS -X POST "$BASE_URL/api/v1/system/analysis-task/add" \
-  "${AUTH_ARGS[@]}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "接口测试-分析任务",
-    "description": "接口文档自动测试任务",
-    "model": "auto",
-    "prompt": "请用三句话分析测试数据：总调用量1000，失败量25，平均响应时间120ms。",
-    "priority": 100
-  }')
-echo "$CREATE_RESPONSE"
-
-TASK_ID=$(echo "$CREATE_RESPONSE" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p' | head -1)
-if [ -z "$TASK_ID" ]; then
-  echo "创建任务失败，未解析到任务ID"
-  exit 1
-fi
-
-echo "2. 查询任务列表"
-curl -sS -X GET "$BASE_URL/api/v1/system/analysis-task/list?page=1&perPage=10&name=接口测试" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "3. 查询队列状态"
-curl -sS -X GET "$BASE_URL/api/v1/system/analysis-task/queue/status" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "4. 手动执行一次队列"
-curl -sS -X POST "$BASE_URL/api/v1/system/analysis-task/queue/run-once" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "5. 查询任务详情，检查 result 或 errorMessage"
-curl -sS -X GET "$BASE_URL/api/v1/system/analysis-task/$TASK_ID/view" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "6. 重新入队"
-curl -sS -X POST "$BASE_URL/api/v1/system/analysis-task/$TASK_ID/enqueue" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "7. 取消任务"
-curl -sS -X POST "$BASE_URL/api/v1/system/analysis-task/$TASK_ID/cancel" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "8. 删除任务"
-curl -sS -X DELETE "$BASE_URL/api/v1/system/analysis-task/$TASK_ID" \
-  "${AUTH_ARGS[@]}"
-echo
-
-echo "分析任务接口测试完成"
-```
-
-**测试说明**:
-- `queue/run-once` 会真实调用AI模型；如果本地未配置有效 OpenAI API Key，项目的本地 fallback 模型会返回“AI 对话暂不可用”的提示，该结果仍会写入任务 `result`。
-- 定时任务每隔1分钟自动执行一次队列；接口测试中使用 `queue/run-once` 是为了立即验证执行链路。
-- `RUNNING` 状态任务不能更新、删除、取消或重新入队。
-
----
-
-## 响应码汇总
-
-| 响应码 | 说明 | 触发场景 |
-|--------|------|---------|
-| 0 | 请求成功 | 接口调用成功 |
-| 1 | 请求失败 | 通用服务端失败 |
-| 99 | 不支持的操作 | 执行中的任务被更新、删除、取消或重新入队 |
-| 301 | 必填字段不能为空 | 创建或更新时 `name`、`prompt` 为空 |
-
----
-
-## 注意事项
-
-1. **队列调度**: 系统启动后每60秒扫描一次到期 `PENDING` 任务。
-2. **执行顺序**: 队列按 `priority DESC`、`scheduledTime ASC`、`createTime ASC`、`id ASC` 取下一个任务。
-3. **单任务执行**: 同一应用实例内使用执行锁保护，同一时间只执行一个AI分析任务。
-4. **结果持久化**: 任务提示词存储在 `prompt`，AI返回结果存储在 `result`，异常信息存储在 `errorMessage`。
-5. **启动恢复**: 服务启动时若发现历史 `RUNNING` 任务，会标记为 `FAILED`，可通过重新入队再次执行。
+| 配置 | 说明 |
+|---|---|
+| `max-concurrency` | 同时占用正常执行槽的任务数 |
+| `max-suspended` | 最多允许挂起等待审批的任务数 |
+| `dispatch-delay-ms` | 调度轮询间隔 |
+
+## 14. 相关文档
+
+- [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)
+- [MCP Client 与业务 Agent 工具集成设计说明](../DIH/MCP-Client-Agent-Design.md)
+- [SkillController](SkillController.md)
+- [McpController](McpController.md)

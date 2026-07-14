@@ -2,6 +2,7 @@ package com.coolxer.controller.policy;
 
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.dih.mcp.McpToolApproval;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -19,6 +20,9 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import static com.coolxer.commons.enums.McpApprovalPolicy.ALLOW;
+import static com.coolxer.commons.enums.McpToolRiskLevel.LOW;
+
 /**
  * MCP 工具：策略配置校验与轻量模拟。
  */
@@ -33,6 +37,7 @@ public class PolicyConfigValidationMcpTool {
         this.configService = configService;
     }
 
+    @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "policy_config_validate", description = "校验策略 JSON 语法、根结构、必填字段和 schema 中声明的基础类型")
     public PolicyValidationResult validate(@ToolParam(description = "配置类型：checker、rating 或 punish") String type,
                                            @ToolParam(description = "配置文件名，例如 host.json、rating_rule.json、risk-block.json") String fileName,
@@ -40,6 +45,7 @@ public class PolicyConfigValidationMcpTool {
         return validateInternal(type, fileName, text);
     }
 
+    @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "policy_config_simulate", description = "按策略类型做轻量模拟，返回是否通过、命中规则、风险提示和建议")
     public PolicySimulationResult simulate(@ToolParam(description = "配置类型：checker、rating 或 punish") String type,
                                            @ToolParam(description = "配置文件名，例如 host.json、rating_rule.json、risk-block.json") String fileName,

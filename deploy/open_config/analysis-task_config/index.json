@@ -27,10 +27,16 @@
             {
               "label": "模型",
               "name": "model",
-              "type": "input-text",
-              "placeholder": "auto",
+              "type": "select",
+              "source": "/zenvis/api/v1/dih/model/list",
+              "labelField": "model",
+              "valueField": "model",
+              "searchable": true,
+              "placeholder": "请选择可用模型",
               "value": "auto",
-              "clearable": true
+              "clearable": false,
+              "required": true,
+              "description": "模型列表与 DIH Chat 保持一致；auto 表示由系统自动选择。"
             },
             {
               "label": "优先级",
@@ -47,6 +53,37 @@
               "format": "YYYY-MM-DD HH:mm:ss",
               "inputFormat": "YYYY-MM-DD HH:mm:ss",
               "clearable": true
+            },
+            {
+              "label": "MCP审批模式",
+              "name": "approval_mode",
+              "type": "radios",
+              "required": true,
+              "options": [
+                {
+                  "label": "需要人工审批",
+                  "value": "MANUAL"
+                },
+                {
+                  "label": "无需人工审批",
+                  "value": "AUTO"
+                }
+              ],
+              "description": "无需人工审批会自动批准全局 ASK 工具，但绝不会覆盖 DENY。"
+            },
+            {
+              "label": "使用 Skill",
+              "name": "skill_ids",
+              "type": "select",
+              "multiple": true,
+              "searchable": true,
+              "clearable": true,
+              "labelField": "label",
+              "valueField": "value",
+              "joinValues": false,
+              "extractValue": true,
+              "source": "/zenvis/api/v1/dih/skills/options?enabled=true",
+              "description": "只能选择已启用 Skill；若执行前被停用或删除，任务将失败。"
             },
             {
               "label": "描述说明",
@@ -92,7 +129,8 @@
       "name": "analysis_task_queue_status",
       "type": "service",
       "api": "/zenvis/api/v1/system/analysis-task/queue/status",
-      "interval": 60000,
+      "interval": 5000,
+      "silentPolling": true,
       "body": [
         {
           "type": "property",
@@ -110,6 +148,18 @@
             {
               "label": "执行中",
               "content": "${running_count|default:0}"
+            },
+            {
+              "label": "等待审批",
+              "content": "${waiting_approval_count|default:0}"
+            },
+            {
+              "label": "可用执行槽",
+              "content": "${available_slots|default:0}"
+            },
+            {
+              "label": "最大挂起数",
+              "content": "${max_suspended|default:0}"
             },
             {
               "label": "下一个任务",
@@ -131,6 +181,8 @@
       "name": "analysis_task_list",
       "type": "crud",
       "api": "/zenvis/api/v1/system/analysis-task/list",
+      "interval": 5000,
+      "silentPolling": true,
       "defaultParams": {
         "page": 1,
         "perPage": 10
@@ -170,7 +222,25 @@
               {
                 "label": "已取消",
                 "value": "CANCELED"
+              },
+              {
+                "label": "等待审批",
+                "value": "WAITING_APPROVAL"
+              },
+              {
+                "label": "取消中",
+                "value": "CANCELING"
               }
+            ]
+          },
+          {
+            "label": "审批模式",
+            "type": "select",
+            "name": "approvalMode",
+            "clearable": true,
+            "options": [
+              { "label": "自动批准 ASK", "value": "AUTO" },
+              { "label": "人工审批", "value": "MANUAL" }
             ]
           },
           {
@@ -215,6 +285,8 @@
           "map": {
             "PENDING": "<span class='label label-info'>等待执行</span>",
             "RUNNING": "<span class='label label-warning'>执行中</span>",
+            "WAITING_APPROVAL": "<span class='label label-warning'>等待审批</span>",
+            "CANCELING": "<span class='label label-default'>取消中</span>",
             "SUCCESS": "<span class='label label-success'>执行成功</span>",
             "FAILED": "<span class='label label-danger'>执行失败</span>",
             "CANCELED": "<span class='label label-default'>已取消</span>",
@@ -233,6 +305,31 @@
           "name": "priority",
           "label": "优先级",
           "type": "text",
+          "toggled": true
+        },
+        {
+          "name": "approval_mode",
+          "label": "审批模式",
+          "type": "mapping",
+          "map": {
+            "AUTO": "<span class='label label-warning'>自动批准 ASK</span>",
+            "MANUAL": "<span class='label label-info'>人工审批</span>",
+            "*": "<span class='label label-default'>人工审批</span>"
+          },
+          "toggled": true
+        },
+        {
+          "name": "skill_ids",
+          "label": "Skill",
+          "type": "tpl",
+          "tpl": "${skill_ids|join:', '|default:'-'}",
+          "toggled": false
+        },
+        {
+          "name": "pending_approval_count",
+          "label": "待审批",
+          "type": "text",
+          "placeholder": "0",
           "toggled": true
         },
         {
@@ -336,6 +433,18 @@
                           "content": "${priority}"
                         },
                         {
+                          "label": "审批模式",
+                          "content": "${approval_mode == 'AUTO' ? '自动批准 ASK' : '人工审批'}"
+                        },
+                        {
+                          "label": "Skill",
+                          "content": "${skill_ids|join:', '|default:'未选择'}"
+                        },
+                        {
+                          "label": "Execution ID",
+                          "content": "${execution_id|default:'-'}"
+                        },
+                        {
                           "label": "执行次数",
                           "content": "${run_count}"
                         },
@@ -386,6 +495,98 @@
                             "language": "text",
                             "value": "${error_message|default:'暂无错误'}"
                           }
+                        },
+                        {
+                          "title": "MCP调用审计",
+                          "body": {
+                            "type": "crud",
+                            "api": "/zenvis/api/v1/dih/mcp/invocations/list?analysisTaskId=${id}&executionId=${execution_id}",
+                            "defaultParams": { "page": 1, "perPage": 20 },
+                            "columns": [
+                              { "name": "request_id", "label": "请求 ID", "type": "text" },
+                              { "name": "tool_key", "label": "工具", "type": "text" },
+                              { "name": "policy", "label": "策略", "type": "text" },
+                              { "name": "approval_scope", "label": "审批范围", "type": "text", "placeholder": "无需审批" },
+                              { "name": "status", "label": "状态", "type": "text" },
+                              { "name": "arguments_summary", "label": "参数摘要", "type": "json" },
+                              { "name": "result_summary", "label": "结果摘要", "type": "json" },
+                              { "name": "error_summary", "label": "错误", "type": "text" },
+                              { "name": "create_time", "label": "创建时间", "type": "datetime" }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-shield text-warning",
+              "tooltip": "处理MCP审批",
+              "visibleOn": "pending_approval_count > 0",
+              "actionType": "dialog",
+              "dialog": {
+                "size": "xl",
+                "title": "MCP工具审批 - ${name}",
+                "body": {
+                  "name": "analysis_task_approval_list",
+                  "type": "crud",
+                  "api": "/zenvis/api/v1/system/analysis-task/${id}/approvals/list",
+                  "interval": 3000,
+                  "silentPolling": true,
+                  "defaultParams": { "page": 1, "perPage": 20 },
+                  "placeholder": "暂无待审批的MCP工具调用",
+                  "columns": [
+                    { "name": "tool_name", "label": "工具", "type": "text" },
+                    { "name": "server_name", "label": "来源", "type": "text", "placeholder": "ZenVis内置工具" },
+                    { "name": "description", "label": "说明", "type": "text" },
+                    { "name": "risk_level", "label": "风险", "type": "text" },
+                    { "name": "arguments_summary", "label": "调用参数", "type": "json" },
+                    { "name": "create_time", "label": "创建时间", "type": "datetime" },
+                    {
+                      "type": "operation",
+                      "label": "审批",
+                      "buttons": [
+                        {
+                          "type": "button",
+                          "label": "允许本次",
+                          "level": "primary",
+                          "actionType": "ajax",
+                          "confirmText": "确认允许本次MCP工具调用？",
+                          "api": {
+                            "method": "post",
+                            "url": "/zenvis/api/v1/system/analysis-task/${analysis_task_id}/approvals/${request_id}/decision",
+                            "data": { "decision": "approved" }
+                          },
+                          "reload": "analysis_task_approval_list,analysis_task_list,analysis_task_queue_status"
+                        },
+                        {
+                          "type": "button",
+                          "label": "本任务一直允许",
+                          "level": "success",
+                          "actionType": "ajax",
+                          "confirmText": "本次执行后续调用相同工具将不再询问，确认继续？",
+                          "api": {
+                            "method": "post",
+                            "url": "/zenvis/api/v1/system/analysis-task/${analysis_task_id}/approvals/${request_id}/decision",
+                            "data": { "decision": "approved_task" }
+                          },
+                          "reload": "analysis_task_approval_list,analysis_task_list,analysis_task_queue_status"
+                        },
+                        {
+                          "type": "button",
+                          "label": "拒绝",
+                          "level": "danger",
+                          "actionType": "ajax",
+                          "confirmText": "确认拒绝本次MCP工具调用？分析Agent会在不执行该工具的情况下继续。",
+                          "api": {
+                            "method": "post",
+                            "url": "/zenvis/api/v1/system/analysis-task/${analysis_task_id}/approvals/${request_id}/decision",
+                            "data": { "decision": "rejected" }
+                          },
+                          "reload": "analysis_task_approval_list,analysis_task_list,analysis_task_queue_status"
                         }
                       ]
                     }
@@ -397,7 +598,7 @@
               "type": "button",
               "icon": "fa fa-pencil",
               "tooltip": "编辑",
-              "disabledOn": "status == 'RUNNING'",
+              "disabledOn": "status == 'RUNNING' || status == 'WAITING_APPROVAL' || status == 'CANCELING'",
               "actionType": "dialog",
               "dialog": {
                 "size": "lg",
@@ -417,9 +618,15 @@
                     {
                       "label": "模型",
                       "name": "model",
-                      "type": "input-text",
-                      "placeholder": "auto",
-                      "clearable": true
+                      "type": "select",
+                      "source": "/zenvis/api/v1/dih/model/list",
+                      "labelField": "model",
+                      "valueField": "model",
+                      "searchable": true,
+                      "placeholder": "请选择可用模型",
+                      "clearable": false,
+                      "required": true,
+                      "description": "模型列表与 DIH Chat 保持一致；auto 表示由系统自动选择。"
                     },
                     {
                       "label": "优先级",
@@ -435,6 +642,31 @@
                       "format": "YYYY-MM-DD HH:mm:ss",
                       "inputFormat": "YYYY-MM-DD HH:mm:ss",
                       "clearable": true
+                    },
+                    {
+                      "label": "MCP审批模式",
+                      "name": "approval_mode",
+                      "type": "radios",
+                      "required": true,
+                      "options": [
+                        { "label": "需要人工审批", "value": "MANUAL" },
+                        { "label": "无需人工审批", "value": "AUTO" }
+                      ],
+                      "description": "AUTO 会自动批准 ASK，但不会覆盖 DENY。"
+                    },
+                    {
+                      "label": "使用 Skill",
+                      "name": "skill_ids",
+                      "type": "select",
+                      "multiple": true,
+                      "searchable": true,
+                      "clearable": true,
+                      "labelField": "label",
+                      "valueField": "value",
+                      "joinValues": false,
+                      "extractValue": true,
+                      "source": "/zenvis/api/v1/dih/skills/options?enabled=true",
+                      "description": "只能选择已启用 Skill。"
                     },
                     {
                       "label": "描述说明",
@@ -461,7 +693,7 @@
               "type": "button",
               "icon": "fa fa-repeat text-success",
               "tooltip": "重新入队",
-              "disabledOn": "status == 'RUNNING'",
+              "disabledOn": "status == 'RUNNING' || status == 'WAITING_APPROVAL' || status == 'CANCELING' || status == 'PENDING'",
               "actionType": "ajax",
               "confirmText": "确认将该任务重新放入队列？",
               "api": "post:/zenvis/api/v1/system/analysis-task/$id/enqueue",
@@ -471,8 +703,8 @@
               "type": "button",
               "icon": "fa fa-ban text-warning",
               "tooltip": "取消任务",
-              "hiddenOn": "status == 'CANCELED' || status == 'SUCCESS'",
-              "disabledOn": "status == 'RUNNING'",
+              "hiddenOn": "status == 'CANCELED' || status == 'SUCCESS' || status == 'FAILED'",
+              "disabledOn": "status == 'CANCELING'",
               "actionType": "ajax",
               "confirmText": "确认取消该任务？",
               "api": "post:/zenvis/api/v1/system/analysis-task/$id/cancel",
@@ -482,7 +714,7 @@
               "type": "button",
               "icon": "fa fa-times text-danger",
               "tooltip": "删除",
-              "disabledOn": "status == 'RUNNING'",
+              "disabledOn": "status == 'RUNNING' || status == 'WAITING_APPROVAL' || status == 'CANCELING'",
               "actionType": "ajax",
               "confirmText": "确认删除该分析任务？",
               "api": "delete:/zenvis/api/v1/system/analysis-task/$id",

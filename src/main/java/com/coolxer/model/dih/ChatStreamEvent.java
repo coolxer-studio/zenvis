@@ -16,6 +16,7 @@ public class ChatStreamEvent {
     private String event;
     private String content;
     private Object message;
+    private Object data;
 
     public static ChatStreamEvent delta(String content) {
         return ChatStreamEvent.builder()
@@ -35,6 +36,13 @@ public class ChatStreamEvent {
         return ChatStreamEvent.builder()
                 .event("error")
                 .message(message)
+                .build();
+    }
+
+    public static ChatStreamEvent approval(String event, Object data) {
+        return ChatStreamEvent.builder()
+                .event(event)
+                .data(data)
                 .build();
     }
 }

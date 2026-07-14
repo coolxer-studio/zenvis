@@ -6,6 +6,7 @@ import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
+import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.utils.WalkFileUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -207,6 +208,47 @@ public class SkillService {
             }
         }
         return buildSkillPrompt(agentType, requiredIds);
+    }
+
+    /**
+     * Build a task prompt after strictly validating that every explicitly selected Skill still exists and is enabled.
+     */
+    public String buildTaskSkillPrompt(String agentType, List<String> selectedSkillIds) {
+        validateEnabledSkillIds(selectedSkillIds);
+        return buildRequiredSkillPrompt(agentType, selectedSkillIds);
+    }
+
+    /**
+     * Validate task-selected Skills independently from their declared Agent type.
+     */
+    public void validateEnabledSkillIds(List<String> skillIds) {
+        if (skillIds == null || skillIds.isEmpty()) {
+            return;
+        }
+        List<String> invalid = skillIds.stream()
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .filter(id -> {
+                    SkillRecord record = skillCache.get(id);
+                    return record == null || !Boolean.TRUE.equals(record.getSkill().getEnabled());
+                })
+                .sorted()
+                .toList();
+        if (!invalid.isEmpty()) {
+            throw new IllegalArgumentException("以下 Skill 不存在或未启用: " + String.join(", ", invalid));
+        }
+    }
+
+    public List<SkillOptionVo> getEnabledOptions() {
+        return getAll().stream()
+                .filter(skill -> Boolean.TRUE.equals(skill.getEnabled()))
+                .map(skill -> new SkillOptionVo(
+                        skill.getName() + " (" + skill.getId() + ")",
+                        skill.getId(),
+                        skill.getDescription(),
+                        skill.getAgentTypes() == null ? new ArrayList<>() : new ArrayList<>(skill.getAgentTypes())
+                ))
+                .toList();
     }
 
     private String buildSkillPrompt(String agentType, Set<String> requiredSkillIds) {

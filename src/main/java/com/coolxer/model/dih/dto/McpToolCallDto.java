@@ -14,4 +14,9 @@ public class McpToolCallDto {
     private String name;
 
     private Map<String, Object> arguments;
+
+    /**
+     * ASK策略批准后重试时携带的单次审批请求ID。
+     */
+    private String approvalRequestId;
 }

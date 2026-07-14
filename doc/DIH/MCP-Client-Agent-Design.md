@@ -11,6 +11,8 @@ ZenVis 已经通过 Spring AI MCP Server 对外提供本系统工具能力。本
 - 支持通过 AMIS 低代码页面完成配置管理。
 - 支持普通问答和各业务 Agent 按需使用已连接 MCP 工具。
 - 支持通过配置控制每个业务 Agent 可使用的 MCP 服务范围。
+- 为本地工具和外部 MCP 工具提供统一的 `ALLOW / ASK / DENY` 审批策略、调用审计与并发安全状态机。
+- DIH Chat 在原 AI 消息内展示审批卡片，审批完成后继续当前模型工具循环。
 - 参考 Skill 管理流程，形成“配置管理 + 运行期加载 + 工具上下文注入”的闭环。
 
 ---
@@ -69,6 +71,19 @@ McpClientServiceImpl
 `src/main/java/com/coolxer/dao/mysql/entity/McpServerConfig.java`
 
 当前项目各环境配置了 `spring.jpa.hibernate.ddl-auto=update`，启动后由 JPA 自动建表或更新表结构。
+
+审批能力新增四张表：
+
+| 表名 | 说明 |
+|------|------|
+| `t_ai_mcp_tool_policy` | 工具发现信息、默认策略、人工覆盖、可用状态和最后发现时间 |
+| `t_ai_mcp_invocation` | 参数摘要及校验值、策略快照、审批人、调用状态、结果摘要和耗时审计 |
+| `t_ai_mcp_chat_tool_grant` | DIH Chat 内按用户、chatId 和 toolKey 持久化的会话授权 |
+| `t_ai_mcp_task_tool_grant` | 按分析任务 executionId 和 toolKey 持久化的任务授权 |
+
+分析任务另通过 `t_ai_analysis_task_skill` 保存任务与 Skill ID 的关联。任务只保存 ID，运行时读取最新 Skill 内容。
+
+工具唯一键固定为 `local::<toolName>` 或 `external::<serverId>::<originalToolName>`。参数、结果和错误在落库前递归打码并截断；参数另存 SHA-256 摘要，用于两阶段调用重试时防止替换参数。
 
 ### 字段说明
 
@@ -197,6 +212,13 @@ AI 工具名: risk_system_query_user
 | POST | `/servers/refresh` | 刷新全部已启用 MCP 服务连接 |
 | GET | `/tools` | 查询已连接 MCP 工具列表，可选 `serverId` |
 | POST | `/tools/call` | 测试调用 MCP 工具 |
+| GET | `/tools/policies/list` | 分页查询工具策略 |
+| POST | `/tools/policies/update` | 修改或恢复单工具策略，仅超级管理员 |
+| POST | `/tools/policies/bulk-update` | 批量修改策略，仅超级管理员 |
+| GET | `/approvals/list` | 查询当前用户可处理的 `PENDING` 审批 |
+| GET | `/approvals/{requestId}/view` | 查询审批详情 |
+| POST | `/approvals/{requestId}/decision` | `approved` 单次允许、`approved_session` 当前聊天持续允许或 `rejected` 拒绝当前请求 |
+| GET | `/invocations/list` | 查询工具调用审计 |
 | GET | `/agent/prompt` | 查看指定业务 Agent 当前加载的 MCP 工具提示词 |
 
 工具测试调用使用原始 MCP 工具名，不使用 AI 前缀工具名：
@@ -210,6 +232,8 @@ AI 工具名: risk_system_query_user
   }
 }
 ```
+
+`/tools/call` 命中 `ASK` 时采用两阶段协议：首次返回 `requestId` 且不执行；批准后使用相同 `requestId` 和原参数重试。服务端校验参数摘要并以条件更新保证最多执行一次。
 
 ---
 
@@ -230,6 +254,9 @@ AI 工具名: risk_system_query_user
 - 查看已连接工具
 - 测试调用工具
 - 查看业务 Agent MCP 工具提示词
+- 管理全部本地和外部工具的审批策略
+- 逐行或跨页批量设置允许、询问、禁止或恢复默认
+- 审批队列只处理当前待审批请求，所有终态在长期调用审计中查看
 
 默认菜单：
 
@@ -289,8 +316,17 @@ Spring AI ChatClient.toolCallbacks(...)
 
 - 仅当用户问题确实需要外部系统数据、动作或上下文时才调用工具。
 - 参数不足时先追问，不编造参数。
-- 写入、删除、执行任务等副作用工具，先说明动作并请求用户确认。
+- `DENY` 工具不注入 Agent；`ASK` 工具会标记为需要审批，并由统一回调在执行前阻塞等待审批。
 - 工具返回后用中文归纳结果，保留关键字段、异常信息和下一步建议。
+
+### 策略推导与状态机
+
+- 本地查询、列表、详情、统计、校验和模拟类默认 `ALLOW/LOW`；写入、删除、执行和任务触发类默认 `ASK/HIGH`。每个 `@Tool` 必须通过 `@McpToolApproval` 显式声明默认策略与风险，遗漏会导致测试失败。
+- 外部工具仅在 MCP `readOnlyHint=true` 时默认 `ALLOW`，其他情况默认 `ASK`。
+- 未识别风险强制 `ASK`，人工覆盖优先于默认策略。
+- `ALLOW` 直接进入 `running`；`ASK` 创建 `pending` 请求并等待；`DENY` 直接进入 `denied` 且不触达底层工具。
+- 状态集合为 `pending / approved / running / succeeded / failed / rejected / denied / expired / cancelled`，终态和执行权通过条件更新竞争，避免重复审批或重复执行。
+- 拒绝、超时和取消会向 Agent 返回结构化拒绝结果，使模型可以继续解释；MCP Server 调用则返回错误结果。
 
 ### Scope 配置
 
@@ -301,15 +337,20 @@ app.ai.mcp.enabled=true
 app.ai.mcp.agent-scopes.default=*
 app.ai.mcp.agent-scopes.agent_data_access=risk,asset
 app.ai.mcp.agent-scopes.agent_data_visualization=none
+app.ai.mcp.approval.timeout-seconds=300
 ```
 
 scope 值为 `none/off/false/disabled` 时，该业务 Agent 不注入 MCP 工具。
 
 ---
 
-## 七、前端入口
+## 七、DIH Chat 内联审批
 
-前端不需要新增独立 MCP 聊天入口。保留 MCP 服务管理页，用于配置、刷新和测试外部 MCP 服务；聊天侧继续选择普通问答或具体业务 Agent。
+聊天 NDJSON 协议增加 `approval_required` 和 `approval_updated`，事件的 `data` 包含请求 ID、工具来源、风险、脱敏参数、状态和过期时间。工具回调从 Spring AI `toolContext` 获取用户、chatId、Agent 类型、轮次 ID 和事件发送器。
+
+命中 `ASK` 后，当前流不发送 `done`：前端在当前 AI 消息 parts 中插入 `mcp-approval` 卡片，用户可选择“允许本次”“本会话始终允许”或“拒绝执行”，随后原工具回调被唤醒并继续模型循环。“本会话始终允许”只对当前用户、chatId 和精确 toolKey 生效，刷新或服务重启后仍保留；全局 `DENY` 始终优先。同一轮可维护多个独立请求；停止生成和流取消会清理本轮仍在等待的请求，但不撤销已经建立的会话授权。最终消息保存审批 part 和审批范围，重新加载会话仍能看到决策及最终状态。
+
+工具参数和返回结果由普通 MCP 调用日志以 JSON 代码块展示；审批卡片不重复展示 payload，只承载来源、风险、说明、倒计时、操作和状态。
 
 ---
 
@@ -339,10 +380,44 @@ spring.ai.mcp.server.capabilities.tool=true
 - MCP Server：把本系统 `@Tool` 暴露给外部客户端。
 - MCP Client：连接其他系统暴露的 MCP Server。
 - MCP 工具上下文：把外部 MCP 工具按业务 Agent scope 注入 AI 对话。
+- MCP 权限网关：本地 Server、外部 Client、后台任务、测试调用和 DIH Chat 共用同一策略与审计链路。
 
 ---
 
-## 九、验证方式
+## 九、分析任务调度、Skill 与审批
+
+分析任务是一种一次性后台 Agent 执行。创建接口必须明确传入 `approval_mode`，并可通过
+`skill_ids` 选择任意已扫描且已启用的 Skill。任务保存 Skill ID，实际执行前再次读取最新
+Skill 内容并校验启用状态；Skill 已停用或删除时任务直接进入 `FAILED`，不会静默跳过。
+创建和编辑表单的模型列表复用 `/api/v1/dih/model/list`，与 DIH Chat 保持一致；`auto` 表示运行时由系统选择。
+
+任务支持立即排队或设置一次性 `scheduled_time`。到期计划任务优先于普通任务，普通任务按
+优先级降序、创建时间升序执行。执行由后台线程池完成，HTTP `run-once` 仅认领并提交任务，
+页面关闭不会中断执行。`RUNNING` 或 `WAITING_APPROVAL` 任务在服务重启后会生成新的
+`execution_id` 并从头重新入队，旧 execution 的审批与工具授权会失效。
+
+审批模式：
+
+- `AUTO`：全局 `ALLOW` 正常执行；全局 `ASK` 自动批准并记录 `TASK_AUTO`；全局 `DENY` 始终禁止。
+- `MANUAL`：全局 `ASK` 创建无限期待审批请求，任务进入 `WAITING_APPROVAL` 并释放普通执行槽。
+- `approved`：只允许当前 requestId。
+- `approved_task`：仅当前 execution、精确 toolKey 持续允许，审计范围为 `TASK_RUN`。
+- `rejected`：只拒绝当前工具调用，底层工具不执行，Agent 获得结构化拒绝结果后继续分析。
+
+分析任务审批仅允许任务创建人或超级管理员处理。任务完成、取消或重新入队后会清理当前
+execution 的工具授权。审批与审计接口支持 `analysisTaskId`、`executionId` 关联和筛选。
+
+关键配置：
+
+```properties
+app.ai.analysis-task.max-concurrency=1
+app.ai.analysis-task.max-suspended=20
+app.ai.analysis-task.dispatch-delay-ms=5000
+```
+
+---
+
+## 十、验证方式
 
 ### 编译验证
 
@@ -356,6 +431,7 @@ mvn -DskipTests clean compile
 ```bash
 cd zenvis-backend
 jq empty deploy/open_config/mcp_config/index.json
+jq empty deploy/open_config/analysis-task_config/index.json
 ```
 
 ### 前端类型检查
@@ -389,7 +465,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 
 ---
 
-## 十、已知边界与后续规划
+## 十一、已知边界与后续规划
 
 ### 当前边界
 
@@ -402,9 +478,9 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 
 | 方向 | 说明 |
 |------|------|
-| 权限控制 | 按用户、角色、租户限制可见 MCP 服务和工具 |
-| 工具审计 | 记录每次 AI 工具调用的服务、工具、参数、返回摘要和耗时 |
-| 工具确认流 | 将副作用工具调用接入现有 `actionDecision` 确认机制 |
+| 细粒度策略 | 在全局工具策略之上按角色或租户增加可见性与上限 |
+| 授权撤销 | 为 Chat 会话授权提供可视化查询和主动撤销入口 |
+| 审计导出 | 按任务、用户、工具和时间范围导出脱敏记录 |
 | 健康检查 | 定时刷新 MCP 连接状态，避免长时间状态过期 |
 | 多传输协议 | 后续按 Spring AI MCP 能力扩展 Streamable HTTP 等传输 |
 | 工具分组 | 在 AMIS 管理页支持按服务、标签、只读/写入风险筛选工具 |

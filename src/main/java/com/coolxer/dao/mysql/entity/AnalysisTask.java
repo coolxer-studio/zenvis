@@ -1,19 +1,18 @@
 package com.coolxer.dao.mysql.entity;
 
 import com.coolxer.commons.enums.AnalysisTaskStatus;
+import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import com.coolxer.dao.mysql.constant.MysqlFinalTableName;
 import com.coolxer.model.system.dto.AnalysisTaskDto;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.util.Date;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * AI分析任务
@@ -66,7 +65,7 @@ public class AnalysisTask extends BaseEntity {
      * 任务状态
      */
     @Enumerated(EnumType.STRING)
-    @Column
+    @Column(name = "status", nullable = false, columnDefinition = "VARCHAR(32)")
     private AnalysisTaskStatus status = AnalysisTaskStatus.PENDING;
 
     /**
@@ -74,6 +73,32 @@ public class AnalysisTask extends BaseEntity {
      */
     @Column
     private Integer priority = 0;
+
+    /**
+     * MCP 工具审批模式。历史数据为空时按 MANUAL 处理。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_mode", length = 16)
+    private AnalysisTaskApprovalMode approvalMode = AnalysisTaskApprovalMode.MANUAL;
+
+    /**
+     * 当前一次执行的唯一标识。
+     */
+    @Column(name = "execution_id", length = 64)
+    private String executionId;
+
+    /**
+     * 任务明确选择的 Skill。
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = MysqlFinalTableName.T_AI_ANALYSIS_TASK_SKILL,
+            joinColumns = @JoinColumn(name = "task_id"),
+            uniqueConstraints = @UniqueConstraint(
+                    name = "uk_analysis_task_skill",
+                    columnNames = {"task_id", "skill_id"}
+            ))
+    @Column(name = "skill_id", nullable = false, length = 128)
+    private Set<String> skillIds = new LinkedHashSet<>();
 
     /**
      * 计划执行时间，为空表示立即进入队列
@@ -99,24 +124,21 @@ public class AnalysisTask extends BaseEntity {
     @Column(name = "run_count")
     private Integer runCount = 0;
 
+    @Version
+    @Column(name = "lock_version", nullable = false, columnDefinition = "BIGINT DEFAULT 0")
+    private Long lockVersion = 0L;
+
     public void updateFromDto(AnalysisTaskDto analysisTaskDto) {
-        if (analysisTaskDto.getName() != null) {
-            this.name = analysisTaskDto.getName();
-        }
-        if (analysisTaskDto.getDescription() != null) {
-            this.description = analysisTaskDto.getDescription();
-        }
-        if (analysisTaskDto.getModel() != null) {
-            this.model = analysisTaskDto.getModel();
-        }
-        if (analysisTaskDto.getPrompt() != null) {
-            this.prompt = analysisTaskDto.getPrompt();
-        }
+        this.name = analysisTaskDto.getName();
+        this.description = analysisTaskDto.getDescription();
+        this.model = analysisTaskDto.getModel();
+        this.prompt = analysisTaskDto.getPrompt();
         if (analysisTaskDto.getPriority() != null) {
             this.priority = analysisTaskDto.getPriority();
         }
-        if (analysisTaskDto.getScheduledTime() != null) {
-            this.scheduledTime = analysisTaskDto.getScheduledTime();
-        }
+        this.scheduledTime = analysisTaskDto.getScheduledTime();
+        this.approvalMode = analysisTaskDto.getApprovalMode();
+        this.skillIds = analysisTaskDto.getSkillIds() == null
+                ? new LinkedHashSet<>() : new LinkedHashSet<>(analysisTaskDto.getSkillIds());
     }
 }

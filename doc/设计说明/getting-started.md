@@ -49,12 +49,36 @@ docker-compose up -d
 
 ```bash
 curl -X POST http://localhost:11001/api/v1/dih/chat \
+  -H "Authorization: Bearer <API_BEARER_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "查询最近7天的API调用次数",
-    "chatId": "session-001"
+    "chat_id": "session-001",
+    "model": "auto",
+    "type": "ask",
+    "message": "查询最近7天的API调用次数",
+    "response_format": "events"
   }'
 ```
+
+DIH Chat 调用需审批的 MCP 工具时，会在当前流式消息中返回审批卡片事件。耗时分析可创建后台分析任务，关闭页面后仍继续执行。
+
+## 第三方系统快速对接
+
+第三方系统调用普通 REST API 推荐使用 Bearer Token，而不是模拟验证码登录。部署时配置：
+
+```properties
+API_BEARER_TOKEN=your_api_token
+API_BEARER_USER=admin@admin.com
+```
+
+调用示例：
+
+```bash
+curl -H "Authorization: Bearer <API_BEARER_TOKEN>" \
+  "http://localhost:11001/api/v1/system/user/list?page=1&per_page=10"
+```
+
+更多接口地图、数据检索示例和排障说明见 [第三方 REST API 对接指南](third-party-api-integration.md)。
 
 ## 目录结构
 
@@ -73,4 +97,7 @@ zenvis-backend/
 
 - [详细安装部署](installation.md)
 - [系统架构设计](architecture.md)
-- [API接口文档](api接口文档/)
+- [API 参考](api-reference.md)
+- [第三方 REST API 对接指南](third-party-api-integration.md)
+- [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)
+- [MCP Client 与业务 Agent 设计](../DIH/MCP-Client-Agent-Design.md)

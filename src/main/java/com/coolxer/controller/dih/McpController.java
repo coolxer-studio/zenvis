@@ -6,10 +6,23 @@ import com.coolxer.model.base.vo.SingleValueVo;
 import com.coolxer.model.dih.dto.McpServerDto;
 import com.coolxer.model.dih.dto.McpServerSearchDto;
 import com.coolxer.model.dih.dto.McpToolCallDto;
+import com.coolxer.model.dih.dto.McpApprovalDecisionDto;
+import com.coolxer.model.dih.dto.McpInvocationSearchDto;
+import com.coolxer.model.dih.dto.McpToolPolicyBulkUpdateDto;
+import com.coolxer.model.dih.dto.McpToolPolicyUpdateDto;
 import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.dih.vo.McpToolVo;
+import com.coolxer.model.dih.vo.McpApprovalVo;
+import com.coolxer.model.dih.vo.McpToolPolicyVo;
+import com.coolxer.commons.enums.McpApprovalPolicy;
+import com.coolxer.commons.enums.McpToolSourceType;
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
+import com.coolxer.controller.BaseController;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
+import com.coolxer.service.dih.mcp.McpApprovalService;
 import com.coolxer.service.dih.mcp.McpClientService;
+import com.coolxer.service.dih.mcp.McpToolPolicyService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,13 +47,19 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/dih/mcp")
-public class McpController {
+public class McpController extends BaseController {
 
     @Autowired
     private McpClientService mcpClientService;
 
     @Autowired
     private AgentMcpToolService agentMcpToolService;
+
+    @Autowired
+    private McpApprovalService mcpApprovalService;
+
+    @Autowired
+    private McpToolPolicyService mcpToolPolicyService;
 
     @GetMapping("/servers/list")
     @Operation(summary = "MCP服务列表", description = "分页查询外部MCP服务配置")
@@ -160,7 +179,7 @@ public class McpController {
     @Operation(summary = "测试调用MCP工具")
     public ResponseWrap<?> callTool(@RequestBody McpToolCallDto callDto) {
         try {
-            return ResponseWrap.success(mcpClientService.callTool(callDto));
+            return ResponseWrap.success(mcpClientService.callTool(callDto, getSessionUser()));
         } catch (Exception e) {
             log.error("调用MCP工具失败, serverId={}, serverCode={}, tool={}",
                     callDto == null ? null : callDto.getServerId(),
@@ -168,6 +187,76 @@ public class McpController {
                     callDto == null ? null : callDto.getName(),
                     e);
             return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/tools/policies/list")
+    @Operation(summary = "MCP工具审批策略列表")
+    public ResponseWrap<PageRowsVo<McpToolPolicyVo>> toolPolicies(
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "perPage", defaultValue = "20") int perPage,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "sourceType", required = false) McpToolSourceType sourceType,
+            @RequestParam(value = "policy", required = false) McpApprovalPolicy policy,
+            @RequestParam(value = "available", required = false) Boolean available) {
+        return ResponseWrap.success(mcpToolPolicyService.list(page, perPage, keyword, sourceType, policy, available));
+    }
+
+    @PostMapping("/tools/policies/update")
+    @Operation(summary = "更新单个MCP工具审批策略")
+    public ResponseWrap<McpToolPolicyVo> updateToolPolicy(@RequestBody McpToolPolicyUpdateDto dto) {
+        requireSuperAdmin();
+        if (dto == null || dto.getToolKey() == null) {
+            return ResponseWrap.fail(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        return ResponseWrap.success(mcpToolPolicyService.update(dto.getToolKey(), dto.getPolicy()));
+    }
+
+    @PostMapping("/tools/policies/bulk-update")
+    @Operation(summary = "批量更新MCP工具审批策略")
+    public ResponseWrap<List<McpToolPolicyVo>> bulkUpdateToolPolicy(@RequestBody McpToolPolicyBulkUpdateDto dto) {
+        requireSuperAdmin();
+        if (dto == null) {
+            return ResponseWrap.fail(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        return ResponseWrap.success(mcpToolPolicyService.bulkUpdate(dto.getToolKeys(), dto.getPolicy()));
+    }
+
+    @GetMapping("/approvals/list")
+    @Operation(summary = "MCP待审批与调用记录列表")
+    public ResponseWrap<PageRowsVo<McpApprovalVo>> approvals(
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "perPage", defaultValue = "20") int perPage) {
+        return ResponseWrap.success(mcpApprovalService.listPendingApprovals(page, perPage, getSessionUser()));
+    }
+
+    @GetMapping("/approvals/{requestId}/view")
+    @Operation(summary = "MCP审批详情")
+    public ResponseWrap<McpApprovalVo> approvalView(@PathVariable("requestId") String requestId) {
+        return ResponseWrap.success(mcpApprovalService.view(requestId, getSessionUser()));
+    }
+
+    @PostMapping("/approvals/{requestId}/decision")
+    @Operation(summary = "提交MCP工具审批决策")
+    public ResponseWrap<McpApprovalVo> approvalDecision(@PathVariable("requestId") String requestId,
+                                                        @RequestBody McpApprovalDecisionDto dto) {
+        if (dto == null) {
+            return ResponseWrap.fail(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+        return ResponseWrap.success(mcpApprovalService.decide(
+                requestId, dto.getDecision(), dto.getComment(), getSessionUser()));
+    }
+
+    @GetMapping("/invocations/list")
+    @Operation(summary = "MCP工具调用审计列表")
+    public ResponseWrap<PageRowsVo<McpApprovalVo>> invocations(McpInvocationSearchDto searchDto) {
+        return ResponseWrap.success(mcpApprovalService.listInvocations(searchDto, getSessionUser()));
+    }
+
+    private void requireSuperAdmin() {
+        com.coolxer.dao.mysql.entity.User user = getSessionUser();
+        if (user == null || !Boolean.TRUE.equals(user.getIsSuperAdmin())) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
         }
     }
 

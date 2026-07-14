@@ -5,6 +5,8 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Map;
+import com.coolxer.commons.enums.McpApprovalPolicy;
+import com.coolxer.commons.enums.McpToolRiskLevel;
 
 @Data
 @Builder
@@ -35,4 +37,16 @@ public class McpToolVo implements Serializable {
     private Boolean idempotentHint;
 
     private Boolean openWorldHint;
+
+    private String toolKey;
+
+    private McpToolRiskLevel riskLevel;
+
+    private McpApprovalPolicy defaultApprovalPolicy;
+
+    private McpApprovalPolicy configuredApprovalPolicy;
+
+    private McpApprovalPolicy effectiveApprovalPolicy;
+
+    private Boolean available;
 }

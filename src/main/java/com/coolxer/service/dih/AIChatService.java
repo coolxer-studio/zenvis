@@ -24,6 +24,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -139,6 +140,12 @@ public class AIChatService {
 
     public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
                              ToolCallbackProvider toolCallbackProvider, String toolSystemPrompt) {
+        return chat(chatId, model, prompt, attachments, user, toolCallbackProvider, toolSystemPrompt, null);
+    }
+
+    public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                             ToolCallbackProvider toolCallbackProvider, String toolSystemPrompt,
+                             McpInvocationContext invocationContext) {
 
         log.debug("chat model is: {}", model);
 
@@ -167,6 +174,9 @@ public class AIChatService {
         }
         if (toolCallbackProvider != null) {
             promptSpec = promptSpec.toolCallbacks(toolCallbackProvider);
+            if (invocationContext != null) {
+                promptSpec = promptSpec.toolContext(Map.of(McpInvocationContext.TOOL_CONTEXT_KEY, invocationContext));
+            }
         }
 
         if (supportsReasoningContent(model)) {
@@ -197,19 +207,28 @@ public class AIChatService {
     public Flux<String> chatWithSystemPrompt(String chatId, String model, String systemPrompt, String prompt,
                                              List<ChatAttachment> attachments, User user) {
         return chatWithSystemPromptInternal(chatId, model, systemPrompt, prompt, attachments, user,
-                null, true, "AIChatService.chatWithSystemPrompt");
+                null, null, true, "AIChatService.chatWithSystemPrompt");
     }
 
     public Flux<String> chatWithSystemPromptAndTools(String chatId, String model, String systemPrompt, String prompt,
                                                      List<ChatAttachment> attachments, User user,
                                                      ToolCallbackProvider toolCallbackProvider) {
+        return chatWithSystemPromptAndTools(chatId, model, systemPrompt, prompt, attachments, user,
+                toolCallbackProvider, null);
+    }
+
+    public Flux<String> chatWithSystemPromptAndTools(String chatId, String model, String systemPrompt, String prompt,
+                                                     List<ChatAttachment> attachments, User user,
+                                                     ToolCallbackProvider toolCallbackProvider,
+                                                     McpInvocationContext invocationContext) {
         return chatWithSystemPromptInternal(chatId, model, systemPrompt, prompt, attachments, user,
-                toolCallbackProvider, false, "AIChatService.chatWithSystemPromptAndTools");
+                toolCallbackProvider, invocationContext, false, "AIChatService.chatWithSystemPromptAndTools");
     }
 
     private Flux<String> chatWithSystemPromptInternal(String chatId, String model, String systemPrompt, String prompt,
                                                       List<ChatAttachment> attachments, User user,
                                                       ToolCallbackProvider toolCallbackProvider,
+                                                      McpInvocationContext invocationContext,
                                                       boolean allowNativeImageStream,
                                                       String scene) {
         if (!StringUtils.hasText(systemPrompt)) {
@@ -238,6 +257,9 @@ public class AIChatService {
 
         if (toolCallbackProvider != null) {
             promptSpec = promptSpec.toolCallbacks(toolCallbackProvider);
+            if (invocationContext != null) {
+                promptSpec = promptSpec.toolContext(Map.of(McpInvocationContext.TOOL_CONTEXT_KEY, invocationContext));
+            }
         }
 
         if (supportsReasoningContent(model)) {
@@ -273,6 +295,12 @@ public class AIChatService {
 
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
                                          ToolCallbackProvider toolCallbackProvider, String toolSystemPrompt) {
+        return deepThinkingChat(chatId, model, prompt, attachments, user, toolCallbackProvider, toolSystemPrompt, null);
+    }
+
+    public Flux<String> deepThinkingChat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+                                         ToolCallbackProvider toolCallbackProvider, String toolSystemPrompt,
+                                         McpInvocationContext invocationContext) {
 
         if (toolCallbackProvider == null
                 && (supportsQwenReasoningStream(model) || chatAttachmentService.hasImageAttachment(attachments))
@@ -296,6 +324,9 @@ public class AIChatService {
 
         if (toolCallbackProvider != null) {
             promptSpec = promptSpec.toolCallbacks(toolCallbackProvider);
+            if (invocationContext != null) {
+                promptSpec = promptSpec.toolContext(Map.of(McpInvocationContext.TOOL_CONTEXT_KEY, invocationContext));
+            }
         }
 
         promptSpec = promptSpec.advisors(reasoningContentAdvisor);

@@ -89,6 +89,7 @@
   "server_id": 1,
   "server_code": "risk-system",
   "name": "query_user",
+  "approval_request_id": null,
   "arguments": {
     "userId": "10001"
   }
@@ -101,6 +102,42 @@
 | serverCode/server_code | String | 否 | MCP 服务标识，未传 `serverId` 时使用 |
 | name | String | 是 | 原始 MCP 工具名，不是 `ai_tool_name` |
 | arguments | Object | 否 | 工具参数 |
+| approvalRequestId/approval_request_id | String | 否 | `ASK` 两阶段调用批准后重试时携带的 requestId |
+
+### 工具策略
+
+每个工具使用稳定唯一键：
+
+```text
+local::<toolName>
+external::<serverId>::<originalToolName>
+```
+
+策略值为 `ALLOW`、`ASK`、`DENY`。策略列表同时返回默认策略、人工策略和最终有效策略；更新请求的 `policy=null` 表示恢复默认。
+
+批量更新请求：
+
+```json
+{
+  "tool_keys": ["local::dashboard_create", "external::1::query_user"],
+  "policy": "ASK"
+}
+```
+
+策略修改仅超级管理员可用。
+
+### 审批与调用状态
+
+调用状态包括：`PENDING`、`APPROVED`、`RUNNING`、`SUCCEEDED`、`FAILED`、`REJECTED`、`DENIED`、`EXPIRED`、`CANCELLED`。
+
+审批范围包括：
+
+| 范围 | 说明 |
+|---|---|
+| `ONCE` | 单次批准 |
+| `SESSION` | DIH Chat 当前用户、chatId、toolKey 会话授权 |
+| `TASK_AUTO` | 分析任务 `AUTO` 自动批准 |
+| `TASK_RUN` | 当前分析任务 execution 的工具授权 |
 
 ---
 
@@ -119,6 +156,13 @@
 | POST | `/api/v1/dih/mcp/servers/refresh` | 刷新全部已启用 MCP 服务连接 |
 | GET | `/api/v1/dih/mcp/tools` | 查询 MCP 工具列表 |
 | POST | `/api/v1/dih/mcp/tools/call` | 测试调用 MCP 工具 |
+| GET | `/api/v1/dih/mcp/tools/policies/list` | 分页查询工具策略 |
+| POST | `/api/v1/dih/mcp/tools/policies/update` | 更新单工具策略 |
+| POST | `/api/v1/dih/mcp/tools/policies/bulk-update` | 批量更新工具策略 |
+| GET | `/api/v1/dih/mcp/approvals/list` | 查询当前待审批请求 |
+| GET | `/api/v1/dih/mcp/approvals/{requestId}/view` | 查询审批详情 |
+| POST | `/api/v1/dih/mcp/approvals/{requestId}/decision` | 提交审批决定 |
+| GET | `/api/v1/dih/mcp/invocations/list` | 分页查询调用审计 |
 | GET | `/api/v1/dih/mcp/agent/prompt` | 查看业务 Agent MCP 工具提示词 |
 
 ---
@@ -293,6 +337,98 @@ curl -X POST "http://localhost:11001/api/v1/dih/mcp/tools/call" \
   }'
 ```
 
+如果工具有效策略为 `ASK`，首次调用只创建审批请求，不执行底层工具。批准后使用完全相同的参数和返回的 requestId 重试：
+
+```json
+{
+  "server_id": 1,
+  "name": "query_user",
+  "approval_request_id": "a1bd28ef-91ce-45b8-b501-d13a1b29c3dc",
+  "arguments": {
+    "userId": "10001"
+  }
+}
+```
+
+服务端校验规范化参数摘要，并通过条件更新保证最多执行一次。
+
+### 查询工具审批策略
+
+```http
+GET /api/v1/dih/mcp/tools/policies/list?page=1&perPage=20
+```
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `keyword` | String | 匹配工具键、名称、描述或服务 |
+| `sourceType` | Enum | `LOCAL` 或 `EXTERNAL` |
+| `policy` | Enum | 按有效策略过滤 |
+| `available` | Boolean | 工具当前是否可用 |
+
+不可用工具仍保留策略记录，便于在外部服务恢复前提前维护权限。
+
+### 更新工具策略
+
+```http
+POST /api/v1/dih/mcp/tools/policies/update
+```
+
+```json
+{
+  "tool_key": "local::dashboard_create",
+  "policy": "ASK"
+}
+```
+
+`policy` 传 `null` 恢复默认。批量接口 `/tools/policies/bulk-update` 使用 `tool_keys` 数组，语义相同。
+
+### 查询待审批队列
+
+```http
+GET /api/v1/dih/mcp/approvals/list?page=1&perPage=20
+```
+
+该接口只返回 `PENDING` 请求。审批完成、超时或取消后从队列移除，但仍可在调用审计中查询。
+
+### 提交审批决定
+
+```http
+POST /api/v1/dih/mcp/approvals/{requestId}/decision
+```
+
+```json
+{
+  "decision": "approved",
+  "comment": "确认本次调用"
+}
+```
+
+- `approved`：允许当前 requestId。
+- `approved_session`：仅 DIH Chat 使用，授权当前用户、chatId 和精确 toolKey。
+- `rejected`：拒绝当前调用。
+
+分析任务的 `approved_task` 应使用任务专用接口，见 [AnalysisTaskController](AnalysisTaskController.md)。普通用户只能处理自己的请求，超级管理员可以代审。
+
+### 查询调用审计
+
+```http
+GET /api/v1/dih/mcp/invocations/list?page=1&perPage=20
+```
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `keyword` | String | 匹配 requestId、工具、服务、chatId、Agent |
+| `channel` | Enum | `CHAT_AGENT`、`BACKGROUND_AGENT`、`MCP_SERVER`、`MANUAL` |
+| `status` | Enum | 调用状态 |
+| `policy` | Enum | 策略快照 |
+| `approvalScope` | Enum | `ONCE`、`SESSION`、`TASK_AUTO`、`TASK_RUN` |
+| `requesterUserId` | Integer | 发起用户，超级管理员可指定 |
+| `decisionBy` | Integer | 审批人 |
+| `analysisTaskId` | Integer | 分析任务 ID |
+| `executionId` | String | 分析任务 executionId |
+
+参数、结果和错误摘要均会递归脱敏并截断。普通用户只能查看自己的调用记录，超级管理员可以查看全量记录。
+
 ### 查看业务 Agent MCP 工具提示词
 
 **接口地址**: `GET /api/v1/dih/mcp/agent/prompt`
@@ -316,6 +452,8 @@ MCP 工具作为通用工具能力注入聊天接口，不再需要单独的 `ag
 **接口地址**: `POST /api/v1/dih/chat`
 
 请求中的 `type` 可为普通问答 `ask`，也可为具体业务 Agent，如 `agent_data_access`、`agent_data_visualization`。后端会根据 `app.ai.mcp.agent-scopes.<type>` 控制可用 MCP 服务范围。
+
+`ASK` 工具会在当前 AI 消息内插入审批卡片，支持“允许本次”“本会话始终允许”和“拒绝执行”。聊天会话授权不会覆盖全局 `DENY`，停止生成只取消本轮待审批请求。
 
 示例：
 
@@ -341,3 +479,5 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 4. 工具测试接口使用原始 MCP 工具名；AI 对话中使用的是带服务前缀的规范化工具名。
 5. 当前实现主要面向 SSE MCP 服务，`base_url` 需要填写服务根地址，`sse_endpoint` 填写 SSE 路径。
 6. 可通过 `app.ai.mcp.agent-scopes.<agentType>=serverCode1,serverCode2` 限制某个业务 Agent 可使用的 MCP 服务；值为 `none` 时禁用该 Agent 的 MCP 工具。
+7. MCP 审批队列只展示待处理项；历史和终态记录统一在调用审计查看。
+8. 更完整的操作和排障流程见 [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)。

@@ -18,6 +18,10 @@ import org.springframework.mock.env.MockEnvironment;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AgentMcpToolServiceTest {
 
@@ -124,6 +128,32 @@ class AgentMcpToolServiceTest {
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
                 .containsExactly("retrieval_search", "policy_config_tree", "external_search");
+    }
+
+    @Test
+    void resolveOmitsDeniedToolsAndMarksAskTools() {
+        McpToolPolicyService policyService = mock(McpToolPolicyService.class);
+        when(policyService.effectivePolicy(anyString(), any()))
+                .thenAnswer(call -> call.getArgument(0, String.class).endsWith("write")
+                        ? com.coolxer.commons.enums.McpApprovalPolicy.ASK
+                        : com.coolxer.commons.enums.McpApprovalPolicy.DENY);
+        AgentMcpToolService service = new AgentMcpToolService(
+                new EmptyMcpClientService(),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("local_read", "read"),
+                        new FakeToolCallback("local_write", "write")),
+                policyService
+        );
+
+        McpToolContext context = service.resolve("agent_data_access");
+
+        assertThat(context.systemPrompt())
+                .contains("local_write", "调用前需要用户审批")
+                .doesNotContain("local_read");
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly("local_write");
     }
 
     private record FakeToolCallback(String name, String description) implements ToolCallback {

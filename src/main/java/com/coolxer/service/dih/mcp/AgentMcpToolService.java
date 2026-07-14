@@ -4,6 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
@@ -61,7 +62,8 @@ public class AgentMcpToolService {
             当前业务 Agent 可以使用下列 MCP 工具获取外部系统信息或执行操作。
             仅当用户问题确实需要外部系统数据、动作或上下文时才调用工具；如果直接回答更合适，请直接回答。
             调用工具前先确认必要参数；参数不足时先向用户追问，不要编造参数。
-            对具有写入、删除、执行任务等副作用的工具，先用自然语言说明将要执行的动作并请求用户确认。
+            标记“调用前需要用户审批”的工具由平台在调用时展示审批卡片；参数完整时直接发起工具调用，
+            不要在调用前额外进行一轮自然语言确认。用户拒绝或审批超时后，根据工具返回的结构化状态继续说明结果。
             工具返回后，请用中文归纳结果，保留关键字段、异常信息和下一步建议。
             只能调用下方“可用 MCP 工具”中明确列出的工具名。`zenvis:*` 是前端 UI 代码块协议，
             例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:analysis-record`、`zenvis:analysis-decision`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
@@ -78,12 +80,26 @@ public class AgentMcpToolService {
 
     private final ToolCallbackProvider localToolCallbackProvider;
 
+    private final McpToolPolicyService policyService;
+
+    @Autowired
     public AgentMcpToolService(McpClientService mcpClientService,
                                Environment environment,
-                               @Qualifier("retrievalToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider) {
+                               @Qualifier("retrievalToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider,
+                               McpToolPolicyService policyService) {
         this.mcpClientService = mcpClientService;
         this.environment = environment;
         this.localToolCallbackProvider = localToolCallbackProvider;
+        this.policyService = policyService;
+    }
+
+    public AgentMcpToolService(McpClientService mcpClientService,
+                               Environment environment,
+                               ToolCallbackProvider localToolCallbackProvider) {
+        this.mcpClientService = mcpClientService;
+        this.environment = environment;
+        this.localToolCallbackProvider = localToolCallbackProvider;
+        this.policyService = null;
     }
 
     public McpToolContext resolve(String agentType) {
@@ -125,12 +141,20 @@ public class AgentMcpToolService {
             if (allowedToolNames != null && !allowedToolNames.contains(toolName)) {
                 continue;
             }
+            com.coolxer.commons.enums.McpApprovalPolicy policy = policyService == null
+                    ? com.coolxer.commons.enums.McpApprovalPolicy.ALLOW
+                    : policyService.effectivePolicy(McpToolDescriptor.localKey(toolName),
+                    com.coolxer.commons.enums.McpApprovalPolicy.ASK);
+            if (policy == com.coolxer.commons.enums.McpApprovalPolicy.DENY) {
+                continue;
+            }
             toolCallbacks.add(callback);
             added = true;
             String description = StringUtils.defaultIfBlank(callback.getToolDefinition().description(), toolName);
             localPrompt.append("- ").append(toolName)
                     .append("：")
                     .append(description)
+                    .append(policy == com.coolxer.commons.enums.McpApprovalPolicy.ASK ? "（调用前需要用户审批）" : "")
                     .append("\n");
         }
         if (added) {
@@ -149,7 +173,13 @@ public class AgentMcpToolService {
         ToolCallbackProvider externalProvider = mcpClientService.getToolCallbackProvider(scope.serverCodes());
         ToolCallback[] externalCallbacks = externalProvider == null ? null : externalProvider.getToolCallbacks();
         if (externalCallbacks != null) {
-            toolCallbacks.addAll(Arrays.asList(externalCallbacks));
+            toolCallbacks.addAll(Arrays.stream(externalCallbacks)
+                    .filter(callback -> policyService == null
+                            || policyService.effectivePolicyByAiToolName(
+                            callback.getToolDefinition().name(),
+                            com.coolxer.commons.enums.McpApprovalPolicy.ASK)
+                            != com.coolxer.commons.enums.McpApprovalPolicy.DENY)
+                    .toList());
         }
         prompt.append(externalPrompt).append("\n\n");
     }

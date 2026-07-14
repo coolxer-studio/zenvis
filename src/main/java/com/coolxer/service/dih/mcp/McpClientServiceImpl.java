@@ -1,8 +1,12 @@
 package com.coolxer.service.dih.mcp;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.enums.McpApprovalPolicy;
+import com.coolxer.commons.enums.McpToolSourceType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.McpServerConfig;
+import com.coolxer.dao.mysql.entity.McpToolPolicyConfig;
+import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.McpServerDto;
@@ -26,6 +30,7 @@ import org.springframework.ai.mcp.McpToolUtils;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -63,18 +68,35 @@ public class McpClientServiceImpl implements McpClientService {
     private final ConcurrentHashMap<Integer, ClientHolder> clients = new ConcurrentHashMap<>();
     private final String clientVersion;
     private final boolean allowPrivateServerUrls;
-    private final boolean allowDestructiveToolCalls;
+    private final McpApprovalService approvalService;
+    private final McpToolPolicyService policyService;
 
+    @Autowired
     public McpClientServiceImpl(McpServerConfigRepository mcpServerConfigRepository,
                                 ObjectMapper objectMapper,
+                                McpApprovalService approvalService,
+                                McpToolPolicyService policyService,
                                 @Value("${spring.ai.mcp.server.version:1.0.0}") String clientVersion,
-                                @Value("${app.ai.mcp.allow-private-server-urls:true}") boolean allowPrivateServerUrls,
-                                @Value("${app.ai.mcp.allow-destructive-tool-calls:false}") boolean allowDestructiveToolCalls) {
+                                @Value("${app.ai.mcp.allow-private-server-urls:true}") boolean allowPrivateServerUrls) {
         this.mcpServerConfigRepository = mcpServerConfigRepository;
         this.objectMapper = objectMapper;
+        this.approvalService = approvalService;
+        this.policyService = policyService;
         this.clientVersion = clientVersion;
         this.allowPrivateServerUrls = allowPrivateServerUrls;
-        this.allowDestructiveToolCalls = allowDestructiveToolCalls;
+    }
+
+    McpClientServiceImpl(McpServerConfigRepository mcpServerConfigRepository,
+                         ObjectMapper objectMapper,
+                         String clientVersion,
+                         boolean allowPrivateServerUrls,
+                         boolean ignoredAllowDestructiveToolCalls) {
+        this.mcpServerConfigRepository = mcpServerConfigRepository;
+        this.objectMapper = objectMapper;
+        this.approvalService = null;
+        this.policyService = null;
+        this.clientVersion = clientVersion;
+        this.allowPrivateServerUrls = allowPrivateServerUrls;
     }
 
     @PostConstruct
@@ -147,6 +169,8 @@ public class McpClientServiceImpl implements McpClientService {
         closeClient(id);
         if (Boolean.TRUE.equals(config.getEnabled())) {
             refresh(id);
+        } else if (policyService != null) {
+            policyService.markServerUnavailable(id);
         }
         return true;
     }
@@ -154,6 +178,9 @@ public class McpClientServiceImpl implements McpClientService {
     @Override
     public void delete(Integer id) {
         closeClient(id);
+        if (policyService != null) {
+            policyService.deleteServerPolicies(id);
+        }
         if (mcpServerConfigRepository.findById(id).isPresent()) {
             mcpServerConfigRepository.deleteById(id);
         }
@@ -173,6 +200,9 @@ public class McpClientServiceImpl implements McpClientService {
             config.setConnected(false);
             config.setLastError(null);
             closeClient(id);
+            if (policyService != null) {
+                policyService.markServerUnavailable(id);
+            }
             return new McpServerVo(mcpServerConfigRepository.save(config), 0);
         }
         mcpServerConfigRepository.save(config);
@@ -183,6 +213,10 @@ public class McpClientServiceImpl implements McpClientService {
     public McpServerVo refresh(Integer id) {
         McpServerConfig config = getConfig(id);
         closeClient(id);
+        if (policyService != null) {
+            // Tools removed by a server refresh stay discoverable in policy history but are no longer injectable.
+            policyService.markServerUnavailable(id);
+        }
 
         if (!Boolean.TRUE.equals(config.getEnabled())) {
             config.setConnected(false);
@@ -196,6 +230,7 @@ public class McpClientServiceImpl implements McpClientService {
             McpSchema.InitializeResult initializeResult = client.initialize();
             List<McpSchema.Tool> tools = safeListTools(client);
             clients.put(id, new ClientHolder(config.getId(), config.getCode(), config.getName(), client, tools));
+            registerExternalTools(config, tools);
 
             config.setConnected(true);
             config.setLastError(null);
@@ -210,6 +245,9 @@ public class McpClientServiceImpl implements McpClientService {
             config.setLastError(errorMessage);
             McpServerConfig saved = mcpServerConfigRepository.save(config);
             closeClient(id);
+            if (policyService != null) {
+                policyService.markServerUnavailable(id);
+            }
             log.warn("MCP服务连接失败: id={}, code={}, error={}", id, config.getCode(), errorMessage, e);
             return new McpServerVo(saved, 0);
         }
@@ -236,15 +274,33 @@ public class McpClientServiceImpl implements McpClientService {
 
     @Override
     public Object callTool(McpToolCallDto callDto) {
+        return callTool(callDto, null);
+    }
+
+    @Override
+    public Object callTool(McpToolCallDto callDto, User user) {
         if (callDto == null || StringUtils.isBlank(callDto.getName())) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
         }
         ClientHolder holder = resolveHolder(callDto);
         McpSchema.Tool tool = holder.findTool(callDto.getName());
-        if (!allowDestructiveToolCalls && isDestructiveTool(tool)) {
-            throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "破坏性MCP工具调用未启用");
+        if (tool == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "MCP工具不存在");
         }
         Map<String, Object> arguments = callDto.getArguments() == null ? Map.of() : callDto.getArguments();
+        if (approvalService != null) {
+            McpToolDescriptor descriptor = externalDescriptor(holder, tool);
+            String input = summarizeAsJson(arguments);
+            McpApprovalService.ManualGate gate = approvalService.prepareManual(
+                    descriptor, input, user, callDto.getApprovalRequestId());
+            if (!gate.executable()) {
+                return new com.coolxer.model.dih.vo.McpToolCallResultVo(
+                        gate.invocation().getRequestId(), gate.invocation().getStatus(), null,
+                        gate.invocation().getErrorSummary());
+            }
+            return approvalService.completeManual(gate.invocation().getRequestId(),
+                    () -> holder.getClient().callTool(new McpSchema.CallToolRequest(callDto.getName(), arguments)));
+        }
         long startedAt = System.nanoTime();
         log.info("MCP工具测试调用开始: serverCode={}, tool={}, arguments={}",
                 holder.getServerCode(), callDto.getName(), summarizeObject(arguments));
@@ -285,12 +341,17 @@ public class McpClientServiceImpl implements McpClientService {
             block.append("### MCP服务：").append(holder.getServerName())
                     .append(" (").append(holder.getServerCode()).append(")\n");
             for (McpSchema.Tool tool : holder.getTools()) {
-                if (!allowDestructiveToolCalls && isDestructiveTool(tool)) {
+                McpToolDescriptor descriptor = externalDescriptor(holder, tool);
+                McpApprovalPolicy effectivePolicy = policyService == null
+                        ? descriptor.defaultPolicy()
+                        : policyService.effectivePolicy(descriptor.toolKey(), descriptor.defaultPolicy());
+                if (effectivePolicy == McpApprovalPolicy.DENY) {
                     continue;
                 }
                 block.append("- ").append(holder.aiToolName(tool))
                         .append("：")
                         .append(StringUtils.defaultIfBlank(tool.description(), StringUtils.defaultIfBlank(tool.title(), tool.name())))
+                        .append(effectivePolicy == McpApprovalPolicy.ASK ? "（调用前需要用户审批）" : "")
                         .append("\n");
             }
             int remain = MAX_PROMPT_CHARS - prompt.length();
@@ -313,7 +374,7 @@ public class McpClientServiceImpl implements McpClientService {
 
     @Override
     public ToolCallbackProvider getToolCallbackProvider(List<String> serverCodes) {
-        return SyncMcpToolCallbackProvider.builder()
+        ToolCallbackProvider provider = SyncMcpToolCallbackProvider.builder()
                 .mcpClients(getActiveClients(serverCodes))
                 .toolNamePrefixGenerator((connectionInfo, tool) -> {
                     String prefix = connectionInfo.clientInfo() == null
@@ -322,6 +383,17 @@ public class McpClientServiceImpl implements McpClientService {
                     return formatAiToolName(prefix, tool.name());
                 })
                 .build();
+        if (approvalService == null || policyService == null) {
+            return provider;
+        }
+        Map<String, McpToolDescriptor> descriptors = new LinkedHashMap<>();
+        for (ClientHolder holder : activeHolders(serverCodes)) {
+            for (McpSchema.Tool tool : holder.getTools()) {
+                McpToolDescriptor descriptor = externalDescriptor(holder, tool);
+                descriptors.put(descriptor.aiToolName(), descriptor);
+            }
+        }
+        return new McpApprovalToolCallbackProvider(provider, descriptors, approvalService, policyService);
     }
 
     @Override
@@ -540,12 +612,6 @@ public class McpClientServiceImpl implements McpClientService {
         return StringUtils.defaultIfBlank(serverInfo.title(), serverInfo.name());
     }
 
-    private static boolean isDestructiveTool(McpSchema.Tool tool) {
-        return tool != null
-                && tool.annotations() != null
-                && Boolean.TRUE.equals(tool.annotations().destructiveHint());
-    }
-
     private static boolean isPrivateOrLocalHost(String host) throws Exception {
         String normalizedHost = StringUtils.trimToEmpty(host).toLowerCase();
         if ("localhost".equals(normalizedHost) || normalizedHost.endsWith(".localhost")) {
@@ -604,9 +670,50 @@ public class McpClientServiceImpl implements McpClientService {
         return normalized.length() <= 500 ? normalized : normalized.substring(0, 500) + "...";
     }
 
+    private String summarizeAsJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? Map.of() : value);
+        } catch (Exception e) {
+            return String.valueOf(value);
+        }
+    }
+
+    private void registerExternalTools(McpServerConfig config, List<McpSchema.Tool> tools) {
+        if (policyService == null || tools == null) {
+            return;
+        }
+        ClientHolder holder = new ClientHolder(config.getId(), config.getCode(), config.getName(), null, tools);
+        tools.forEach(tool -> policyService.register(externalDescriptor(holder, tool)));
+    }
+
+    private McpToolDescriptor externalDescriptor(ClientHolder holder, McpSchema.Tool tool) {
+        McpSchema.ToolAnnotations annotations = tool.annotations();
+        Boolean readOnly = annotations == null ? null : annotations.readOnlyHint();
+        Boolean destructive = annotations == null ? null : annotations.destructiveHint();
+        McpApprovalPolicy defaultPolicy = Boolean.TRUE.equals(readOnly)
+                ? McpApprovalPolicy.ALLOW : McpApprovalPolicy.ASK;
+        return new McpToolDescriptor(
+                McpToolDescriptor.externalKey(holder.getServerId(), tool.name()),
+                McpToolSourceType.EXTERNAL,
+                holder.getServerId(),
+                holder.getServerCode(),
+                holder.getServerName(),
+                tool.name(),
+                holder.aiToolName(tool),
+                tool.title(),
+                tool.description(),
+                readOnly,
+                destructive,
+                Boolean.TRUE.equals(readOnly)
+                        ? com.coolxer.commons.enums.McpToolRiskLevel.LOW
+                        : com.coolxer.commons.enums.McpToolRiskLevel.UNKNOWN,
+                defaultPolicy
+        );
+    }
+
     @Data
     @AllArgsConstructor
-    private static class ClientHolder {
+    private class ClientHolder {
         private Integer serverId;
         private String serverCode;
         private String serverName;
@@ -617,6 +724,13 @@ public class McpClientServiceImpl implements McpClientService {
             List<McpToolVo> rows = new ArrayList<>();
             for (McpSchema.Tool tool : tools) {
                 McpSchema.ToolAnnotations annotations = tool.annotations();
+                String toolKey = McpToolDescriptor.externalKey(serverId, tool.name());
+                McpApprovalPolicy defaultPolicy = annotations != null && Boolean.TRUE.equals(annotations.readOnlyHint())
+                        ? McpApprovalPolicy.ALLOW : McpApprovalPolicy.ASK;
+                McpApprovalPolicy effectivePolicy = policyService == null
+                        ? defaultPolicy : policyService.effectivePolicy(toolKey, defaultPolicy);
+                McpToolPolicyConfig storedPolicy = policyService == null ? null
+                        : policyService.register(externalDescriptor(this, tool));
                 rows.add(McpToolVo.builder()
                         .serverId(serverId)
                         .serverCode(serverCode)
@@ -631,6 +745,14 @@ public class McpClientServiceImpl implements McpClientService {
                         .destructiveHint(annotations == null ? null : annotations.destructiveHint())
                         .idempotentHint(annotations == null ? null : annotations.idempotentHint())
                         .openWorldHint(annotations == null ? null : annotations.openWorldHint())
+                        .toolKey(toolKey)
+                        .riskLevel(Boolean.TRUE.equals(annotations == null ? null : annotations.readOnlyHint())
+                                ? com.coolxer.commons.enums.McpToolRiskLevel.LOW
+                                : com.coolxer.commons.enums.McpToolRiskLevel.UNKNOWN)
+                        .defaultApprovalPolicy(defaultPolicy)
+                        .configuredApprovalPolicy(storedPolicy == null ? null : storedPolicy.getConfiguredPolicy())
+                        .effectiveApprovalPolicy(effectivePolicy)
+                        .available(true)
                         .build());
             }
             return rows;

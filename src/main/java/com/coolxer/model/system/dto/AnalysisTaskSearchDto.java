@@ -1,6 +1,7 @@
 package com.coolxer.model.system.dto;
 
 import com.coolxer.commons.enums.AnalysisTaskStatus;
+import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import com.coolxer.model.base.dto.SortPageDto;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -26,4 +27,6 @@ public class AnalysisTaskSearchDto extends SortPageDto {
      * 模型
      */
     private String model;
+
+    private AnalysisTaskApprovalMode approvalMode;
 }

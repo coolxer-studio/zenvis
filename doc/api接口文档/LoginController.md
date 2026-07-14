@@ -14,18 +14,18 @@
 
 ```json
 {
-  "userName": "user@example.com",// String - 登录邮箱（必填）
+  "user_name": "user@example.com",// String - 登录邮箱（必填）
   "password": "******",           // String - 密码（必填，RSA加密）
-  "authCode": "abcd"              // String - 验证码（必填）
+  "auth_code": "abcd"             // String - 验证码（必填）
 }
 ```
 
 **字段说明**:
 | 字段 | 类型 | 必填 | 说明 |
 |-----|------|-----|------|
-| userName | String | 是 | 登录邮箱 |
+| user_name | String | 是 | 登录邮箱 |
 | password | String | 是 | 密码，需使用公钥加密 |
-| authCode | String | 是 | 验证码 |
+| auth_code | String | 是 | 验证码 |
 
 ### 2. LoginVo (登录响应对象)
 
@@ -36,9 +36,9 @@
     "id": 1,
     "email": "user@example.com",
     "name": "用户名",
-    "roleId": 1,
-    "roleName": "管理员",
-    "updateTime": "2024-01-01 12:00:00"
+    "role_id": 1,
+    "role_name": "管理员",
+    "update_time": "2024-01-01 12:00:00"
   }
 }
 ```
@@ -88,12 +88,12 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/login/sign-in \
+curl -X POST http://localhost:11001/api/v1/system/login/sign-in \
   -H "Content-Type: application/json" \
   -d '{
-    "userName": "admin@example.com",
+    "user_name": "admin@example.com",
     "password": "encryptedPassword",
-    "authCode": "abcd"
+    "auth_code": "abcd"
   }'
 ```
 
@@ -114,9 +114,9 @@ curl -X POST http://localhost:11002/api/v1/system/login/sign-in \
       "id": 1,
       "email": "admin@example.com",
       "name": "管理员",
-      "roleId": 1,
-      "roleName": "管理员",
-      "updateTime": "2024-01-01 12:00:00"
+      "role_id": 1,
+      "role_name": "管理员",
+      "update_time": "2024-01-01 12:00:00"
     }
   }
 }
@@ -134,7 +134,7 @@ curl -X POST http://localhost:11002/api/v1/system/login/sign-in \
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/login/kaptcha
+curl -X GET http://localhost:11001/api/v1/system/login/kaptcha
 ```
 
 **成功响应**: 返回PNG格式的验证码图片
@@ -151,7 +151,7 @@ curl -X GET http://localhost:11002/api/v1/system/login/kaptcha
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/login/encrypt/key
+curl -X GET http://localhost:11001/api/v1/system/login/encrypt/key
 ```
 
 **成功响应**:
@@ -177,7 +177,7 @@ curl -X GET http://localhost:11002/api/v1/system/login/encrypt/key
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/login/sign-out
+curl -X POST http://localhost:11001/api/v1/system/login/sign-out
 ```
 
 **成功响应**:
@@ -209,5 +209,6 @@ curl -X POST http://localhost:11002/api/v1/system/login/sign-out
 2. **验证码有效期**: 验证码有效期为120秒
 3. **Session安全**: 登录成功后会重置SessionID，提高安全性
 4. **退出登录**: 退出时会清除Redis中的Session和浏览器Cookie
+5. **第三方调用**: 后端服务对后端服务调用不建议模拟验证码登录。配置 `API_BEARER_TOKEN` 后，普通 `/api/v1/**` 接口可使用 `Authorization: Bearer <token>` 直接调用，调用身份由 `API_BEARER_USER` 映射到系统用户。详见 [第三方 REST API 对接指南](../设计说明/third-party-api-integration.md)。
 
 ---

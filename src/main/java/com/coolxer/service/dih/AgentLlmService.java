@@ -2,6 +2,7 @@ package com.coolxer.service.dih;
 
 import com.coolxer.service.dih.logging.LlmLogHelper;
 import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,6 +28,8 @@ public class AgentLlmService {
 
     private static final ThreadLocal<String> CURRENT_TOOL_SYSTEM_PROMPT = new ThreadLocal<>();
 
+    private static final ThreadLocal<McpInvocationContext> CURRENT_TOOL_INVOCATION_CONTEXT = new ThreadLocal<>();
+
     private final ChatClient chatClient;
 
     public AgentLlmService(ChatClient chatClient) {
@@ -50,6 +53,8 @@ public class AgentLlmService {
         if (context != null && context.hasTools()) {
             CURRENT_TOOL_CALLBACK_PROVIDER.set(context.toolCallbackProvider());
             CURRENT_TOOL_SYSTEM_PROMPT.set(context.systemPrompt());
+            CURRENT_TOOL_INVOCATION_CONTEXT.set(context.invocationContext() == null
+                    ? McpInvocationContext.background(null) : context.invocationContext());
         }
         else {
             clearMcpToolContext();
@@ -59,6 +64,7 @@ public class AgentLlmService {
     public void clearMcpToolContext() {
         CURRENT_TOOL_CALLBACK_PROVIDER.remove();
         CURRENT_TOOL_SYSTEM_PROMPT.remove();
+        CURRENT_TOOL_INVOCATION_CONTEXT.remove();
     }
 
     public String call(String prompt) {
@@ -75,6 +81,7 @@ public class AgentLlmService {
         }
         if (currentToolCallbackProvider() != null) {
             spec = spec.toolCallbacks(currentToolCallbackProvider());
+            spec = applyToolContext(spec);
         }
         LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(null, prompt, false));
         try {
@@ -99,6 +106,7 @@ public class AgentLlmService {
         }
         if (currentToolCallbackProvider() != null) {
             spec = spec.toolCallbacks(currentToolCallbackProvider());
+            spec = applyToolContext(spec);
         }
         LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(systemPrompt, userPrompt, false));
         try {
@@ -126,6 +134,7 @@ public class AgentLlmService {
         }
         if (currentToolCallbackProvider() != null) {
             spec = spec.toolCallbacks(currentToolCallbackProvider());
+            spec = applyToolContext(spec);
         }
         LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(null, prompt, true));
         return LlmLogHelper.logChatResponseStream(log, requestId, scene, spec.stream().chatResponse(), startedAtNanos);
@@ -142,6 +151,7 @@ public class AgentLlmService {
         }
         if (currentToolCallbackProvider() != null) {
             spec = spec.toolCallbacks(currentToolCallbackProvider());
+            spec = applyToolContext(spec);
         }
         LlmLogHelper.logRequest(log, requestId, scene, buildLogRequest(systemPrompt, userPrompt, true));
         return LlmLogHelper.logChatResponseStream(log, requestId, scene, spec.stream().chatResponse(), startedAtNanos);
@@ -163,6 +173,11 @@ public class AgentLlmService {
 
     private String currentToolSystemPrompt() {
         return CURRENT_TOOL_SYSTEM_PROMPT.get();
+    }
+
+    private ChatClient.ChatClientRequestSpec applyToolContext(ChatClient.ChatClientRequestSpec spec) {
+        McpInvocationContext context = CURRENT_TOOL_INVOCATION_CONTEXT.get();
+        return context == null ? spec : spec.toolContext(Map.of(McpInvocationContext.TOOL_CONTEXT_KEY, context));
     }
 
     private String appendToolSystemPrompt(String systemPrompt) {

@@ -1,5 +1,7 @@
 package com.coolxer.configuration.mcp;
 
+import com.coolxer.commons.enums.McpApprovalPolicy;
+import com.coolxer.commons.enums.McpToolSourceType;
 import com.coolxer.controller.policy.ConfigMcpTool;
 import com.coolxer.controller.policy.PolicyConfigValidationMcpTool;
 import com.coolxer.controller.retrieval.RetrievalMcpTool;
@@ -7,13 +9,21 @@ import com.coolxer.controller.system.AnalysisTaskMcpTool;
 import com.coolxer.controller.system.DashboardMcpTool;
 import com.coolxer.controller.system.MenuMcpTool;
 import com.coolxer.controller.system.PushTaskMcpTool;
+import com.coolxer.service.dih.mcp.McpApprovalService;
+import com.coolxer.service.dih.mcp.McpApprovalToolCallbackProvider;
+import com.coolxer.service.dih.mcp.McpToolApproval;
+import com.coolxer.service.dih.mcp.McpToolDescriptor;
+import com.coolxer.service.dih.mcp.McpToolPolicyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.lang.reflect.Method;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * MCP服务器工具配置
@@ -24,13 +34,15 @@ import java.lang.reflect.Method;
 public class McpServerToolConfiguration {
 
     @Bean
-    public MethodToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool,
+    public ToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool,
                                                                     AnalysisTaskMcpTool analysisTaskMcpTool,
                                                                     PushTaskMcpTool pushTaskMcpTool,
                                                                     ConfigMcpTool configMcpTool,
                                                                     PolicyConfigValidationMcpTool policyConfigValidationMcpTool,
                                                                     MenuMcpTool menuMcpTool,
-                                                                    DashboardMcpTool dashboardMcpTool) {
+                                                                    DashboardMcpTool dashboardMcpTool,
+                                                                    McpApprovalService approvalService,
+                                                                    McpToolPolicyService policyService) {
         log.info("=== Creating MethodToolCallbackProvider for MCP tools ===");
 
         logToolMethods(RetrievalMcpTool.class);
@@ -47,8 +59,17 @@ public class McpServerToolConfiguration {
                         policyConfigValidationMcpTool, menuMcpTool, dashboardMcpTool)
                 .build();
 
+        Map<String, McpToolDescriptor> descriptors = new LinkedHashMap<>();
+        addToolDescriptors(descriptors, RetrievalMcpTool.class);
+        addToolDescriptors(descriptors, AnalysisTaskMcpTool.class);
+        addToolDescriptors(descriptors, PushTaskMcpTool.class);
+        addToolDescriptors(descriptors, ConfigMcpTool.class);
+        addToolDescriptors(descriptors, PolicyConfigValidationMcpTool.class);
+        addToolDescriptors(descriptors, MenuMcpTool.class);
+        addToolDescriptors(descriptors, DashboardMcpTool.class);
+
         log.info("=== MethodToolCallbackProvider created successfully ===");
-        return provider;
+        return new McpApprovalToolCallbackProvider(provider, descriptors, approvalService, policyService);
     }
 
     private void logToolMethods(Class<?> toolClass) {
@@ -60,6 +81,33 @@ public class McpServerToolConfiguration {
                     toolClass.getSimpleName(),
                     toolAnnotation.name(), toolAnnotation.description());
             }
+        }
+    }
+
+    private void addToolDescriptors(Map<String, McpToolDescriptor> descriptors, Class<?> toolClass) {
+        for (Method method : toolClass.getDeclaredMethods()) {
+            Tool tool = method.getAnnotation(Tool.class);
+            if (tool == null) {
+                continue;
+            }
+            McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
+            McpApprovalPolicy defaultPolicy = approval == null ? McpApprovalPolicy.ASK : approval.value();
+            String name = tool.name();
+            descriptors.put(name, new McpToolDescriptor(
+                    McpToolDescriptor.localKey(name),
+                    McpToolSourceType.LOCAL,
+                    null,
+                    "local",
+                    "ZenVis 内置工具",
+                    name,
+                    name,
+                    null,
+                    tool.description(),
+                    defaultPolicy == McpApprovalPolicy.ALLOW,
+                    name.contains("delete") || name.contains("apply") || name.contains("run"),
+                    approval == null ? com.coolxer.commons.enums.McpToolRiskLevel.UNKNOWN : approval.risk(),
+                    defaultPolicy
+            ));
         }
     }
 }

@@ -6,6 +6,7 @@ import com.coolxer.model.dih.dto.McpServerSearchDto;
 import com.coolxer.model.dih.dto.McpToolCallDto;
 import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.dih.vo.McpToolVo;
+import com.coolxer.dao.mysql.entity.User;
 import io.modelcontextprotocol.client.McpSyncClient;
 import org.springframework.ai.tool.ToolCallbackProvider;
 
@@ -32,6 +33,10 @@ public interface McpClientService {
     List<McpToolVo> listTools(Integer serverId);
 
     Object callTool(McpToolCallDto callDto);
+
+    default Object callTool(McpToolCallDto callDto, User user) {
+        return callTool(callDto);
+    }
 
     boolean hasAvailableTools();
 

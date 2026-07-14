@@ -181,14 +181,42 @@ curl -X POST http://localhost:8080/api/v1/retrieval/rule/create \
 - Content-Type: `application/json`
 - Body: RetrievalRequestDto
 
+**更新行为说明**:
+
+更新规则会先读取已有规则，再将本次请求中缺失的上下文补齐，然后复用创建规则的生成逻辑保存。可补齐的上下文包括：
+
+- `entity`
+- `display_list`
+- `type`
+- 普通筛选的 `criteria_list` / `criteria_logic`
+- 高级筛选的 `sql`
+- `rule_name` / `rule_description`
+
+因此，前端在更新高级过滤器时即使只提交 `id`、`type`、`sql` 和本次展示字段，也可以正常保存；如果本次请求显式传了实体、展示字段或条件，则以本次请求为准。
+
+**高级 where 表达式安全规则**:
+
+- 字段必须来自当前实体元数据。
+- 支持 `= != > < >= <= like between in is null is not null`。
+- 支持反引号包裹字段名，例如 `` `ip` = '10.0.0.1' ``。
+- 不支持任意 SQL、子查询、函数调用、注释拼接或 `1=1` 这类无字段条件。
+
 **请求示例**:
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/retrieval/rule/update \
   -H "Content-Type: application/json" \
   -d '{
-    "ruleId": 1,
-    "displayList": [],
-    "searchParams": {}
+    "id": 7,
+    "rule_name": "攻击事件过滤器",
+    "type": "advanced",
+    "sql": "module_type_name = '\''网站攻击'\'' and attack_type_name in ('\''信息泄露'\'', '\''SQL注入'\'')",
+    "display_list": [
+      {
+        "entity": "asset",
+        "attribute_list": ["module_type_name", "attack_type_name"]
+      }
+    ]
   }'
 ```
 

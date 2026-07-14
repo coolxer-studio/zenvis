@@ -34,11 +34,14 @@
   "id": 1,                    // Integer - 角色ID
   "name": "管理员",           // String - 角色名称
   "roleId": 1,               // Integer - 角色ID（冗余字段）
+  "isSuperAdmin": false,     // Boolean - 是否超级管理员内置角色
   "updateTime": "2024-01-01 12:00:00", // String - 更新时间
   "menuIds": [1, 2, 3],      // List<Integer> - 菜单权限ID列表
   "menuNames": ["用户管理", "角色管理", "菜单管理"]  // List<String> - 菜单权限名称列表
 }
 ```
+
+`isSuperAdmin` 用于前端识别系统内置超级管理员角色。超级管理员角色由系统初始化生成，默认拥有全部菜单权限，新增菜单会自动同步授权。
 
 ### 3. RoleSearchDto (角色搜索传输对象)
 
@@ -119,6 +122,8 @@ curl -X POST http://localhost:11002/api/v1/system/role/add \
 
 **功能描述**: 根据ID删除单个角色
 
+**业务规则**: 超级管理员角色为系统内置角色，不允许删除。
+
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
@@ -146,6 +151,8 @@ curl -X DELETE http://localhost:11002/api/v1/system/role/1
 
 **功能描述**: 批量删除多个角色
 
+**业务规则**: 批量删除中不能包含超级管理员角色。
+
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
@@ -172,6 +179,8 @@ curl -X DELETE http://localhost:11002/api/v1/system/role/bulk/1,2,3
 **接口地址**: `POST /api/v1/system/role/{id}/update`
 
 **功能描述**: 根据ID更新角色信息
+
+**业务规则**: 超级管理员角色为系统内置角色，不允许修改名称或菜单权限。
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
@@ -209,6 +218,8 @@ curl -X POST http://localhost:11002/api/v1/system/role/1/update \
 
 **功能描述**: 批量更新多个角色
 
+**业务规则**: 批量更新中不能包含超级管理员角色。
+
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
@@ -244,6 +255,8 @@ curl -X POST http://localhost:11002/api/v1/system/role/1,2,3/bulk-update \
 
 **功能描述**: 分页查询角色列表
 
+**可见性规则**: 非超级管理员查询角色列表时不会返回超级管理员角色；超级管理员可见全部角色。
+
 **查询参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
@@ -272,6 +285,7 @@ curl -X GET "http://localhost:11002/api/v1/system/role/list?name=管理员&page=
         "id": 1,
         "name": "管理员",
         "roleId": 1,
+        "isSuperAdmin": false,
         "updateTime": "2024-01-01 12:00:00",
         "menuIds": [1, 2, 3],
         "menuNames": ["用户管理", "角色管理", "菜单管理"]
@@ -288,6 +302,8 @@ curl -X GET "http://localhost:11002/api/v1/system/role/list?name=管理员&page=
 **接口地址**: `GET /api/v1/system/role/{id}/view`
 
 **功能描述**: 根据ID查询角色详细信息
+
+**可见性规则**: 非超级管理员不能查看超级管理员角色详情；超级管理员可见全部角色详情。
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
@@ -308,6 +324,7 @@ curl -X GET http://localhost:11002/api/v1/system/role/1/view
     "id": 1,
     "name": "管理员",
     "roleId": 1,
+    "isSuperAdmin": false,
     "updateTime": "2024-01-01 12:00:00",
     "menuIds": [1, 2, 3],
     "menuNames": ["用户管理", "角色管理", "菜单管理"]
@@ -322,6 +339,8 @@ curl -X GET http://localhost:11002/api/v1/system/role/1/view
 **接口地址**: `GET /api/v1/system/role/type/list`
 
 **功能描述**: 获取所有角色列表，用于下拉选择框
+
+**可见性规则**: 非超级管理员获取角色下拉列表时不会返回超级管理员角色，避免将内置角色分配给普通用户。
 
 **请求参数**: 无
 
@@ -407,5 +426,7 @@ curl -X GET http://localhost:11002/api/v1/system/role/permission/tree
 1. **认证授权**: 需要登录认证
 2. **权限管理**: 角色关联菜单权限，通过menuIds字段配置
 3. **批量操作**: 批量删除/更新时，ID列表不能为空
+4. **内置角色保护**: 超级管理员角色由系统初始化生成，仅超级管理员可见，不允许编辑或删除
+5. **菜单权限同步**: 超级管理员角色默认拥有全部菜单权限，新建菜单后系统会自动补齐授权
 
 ---

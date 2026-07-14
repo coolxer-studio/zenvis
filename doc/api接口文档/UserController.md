@@ -40,9 +40,12 @@
   "name": "用户名",           // String - 用户名
   "roleId": 1,               // Integer - 角色ID
   "roleName": "管理员",       // String - 角色名称
+  "isSuperAdmin": false,     // Boolean - 是否超级管理员内置账号
   "updateTime": "2024-01-01 12:00:00"  // String - 更新时间
 }
 ```
+
+`isSuperAdmin` 用于前端识别系统内置超级管理员账号。默认超级管理员账号为 `super@admin.com`，名称为 `超级管理员`，仅超级管理员本人可在用户管理接口中看到。
 
 ### 3. UserSearchDto (用户搜索传输对象)
 
@@ -100,6 +103,8 @@
 
 **功能描述**: 创建新的用户
 
+**业务规则**: 创建普通用户时不能选择超级管理员角色。
+
 **请求参数**:
 - Content-Type: `application/json`
 - Body: UserDto
@@ -133,6 +138,8 @@ curl -X POST http://localhost:11002/api/v1/system/user/add \
 
 **功能描述**: 根据ID删除单个用户
 
+**业务规则**: 超级管理员账号为系统内置账号，不允许通过用户管理接口删除。
+
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
@@ -159,6 +166,8 @@ curl -X DELETE http://localhost:11002/api/v1/system/user/1
 **接口地址**: `POST /api/v1/system/user/{id}/update`
 
 **功能描述**: 根据ID更新用户信息
+
+**业务规则**: 超级管理员账号为系统内置账号，不允许通过用户管理接口修改。
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
@@ -231,6 +240,8 @@ curl -X POST http://localhost:11002/api/v1/system/user/1,2,3/bulk-update \
 
 **功能描述**: 分页查询用户列表
 
+**可见性规则**: 非超级管理员查询用户列表时不会返回超级管理员账号；超级管理员可见全部用户。
+
 **查询参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
@@ -262,6 +273,7 @@ curl -X GET "http://localhost:11002/api/v1/system/user/list?name=测试&page=1&s
         "name": "测试用户",
         "roleId": 1,
         "roleName": "管理员",
+        "isSuperAdmin": false,
         "updateTime": "2024-01-01 12:00:00"
       }
     ]
@@ -276,6 +288,8 @@ curl -X GET "http://localhost:11002/api/v1/system/user/list?name=测试&page=1&s
 **接口地址**: `GET /api/v1/system/user/{id}/view`
 
 **功能描述**: 根据ID查询用户详细信息
+
+**可见性规则**: 非超级管理员不能查看超级管理员账号详情；超级管理员可见全部用户详情。
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
@@ -298,6 +312,7 @@ curl -X GET http://localhost:11002/api/v1/system/user/1/view
     "name": "测试用户",
     "roleId": 1,
     "roleName": "管理员",
+    "isSuperAdmin": false,
     "updateTime": "2024-01-01 12:00:00"
   }
 }
@@ -310,6 +325,8 @@ curl -X GET http://localhost:11002/api/v1/system/user/1/view
 **接口地址**: `POST /api/v1/system/user/update-password`
 
 **功能描述**: 当前登录用户修改密码
+
+**业务规则**: 超级管理员本人可以通过该接口修改自己的密码；该限制不同于用户管理中的编辑/删除保护。
 
 **请求参数**:
 - Content-Type: `application/json`
@@ -350,5 +367,7 @@ curl -X POST http://localhost:11002/api/v1/system/user/update-password \
 1. **认证授权**: 需要登录认证
 2. **密码安全**: 密码修改需要验证旧密码
 3. **批量操作**: 批量更新时，ID列表不能为空
+4. **内置账号保护**: 超级管理员账号由系统初始化生成，默认账号为 `super@admin.com`，仅超级管理员本人可见，禁止通过用户管理修改或删除
+5. **角色分配限制**: 创建或修改普通用户时不能手动分配超级管理员角色
 
 ---

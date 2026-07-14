@@ -503,6 +503,25 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("MCP 审批围栏应保留请求标识和最终状态")
+    void parseMcpApprovalFence() {
+        String content = """
+                ```zenvis:mcp-approval
+                {"id":"request-1","title":"MCP 工具审批：delete","content":"删除记录","status":"succeeded","toolKey":"local::delete","approvalScope":"SESSION","argumentsSummary":"{\\"id\\":1}"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("mcp-approval", parts.get(0).getType());
+        assertEquals("request-1", parts.get(0).getId());
+        assertEquals("succeeded", parts.get(0).getStatus());
+        assertEquals("local::delete", parts.get(0).getMetadata().get("toolKey"));
+        assertEquals("SESSION", parts.get(0).getMetadata().get("approvalScope"));
+    }
+
+    @Test
     @DisplayName("非法 zenvis JSON 应回退为 Markdown")
     void invalidSpecialFenceFallsBackToMarkdown() {
         String content = """

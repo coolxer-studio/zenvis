@@ -1,5 +1,6 @@
 package com.coolxer.service.dih;
 
+import com.coolxer.commons.enums.MessageType;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.base.vo.PageRowsVo;
@@ -18,6 +19,7 @@ import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
@@ -43,6 +45,64 @@ import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVEN
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DihChatApplicationServiceTest {
+
+    @Test
+    void mcpToolLogPayloadsAreSavedAsPrettyCodeParts() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var formatLog = streamType.getDeclaredMethod(
+                "formatLog",
+                McpToolCallLoggingProvider.McpToolCallLog.class
+        );
+        formatLog.setAccessible(true);
+
+        String started = (String) formatLog.invoke(null,
+                McpToolCallLoggingProvider.McpToolCallLog.started(
+                        "dashboard_create",
+                        "{\"request\":{\"name\":\"审批验证\",\"type\":\"LINK\"}}"
+                ));
+        String succeeded = (String) formatLog.invoke(null,
+                McpToolCallLoggingProvider.McpToolCallLog.succeeded(
+                        "dashboard_create",
+                        120L,
+                        "{\"id\":502,\"name\":\"审批验证\"}"
+                ));
+
+        List<ChatMessagePart> parts = new ChatMessagePartParser().parse(started + succeeded, MessageType.TEXT);
+
+        assertThat(parts).extracting(ChatMessagePart::getType)
+                .containsExactly("markdown", "code", "markdown", "code");
+        assertThat(parts.get(1).getLanguage()).isEqualTo("json");
+        assertThat(parts.get(1).getContent()).contains("\n  \"request\"");
+        assertThat(parts.get(3).getLanguage()).isEqualTo("json");
+        assertThat(parts.get(3).getContent()).contains("\n  \"id\" : 502");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void mergeSupplementalPartsKeepsApprovalAtItsStreamPosition() {
+        DihChatApplicationService service = emptyService();
+        ChatMessagePart approval = ChatMessagePart.builder()
+                .id("approval-1")
+                .type("mcp-approval")
+                .status("succeeded")
+                .metadata(Map.of("contentOffset", 6))
+                .build();
+        ChatMessagePart markdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content("beforeafter")
+                .build();
+
+        List<ChatMessagePart> parts = ReflectionTestUtils.invokeMethod(
+                service, "mergeSupplementalParts", "beforeafter", List.of(markdown), List.of(approval));
+
+        assertThat(parts).extracting(ChatMessagePart::getType)
+                .containsExactly("markdown", "mcp-approval", "markdown");
+        assertThat(parts.get(0).getContent()).isEqualTo("before");
+        assertThat(parts.get(2).getContent()).isEqualTo("after");
+    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -100,6 +160,16 @@ class DihChatApplicationServiceTest {
                 .containsEntry("name", "登录趋势图")
                 .containsEntry("chartType", "line")
                 .containsEntry("entity", "user_event");
+    }
+
+    private DihChatApplicationService emptyService() {
+        return new DihChatApplicationService(
+                null, null, null, null, null, null, null, null,
+                (AnalysisAgent) null, (DisposeAgent) null, (ReportAgent) null,
+                (DataAccessAgent) null, (DataVisualizationAgent) null,
+                null, null, null, (AgentMcpToolService) null, (SkillService) null,
+                null, (PushTaskService) null, (DashboardService) null, (MenuService) null
+        );
     }
 
     @Test

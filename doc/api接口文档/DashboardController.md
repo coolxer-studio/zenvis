@@ -16,9 +16,11 @@
 {
   "id": 1,                    // Integer - 看板ID（更新时使用，创建时不传）
   "name": "数据分析看板",     // String - 看板名称（必填）
-  "code": "dashboard_001",    // String - 编码（必填）
-  "type": "ROUTE",            // DashboardType - 看板类型（必填，枚举值：ROUTE/LINK）
-  "url": "/dashboard/data"    // String - URL地址（必填）
+  "code": "msg-board",        // String - 路由编码（仅内置看板 BUILT 必填）
+  "type": "BUILT",            // DashboardType - 看板类型（必填）
+  "configIndex": "user-event-dashboard", // String - 低代码页面看板配置索引
+  "htmlPath": "/html-page/demo.html",    // String - HTML页面路径
+  "url": "https://example.com/report"    // String - 外链地址
 }
 ```
 
@@ -27,9 +29,19 @@
 |-----|------|-----|------|
 | id | Integer | 否 | 看板ID，更新时需传入 |
 | name | String | 是 | 看板名称 |
-| code | String | 是 | 看板编码 |
-| type | DashboardType | 是 | 类型（ROUTE:路由/LINK:外链） |
-| url | String | 是 | URL地址 |
+| type | DashboardType | 是 | 类型：`BUILT`、`LOW_CODE_PAGE`、`HTML_PAGE`、`LINK` |
+| code | String | 仅 `BUILT` 必填 | 内置看板路由编码，用于前端映射内置组件 |
+| configIndex | String | 仅 `LOW_CODE_PAGE` 必填 | AMIS低代码页面配置索引 |
+| htmlPath | String | 仅 `HTML_PAGE` 必填 | HTML页面路径 |
+| url | String | 仅 `LINK` 必填 | 外链地址 |
+
+**类型校验规则**:
+
+- `BUILT`：必须填写 `code`，用于前端根据编码找到内置看板组件。
+- `LOW_CODE_PAGE`：必须填写 `configIndex`，不要求 `code`。
+- `HTML_PAGE`：必须填写 `htmlPath`，不要求 `code`。
+- `LINK`：必须填写 `url`，不要求 `code`。
+- 非内置看板的选中、高亮和打开逻辑推荐使用 `id`，不要依赖 `code`。
 
 ### 2. DashboardVo (看板视图对象)
 
@@ -37,10 +49,12 @@
 {
   "id": 1,                    // Integer - 看板ID
   "name": "数据分析看板",     // String - 看板名称
-  "code": "dashboard_001",    // String - 编码
-  "type": "ROUTE",            // DashboardType - 看板类型
-  "typeDescription": "路由",  // String - 类型描述
-  "url": "/dashboard/data",   // String - URL地址
+  "code": "msg-board",        // String - 内置看板编码，非内置可为空
+  "type": "BUILT",            // DashboardType - 看板类型
+  "typeDescription": "内置看板", // String - 类型描述
+  "configIndex": "",          // String - 低代码页面配置索引
+  "htmlPath": "",             // String - HTML页面路径
+  "url": "",                  // String - 外链地址
   "updateTime": "2024-01-01 12:00:00"  // String - 更新时间
 }
 ```
@@ -104,9 +118,8 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/add \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试看板",
-    "code": "test_dashboard",
-    "type": "ROUTE",
-    "url": "/dashboard/test"
+    "code": "msg-board",
+    "type": "BUILT"
   }'
 ```
 

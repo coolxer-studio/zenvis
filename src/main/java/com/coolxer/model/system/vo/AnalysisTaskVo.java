@@ -1,11 +1,14 @@
 package com.coolxer.model.system.vo;
 
 import com.coolxer.commons.enums.AnalysisTaskStatus;
+import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
 import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * AI分析任务展示对象
@@ -33,6 +36,14 @@ public class AnalysisTaskVo implements Serializable {
 
     private Integer priority;
 
+    private AnalysisTaskApprovalMode approvalMode;
+
+    private String executionId;
+
+    private List<String> skillIds;
+
+    private long pendingApprovalCount;
+
     private Date scheduledTime;
 
     private Date startTime;
@@ -58,6 +69,11 @@ public class AnalysisTaskVo implements Serializable {
         this.status = analysisTask.getStatus();
         this.statusDescription = analysisTask.getStatus() == null ? null : analysisTask.getStatus().getDescription();
         this.priority = analysisTask.getPriority();
+        this.approvalMode = analysisTask.getApprovalMode() == null
+                ? AnalysisTaskApprovalMode.MANUAL : analysisTask.getApprovalMode();
+        this.executionId = analysisTask.getExecutionId();
+        this.skillIds = analysisTask.getSkillIds() == null
+                ? new ArrayList<>() : new ArrayList<>(analysisTask.getSkillIds());
         this.scheduledTime = analysisTask.getScheduledTime();
         this.startTime = analysisTask.getStartTime();
         this.finishTime = analysisTask.getFinishTime();

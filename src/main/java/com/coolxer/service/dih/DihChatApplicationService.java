@@ -1,6 +1,7 @@
 package com.coolxer.service.dih;
 
 import com.coolxer.commons.enums.MessageType;
+import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
@@ -18,6 +19,11 @@ import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
+import com.coolxer.service.dih.mcp.McpApprovalEvent;
+import com.coolxer.service.dih.mcp.McpApprovalService;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.model.dih.vo.McpApprovalVo;
+import com.coolxer.commons.enums.McpInvocationChannel;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
@@ -29,6 +35,7 @@ import com.coolxer.utils.JacksonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
@@ -39,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 /**
  * DIH 聊天应用编排服务。
@@ -74,6 +83,9 @@ public class DihChatApplicationService {
     private final PushTaskService pushTaskService;
     private final DashboardService dashboardService;
     private final MenuService menuService;
+
+    @Autowired(required = false)
+    private McpApprovalService mcpApprovalService;
 
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
@@ -210,8 +222,19 @@ public class DihChatApplicationService {
                 ? McpToolContext.empty()
                 : agentMcpToolService.resolve(chatType);
         McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
+        String turnId = UUID.randomUUID().toString();
         if (mcpToolContext.hasTools()) {
             mcpToolLogStream = McpToolLogStream.create();
+            mcpToolContext = mcpToolContext.withInvocationContext(new McpInvocationContext(
+                    McpInvocationChannel.CHAT_AGENT,
+                    currentUser == null ? null : currentUser.getId(),
+                    chatId,
+                    turnId,
+                    chatType,
+                    null,
+                    null,
+                    mcpToolLogStream::emitApproval
+            ));
             mcpToolContext = mcpToolContext.withToolCallbackProvider(
                     new McpToolCallLoggingProvider(mcpToolContext.toolCallbackProvider(), mcpToolLogStream::emit)
             );
@@ -239,7 +262,12 @@ public class DihChatApplicationService {
             McpToolLogStream finalMcpToolLogStream = mcpToolLogStream;
             fluxResponse = Flux.merge(
                     finalMcpToolLogStream.flux(),
-                    fluxResponse.doFinally(signalType -> finalMcpToolLogStream.complete())
+                    fluxResponse.doFinally(signalType -> {
+                        if (signalType == reactor.core.publisher.SignalType.CANCEL && mcpApprovalService != null) {
+                            mcpApprovalService.cancelTurn(turnId, currentUser == null ? null : currentUser.getId());
+                        }
+                        finalMcpToolLogStream.complete();
+                    })
             );
         }
 
@@ -249,7 +277,8 @@ public class DihChatApplicationService {
                 currentUser,
                 eventStream,
                 messageType,
-                BooleanUtils.isTrue(chatDto.getDeepThink())
+                BooleanUtils.isTrue(chatDto.getDeepThink()),
+                mcpToolLogStream
         );
     }
 
@@ -347,7 +376,8 @@ public class DihChatApplicationService {
                     chatDto.getAttachments(),
                     currentUser,
                     mcpToolContext.toolCallbackProvider(),
-                    mcpToolContext.systemPrompt()
+                    mcpToolContext.systemPrompt(),
+                    mcpToolContext.invocationContext()
             );
         }
 
@@ -359,7 +389,8 @@ public class DihChatApplicationService {
                 chatDto.getAttachments(),
                 currentUser,
                 mcpToolContext.toolCallbackProvider(),
-                mcpToolContext.systemPrompt()
+                mcpToolContext.systemPrompt(),
+                mcpToolContext.invocationContext()
         );
     }
 
@@ -402,11 +433,33 @@ public class DihChatApplicationService {
                                                  boolean eventStream,
                                                  AtomicReference<MessageType> messageType,
                                                  boolean deepThinkRequested) {
+        return emitAndSaveTextResponse(fluxResponse, chatSession, currentUser, eventStream,
+                messageType, deepThinkRequested, McpToolLogStream.disabled());
+    }
+
+    private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
+                                                 ChatSession chatSession,
+                                                 User currentUser,
+                                                 boolean eventStream,
+                                                 AtomicReference<MessageType> messageType,
+                                                 boolean deepThinkRequested,
+                                                 McpToolLogStream toolActivityStream) {
         StringBuilder modelResponse = new StringBuilder();
         if (eventStream) {
             return fluxResponse
-                    .doOnNext(modelResponse::append)
-                    .map(s -> toNdjson(ChatStreamEvent.delta(s)))
+                    .handle((value, sink) -> {
+                        McpApprovalEvent approvalEvent = McpToolLogStream.parseApprovalEvent(value);
+                        if (approvalEvent != null) {
+                            toolActivityStream.recordApprovalPosition(
+                                    approvalEvent.data() == null ? null : approvalEvent.data().getRequestId(),
+                                    modelResponse.length());
+                            sink.next(toNdjson(ChatStreamEvent.approval(approvalEvent.event(), approvalEvent.data())));
+                            return;
+                        }
+                        modelResponse.append(value);
+                        sink.next(toNdjson(ChatStreamEvent.delta(value)));
+                    })
+                    .cast(String.class)
                     .concatWith(Flux.defer(() -> {
                         Message aiMessage = saveAiResponse(
                                 chatSession,
@@ -414,7 +467,8 @@ public class DihChatApplicationService {
                                 modelResponse.toString(),
                                 messageType.get(),
                                 true,
-                                deepThinkRequested
+                                deepThinkRequested,
+                                toolActivityStream.approvalParts()
                         );
                         return Flux.just(toNdjson(ChatStreamEvent.done(aiMessage)));
                     }))
@@ -425,8 +479,10 @@ public class DihChatApplicationService {
                     });
         }
 
-        return fluxResponse.doOnNext(modelResponse::append)
-                .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(), messageType.get(), false, false))
+        return fluxResponse.filter(value -> McpToolLogStream.parseApprovalEvent(value) == null)
+                .doOnNext(modelResponse::append)
+                .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(),
+                        messageType.get(), false, false, toolActivityStream.approvalParts()))
                 .doOnError(e -> persistErrorResponse(chatSession, currentUser));
     }
 
@@ -500,10 +556,22 @@ public class DihChatApplicationService {
     }
 
     private Message saveAiResponse(ChatSession chatSession, User currentUser, String content, MessageType type, boolean withParts, boolean deepThinkRequested) {
+        return saveAiResponse(chatSession, currentUser, content, type, withParts, deepThinkRequested, List.of());
+    }
+
+    private Message saveAiResponse(ChatSession chatSession,
+                                   User currentUser,
+                                   String content,
+                                   MessageType type,
+                                   boolean withParts,
+                                   boolean deepThinkRequested,
+                                   List<ChatMessagePart> supplementalParts) {
         Message aiMessage = new Message("ai", content, type);
         List<ChatMessagePart> parts = List.of();
         if (withParts) {
-            parts = new ArrayList<>(chatMessagePartParser.parse(content, type));
+            String parsableContent = insertSupplementalMarkers(content, supplementalParts);
+            parts = new ArrayList<>(chatMessagePartParser.parse(parsableContent, type));
+            parts = mergeSupplementalParts(content, parts, supplementalParts);
             if (deepThinkRequested && parts.stream().noneMatch(part -> "thinking".equals(part.getType()))) {
                 parts.add(0, ChatMessagePart.builder()
                         .id(java.util.UUID.randomUUID().toString())
@@ -526,6 +594,82 @@ public class DihChatApplicationService {
             log.error("保存模型响应到会话失败: {}", e.getMessage(), e);
         }
         return aiMessage;
+    }
+
+    private String insertSupplementalMarkers(String content, List<ChatMessagePart> supplementalParts) {
+        if (supplementalParts == null || supplementalParts.isEmpty()
+                || supplementalParts.stream().anyMatch(part -> part.getMetadata() == null
+                || !(part.getMetadata().get("contentOffset") instanceof Number))) {
+            return content;
+        }
+        StringBuilder marked = new StringBuilder(content);
+        List<ChatMessagePart> ordered = supplementalParts.stream()
+                .sorted(java.util.Comparator.comparingInt(part ->
+                        ((Number) part.getMetadata().get("contentOffset")).intValue()))
+                .toList();
+        for (int i = ordered.size() - 1; i >= 0; i--) {
+            ChatMessagePart part = ordered.get(i);
+            int offset = Math.max(0, Math.min(marked.length(),
+                    ((Number) part.getMetadata().get("contentOffset")).intValue()));
+            Map<String, Object> marker = new LinkedHashMap<>(part.getMetadata());
+            marker.put("id", part.getId());
+            marker.put("title", part.getTitle());
+            marker.put("content", part.getContent());
+            marker.put("status", part.getStatus());
+            marked.insert(offset, "\n```zenvis:mcp-approval\n" + JacksonUtil.toJson(marker) + "\n```\n");
+        }
+        return marked.toString();
+    }
+
+    private List<ChatMessagePart> mergeSupplementalParts(String content,
+                                                         List<ChatMessagePart> parsedParts,
+                                                         List<ChatMessagePart> supplementalParts) {
+        if (supplementalParts == null || supplementalParts.isEmpty()) {
+            return parsedParts;
+        }
+        java.util.Set<String> parsedApprovalIds = parsedParts.stream()
+                .filter(part -> "mcp-approval".equals(part.getType()))
+                .map(ChatMessagePart::getId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (supplementalParts.stream().allMatch(part -> parsedApprovalIds.contains(part.getId()))) {
+            return parsedParts;
+        }
+        boolean plainMarkdown = parsedParts.stream().allMatch(part -> "markdown".equals(part.getType()));
+        boolean hasOffsets = supplementalParts.stream().allMatch(part -> part.getMetadata() != null
+                && part.getMetadata().get("contentOffset") instanceof Number);
+        if (!plainMarkdown || !hasOffsets) {
+            List<ChatMessagePart> merged = new ArrayList<>(supplementalParts);
+            merged.addAll(parsedParts);
+            return merged;
+        }
+
+        List<ChatMessagePart> merged = new ArrayList<>();
+        int cursor = 0;
+        for (ChatMessagePart approval : supplementalParts.stream()
+                .sorted(java.util.Comparator.comparingInt(part ->
+                        ((Number) part.getMetadata().get("contentOffset")).intValue()))
+                .toList()) {
+            int offset = Math.max(cursor, Math.min(content.length(),
+                    ((Number) approval.getMetadata().get("contentOffset")).intValue()));
+            if (offset > cursor) {
+                merged.add(ChatMessagePart.builder()
+                        .id(java.util.UUID.randomUUID().toString())
+                        .type("markdown")
+                        .content(content.substring(cursor, offset))
+                        .build());
+            }
+            merged.add(approval);
+            cursor = offset;
+        }
+        if (cursor < content.length()) {
+            merged.add(ChatMessagePart.builder()
+                    .id(java.util.UUID.randomUUID().toString())
+                    .type("markdown")
+                    .content(content.substring(cursor))
+                    .build());
+        }
+        return merged;
     }
 
     private void mergeStructuredExtraData(ChatSession chatSession, List<ChatMessagePart> parts, User currentUser) {
@@ -1612,18 +1756,29 @@ public class DihChatApplicationService {
 
     private static class McpToolLogStream {
 
+        private static final String APPROVAL_EVENT_PREFIX = "\u001ezenvis-mcp-approval:";
+
         private final Sinks.Many<String> sink;
 
-        private McpToolLogStream(Sinks.Many<String> sink) {
+        private final Map<String, McpApprovalVo> approvalStates;
+
+        private final Map<String, Integer> approvalOffsets;
+
+        private McpToolLogStream(Sinks.Many<String> sink,
+                                 Map<String, McpApprovalVo> approvalStates,
+                                 Map<String, Integer> approvalOffsets) {
             this.sink = sink;
+            this.approvalStates = approvalStates;
+            this.approvalOffsets = approvalOffsets;
         }
 
         private static McpToolLogStream create() {
-            return new McpToolLogStream(Sinks.many().multicast().onBackpressureBuffer());
+            return new McpToolLogStream(Sinks.many().multicast().onBackpressureBuffer(),
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
         }
 
         private static McpToolLogStream disabled() {
-            return new McpToolLogStream(null);
+            return new McpToolLogStream(null, Map.of(), Map.of());
         }
 
         private boolean enabled() {
@@ -1641,6 +1796,67 @@ public class DihChatApplicationService {
             sink.tryEmitNext(formatLog(logEvent));
         }
 
+        private void emitApproval(McpApprovalEvent approvalEvent) {
+            if (!enabled() || approvalEvent == null || approvalEvent.data() == null) {
+                return;
+            }
+            approvalStates.put(approvalEvent.data().getRequestId(), approvalEvent.data());
+            sink.tryEmitNext(APPROVAL_EVENT_PREFIX + JacksonUtil.toJson(approvalEvent));
+        }
+
+        private static McpApprovalEvent parseApprovalEvent(String value) {
+            if (value == null || !value.startsWith(APPROVAL_EVENT_PREFIX)) {
+                return null;
+            }
+            return JacksonUtil.toObject(value.substring(APPROVAL_EVENT_PREFIX.length()), McpApprovalEvent.class);
+        }
+
+        private void recordApprovalPosition(String requestId, int contentOffset) {
+            if (enabled() && StringUtils.hasText(requestId)) {
+                approvalOffsets.putIfAbsent(requestId, Math.max(contentOffset, 0));
+            }
+        }
+
+        private List<ChatMessagePart> approvalParts() {
+            if (approvalStates.isEmpty()) {
+                return List.of();
+            }
+            return approvalStates.values().stream()
+                    .sorted(java.util.Comparator.comparing(McpApprovalVo::getCreateTime,
+                            java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                    .map(approval -> toApprovalPart(approval, approvalOffsets.get(approval.getRequestId())))
+                    .toList();
+        }
+
+        private static ChatMessagePart toApprovalPart(McpApprovalVo approval, Integer contentOffset) {
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("requestId", approval.getRequestId());
+            metadata.put("toolKey", approval.getToolKey());
+            metadata.put("toolName", approval.getToolName());
+            metadata.put("sourceType", approval.getSourceType());
+            metadata.put("serverName", approval.getServerName());
+            metadata.put("channel", approval.getChannel());
+            metadata.put("policy", approval.getPolicy());
+            metadata.put("approvalScope", approval.getApprovalScope());
+            metadata.put("argumentsSummary", approval.getArgumentsSummary());
+            metadata.put("resultSummary", approval.getResultSummary());
+            metadata.put("errorSummary", approval.getErrorSummary());
+            metadata.put("riskLevel", approval.getRiskLevel());
+            metadata.put("expireTime", approval.getExpireTime());
+            if (contentOffset != null) {
+                metadata.put("contentOffset", contentOffset);
+            }
+            return ChatMessagePart.builder()
+                    .id(approval.getRequestId())
+                    .type("mcp-approval")
+                    .title("MCP 工具审批：" + approval.getToolName())
+                    .content(approval.getDescription())
+                    .status(approval.getStatus() == null ? "pending"
+                            : approval.getStatus().name().toLowerCase(java.util.Locale.ROOT))
+                    .metadata(metadata)
+                    .build();
+        }
+
         private void complete() {
             if (enabled()) {
                 sink.tryEmitComplete();
@@ -1650,33 +1866,42 @@ public class DihChatApplicationService {
         private static String formatLog(McpToolCallLoggingProvider.McpToolCallLog logEvent) {
             String toolName = inlineCode(logEvent.toolName());
             if ("started".equals(logEvent.status())) {
-                return "\n\n> MCP调用开始：" + toolName + formatArguments(logEvent.arguments()) + "\n\n";
+                return "\n\n**MCP调用开始：** " + toolName
+                        + formatPayload("调用参数", logEvent.arguments())
+                        + "\n\n";
             }
             if ("succeeded".equals(logEvent.status())) {
-                return "\n\n> MCP调用成功：" + toolName
+                return "\n\n**MCP调用成功：** " + toolName
                         + formatDuration(logEvent.durationMillis())
-                        + formatResult(logEvent.result())
+                        + formatPayload("返回结果", logEvent.result())
                         + "\n\n";
             }
             if ("failed".equals(logEvent.status())) {
-                return "\n\n> MCP调用失败：" + toolName
+                return "\n\n**MCP调用失败：** " + toolName
                         + formatDuration(logEvent.durationMillis())
-                        + formatError(logEvent.error())
+                        + formatPayload("错误信息", logEvent.error())
                         + "\n\n";
             }
-            return "\n\n> MCP调用日志：" + toolName + "\n\n";
+            return "\n\n**MCP调用日志：** " + toolName + "\n\n";
         }
 
-        private static String formatArguments(String arguments) {
-            return StringUtils.hasText(arguments) ? "，参数：" + inlineCode(arguments) : "";
-        }
-
-        private static String formatResult(String result) {
-            return StringUtils.hasText(result) ? "，返回：" + inlineCode(result) : "";
-        }
-
-        private static String formatError(String error) {
-            return StringUtils.hasText(error) ? "，错误：" + inlineCode(error) : "";
+        private static String formatPayload(String title, String payload) {
+            if (!StringUtils.hasText(payload)) {
+                return "";
+            }
+            String language = "text";
+            String formatted = payload;
+            try {
+                var json = JacksonConfig.OBJECT_MAPPER.readTree(payload);
+                if (json != null) {
+                    formatted = JacksonConfig.OBJECT_MAPPER.writerWithDefaultPrettyPrinter()
+                            .writeValueAsString(json);
+                    language = "json";
+                }
+            } catch (Exception ignored) {
+                // Non-JSON tool output is still rendered in a plaintext code card.
+            }
+            return "\n\n" + title + "：\n\n```" + language + "\n" + formatted + "\n```";
         }
 
         private static String formatDuration(Long durationMillis) {

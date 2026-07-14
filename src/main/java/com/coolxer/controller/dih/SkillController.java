@@ -7,6 +7,7 @@ import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
+import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -51,6 +52,21 @@ public class SkillController {
             return ResponseWrap.success(skillService.getBuiltinAgentSkills(enabled));
         } catch (Exception e) {
             log.error("查询内置 Agent Skill 列表失败", e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/options")
+    @Operation(summary = "已启用 Skill 选项", description = "查询所有已启用 Skill，不按 Agent 类型过滤")
+    public ResponseWrap<List<SkillOptionVo>> options(
+            @RequestParam(value = "enabled", defaultValue = "true") Boolean enabled) {
+        try {
+            if (!Boolean.TRUE.equals(enabled)) {
+                return ResponseWrap.fail(new IllegalArgumentException("分析任务只允许选择已启用 Skill"));
+            }
+            return ResponseWrap.success(skillService.getEnabledOptions());
+        } catch (Exception e) {
+            log.error("查询 Skill 选项失败", e);
             return ResponseWrap.fail(e);
         }
     }

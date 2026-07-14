@@ -43,7 +43,8 @@ public class PromptDrivenAgentRuntime {
                     prompt,
                     attachments,
                     user,
-                    mcpToolContext.toolCallbackProvider()
+                    mcpToolContext.toolCallbackProvider(),
+                    mcpToolContext.invocationContext()
             );
         }
         return chatService.chatWithSystemPrompt(chatId, model, systemPrompt, prompt, attachments, user);

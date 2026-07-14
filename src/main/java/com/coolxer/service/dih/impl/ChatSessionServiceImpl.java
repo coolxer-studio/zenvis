@@ -11,6 +11,7 @@ import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.mcp.McpChatToolGrantService;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,9 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     @Autowired
     private ChatSessionRepository chatSessionRepository;
 
+    @Autowired
+    private McpChatToolGrantService mcpChatToolGrantService;
+
     @Override
     public List<ChatSessionVo> findAll() {
         return chatSessionRepository.findAll().stream().map(ChatSessionVo::new).toList();
@@ -54,7 +58,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public Boolean update(Long id, ChatSessionDto chatSessionDto, User currentUser) {
         try {
             if (currentUser == null) {
@@ -79,6 +83,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     }
 
     @Override
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public void delete(Long id, User currentUser) {
         ChatSession chatSession = chatSessionRepository.findById(id).orElse(null);
         if (chatSession != null) {
@@ -86,12 +91,14 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                 // 不支持删除
                 throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
             } else {
+                mcpChatToolGrantService.revokeChat(chatSession.getSessionId(), currentUser.getId());
                 chatSessionRepository.deleteById(id);
             }
         }
     }
 
     @Override
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public void deleteByIds(List<Long> ids, User currentUser) {
         for (Long id : ids) {
             delete(id, currentUser);
@@ -151,7 +158,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public ChatSession appendMessage(String chatId, ChatSessionDto createDefaults, Message message, User currentUser) {
         if (currentUser == null) {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
@@ -173,7 +180,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public ChatSession appendMessage(ChatSession chatSession, Message message, User currentUser) {
         if (chatSession == null || message == null) {
             return chatSession;

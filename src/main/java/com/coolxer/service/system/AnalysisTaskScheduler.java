@@ -24,10 +24,14 @@ public class AnalysisTaskScheduler {
         analysisTaskService.recoverRunningTasks();
     }
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelayString = "${app.ai.analysis-task.dispatch-delay-ms:5000}")
     public void dispatch() {
         try {
-            analysisTaskService.executeNextTask();
+            for (int i = 0; i < 100; i++) {
+                if (analysisTaskService.executeNextTask() == null) {
+                    break;
+                }
+            }
         } catch (Exception e) {
             log.error("AI分析任务队列调度失败", e);
         }

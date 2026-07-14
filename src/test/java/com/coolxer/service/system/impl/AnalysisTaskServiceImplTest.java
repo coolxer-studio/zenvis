@@ -14,8 +14,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AnalysisTaskServiceImplTest {
 
@@ -54,6 +56,23 @@ class AnalysisTaskServiceImplTest {
     }
 
     @Test
+    void taskSkillSelectionOnlyAcceptsEnabledSkillsRegardlessOfAgentType() throws Exception {
+        createSkill("enabled-any-agent", true, "agent_dispose", "已启用 Skill Prompt");
+        createSkill("disabled-skill", false, "agent_analysis", "不应加载");
+
+        SkillService skillService = createSkillService();
+
+        assertThat(skillService.getEnabledOptions())
+                .extracting(option -> option.getValue())
+                .containsExactly("enabled-any-agent");
+        assertThat(skillService.buildTaskSkillPrompt("agent_analysis", List.of("enabled-any-agent")))
+                .contains("已启用 Skill Prompt");
+        assertThatThrownBy(() -> skillService.validateEnabledSkillIds(List.of("disabled-skill")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("disabled-skill");
+    }
+
+    @Test
     void callAiAnalyzeUsesGenericAgentLlmServiceAndClearsContext() {
         AnalysisTask task = new AnalysisTask()
                 .setName("每日研判")
@@ -84,6 +103,29 @@ class AnalysisTaskServiceImplTest {
         assertThat(agentLlmService.userPrompt).contains("每日研判").contains("分析最近风险");
         assertThat(agentLlmService.modelCleared).isTrue();
         assertThat(agentLlmService.mcpContextCleared).isTrue();
+    }
+
+    private void createSkill(String id, boolean enabled, String agentType, String content) throws Exception {
+        Path skill = skillRoot.resolve(id);
+        Files.createDirectories(skill);
+        Files.writeString(skill.resolve("skill.json"), """
+                {
+                  "id": "%s",
+                  "name": "%s",
+                  "enabled": %s,
+                  "agentTypes": ["%s"],
+                  "entry": "SKILL.md"
+                }
+                """.formatted(id, id, enabled, agentType));
+        Files.writeString(skill.resolve("SKILL.md"), content);
+    }
+
+    private SkillService createSkillService() {
+        CustomWebConfig customWebConfig = new CustomWebConfig();
+        ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());
+        SkillService skillService = new SkillService(customWebConfig, JacksonConfig.OBJECT_MAPPER.copy());
+        skillService.reload();
+        return skillService;
     }
 
     private static final class FakeAIBaseService extends AIBaseService {

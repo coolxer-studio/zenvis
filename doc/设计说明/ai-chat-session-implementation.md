@@ -1,12 +1,13 @@
 # AI 会话实现说明
 
-本文面向需要理解 ZenVis Backend 当前 AI 会话实现的开发者，重点说明 `/api/v1/dih/chat`、会话管理、普通问答、深度思考、附件、MCP Agent 和数据可视化 Agent 的主要逻辑。
+本文面向需要理解 ZenVis Backend 当前 AI 会话实现的开发者，重点说明 `/api/v1/dih/chat`、会话管理、普通问答、深度思考、附件、统一 MCP 工具审批和业务 Agent 的主要逻辑。
 
 ## 代码范围
 
 | 模块 | 关键文件 | 作用 |
 | :--- | :--- | :--- |
-| Chat 接口入口 | `src/main/java/com/coolxer/controller/dih/ChatController.java` | 接收聊天请求、创建/更新会话、选择聊天分支、封装流式事件、保存 AI 回复 |
+| Chat 接口入口 | `src/main/java/com/coolxer/controller/dih/ChatController.java` | 接收 Chat、模型列表、附件和业务动作请求 |
+| Chat 应用服务 | `src/main/java/com/coolxer/service/dih/DihChatApplicationService.java` | 校验请求、维护会话、选择 Agent、合并 MCP 事件、保存最终 AI 消息 |
 | 会话管理接口 | `src/main/java/com/coolxer/controller/dih/ChatSessionController.java` | 会话增删改查、置顶列表、首次进入会话时返回默认开场白 |
 | 普通聊天服务 | `src/main/java/com/coolxer/service/dih/AIChatService.java` | 调用 Spring AI ChatClient 或原生 OpenAI 兼容接口，处理 RAG、记忆、深度思考、附件图片 |
 | 会话服务 | `src/main/java/com/coolxer/service/dih/impl/ChatSessionServiceImpl.java` | 读写 `t_ai_chat_session`，按当前用户隔离会话 |
@@ -14,7 +15,10 @@
 | 结构化消息解析 | `src/main/java/com/coolxer/service/dih/ChatMessagePartParser.java` | 将 AI 回复解析为 markdown、code、thinking、notice、confirm、chart 等片段 |
 | 附件服务 | `src/main/java/com/coolxer/service/dih/ChatAttachmentService.java` | 上传附件、读取文本附件、图片转 OpenAI image_url 输入 |
 | 数据可视化 Agent | `src/main/java/com/coolxer/service/dih/agent/DataVisualizationAgent.java` | 通过只读 retrieval MCP 工具完成可视化分析 |
-| MCP Agent | `src/main/java/com/coolxer/service/dih/agent/McpAgent.java` | 将已连接 MCP 工具挂到模型工具调用链路 |
+| 报表制作 Agent | `src/main/java/com/coolxer/service/dih/agent/ReportAgent.java` | 生成和改写报表正文，输出可同步到右侧编辑器的结构化报表文档 |
+| 报表示例服务 | `src/main/java/com/coolxer/service/dih/ReportDemoResponseService.java` | 为报表演示示例提供内置模板，命中后不请求后台模型 |
+| MCP 工具注入 | `src/main/java/com/coolxer/service/dih/mcp/AgentMcpToolService.java` | 按 Agent scope 注入本地和外部工具及工具提示词 |
+| MCP 策略与审批 | `src/main/java/com/coolxer/service/dih/mcp/McpApprovalService.java` | 执行 ALLOW/ASK/DENY，会话授权、审批状态和调用审计 |
 | 记忆配置 | `src/main/java/com/coolxer/configuration/ai/SpringAiChatMemoryConfiguration.java` | 初始化 Spring AI JDBC chat memory，并使用 MySQL 存储 |
 
 ## 总体设计
@@ -23,7 +27,7 @@
 
 | 数据 | 主要用途 | 写入位置 | 读取位置 |
 | :--- | :--- | :--- | :--- |
-| `ChatSession.messages` | 前端展示历史消息 | `ChatController.saveAiResponse` 和用户消息追加逻辑 | `ChatSessionController.sessionInfo/list/view` |
+| `ChatSession.messages` | 前端展示历史消息 | `DihChatApplicationService` 的用户消息和 AI 结果保存逻辑 | `ChatSessionController.sessionInfo/list/view` |
 | Spring AI `ChatMemory` | 给模型提供多轮上下文 | Spring AI `MessageChatMemoryAdvisor` 自动写入；原生 OpenAI 分支和业务 Agent 运行时手动写入 | `AIChatService`、`PromptDrivenAgentRuntime` |
 
 这两层不是同一个表，也不是同一份 JSON。前端历史主要依赖 `t_ai_chat_session.messages`，模型记忆主要依赖 Spring AI JDBC memory 表。
@@ -36,6 +40,9 @@
         v
 ChatController.chat
         |
+        v
+DihChatApplicationService.chat
+        |
         |-- 校验模型、消息、agent 类型权限
         |-- 读取/拼接附件上下文
         |-- 创建或更新 ChatSession.messages，先保存用户消息
@@ -44,15 +51,15 @@ ChatController.chat
 按 type/deep_think/fixed response 选择执行分支
         |
         |-- agent_data_access -> DataAccessAgent -> AIChatService.chatWithSystemPrompt
-        |-- agent_mcp         -> McpAgent -> AIChatService.chatWithSystemPromptAndTools
         |-- agent_data_visualization -> DataVisualizationAgent.chat
+        |-- agent_report -> ReportAgent.chat 或 ReportDemoResponseService 内置模板
         |-- deep_think=true   -> AIChatService.deepThinkingChat
         |-- 默认 ask/普通聊天 -> AIChatService.chat
         |
         v
 Flux<String> 模型输出
         |
-        |-- response_format=events -> NDJSON: delta/done/error
+        |-- response_format=events -> NDJSON: delta/approval_required/approval_updated/done/error
         |-- 否则 -> 纯文本流
         |
         v
@@ -61,7 +68,7 @@ Flux<String> 模型输出
 
 ## `/api/v1/dih/chat` 主流程
 
-`ChatController.chat` 是当前 AI 会话最核心的入口。
+`ChatController.chat` 负责 HTTP 入口和响应类型，核心会话编排位于 `DihChatApplicationService.chat`。
 
 ### 1. 响应格式
 
@@ -82,10 +89,11 @@ Flux<String> 模型输出
 Controller 会做几类前置检查：
 
 - `type` 如果以 `agent` 开头，只允许已注册且已启用的内置 agent 类型，例如 `agent_data_access`、`agent_data_visualization`、`agent_analysis`、`agent_dispose`、`agent_report`。
-- 模型列表来自 `AIBaseService.getModels()`，底层读取 `src/main/resources/models.yaml`。当前模型白名单包括 `auto` 和 `${OPENAI_CHAT_MODEL}` 解析后的值。
-- `model` 为空、`auto` 或 `x-sage-v1` 时最终会转成 `null`，交给 Spring AI 默认模型配置。
+- 模型列表来自 `AIBaseService.getModels()`，综合默认模型与 OpenAI 兼容 `/v1/models` 返回，并总是提供 `auto`。
+- `model` 为空、`auto` 或历史自动值时，由 `AIBaseService.resolveChatModel` 按当前可用目录选择模型。
 - 用户消息为空但有附件时，会自动使用“请分析上传的附件内容。”作为本轮消息。
 - 消息和附件都为空时直接返回错误。
+- `agent_report` 的固定演示提示词会在模型校验前命中 `ReportDemoResponseService`，直接返回内置模板；这条链路不会请求后台模型，也不会调用标题模型。
 
 ### 3. 附件上下文拼接
 
@@ -148,18 +156,19 @@ Controller 会做几类前置检查：
 
 因此它仍支持普通聊天记忆、附件文本、图片原生流式、可选 RAG。
 
-### MCP Agent
+### 统一 MCP 工具与内联审批
 
-`type=agent_mcp` 时调用 `McpAgent`。
+MCP 不再作为独立 `agent_mcp` 入口。普通问答和业务 Agent 都通过 `AgentMcpToolService.resolve(type)` 按 scope 获取可见的本地和外部工具。
 
-主要逻辑：
+工具回调由 `McpApprovalService` 强制执行全局 `ALLOW / ASK / DENY` 策略，不依赖模型自觉遵守提示词。命中 `ASK` 时：
 
-1. 先检查 `McpClientService.hasAvailableTools()`，没有可用工具时直接返回提示。
-2. 构造 MCP 专用 system prompt，要求参数不足先追问，有副作用工具先请求确认。
-3. 把已连接服务与工具列表拼进 system prompt。
-4. 使用 `AIChatService.chatWithSystemPromptAndTools`，通过 `ToolCallbackProvider` 把 MCP 工具暴露给 Spring AI。
+1. 保持当前 Chat Flux 打开。
+2. 向 NDJSON 流发送 `approval_required`。
+3. 前端在当前 AI 消息中插入 `mcp-approval` part。
+4. 用户选择单次允许、会话允许或拒绝。
+5. 后端发送 `approval_updated`，唤醒工具回调并继续模型工具循环。
 
-注意：MCP Agent 的 system prompt 要求“副作用动作先确认”，但当前工具确认的强制性主要依赖模型遵守提示；后端还有 `zenvis:confirm` 结构化片段和 `/chat/action-decision` 记录接口，但这只是记录用户选择，不会自动执行或阻断工具调用。
+工具参数和返回结果由 MCP 调用日志以 JSON 代码块展示，审批卡片不重复展示 payload。最终审批 part 与模型消息按发生顺序保存。
 
 ### 数据可视化 Agent
 
@@ -188,6 +197,43 @@ Controller 会做几类前置检查：
 
 数据可视化 Agent 不直接访问数据库、不生成查询语句、不执行写入类 MCP 工具。
 
+### 报表制作 Agent
+
+`type=agent_report` 时进入报表制作链路。它的目标不是只返回普通聊天文本，而是生成可写入右侧文档编辑器的报表正文。
+
+主要规则：
+
+1. `SystemPromptConfig.agentReportSystemPromptTemplate` 要求完整报表优先输出 Markdown，必要时可输出完整 HTML。
+2. 完整报表或整篇重写必须在回答末尾输出 `zenvis:report-document-config` 围栏，围栏内只放最终 Markdown 或 HTML 正文。
+3. `ChatMessagePartParser` 会把该围栏解析成 `report-document` part，并提取标题、格式、版本、更新时间和大纲。
+4. `DihChatApplicationService.mergeStructuredExtraData` 会把 `report-document` 合并到 `ChatSession.extraData.report`，包括 `currentDocument`、`documents`、`artifacts`。
+5. 前端 `view-center.vue` 发布 `dihReportRecordsUpdated`，右侧 `view-right-report.vue` 读取当前文档并注入 wangEditor。
+
+报表智能体的新会话开场白由 `ChatSessionController.buildPrologueMessage` 生成。开场白包含 `prompt-suggestions`，示例包括用户事件分析报告、运营周报、风险事件复盘和可视化结论归档报告。
+
+#### 报表示例模板
+
+报表示例命中后走 `ReportDemoResponseService`：
+
+- 命中条件是固定示例提示词的精确匹配，避免拦截普通用户需求。
+- 在 `DihChatApplicationService.chat` 中先于模型校验执行，因此无模型配置时也能演示。
+- `ChatTitleService` 对报表示例返回固定标题“报表生成演示”，避免新会话标题生成调用模型。
+- 未命中示例时，仍按普通 `ReportAgent.chat` 走模型生成。
+
+#### 右侧报表工作台
+
+右侧报表面板由前端 `view-right-report.vue` 实现：
+
+- 顶部整篇快捷操作：生成初稿、继续写、正式语气、摘要、标题、结论。
+- 文档编辑器：基于 wangEditor 展示和编辑当前报表。
+- 大纲：根据 `h1` 至 `h6` 自动生成章节导航。
+- 保存：通过 `/api/v1/dih/chat-session/{id}/update` 更新 `extra_data`。
+- 归档：把当前文档复制为 artifact 版本。
+- 导出：前端直接下载 Markdown 或 HTML。
+- 选区右键：选中文档片段后右键展示润色、缩写、扩写，只替换选区。
+
+选区改写不要求 AI 返回完整 `report-document-config`。前端会通过 `dihReportQuickActionRequested(target=selection)` 发送只包含选中片段的请求；中间对话完成后触发 `dihReportSelectionRewriteCompleted`，右侧恢复缓存选区并替换为 AI 返回片段。
+
 ## 消息结构与渲染
 
 ### Message
@@ -215,6 +261,9 @@ Controller 会做几类前置检查：
 | `<think>...</think>` | `thinking` | 保存思考过程，状态为 `completed` |
 | `zenvis:notice` 代码围栏中的 JSON | `notice` | 解析标题、内容、level、metadata |
 | `zenvis:confirm` 代码围栏中的 JSON | `confirm` | 解析为待确认片段，默认 `status=pending` |
+| `zenvis:mcp-approval` 内部标记 | `mcp-approval` | 保存 MCP 工具、决策、范围和最终状态 |
+| `zenvis:report-document-config` 代码围栏 | `report-document` | 解析为报表文档，自动同步到 `extraData.report` |
+| `prompt-suggestions` part | `prompt-suggestions` | 用于智能体开场白展示可点击示例提示词 |
 | `MessageType.CHART` | `chart` | 整体作为图表内容 |
 
 如果 `zenvis:notice` 或 `zenvis:confirm` 的 JSON 非法，会回退成普通 Markdown。
@@ -228,9 +277,9 @@ Controller 会做几类前置检查：
 - `chat_id`
 - `message_id`
 - `part_id`
-- `decision`，只支持 `approved` 或 `rejected`
+- `decision`，业务动作根据 part 类型支持 `approved`、`rejected`、`dispose`、`ignore`、`continue`、`apply_config`、`abandon`、`revise` 或 `submitted`
 
-后端会在对应 `Message.parts` 中找到 `type=confirm` 的 part，并更新 `status`。这个接口当前只改会话历史，不触发后续业务动作。
+后端会在对应 `Message.parts` 中找到相应 part，并更新 `status`。这个接口只用于已完成保存的业务动作；MCP 审批必须使用 `/api/v1/dih/mcp/approvals/{requestId}/decision`。
 
 ## 会话管理接口
 
@@ -289,7 +338,7 @@ Controller 会做几类前置检查：
 6. 非 events 的纯文本模式会在 `doOnComplete` 保存 AI 回复，但不会返回最终 message id/parts；前端如果需要结构化渲染，应继续使用 events。
 7. 附件上传限制是 30MB；文本附件只截取前 80,000 字符；图片输入只有在走原生 OpenAI 兼容接口时才会作为 `image_url` 发送。
 8. 深度思考显示依赖 `<think>` 标签或模型 metadata 的 `reasoningContent`。不同模型字段兼容性不同，当前代码只显式处理 DeepSeek reasoning metadata 和 Qwen3 原生 `reasoning_content`。
-9. MCP Agent 的副作用确认目前主要靠提示词约束和 `confirm` 片段记录，不是后端强制的事务门禁。
+9. MCP 副作用工具由后端统一策略回调强制门禁；`DENY`、拒绝、超时或取消时底层工具不得执行。
 10. `ChatSession` 主键实体字段是 `Integer`，但 Controller/Service 的部分入参使用 `Long`；当前基础仓库使用 `Serializable` 所以能工作，后续如果收紧泛型需要统一类型。
 11. `ChatSessionService.update` 捕获异常后返回 `false`，部分调用方只记录日志或继续流程。保存会话失败时，模型响应可能已经返回给前端但历史没有落库。
 12. 日志工具 `LlmLogHelper` 会记录 LLM prompt 和 response，并会对常见敏感字段脱敏；但 prompt 本身可能包含用户上传文本附件内容，生产环境需要注意日志留存策略。
@@ -302,5 +351,6 @@ Controller 会做几类前置检查：
 | 图片附件没有被模型看到 | 是否配置了 `spring.ai.openai.base-url` 和 `api-key`；是否走了原生 OpenAI 分支 |
 | 数据可视化 Agent 数据查询失败 | retrieval MCP 工具是否启用、可查询实体和字段是否存在、工具返回是否为空或报错 |
 | 图表没有渲染 | AI 消息 `MessageType` 是否为 `CHART`，`content` 是否为 ECharts JSON，最终 `parts` 是否有 `chart` |
-| MCP Agent 不会调用工具 | MCP 服务是否 enabled/connected，`McpClientService.hasAvailableTools()` 是否为 true，工具名是否进入 system prompt |
+| Agent 不会调用 MCP 工具 | 工具是否可用、是否被 `DENY`、Agent scope 是否包含该服务、工具提示词是否已注入 |
+| 审批卡片不出现 | 有效策略是否为 `ASK`，当前 chatId 是否已有会话授权，是否使用 `response_format=events` |
 | 深度思考没有过程 | 模型是否支持 reasoning metadata 或 `<think>` 输出；是否触发了后端 fallback thinking part |

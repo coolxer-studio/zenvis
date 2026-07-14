@@ -40,6 +40,15 @@ public class AnalysisTaskQueueVo implements Serializable {
      */
     private long runningCount;
 
+    /** 等待MCP审批的任务数 */
+    private long waitingApprovalCount;
+
+    /** 当前可用的正常执行槽 */
+    private int availableSlots;
+
+    /** 允许挂起的最大任务数 */
+    private int maxSuspended;
+
     /**
      * 队列检查时间
      */

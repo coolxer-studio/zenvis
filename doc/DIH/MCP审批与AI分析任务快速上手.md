@@ -1,6 +1,6 @@
-# MCP 审批与分析任务快速上手
+# MCP 审批与 AI分析任务快速上手
 
-本文面向第一次接触 ZenVis DIH 的产品、测试、前端和后端同事，说明 MCP 工具权限、聊天内审批、Skill 和后台分析任务之间的关系，以及最短的验证和扩展路径。
+本文面向第一次接触 ZenVis DIH 的产品、测试、前端和后端同事，说明 MCP 工具权限、聊天内审批、Skill 和后台 AI分析任务之间的关系，以及最短的验证和扩展路径。
 
 更底层的实现与数据结构见 [MCP Client 与业务 Agent 工具集成设计说明](MCP-Client-Agent-Design.md)，完整接口见 [ChatController](../api接口文档/ChatController.md)、[McpController](../api接口文档/McpController.md)、[AnalysisTaskController](../api接口文档/AnalysisTaskController.md) 和 [SkillController](../api接口文档/SkillController.md)。
 
@@ -10,8 +10,8 @@
 |---|---|---|
 | MCP 服务 | 连接外部系统并发现其工具 | 服务管理 → MCP 服务 |
 | MCP 工具策略 | 决定工具直接执行、需要审批还是禁止 | MCP 服务 → 工具审批策略 |
-| Skill | 向 Agent 注入业务规则、流程和知识提示 | DIH Skill 管理；分析任务创建时可选 |
-| 分析任务 | 在后台持续运行一次 Agent 分析，可定时、排队和审批 | 服务管理 → 分析任务 |
+| Skill | 向 Agent 注入业务规则、流程和知识提示 | DIH Skill 管理；AI分析任务创建时可选 |
+| AI分析任务 | 在后台持续运行一次 Agent 分析，可定时、排队和审批 | 服务管理 → AI分析任务 |
 
 MCP 是“可执行能力”，Skill 是“如何思考和使用能力的说明”。Skill 本身不会绕过 MCP 策略。
 
@@ -39,8 +39,8 @@ flowchart TD
     B -->|ALLOW| D[直接执行并审计]
     B -->|ASK| E{是否存在当前渠道授权}
     E -->|Chat 会话授权| D
-    E -->|分析任务 execution 授权| D
-    E -->|分析任务 AUTO| F[自动批准并执行]
+    E -->|AI分析任务 execution 授权| D
+    E -->|AI分析任务 AUTO| F[自动批准并执行]
     E -->|没有授权| G[创建待审批请求并挂起调用]
 ```
 
@@ -115,9 +115,9 @@ flowchart TD
 
 最终消息会保存 `mcp-approval` part，重新打开历史会话时仍能看到工具和决策状态。
 
-## 5. 后台分析任务
+## 5. 后台 AI分析任务
 
-分析任务是一次性后台 Agent 任务。提交后 HTTP 请求立即返回，浏览器关闭不会中断执行。
+AI分析任务是一次性后台 Agent 任务。提交后 HTTP 请求立即返回，浏览器关闭不会中断执行。
 
 ### 5.1 创建任务
 
@@ -146,7 +146,7 @@ flowchart TD
 | `AUTO` | 直接执行 | 自动批准，审计范围 `TASK_AUTO` | 禁止 |
 | `MANUAL` | 直接执行 | 无限期等待任务审批 | 禁止 |
 
-`MANUAL` 模式的任务审批没有五分钟超时。任务创建人或超级管理员可以在分析任务页面选择：
+`MANUAL` 模式的任务审批没有五分钟超时。任务创建人或超级管理员可以在 AI分析任务页面选择：
 
 - `approved`：允许本次。
 - `approved_task`：当前 execution 内，这个精确 toolKey 一直允许，审计范围为 `TASK_RUN`。
@@ -178,7 +178,7 @@ PENDING / RUNNING / WAITING_APPROVAL
 
 服务重启时，原 `RUNNING` 和 `WAITING_APPROVAL` execution 会失效，任务生成新 executionId 并从头重新排队。外部有副作用工具可能在重启前已经执行，因此业务工具自身仍应考虑幂等。
 
-## 6. Skill 在分析任务中的行为
+## 6. Skill 在 AI分析任务中的行为
 
 任务运行时会组合两类 Skill：
 
@@ -208,7 +208,7 @@ GET /api/v1/dih/skills/options?enabled=true
 | POST | `/api/v1/dih/mcp/approvals/{requestId}/decision` | 通用审批决定 |
 | GET | `/api/v1/dih/mcp/invocations/list` | 调用审计 |
 
-### 分析任务
+### AI分析任务
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
@@ -260,7 +260,7 @@ deploy/open_config/skill_config/<skill-id>/
   SKILL.md
 ```
 
-在 `skill.json` 中配置唯一 ID、名称、入口文件、启用状态和可选 Agent 类型，然后调用 Skill 重载接口。只有扫描成功且 `enabled=true` 的 Skill 才会出现在分析任务选择器中。
+在 `skill.json` 中配置唯一 ID、名称、入口文件、启用状态和可选 Agent 类型，然后调用 Skill 重载接口。只有扫描成功且 `enabled=true` 的 Skill 才会出现在 AI分析任务选择器中。
 
 ## 9. 配置项
 
@@ -273,7 +273,7 @@ app.ai.mcp.approval.timeout-seconds=300
 app.ai.mcp.agent-scopes.default=*
 app.ai.mcp.agent-scopes.agent_data_visualization=none
 
-# 分析任务调度
+# AI分析任务调度
 app.ai.analysis-task.max-concurrency=1
 app.ai.analysis-task.max-suspended=20
 app.ai.analysis-task.dispatch-delay-ms=5000
@@ -287,15 +287,15 @@ app.ai.analysis-task.dispatch-delay-ms=5000
 2. 将同一工具设为 `ASK`，验证“允许本次”后本轮继续，下一次仍出现审批。
 3. 验证“本会话始终允许”后同一 chatId 再次调用不出现审批卡片。
 4. 设为 `DENY`，确认底层工具不执行。
-5. 创建 `AUTO` 分析任务，确认 `ASK` 工具审计范围为 `TASK_AUTO`。
-6. 创建 `MANUAL` 分析任务，确认状态进入 `WAITING_APPROVAL`，审批后继续。
+5. 创建 `AUTO` AI分析任务，确认 `ASK` 工具审计范围为 `TASK_AUTO`。
+6. 创建 `MANUAL` AI分析任务，确认状态进入 `WAITING_APPROVAL`，审批后继续。
 7. 选择“本任务一直允许”，确认当前 execution 后续同工具不再审批。
 8. 停用任务已选 Skill，再执行任务，确认任务失败并显示 Skill 名称。
 9. 在调用审计中按任务 ID 和 executionId 找到完整记录。
 
 ## 11. 常见问题
 
-### 创建分析任务时没有可选模型
+### 创建 AI分析任务时没有可选模型
 
 先访问 `GET /api/v1/dih/model/list`。模型下拉框与 DIH Chat 共用此接口；如果接口无数据或返回无权限，检查 OpenAI 兼容服务配置、API Key 和当前登录状态。
 
@@ -309,11 +309,11 @@ app.ai.analysis-task.dispatch-delay-ms=5000
 
 依次检查：全局策略是否确实为 `ASK`、工具是否被 Agent scope 过滤、当前 chatId 是否已有会话授权，以及工具是否实际被模型选择调用。
 
-### 分析任务一直是 PENDING
+### AI分析任务一直是 PENDING
 
 检查计划时间、可用执行槽、调度器配置以及等待审批任务是否达到 `max-suspended`。可调用 `queue/status` 查看 `ready_count`、`available_slots` 和 `waiting_approval_count`。
 
-### 分析任务一直等待审批
+### AI分析任务一直等待审批
 
 任务 `MANUAL` 审批是无限期的，不会被聊天五分钟超时任务清理。任务创建人或超级管理员需要在任务详情中处理；也可以取消整个任务。
 
@@ -332,4 +332,4 @@ app.ai.analysis-task.dispatch-delay-ms=5000
 | 后台任务调度 | `service/system/impl/AnalysisTaskServiceImpl.java` |
 | Skill 扫描与加载 | `service/dih/agent/skill/SkillService.java` |
 | MCP AMIS 页面 | `deploy/open_config/mcp_config/index.json` |
-| 分析任务 AMIS 页面 | `deploy/open_config/analysis-task_config/index.json` |
+| AI分析任务 AMIS 页面 | `deploy/open_config/analysis-task_config/index.json` |

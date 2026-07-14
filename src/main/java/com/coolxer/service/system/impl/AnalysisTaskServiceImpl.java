@@ -64,7 +64,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class AnalysisTaskServiceImpl implements AnalysisTaskService {
 
     private static final String ANALYSIS_SYSTEM_PROMPT = """
-            你是 ZenVis 的数据分析任务 Agent。请基于用户提供的任务提示词完成分析，输出结构清晰、结论明确的中文结果。
+            你是 ZenVis 的 AI分析任务 Agent。请基于用户提供的任务提示词完成分析，输出结构清晰、结论明确的中文结果。
             如果提示词中包含数据、SQL结果、指标或上下文，请优先围绕这些信息分析；不要编造不存在的数据。
             输出建议包含：关键结论、过程说明、风险或异常点、下一步建议。
             MCP工具被拒绝或禁止时，不得再尝试绕过审批，应基于已有信息继续完成任务并说明限制。
@@ -176,7 +176,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         if (task == null) {
             return false;
         }
-        checkNotRunning(task, "执行中或等待审批的分析任务不能修改");
+        checkNotRunning(task, "执行中或等待审批的AI分析任务不能修改");
         task.updateFromDto(dto);
         task.setPriority(defaultPriority(task.getPriority()));
         analysisTaskRepository.save(task);
@@ -189,7 +189,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         if (task == null) {
             return;
         }
-        checkNotRunning(task, "执行中或等待审批的分析任务不能删除");
+        checkNotRunning(task, "执行中或等待审批的AI分析任务不能删除");
         taskToolGrantService.revokeExecution(task.getExecutionId());
         analysisTaskRepository.deleteById(id);
     }
@@ -209,8 +209,8 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     @Override
     public AnalysisTaskVo enqueue(Long id) {
         AnalysisTask task = analysisTaskRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "分析任务不存在"));
-        checkNotRunning(task, "执行中或等待审批的分析任务不能重新入队");
+                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "AI分析任务不存在"));
+        checkNotRunning(task, "执行中或等待审批的AI分析任务不能重新入队");
         skillService.validateEnabledSkillIds(new ArrayList<>(task.getSkillIds()));
         taskToolGrantService.revokeExecution(task.getExecutionId());
         task.setStatus(AnalysisTaskStatus.PENDING);
@@ -225,12 +225,12 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     @Override
     public AnalysisTaskVo cancel(Long id) {
         AnalysisTask task = analysisTaskRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "分析任务不存在"));
+                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "AI分析任务不存在"));
         if (task.getStatus() == AnalysisTaskStatus.CANCELED) {
             return toVo(task);
         }
         if (task.getStatus() != null && task.getStatus().isTerminal()) {
-            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "已结束的分析任务无需取消");
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "已结束的AI分析任务无需取消");
         }
         Date now = new Date();
         String executionId = task.getExecutionId();
@@ -242,7 +242,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         }
         task.setStatus(AnalysisTaskStatus.CANCELING);
         analysisTaskRepository.save(task);
-        mcpApprovalService.cancelTaskExecution(executionId, "分析任务已被用户取消");
+        mcpApprovalService.cancelTaskExecution(executionId, "AI分析任务已被用户取消");
         if (control != null) {
             control.cancel();
         } else {
@@ -260,7 +260,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     public AnalysisTaskVo executeNextTask() {
         ensureExecutor();
         if (analysisTaskRepository.countByStatus(AnalysisTaskStatus.WAITING_APPROVAL) >= maxSuspended) {
-            log.debug("等待审批的分析任务已达上限: {}", maxSuspended);
+            log.debug("等待审批的AI分析任务已达上限: {}", maxSuspended);
             return null;
         }
         if (!runningSlots.tryAcquire()) {
@@ -282,7 +282,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
                 return null;
             }
             AnalysisTask claimed = analysisTaskRepository.findById(selected.getId())
-                    .orElseThrow(() -> new IllegalStateException("已认领的分析任务不存在"));
+                    .orElseThrow(() -> new IllegalStateException("已认领的AI分析任务不存在"));
             TaskExecutionControl control = new TaskExecutionControl(executionId, true);
             executions.put(executionId, control);
             try {
@@ -330,7 +330,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     public void recoverRunningTasks() {
         int migrated = analysisTaskRepository.backfillLegacyApprovalMode();
         if (migrated > 0) {
-            log.info("已将 {} 个历史分析任务的审批模式补齐为 MANUAL", migrated);
+            log.info("已将 {} 个历史AI分析任务的审批模式补齐为 MANUAL", migrated);
         }
         List<AnalysisTask> activeTasks = new ArrayList<>(
                 analysisTaskRepository.findByStatus(AnalysisTaskStatus.RUNNING));
@@ -342,7 +342,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         Date now = new Date();
         for (AnalysisTask task : activeTasks) {
             String interruptedExecution = task.getExecutionId();
-            mcpApprovalService.cancelTaskExecution(interruptedExecution, "服务重启，原分析任务执行已失效");
+            mcpApprovalService.cancelTaskExecution(interruptedExecution, "服务重启，原AI分析任务执行已失效");
             taskToolGrantService.revokeExecution(interruptedExecution);
             if (task.getStatus() == AnalysisTaskStatus.CANCELING) {
                 task.setStatus(AnalysisTaskStatus.CANCELED).setFinishTime(now);
@@ -370,10 +370,10 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
             finishExecution(taskId, executionId, AnalysisTaskStatus.SUCCESS, result, null);
             log.info("AI分析任务执行完成, id: {}, executionId: {}", taskId, executionId);
         } catch (TaskCancelledException e) {
-            finishExecution(taskId, executionId, AnalysisTaskStatus.CANCELED, null, "分析任务已取消");
+            finishExecution(taskId, executionId, AnalysisTaskStatus.CANCELED, null, "AI分析任务已取消");
         } catch (Exception e) {
             if (control.isCancelled() || Thread.currentThread().isInterrupted()) {
-                finishExecution(taskId, executionId, AnalysisTaskStatus.CANCELED, null, "分析任务已取消");
+                finishExecution(taskId, executionId, AnalysisTaskStatus.CANCELED, null, "AI分析任务已取消");
             } else {
                 finishExecution(taskId, executionId, AnalysisTaskStatus.FAILED, null, resolveErrorMessage(e));
                 log.error("AI分析任务执行失败, id: {}, executionId: {}", taskId, executionId, e);
@@ -387,7 +387,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
 
     private AnalysisTask loadCurrentExecution(Integer taskId, String executionId) {
         AnalysisTask task = analysisTaskRepository.findById(taskId)
-                .orElseThrow(() -> new IllegalStateException("分析任务不存在"));
+                .orElseThrow(() -> new IllegalStateException("AI分析任务不存在"));
         if (!executionId.equals(task.getExecutionId()) || task.getStatus() == AnalysisTaskStatus.CANCELED) {
             throw new TaskCancelledException();
         }
@@ -416,7 +416,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
             }
             analysisTaskRepository.save(task);
         } catch (OptimisticLockingFailureException e) {
-            log.warn("分析任务终态已被其他操作更新, id={}, executionId={}", taskId, executionId);
+            log.warn("AI分析任务终态已被其他操作更新, id={}, executionId={}", taskId, executionId);
         }
     }
 
@@ -503,7 +503,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
                 analysisTaskRepository.saveAndFlush(task);
                 return;
             } catch (OptimisticLockingFailureException e) {
-                log.debug("更新分析任务审批状态时发生并发竞争, id={}, attempt={}", taskId, attempt + 1);
+                log.debug("更新AI分析任务审批状态时发生并发竞争, id={}, attempt={}", taskId, attempt + 1);
             }
         }
     }

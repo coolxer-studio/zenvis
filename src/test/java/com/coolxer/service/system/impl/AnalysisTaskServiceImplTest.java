@@ -50,7 +50,7 @@ class AnalysisTaskServiceImplTest {
         String systemPrompt = ReflectionTestUtils.invokeMethod(service, "buildAnalysisSystemPrompt");
 
         assertThat(systemPrompt)
-                .contains("ZenVis 的数据分析任务 Agent")
+                .contains("ZenVis 的 AI分析任务 Agent")
                 .contains("【已加载 Skill】")
                 .contains("研判 Skill Prompt");
     }

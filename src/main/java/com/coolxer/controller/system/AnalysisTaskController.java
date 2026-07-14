@@ -179,7 +179,7 @@ public class AnalysisTaskController extends BaseController {
     private AnalysisTaskVo requireTaskApprovalAccess(Long id, User currentUser) {
         AnalysisTaskVo task = analysisTaskService.info(id);
         if (task == null) {
-            throw new ApiException(404, "分析任务不存在");
+            throw new ApiException(404, "AI分析任务不存在");
         }
         boolean superAdmin = currentUser != null && Boolean.TRUE.equals(currentUser.getIsSuperAdmin());
         boolean owner = currentUser != null && task.getCreateBy() != null

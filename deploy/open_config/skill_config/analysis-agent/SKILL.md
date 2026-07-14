@@ -214,7 +214,7 @@
 
 ## 持续分析任务
 
-当用户要求“持续分析、长期监控、定时研判、持续匹配、自动创建分析任务、实时分析、按规则发现后分析”等意图时，进入持续分析任务流。
+当用户要求“持续分析、长期监控、定时研判、持续匹配、自动创建 AI分析任务、实时分析、按规则发现后分析”等意图时，进入持续分析任务流。
 
 确认前必须输出持续分析方案，并展示配置块：
 
@@ -230,13 +230,13 @@
   },
   "pushTask": {
     "name": "示例数据推送任务",
-    "description": "匹配命中数据并推送给分析任务",
+    "description": "匹配命中数据并推送给 AI分析任务",
     "source": "SYSTEM",
     "mark": "analysis-example",
     "config": "vector 或 vectum 配置字符串"
   },
   "analysisTask": {
-    "name": "示例 AI 分析任务",
+    "name": "示例 AI分析任务",
     "description": "对命中数据执行研判",
     "model": "auto",
     "prompt": "对命中数据按日志聚合、沙箱研判、分析结论三阶段执行研判，输出证据、结论和处置策略 JSON。",
@@ -249,7 +249,7 @@
 持续分析确认卡必须是合法 JSON，并使用固定 action：
 
 ```zenvis:confirm
-{"title":"确认创建持续分析任务","content":"将创建数据推送服务用于匹配数据，并创建 AI 分析任务。确认后开始执行。","action":"analysis.create_continuous_task"}
+{"title":"确认创建持续分析任务","content":"将创建数据推送服务用于匹配数据，并创建 AI分析任务。确认后开始执行。","action":"analysis.create_continuous_task"}
 ```
 
 确认后按顺序执行：
@@ -257,13 +257,13 @@
 1. 调用 `push_task_detect_format(content)` 检查推送配置格式。
 2. 调用 `push_task_list_by_source_mark(sourceMark)` 检查是否已有同 mark 的任务；冲突时提示用户确认更新或改名。
 3. 调用 `push_task_create_and_start(request)` 创建并启动数据推送服务。
-4. 调用 `analysis_task_create(request)` 创建 AI 分析任务。
+4. 调用 `analysis_task_create(request)` 创建 AI分析任务。
 5. 如需立即进入队列，调用 `analysis_task_enqueue(id)` 或 `analysis_task_run_once()`。
 6. 调用 `analysis_task_queue_status()` 汇报队列状态。
 
 ## 处置策略 JSON
 
-一次性告警研判和后台分析任务最终都要输出处置策略配置。只生成建议配置，不直接调用真实处置动作。
+一次性告警研判和后台 AI分析任务最终都要输出处置策略配置。只生成建议配置，不直接调用真实处置动作。
 
 ```zenvis:disposal-strategy-config
 {
@@ -308,5 +308,5 @@
 - 日志聚合阶段完成后，只说明聚合范围、调用过的 Retrieval MCP、关键日志数量和确认事项，并输出 `stage=log_aggregation` 记录与日志聚合确认卡。
 - 沙箱研判阶段完成后，只说明沙箱任务、输入摘要、返回 JSON、风险判断和确认事项，并输出 `stage=sandbox_analysis` 记录与沙箱研判确认卡。
 - 分析结论阶段完成后，说明分析目标、分析过程、分析结论、处置建议、处置策略 JSON，并输出 `stage=report_output` 记录、报告和 `zenvis:analysis-decision`。
-- 持续分析任务创建完成后，说明数据推送任务、AI 分析任务、队列状态、调用过的 MCP 和后续观察点。
+- 持续分析任务创建完成后，说明数据推送任务、AI分析任务、队列状态、调用过的 MCP 和后续观察点。
 - 任何阻塞或失败都用 `zenvis:notice` 给出可操作的补充信息。

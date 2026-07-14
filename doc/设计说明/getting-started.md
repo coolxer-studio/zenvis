@@ -60,7 +60,7 @@ curl -X POST http://localhost:11001/api/v1/dih/chat \
   }'
 ```
 
-DIH Chat 调用需审批的 MCP 工具时，会在当前流式消息中返回审批卡片事件。耗时分析可创建后台分析任务，关闭页面后仍继续执行。
+DIH Chat 调用需审批的 MCP 工具时，会在当前流式消息中返回审批卡片事件。耗时分析可创建后台 AI分析任务，关闭页面后仍继续执行。
 
 ## 第三方系统快速对接
 
@@ -99,5 +99,5 @@ zenvis-backend/
 - [系统架构设计](architecture.md)
 - [API 参考](api-reference.md)
 - [第三方 REST API 对接指南](third-party-api-integration.md)
-- [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)
+- [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md)
 - [MCP Client 与业务 Agent 设计](../DIH/MCP-Client-Agent-Design.md)

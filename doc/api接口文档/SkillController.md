@@ -56,7 +56,7 @@
 |----------|----------|----------|
 | GET | `/api/v1/dih/skills/list` | 分页查询 Skill 列表 |
 | GET | `/api/v1/dih/skills/agents` | 查询内置 Agent Skill 状态 |
-| GET | `/api/v1/dih/skills/options?enabled=true` | 查询分析任务可选的全部启用 Skill |
+| GET | `/api/v1/dih/skills/options?enabled=true` | 查询 AI分析任务可选的全部启用 Skill |
 | GET | `/api/v1/dih/skills/{id}/view` | 查询 Skill 详情和入口文件内容 |
 | POST | `/api/v1/dih/skills/reload` | 重新扫描并加载 Skill 目录 |
 | POST | `/api/v1/dih/skills/{id}/enable` | 启用 Skill |
@@ -105,11 +105,11 @@ curl "http://localhost:11001/api/v1/dih/skills/list?page=1&perPage=10&agentType=
 curl "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/view"
 ```
 
-### 查询分析任务 Skill 选项
+### 查询 AI分析任务 Skill 选项
 
 **接口地址**：`GET /api/v1/dih/skills/options?enabled=true`
 
-该接口返回所有已扫描且启用的 Skill，不按 `agentTypes` 过滤，供分析任务创建和编辑表单使用。`enabled=false` 不受支持。
+该接口返回所有已扫描且启用的 Skill，不按 `agentTypes` 过滤，供 AI分析任务创建和编辑表单使用。`enabled=false` 不受支持。
 
 ```json
 {
@@ -126,13 +126,13 @@ curl "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/view"
 }
 ```
 
-分析任务保存 Skill ID，并在实际执行时读取最新内容。创建、编辑、重新入队和执行前都会重新校验 Skill；已停用或删除的 Skill 会使任务失败，不会被静默跳过。
+AI分析任务保存 Skill ID，并在实际执行时读取最新内容。创建、编辑、重新入队和执行前都会重新校验 Skill；已停用或删除的 Skill 会使任务失败，不会被静默跳过。
 
 ### 查询内置 Agent Skill 状态
 
 **接口地址**：`GET /api/v1/dih/skills/agents`
 
-可选参数 `enabled=true/false`。该接口用于查看内置智能体入口对应的 Skill 状态，与分析任务的全量启用选项接口用途不同。
+可选参数 `enabled=true/false`。该接口用于查看内置智能体入口对应的 Skill 状态，与 AI分析任务的全量启用选项接口用途不同。
 
 ### 重载 Skill
 
@@ -195,11 +195,11 @@ skill_config/
 }
 ```
 
-## 分析任务加载规则
+## AI分析任务加载规则
 
-分析任务运行时会同时加载：
+AI分析任务运行时会同时加载：
 
 1. 全局启用且适用于 `agent_analysis` 的 Skill。
 2. 当前任务明确选择且仍处于启用状态的 Skill。
 
-任务显式选择不受 `agentTypes` 限制，但 `enabled=true` 是选择和执行的硬性条件。详细流程见 [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)。
+任务显式选择不受 `agentTypes` 限制，但 `enabled=true` 是选择和执行的硬性条件。详细流程见 [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md)。

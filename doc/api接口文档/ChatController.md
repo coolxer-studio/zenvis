@@ -12,7 +12,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/chat` | AI 流式对话 |
-| GET | `/model/list` | 查询当前可用模型，分析任务表单复用此接口 |
+| GET | `/model/list` | 查询当前可用模型，AI分析任务表单复用此接口 |
 | POST | `/suggest` | 生成编辑器补全建议 |
 | POST | `/upload` | 上传本轮聊天附件 |
 | GET | `/upload/{fileId}/preview` | 预览当前用户的图片附件 |
@@ -152,7 +152,7 @@ GET /api/v1/dih/model/list
 }
 ```
 
-模型目录来自当前 OpenAI 兼容配置和远端 `/v1/models`。DIH Chat 与分析任务创建/编辑表单共用此接口。
+模型目录来自当前 OpenAI 兼容配置和远端 `/v1/models`。DIH Chat 与 AI分析任务创建/编辑表单共用此接口。
 
 ## 7. 附件
 
@@ -180,4 +180,4 @@ GET /api/v1/dih/upload/{fileId}/preview
 3. 同一轮可能出现多个审批请求，必须按 `request_id` 独立维护状态。
 4. 后续文本增量不能覆盖已插入的审批 part。
 5. `action-decision` 用于已保存消息的业务动作卡片，不用于 MCP 工具审批。
-6. 详细权限规则见 [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)。
+6. 详细权限规则见 [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md)。

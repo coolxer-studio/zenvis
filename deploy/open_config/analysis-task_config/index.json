@@ -6,10 +6,10 @@
     {
       "type": "button",
       "actionType": "dialog",
-      "label": "创建分析任务",
+      "label": "创建AI分析任务",
       "primary": true,
       "dialog": {
-        "title": "创建分析任务",
+        "title": "创建AI分析任务",
         "mode": "horizontal",
         "size": "lg",
         "body": {
@@ -402,7 +402,7 @@
               "actionType": "dialog",
               "dialog": {
                 "size": "full",
-                "title": "分析任务详情",
+                "title": "AI分析任务详情",
                 "body": {
                   "type": "service",
                   "api": "/zenvis/api/v1/system/analysis-task/${id}/view",
@@ -602,7 +602,7 @@
               "actionType": "dialog",
               "dialog": {
                 "size": "lg",
-                "title": "编辑分析任务",
+                "title": "编辑AI分析任务",
                 "body": {
                   "type": "form",
                   "api": "/zenvis/api/v1/system/analysis-task/$id/update",
@@ -716,7 +716,7 @@
               "tooltip": "删除",
               "disabledOn": "status == 'RUNNING' || status == 'WAITING_APPROVAL' || status == 'CANCELING'",
               "actionType": "ajax",
-              "confirmText": "确认删除该分析任务？",
+              "confirmText": "确认删除该AI分析任务？",
               "api": "delete:/zenvis/api/v1/system/analysis-task/$id",
               "reload": "analysis_task_list,analysis_task_queue_status"
             }

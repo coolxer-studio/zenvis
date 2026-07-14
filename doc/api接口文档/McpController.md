@@ -136,8 +136,8 @@ external::<serverId>::<originalToolName>
 |---|---|
 | `ONCE` | 单次批准 |
 | `SESSION` | DIH Chat 当前用户、chatId、toolKey 会话授权 |
-| `TASK_AUTO` | 分析任务 `AUTO` 自动批准 |
-| `TASK_RUN` | 当前分析任务 execution 的工具授权 |
+| `TASK_AUTO` | AI分析任务 `AUTO` 自动批准 |
+| `TASK_RUN` | 当前 AI分析任务 execution 的工具授权 |
 
 ---
 
@@ -407,7 +407,7 @@ POST /api/v1/dih/mcp/approvals/{requestId}/decision
 - `approved_session`：仅 DIH Chat 使用，授权当前用户、chatId 和精确 toolKey。
 - `rejected`：拒绝当前调用。
 
-分析任务的 `approved_task` 应使用任务专用接口，见 [AnalysisTaskController](AnalysisTaskController.md)。普通用户只能处理自己的请求，超级管理员可以代审。
+AI分析任务的 `approved_task` 应使用任务专用接口，见 [AnalysisTaskController](AnalysisTaskController.md)。普通用户只能处理自己的请求，超级管理员可以代审。
 
 ### 查询调用审计
 
@@ -424,8 +424,8 @@ GET /api/v1/dih/mcp/invocations/list?page=1&perPage=20
 | `approvalScope` | Enum | `ONCE`、`SESSION`、`TASK_AUTO`、`TASK_RUN` |
 | `requesterUserId` | Integer | 发起用户，超级管理员可指定 |
 | `decisionBy` | Integer | 审批人 |
-| `analysisTaskId` | Integer | 分析任务 ID |
-| `executionId` | String | 分析任务 executionId |
+| `analysisTaskId` | Integer | AI分析任务 ID |
+| `executionId` | String | AI分析任务 executionId |
 
 参数、结果和错误摘要均会递归脱敏并截断。普通用户只能查看自己的调用记录，超级管理员可以查看全量记录。
 
@@ -480,4 +480,4 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 5. 当前实现主要面向 SSE MCP 服务，`base_url` 需要填写服务根地址，`sse_endpoint` 填写 SSE 路径。
 6. 可通过 `app.ai.mcp.agent-scopes.<agentType>=serverCode1,serverCode2` 限制某个业务 Agent 可使用的 MCP 服务；值为 `none` 时禁用该 Agent 的 MCP 工具。
 7. MCP 审批队列只展示待处理项；历史和终态记录统一在调用审计查看。
-8. 更完整的操作和排障流程见 [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)。
+8. 更完整的操作和排障流程见 [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md)。

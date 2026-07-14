@@ -1,15 +1,15 @@
 {
   "type": "page",
-  "title": "数推服务管理",
+  "title": "数据推送服务管理",
   "remark": null,
   "toolbar": [
     {
       "type": "button",
       "actionType": "dialog",
-      "label": "创建数推服务",
+      "label": "创建数据推送服务",
       "primary": true,
       "dialog": {
-        "title": "创建数推任务",
+        "title": "创建数据推送任务",
         "mode": "horizontal",
         "size": "lg",
         "body": {
@@ -17,7 +17,7 @@
           "api": "/zenvis/api/v1/system/push-task/add",
           "body": [
             {
-              "label": "数推服务名称",
+              "label": "数据推送服务名称",
               "name": "name",
               "type": "input-text",
               "required": true
@@ -62,7 +62,7 @@
         },
         {
           "name": "name",
-          "label": "数推服务名称",
+          "label": "数据推送服务名称",
           "type": "text",
           "searchable": true,
           "toggled": true
@@ -181,7 +181,7 @@
                   "api": "PUT:/zenvis/api/v1/system/push-task/$id",
                   "body": [
                     {
-                      "label": "数推服务名称",
+                      "label": "数据推送服务名称",
                       "name": "name",
                       "type": "input-text",
                       "required": true

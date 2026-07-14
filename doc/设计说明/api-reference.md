@@ -15,9 +15,9 @@ http://localhost:11001/swagger-ui/index.html
 | 文档 | 说明 |
 | :--- | :--- |
 | [第三方 REST API 对接指南](third-party-api-integration.md) | 产品接口地图、Bearer Token 调用、示例和排障 |
-| [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md) | 产品概念、操作流程、权限顺序、验收与排障 |
+| [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md) | 产品概念、操作流程、权限顺序、验收与排障 |
 | [MCP Client 与业务 Agent 设计](../DIH/MCP-Client-Agent-Design.md) | MCP 客户端、策略状态机、Chat 审批与任务调度实现 |
-| [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | 后台分析任务、队列和任务审批接口 |
+| [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | 后台 AI分析任务、队列和任务审批接口 |
 | [McpController](../api接口文档/McpController.md) | MCP 服务、策略、通用审批和调用审计接口 |
 | [SkillController](../api接口文档/SkillController.md) | Skill 扫描、启停、Agent 加载和任务选项接口 |
 
@@ -36,7 +36,7 @@ http://localhost:11001/swagger-ui/index.html
 | :--- | :--- |
 | [AboutController](../api接口文档/AboutController.md) | 系统关于信息 |
 | [AggregateController](../api接口文档/AggregateController.md) | 数据聚合 |
-| [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | 分析任务 |
+| [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | AI分析任务 |
 | [AssetRuleController](../api接口文档/AssetRuleController.md) | 资产规则 |
 | [ChatController](../api接口文档/ChatController.md) | AI 对话、上传与预览 |
 | [ChatSessionController](../api接口文档/ChatSessionController.md) | AI 对话会话 |

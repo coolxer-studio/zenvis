@@ -42,7 +42,7 @@ deploy/open_config/plugin-package_config/
     ├── icon.png                  # 可选插件图标
     ├── 00_doc/                   # 插件文档，可加载到 RAG
     ├── 01_meta/                  # 检索元数据和 ClickHouse 表结构
-    ├── 02_push-task/             # 数推任务配置
+    ├── 02_push-task/             # 数据推送任务配置
     ├── 03_api/                   # 动态加载的 API Jar
     ├── 04_ui/                    # 低代码页面配置，安装到 <packageName>_config
     ├── 05_dashboard/             # 数据看板配置

@@ -123,7 +123,7 @@ public class McpApprovalService {
                 automaticScope);
 
         if (taskAutoApproved) {
-            invocation.setDecisionComment("分析任务配置为无需人工审批，已自动批准 ASK 工具")
+            invocation.setDecisionComment("AI分析任务配置为无需人工审批，已自动批准 ASK 工具")
                     .setDecisionTime(new Date());
             invocationRepository.save(invocation);
         }
@@ -137,9 +137,9 @@ public class McpApprovalService {
         if (executionContext.isTaskCancelled()) {
             invocation.setStatus(McpInvocationStatus.CANCELLED)
                     .setFinishTime(new Date())
-                    .setErrorSummary("分析任务已取消");
+                    .setErrorSummary("AI分析任务已取消");
             invocationRepository.save(invocation);
-            return deniedResult(invocation, executionContext, "分析任务已取消");
+            return deniedResult(invocation, executionContext, "AI分析任务已取消");
         }
 
         if (approvalRequired) {
@@ -164,10 +164,10 @@ public class McpApprovalService {
         if (executionContext.isTaskCancelled()) {
             invocation = getInvocation(invocation.getRequestId());
             invocation.setStatus(McpInvocationStatus.CANCELLED)
-                    .setErrorSummary("分析任务已取消")
+                    .setErrorSummary("AI分析任务已取消")
                     .setFinishTime(new Date());
             invocationRepository.save(invocation);
-            return deniedResult(invocation, executionContext, "分析任务已取消");
+            return deniedResult(invocation, executionContext, "AI分析任务已取消");
         }
 
         long startedAt = System.nanoTime();
@@ -177,11 +177,11 @@ public class McpApprovalService {
             if (invocation.getStatus() == McpInvocationStatus.CANCELLED || executionContext.isTaskCancelled()) {
                 if (invocation.getStatus() != McpInvocationStatus.CANCELLED) {
                     invocation.setStatus(McpInvocationStatus.CANCELLED)
-                            .setErrorSummary("分析任务已取消")
+                            .setErrorSummary("AI分析任务已取消")
                             .setFinishTime(new Date());
                     invocationRepository.save(invocation);
                 }
-                return deniedResult(invocation, executionContext, "分析任务已取消");
+                return deniedResult(invocation, executionContext, "AI分析任务已取消");
             }
             invocation.setStatus(McpInvocationStatus.SUCCEEDED)
                     .setResultSummary(summarizeJson(result, MAX_RESULT_CHARS))
@@ -197,11 +197,11 @@ public class McpApprovalService {
             if (invocation.getStatus() == McpInvocationStatus.CANCELLED || executionContext.isTaskCancelled()) {
                 if (invocation.getStatus() != McpInvocationStatus.CANCELLED) {
                     invocation.setStatus(McpInvocationStatus.CANCELLED)
-                            .setErrorSummary("分析任务已取消")
+                            .setErrorSummary("AI分析任务已取消")
                             .setFinishTime(new Date());
                     invocationRepository.save(invocation);
                 }
-                return deniedResult(invocation, executionContext, "分析任务已取消");
+                return deniedResult(invocation, executionContext, "AI分析任务已取消");
             }
             invocation.setStatus(McpInvocationStatus.FAILED)
                     .setErrorSummary(summarizeJson(e.getMessage(), MAX_RESULT_CHARS))
@@ -384,7 +384,7 @@ public class McpApprovalService {
         if (invocation.getChannel() != McpInvocationChannel.BACKGROUND_AGENT
                 || invocation.getAnalysisTaskId() == null
                 || StringUtils.isBlank(invocation.getTaskExecutionId())) {
-            throw new ApiException(400, "仅分析任务中的MCP调用支持本任务一直允许");
+            throw new ApiException(400, "仅AI分析任务中的MCP调用支持本任务一直允许");
         }
     }
 
@@ -473,7 +473,7 @@ public class McpApprovalService {
                                     User currentUser) {
         McpToolInvocation invocation = getInvocation(requestId);
         if (!java.util.Objects.equals(taskId, invocation.getAnalysisTaskId())) {
-            throw new ApiException(400, "审批请求与分析任务不匹配");
+            throw new ApiException(400, "审批请求与AI分析任务不匹配");
         }
         return decide(requestId, decision, comment, currentUser);
     }
@@ -566,7 +566,7 @@ public class McpApprovalService {
         if (StringUtils.isBlank(executionId)) {
             return;
         }
-        String cancellationReason = StringUtils.defaultIfBlank(reason, "分析任务已取消");
+        String cancellationReason = StringUtils.defaultIfBlank(reason, "AI分析任务已取消");
         List<McpToolInvocation> invocations = invocationRepository.findByTaskExecutionIdAndStatusIn(
                 executionId,
                 List.of(McpInvocationStatus.PENDING, McpInvocationStatus.APPROVED, McpInvocationStatus.RUNNING)

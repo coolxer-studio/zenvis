@@ -38,7 +38,7 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 - 封装 Spring AI `ChatClient`
 - 支持按线程设置模型
 - 支持注入 MCP tool callback 和工具 system prompt
-- 供分析任务等非会话流程复用
+- 供 AI分析任务等非会话流程复用
 
 ## RAG 与向量能力
 

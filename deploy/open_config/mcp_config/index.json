@@ -432,7 +432,7 @@
                 "options": [
                   { "label": "允许本次", "value": "ONCE" },
                   { "label": "本会话允许", "value": "SESSION" },
-                  { "label": "分析任务自动批准", "value": "TASK_AUTO" },
+                  { "label": "AI分析任务自动批准", "value": "TASK_AUTO" },
                   { "label": "本次任务允许", "value": "TASK_RUN" }
                 ]
               },
@@ -449,7 +449,7 @@
                 "clearable": true
               },
               {
-                "label": "分析任务 ID",
+                "label": "AI分析任务 ID",
                 "type": "input-number",
                 "name": "analysisTaskId",
                 "clearable": true
@@ -469,7 +469,7 @@
           "columns": [
             { "name": "request_id", "label": "请求 ID", "type": "text" },
             { "name": "tool_key", "label": "工具", "type": "text" },
-            { "name": "analysis_task_id", "label": "分析任务", "type": "text", "placeholder": "-" },
+            { "name": "analysis_task_id", "label": "AI分析任务", "type": "text", "placeholder": "-" },
             { "name": "task_execution_id", "label": "Execution ID", "type": "text", "placeholder": "-", "toggled": false },
             { "name": "channel", "label": "渠道", "type": "text" },
             { "name": "policy", "label": "策略快照", "type": "text" },

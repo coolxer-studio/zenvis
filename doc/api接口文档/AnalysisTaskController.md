@@ -1,13 +1,13 @@
-# AnalysisTaskController 分析任务接口
+# AnalysisTaskController AI分析任务接口
 
 ## 1. 基础信息
 
-- 模块：一次性后台 Agent 分析任务
+- 模块：一次性后台 Agent AI分析任务
 - 基础路径：`/api/v1/system/analysis-task`
 - 数据格式：JSON，wire 字段使用 `snake_case`
 - 鉴权：登录用户；任务 MCP 审批仅任务创建人或超级管理员
 
-分析任务提交后在后台运行，关闭页面不会中断。任务可以指定一次性计划时间，也可以按优先级进入普通队列。
+AI分析任务提交后在后台运行，关闭页面不会中断。任务可以指定一次性计划时间，也可以按优先级进入普通队列。
 
 ## 2. 创建/更新模型
 
@@ -279,7 +279,7 @@ Content-Type: application/json
 | `approved_task` | 当前 execution、精确 toolKey 持续允许 |
 | `rejected` | 拒绝当前调用，底层工具不执行，Agent 继续运行 |
 
-`approved_task` 只适用于分析任务接口。任务审批不设置五分钟超时，会一直等待决定或任务取消。
+`approved_task` 只适用于 AI分析任务接口。任务审批不设置五分钟超时，会一直等待决定或任务取消。
 
 ## 11. 审批模式
 
@@ -312,7 +312,7 @@ app.ai.analysis-task.dispatch-delay-ms=5000
 
 ## 14. 相关文档
 
-- [MCP 审批与分析任务快速上手](../DIH/MCP审批与分析任务快速上手.md)
+- [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md)
 - [MCP Client 与业务 Agent 工具集成设计说明](../DIH/MCP-Client-Agent-Design.md)
 - [SkillController](SkillController.md)
 - [McpController](McpController.md)

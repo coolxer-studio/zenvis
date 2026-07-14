@@ -62,7 +62,7 @@ public class SkillController {
             @RequestParam(value = "enabled", defaultValue = "true") Boolean enabled) {
         try {
             if (!Boolean.TRUE.equals(enabled)) {
-                return ResponseWrap.fail(new IllegalArgumentException("分析任务只允许选择已启用 Skill"));
+                return ResponseWrap.fail(new IllegalArgumentException("AI分析任务只允许选择已启用 Skill"));
             }
             return ResponseWrap.success(skillService.getEnabledOptions());
         } catch (Exception e) {

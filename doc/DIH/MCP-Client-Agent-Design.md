@@ -79,9 +79,9 @@ McpClientServiceImpl
 | `t_ai_mcp_tool_policy` | 工具发现信息、默认策略、人工覆盖、可用状态和最后发现时间 |
 | `t_ai_mcp_invocation` | 参数摘要及校验值、策略快照、审批人、调用状态、结果摘要和耗时审计 |
 | `t_ai_mcp_chat_tool_grant` | DIH Chat 内按用户、chatId 和 toolKey 持久化的会话授权 |
-| `t_ai_mcp_task_tool_grant` | 按分析任务 executionId 和 toolKey 持久化的任务授权 |
+| `t_ai_mcp_task_tool_grant` | 按 AI分析任务 executionId 和 toolKey 持久化的任务授权 |
 
-分析任务另通过 `t_ai_analysis_task_skill` 保存任务与 Skill ID 的关联。任务只保存 ID，运行时读取最新 Skill 内容。
+AI分析任务另通过 `t_ai_analysis_task_skill` 保存任务与 Skill ID 的关联。任务只保存 ID，运行时读取最新 Skill 内容。
 
 工具唯一键固定为 `local::<toolName>` 或 `external::<serverId>::<originalToolName>`。参数、结果和错误在落库前递归打码并截断；参数另存 SHA-256 摘要，用于两阶段调用重试时防止替换参数。
 
@@ -384,9 +384,9 @@ spring.ai.mcp.server.capabilities.tool=true
 
 ---
 
-## 九、分析任务调度、Skill 与审批
+## 九、AI分析任务调度、Skill 与审批
 
-分析任务是一种一次性后台 Agent 执行。创建接口必须明确传入 `approval_mode`，并可通过
+AI分析任务是一种一次性后台 Agent 执行。创建接口必须明确传入 `approval_mode`，并可通过
 `skill_ids` 选择任意已扫描且已启用的 Skill。任务保存 Skill ID，实际执行前再次读取最新
 Skill 内容并校验启用状态；Skill 已停用或删除时任务直接进入 `FAILED`，不会静默跳过。
 创建和编辑表单的模型列表复用 `/api/v1/dih/model/list`，与 DIH Chat 保持一致；`auto` 表示运行时由系统选择。
@@ -404,7 +404,7 @@ Skill 内容并校验启用状态；Skill 已停用或删除时任务直接进�
 - `approved_task`：仅当前 execution、精确 toolKey 持续允许，审计范围为 `TASK_RUN`。
 - `rejected`：只拒绝当前工具调用，底层工具不执行，Agent 获得结构化拒绝结果后继续分析。
 
-分析任务审批仅允许任务创建人或超级管理员处理。任务完成、取消或重新入队后会清理当前
+AI分析任务审批仅允许任务创建人或超级管理员处理。任务完成、取消或重新入队后会清理当前
 execution 的工具授权。审批与审计接口支持 `analysisTaskId`、`executionId` 关联和筛选。
 
 关键配置：

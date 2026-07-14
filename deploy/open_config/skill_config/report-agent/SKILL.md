@@ -15,7 +15,7 @@
 
 - `retrieval_list_display_entity`、`retrieval_list_display_attribute`、`retrieval_search` 查询原始记录。
 - `retrieval_msg_trend`、`retrieval_msg_tag`、`entity_count`、`entity_trend`、`entity_statistics` 补充统计、趋势和标签分布。
-- `analysis_task_list`、`analysis_task_view` 查看既有分析任务及结果。
+- `analysis_task_list`、`analysis_task_view` 查看既有 AI分析任务及结果。
 
 所有关键结论必须能追溯到来源。如果来源不足且需要用户补充材料，使用 `zenvis:info-steps` 补充信息卡，不编造证据、时间、数量、实体名称或处置结果。
 

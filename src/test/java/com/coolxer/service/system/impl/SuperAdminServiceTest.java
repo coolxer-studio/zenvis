@@ -151,6 +151,27 @@ class SuperAdminServiceTest {
     }
 
     @Test
+    void existingBuiltInServiceMenusAreRenamed() {
+        DataInitiator dataInitiator = new DataInitiator();
+        ReflectionTestUtils.setField(dataInitiator, "menuRepository", menuRepository);
+
+        Menu pushTaskMenu = builtInServiceMenu("数推服务", "push-task");
+        Menu analysisTaskMenu = builtInServiceMenu("分析任务", "analysis-task");
+        Menu editableMenu = builtInServiceMenu("数推服务", "push-task").setIsEditable(true);
+        when(menuRepository.findAll()).thenReturn(List.of(pushTaskMenu, analysisTaskMenu, editableMenu));
+
+        ReflectionTestUtils.invokeMethod(dataInitiator, "updateBuiltInMenuNames");
+
+        assertThat(pushTaskMenu.getName()).isEqualTo("数据推送服务");
+        assertThat(analysisTaskMenu.getName()).isEqualTo("AI分析任务");
+        assertThat(editableMenu.getName()).isEqualTo("数推服务");
+
+        ArgumentCaptor<Iterable<Menu>> menusCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(menuRepository).saveAll(menusCaptor.capture());
+        assertThat(menusCaptor.getValue()).containsExactly(pushTaskMenu, analysisTaskMenu);
+    }
+
+    @Test
     void createMenuGrantsPermissionToSuperAdminRole() {
         Role superRole = role(5, SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME, true);
         when(menuRepository.getMaxOrderNumberById(0)).thenReturn(Optional.of(0));
@@ -292,5 +313,13 @@ class SuperAdminServiceTest {
         menu.setId(id);
         menu.setName("menu-" + id);
         return menu;
+    }
+
+    private static Menu builtInServiceMenu(String name, String params) {
+        return new Menu()
+                .setName(name)
+                .setParams(params)
+                .setType(MenuType.LOW_CODE_PAGE)
+                .setIsEditable(false);
     }
 }

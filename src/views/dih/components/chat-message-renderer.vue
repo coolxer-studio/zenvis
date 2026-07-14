@@ -202,6 +202,71 @@
         <div v-if="isZenvisCardExpanded(part)" class="notice-content">{{ part.content }}</div>
       </div>
 
+      <div v-else-if="part.type === 'mcp-approval'" class="mcp-approval-part" :class="`mcp-approval-${part.status || 'pending'}`">
+        <div class="mcp-approval-title">
+          <el-icon><Lock /></el-icon>
+          <span class="card-title-text">{{ part.title || 'MCP 工具审批' }}</span>
+          <el-tag size="small" :type="mcpApprovalTagType(part.status)" effect="plain">
+            {{ mcpApprovalStatusText(part) }}
+          </el-tag>
+          <el-tooltip :content="isZenvisCardExpanded(part) ? '折叠' : '展开'" placement="top">
+            <el-button
+              class="card-toggle-btn"
+              size="small"
+              :icon="isZenvisCardExpanded(part) ? CaretTop : CaretBottom"
+              circle
+              @click="toggleZenvisCard(part)"
+            />
+          </el-tooltip>
+        </div>
+        <template v-if="isZenvisCardExpanded(part)">
+          <div class="mcp-approval-meta">
+            <span>来源：{{ mcpApprovalSourceText(part) }}</span>
+            <el-tag v-if="mcpApprovalIsSessionGranted(part)" size="small" type="success" effect="plain">
+              本会话已授权
+            </el-tag>
+            <el-tag size="small" :type="mcpApprovalRiskTagType(part)" effect="dark">
+              {{ mcpApprovalRiskText(part) }}
+            </el-tag>
+          </div>
+          <div class="mcp-approval-content">{{ part.content || '该工具需要你的明确许可后才能执行。' }}</div>
+          <div v-if="mcpApprovalExpiryText(part)" class="mcp-approval-expiry">
+            {{ mcpApprovalExpiryText(part) }}
+          </div>
+          <div v-if="mcpApprovalCanDecide(part)" class="mcp-approval-actions">
+            <el-button
+              size="small"
+              type="primary"
+              :loading="mcpApprovalDecisionLoading(part, 'approved')"
+              :disabled="mcpApprovalIsDeciding(part)"
+              @click="requestMcpApprovalDecision(part, 'approved')"
+            >
+              允许本次
+            </el-button>
+            <el-button
+              size="small"
+              type="success"
+              plain
+              :loading="mcpApprovalDecisionLoading(part, 'approved_session')"
+              :disabled="mcpApprovalIsDeciding(part)"
+              @click="requestMcpApprovalDecision(part, 'approved_session')"
+            >
+              本会话始终允许
+            </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :loading="mcpApprovalDecisionLoading(part, 'rejected')"
+              :disabled="mcpApprovalIsDeciding(part)"
+              @click="requestMcpApprovalDecision(part, 'rejected')"
+            >
+              拒绝执行
+            </el-button>
+          </div>
+        </template>
+      </div>
+
       <div v-else-if="part.type === 'confirm'" class="confirm-part">
         <div class="confirm-title">
           <el-icon><QuestionFilled /></el-icon>
@@ -525,7 +590,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   CaretBottom,
@@ -537,6 +602,7 @@ import {
   Document,
   InfoFilled,
   Loading,
+  Lock,
   Plus,
   QuestionFilled,
   View,
@@ -545,7 +611,7 @@ import {
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import * as echarts from 'echarts';
-import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
+import type { ChatMessage, ChatMessagePart, McpApprovalDecision } from '@/types/type-dih';
 
 type InfoStepSuggestion = {
   label: string;
@@ -590,8 +656,18 @@ const emit = defineEmits<{
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chooseAnalysisDecision', payload: { part: ChatMessagePart; decision: 'dispose' | 'ignore' | 'continue'; detail?: string }): void;
   (e: 'chooseDataAccessDecision', payload: { part: ChatMessagePart; decision: 'apply_config' | 'abandon' | 'revise'; detail?: string }): void;
+  (e: 'decideMcpApproval', payload: { part: ChatMessagePart; decision: McpApprovalDecision }): void;
   (e: 'selectPromptSuggestion', prompt: string): void;
 }>();
+
+const approvalNow = ref(Date.now());
+let approvalClock: number | undefined;
+
+onMounted(() => {
+  approvalClock = window.setInterval(() => {
+    approvalNow.value = Date.now();
+  }, 1000);
+});
 
 const expandedThinking = reactive<Record<string, boolean>>({});
 const hiddenThinking = reactive<Record<string, boolean>>({});
@@ -761,6 +837,95 @@ const metadataJsonText = (part: ChatMessagePart, key: string) => {
     return JSON.stringify(value, null, 2);
   }
   return '';
+};
+
+const mcpApprovalScope = (part: ChatMessagePart) => {
+  const value = part.metadata?.approvalScope || part.metadata?.approval_scope;
+  return typeof value === 'string' ? value.toLowerCase() : '';
+};
+
+const mcpApprovalIsSessionGranted = (part: ChatMessagePart) => (
+  mcpApprovalScope(part) === 'session' && part.status !== 'pending'
+);
+
+const mcpApprovalStatusText = (part: ChatMessagePart) => {
+  if (mcpApprovalScope(part) === 'session') {
+    if (part.status === 'approved') return '本会话已允许，等待执行';
+    if (part.status === 'running') return '本会话已允许，执行中';
+  }
+  return ({
+    pending: '等待审批',
+    approved: '已允许，等待执行',
+    running: '已允许，执行中',
+    succeeded: '执行成功',
+    failed: '执行失败',
+    rejected: '已拒绝',
+    denied: '策略禁止',
+    expired: '已超时',
+    cancelled: '已取消',
+  }[part.status || 'pending'] || part.status || '等待审批');
+};
+
+const mcpApprovalTagType = (status?: string): 'success' | 'warning' | 'info' | 'danger' => {
+  if (status === 'succeeded') return 'success';
+  if (status === 'failed' || status === 'rejected' || status === 'denied') return 'danger';
+  if (status === 'pending' || status === 'approved' || status === 'running') return 'warning';
+  return 'info';
+};
+
+const mcpApprovalSourceText = (part: ChatMessagePart) => {
+  const serverName = metadataText(part, 'serverName');
+  const toolKey = metadataText(part, 'toolKey');
+  const sourceType = metadataText(part, 'sourceType');
+  if (sourceType.toLowerCase() === 'external' || toolKey.startsWith('external::')) {
+    return serverName ? `外部 MCP · ${serverName}` : '外部 MCP';
+  }
+  return 'ZenVis 本地工具';
+};
+
+const mcpApprovalRiskText = (part: ChatMessagePart) => {
+  const risk = metadataText(part, 'riskLevel').toLowerCase();
+  if (risk === 'danger' || risk === 'high') return '高风险';
+  if (risk === 'low' || risk === 'safe') return '低风险';
+  return '需确认';
+};
+
+const mcpApprovalRiskTagType = (part: ChatMessagePart): 'danger' | 'warning' | 'success' => {
+  const risk = metadataText(part, 'riskLevel').toLowerCase();
+  if (risk === 'danger' || risk === 'high') return 'danger';
+  if (risk === 'low' || risk === 'safe') return 'success';
+  return 'warning';
+};
+
+const mcpApprovalExpireTimestamp = (part: ChatMessagePart) => {
+  const raw = part.metadata?.expireTime;
+  if (typeof raw === 'number') return raw;
+  if (typeof raw !== 'string' || !raw) return 0;
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const mcpApprovalExpiryText = (part: ChatMessagePart) => {
+  const timestamp = mcpApprovalExpireTimestamp(part);
+  if (!timestamp || part.status !== 'pending') return '';
+  const seconds = Math.max(0, Math.ceil((timestamp - approvalNow.value) / 1000));
+  if (seconds <= 0) return '审批请求正在超时处理中';
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `剩余审批时间：${minutes}:${String(rest).padStart(2, '0')}`;
+};
+
+const mcpApprovalCanDecide = (part: ChatMessagePart) => part.status === 'pending';
+
+const mcpApprovalIsDeciding = (part: ChatMessagePart) => part.metadata?.deciding === true;
+
+const mcpApprovalDecisionLoading = (part: ChatMessagePart, decision: McpApprovalDecision) => (
+  mcpApprovalIsDeciding(part) && part.metadata?.decisionInFlight === decision
+);
+
+const requestMcpApprovalDecision = (part: ChatMessagePart, decision: McpApprovalDecision) => {
+  if (!mcpApprovalCanDecide(part) || part.metadata?.deciding === true) return;
+  emit('decideMcpApproval', { part, decision });
 };
 
 const chartPreviewConfigText = (part: ChatMessagePart) => {
@@ -1564,6 +1729,7 @@ watch(
 window.addEventListener('resize', resizeChartPreviews);
 
 onBeforeUnmount(() => {
+  if (approvalClock !== undefined) window.clearInterval(approvalClock);
   window.removeEventListener('resize', resizeChartPreviews);
   chartPreviewInstances.forEach(instance => instance.dispose());
   chartPreviewInstances.clear();
@@ -2156,6 +2322,7 @@ onBeforeUnmount(() => {
 
 .notice-part,
 .confirm-part,
+.mcp-approval-part,
 .info-steps-part,
 .analysis-decision-part,
 .data-access-decision-part,
@@ -2172,6 +2339,7 @@ onBeforeUnmount(() => {
 
 .notice-title,
 .confirm-title,
+.mcp-approval-title,
 .info-steps-title,
 .analysis-decision-title,
 .data-access-decision-title,
@@ -2262,6 +2430,57 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.mcp-approval-part {
+  border-color: #e6a23c;
+  background: #fffaf0;
+}
+
+.mcp-approval-succeeded {
+  border-color: #95d475;
+  background: #f0f9eb;
+}
+
+.mcp-approval-failed,
+.mcp-approval-rejected,
+.mcp-approval-denied {
+  border-color: #f89898;
+  background: #fef0f0;
+}
+
+.mcp-approval-expired,
+.mcp-approval-cancelled {
+  border-color: #c8c9cc;
+  background: #f4f4f5;
+}
+
+.mcp-approval-meta,
+.mcp-approval-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mcp-approval-meta {
+  justify-content: space-between;
+  color: #606266;
+  font-size: 12px;
+}
+
+.mcp-approval-content,
+.mcp-approval-expiry {
+  margin-top: 10px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.mcp-approval-expiry {
+  color: #b88230;
 }
 
 .confirm-revise-box {

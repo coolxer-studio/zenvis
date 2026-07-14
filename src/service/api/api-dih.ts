@@ -9,6 +9,8 @@ import {
   ChatMessagePart,
   ChatStreamEvent,
   ChatActionDecisionParams,
+  McpApprovalData,
+  McpApprovalDecisionParams,
   ChatSessionPageParams,
   UpdateChatSessionParams,
   UpdateChatSessionResponse,
@@ -61,18 +63,45 @@ const normalizeMessage = (item: any): ChatMessage => ({
   iframe: item?.iframe,
 });
 
+const normalizeMcpApproval = (item: any): McpApprovalData => ({
+  ...item,
+  requestId: item?.request_id || item?.requestId || '',
+  toolKey: item?.tool_key || item?.toolKey || '',
+  toolName: item?.tool_name || item?.toolName || '',
+  sourceType: item?.source_type || item?.sourceType || '',
+  serverName: item?.server_name || item?.serverName || '',
+  description: item?.description || '',
+  channel: item?.channel || '',
+  policy: item?.policy || '',
+  approvalScope: String(item?.approval_scope || item?.approvalScope || '').toLowerCase(),
+  status: String(item?.status || 'pending').toLowerCase(),
+  argumentsSummary: item?.arguments_summary || item?.argumentsSummary || '',
+  resultSummary: item?.result_summary || item?.resultSummary || '',
+  errorSummary: item?.error_summary || item?.errorSummary || '',
+  riskLevel: item?.risk_level || item?.riskLevel || 'warning',
+  createTime: item?.create_time || item?.createTime || '',
+  expireTime: item?.expire_time || item?.expireTime || '',
+  finishTime: item?.finish_time || item?.finishTime || '',
+  durationMillis: item?.duration_millis ?? item?.durationMillis,
+  decisionComment: item?.decision_comment || item?.decisionComment || '',
+});
+
 const normalizeStreamEvent = (event: any): ChatStreamEvent => {
   if (event?.event === 'done' && event?.message && typeof event.message === 'object') {
     return {
       event: event.event,
       content: event.content,
       message: normalizeMessage(event.message),
+      data: event.data,
     };
   }
   return {
     event: event?.event || 'error',
     content: event?.content,
     message: event?.message,
+    data: event?.event === 'approval_required' || event?.event === 'approval_updated'
+      ? normalizeMcpApproval(event?.data || {})
+      : event?.data,
   };
 };
 
@@ -224,6 +253,16 @@ export class DihService {
 
   static async recordActionDecision(params: ChatActionDecisionParams): Promise<string> {
     return request<string>(`${prefix}/chat/action-decision`, params, 'POST', { silent: true });
+  }
+
+  static async decideMcpApproval(requestId: string, params: McpApprovalDecisionParams): Promise<McpApprovalData> {
+    const response = await request<McpApprovalData>(
+      `${prefix}/mcp/approvals/${encodeURIComponent(requestId)}/decision`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return normalizeMcpApproval(response);
   }
 
   static async getModelList(): Promise<ModelInfo[]> {

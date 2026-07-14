@@ -1626,7 +1626,7 @@ const autoConfirmMessage = (action: string) => {
     return '我已确认下发策略到系统正式生效，请调用配置管理 MCP 写入并应用策略，成功后输出 zenvis:policy-record 将生效状态更新为 yes。';
   }
   if (action === 'analysis.create_continuous_task') {
-    return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与 AI 分析任务。';
+    return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与 AI分析任务。';
   }
   if (action === 'policy.apply_to_production') {
     return '我已确认更新生产策略配置，请根据上一条确认卡、模拟测试结果和配置块，通过配置管理 MCP 写入系统配置。';

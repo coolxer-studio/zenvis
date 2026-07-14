@@ -7,6 +7,7 @@ import { ElMessage } from 'element-plus';
 type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 type RequestOptions = {
   silent?: boolean;
+  signal?: AbortSignal;
 };
 
 const requestClient = axios.create({
@@ -68,7 +69,12 @@ export function request<R>(
     return Promise.reject(newMessageError('不支持的请求方法'));
   }
 
-  const config: AxiosRequestConfig & { silent?: boolean } = { method, url, silent: options.silent };
+  const config: AxiosRequestConfig & { silent?: boolean } = {
+    method,
+    url,
+    silent: options.silent,
+    signal: options.signal,
+  };
   if (method === 'GET') {
     config.params = params;
   } else {

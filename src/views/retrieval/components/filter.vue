@@ -1,968 +1,511 @@
 <template>
   <div class="filter-div">
-    <div class="filter-div1">
-      {{activeRuleName? activeRuleName : '搜索'}}
-      <el-button type="primary" @click="ruleCreate" style="margin-left: 20px">{{activeRuleName? '更新' : '保存为'}}</el-button></div>
-    <el-row class="filter-toolbar">
-      <el-col :span="3" class="entity-col">
-        实体：<el-select
-        ref="select"
-        v-model="entitySelected"
-        style="width: 120px"
-        @change="handleChangeEntity"
-        placeholder="请选择实体"
-      >
-        <el-option v-for="item in entityListData" :value="(item as any).name" :label="(item as any).label"></el-option>
-      </el-select>
-      </el-col>
-      <el-col :span="1" class="more-filter-col" v-if="!senior">
-        <el-popover :visible="moreFilterShow" placement="bottom-start" :width="240">
-          <template #reference>
-            <div style="cursor: pointer" @click.stop="moreFilterShow = !moreFilterShow">更多
-              <el-icon v-if="moreFilterShow"><ArrowUp /></el-icon>
-              <el-icon v-else><ArrowDown /></el-icon>
-            </div>
-          </template>
-          <div class="more-filter">
-            <template v-if="entitySelected">
-              <el-input
-                v-model="moreSearch"
-                placeholder=""
-                style="margin-bottom: 10px"
-                @click.stop
-              >
-                <template #append>
-                  <el-button @click="onSearch"><el-icon><Search /></el-icon></el-button>
-                </template>
-              </el-input>
-
-              <div class="all-filter">所有条件</div>
-              <el-checkbox-group v-model="filterKeySelected" style="width: 100%" @change="getSelect">
-                <div v-for="item in AttributeListData" style="height: 35px;line-height: 35px">
-                  <template v-if="moreSearch">
-                    <el-checkbox :value="(item as any).name" v-show="(item as any).label.indexOf(moreSearch) != -1">{{(item as any).label}}</el-checkbox>
-                  </template>
-                  <template v-else>
-                    <el-checkbox :value="(item as any).name">{{(item as any).label}}</el-checkbox>
-                  </template>
-                </div>
-              </el-checkbox-group>
-            </template>
-            <template v-else>
-              <div>请先选择实体</div>
-            </template>
-          </div>
-        </el-popover>
-
-      </el-col>
-      <template v-if="senior">
-        <el-col :span="18" class="advanced-input-col">
-          <el-input v-model="sql" placeholder="请输入内容" clearable/>
-        </el-col>
-      </template>
-
-      <el-col :span="3" class="action-col">
-        <el-button class="margin-l" @click="sendQuery1">
-          <el-icon><Search /></el-icon>
-        </el-button>
-        <span class="margin-l option" v-if="!senior" @click="toSenior">高级</span>
-        <span class="margin-l option" v-if="senior" @click="cancelSenior">简单</span>
-      </el-col>
-    </el-row>
-    <div v-if="!senior">
-      <div class="condition-logic-bar" v-if="filterSelected.length > 1">
-        <span class="condition-logic-label">关系：</span>
-        <el-segmented
-          v-model="criteriaLogic"
-          :options="criteriaLogicOptions"
-          size="small"
-          @change="handleCriteriaLogicChange"
-        />
-      </div>
-      <div class="add-filter" v-for="(item, index) in filterSelected">
-        <el-popover :visible="criteriaObject[(item as any).name + 'Visible']" placement="bottom-start" trigger="manual">
-          <template #reference>
-            <div class="filter-tag" @click.stop="togglePopover(item)">
-              <span class="tag-label">{{(item as any).label}}</span>
-              <span class="tag-operator">{{getSelectedOperatorLabel(item as TAttributeListResponse)}}</span>
-              <span class="tag-value" v-if="!isValuelessOperator(criteriaObject[(item as any).name + 'Operator'])">{{criteriaObject[(item as any).name + 'Value'] ? (criteriaObject[(item as any).name + 'Value'] + '').substring(0, 10) : ''}}</span>
-              <el-icon v-if="!criteriaObject[(item as any).name + 'Visible'] == false" class="tag-arrow"><ArrowUp /></el-icon>
-              <el-icon v-else class="tag-arrow"><ArrowDown /></el-icon>
-              <el-icon class="tag-close" @click.stop="deleteFilter(index, item)"><Close /></el-icon>
-            </div>
-          </template>
-
-          <div class="popover-content" @click.stop>
-            <div class="popover-body">
-              <div class="form-row">
-                <div class="form-item operator-item">
-                  <el-select
-                    ref="select"
-                    v-model="criteriaObject[(item as any).name + 'Operator']"
-                    placeholder="请选择操作符"
-                    class="form-select"
-                    @change="handleOperatorChange(item as TAttributeListResponse)"
-                  >
-                    <el-option v-for="item1 in (item as any).operator_list" :value="(item1 as any).name" :label="(item1 as any).label"></el-option>
-                  </el-select>
-                </div>
-                <div class="form-item value-item" v-show="criteriaObject[(item as any).name + 'Operator'] && !isValuelessOperator(criteriaObject[(item as any).name + 'Operator'])">
-                  <template v-if="criteriaObject[(item as any).name + 'Operator'] == 'between'">
-                    <template v-if="item.retrieval_type == 'date'">
-                      <el-date-picker
-                        v-model="criteriaObject[(item as any).name + 'Value']"
-                        type="daterange"
-                        :disabled-date="disabledDate"
-                        show-time
-                        format="YYYY-MM-DD HH:mm:ss"
-                        range-separator="至"
-                        start-placeholder="开始日期"
-                        end-placeholder="结束日期"
-                        class="form-date-picker"/>
-                    </template>
-                    <template v-else>
-                      <div class="range-input-group">
-                        <el-input v-model="criteriaObject[(item as any).name + 'Value']" placeholder="起始值" class="form-input" />
-                        <span class="range-separator">至</span>
-                        <el-input v-model="criteriaObject[(item as any).name + 'Value1']" placeholder="结束值" class="form-input" />
-                      </div>
-                    </template>
-                  </template>
-                  <template v-else>
-                    <template v-if="item.retrieval_type == 'date'">
-                      <el-date-picker
-                        v-model="criteriaObject[(item as any).name + 'Value']"
-                        type="datetime"
-                        show-time
-                        :disabled-date="disabledDate"
-                        class="form-date-picker"/>
-                    </template>
-                    <template v-else>
-                      <el-autocomplete
-                        v-if="shouldUseAutoComplete(item as TAttributeListResponse)"
-                        v-model="criteriaObject[(item as any).name + 'Value']"
-                        :fetch-suggestions="(queryString, callback) => fetchAutoCompleteSuggestions(item as TAttributeListResponse, queryString, callback)"
-                        placeholder="请输入值"
-                        class="form-input"
-                        value-key="label"
-                        :trigger-on-focus="false"
-                        clearable
-                        @select="(option) => handleAutoCompleteSelect(item as TAttributeListResponse, option)"
-                      />
-                      <el-input
-                        v-else
-                        v-model="criteriaObject[(item as any).name + 'Value']"
-                        placeholder="请输入值"
-                        class="form-input"
-                      />
-                    </template>
-                  </template>
-                </div>
-              </div>
-            </div>
-            <div class="popover-footer">
-              <el-button size="small" class="btn-cancel" @click="cancelCriteria(item)">取消</el-button>
-              <el-button type="primary" size="small" class="btn-confirm" @click="saveCriteria(item)">确定</el-button>
-            </div>
-          </div>
-        </el-popover>
-      </div>
+    <div class="filter-header">
+      <span>{{ activeRuleName || '搜索' }}</span>
+      <el-button type="primary" :disabled="!canExecute" @click="emitSave">
+        {{ activeRuleName ? '更新' : '保存为' }}
+      </el-button>
     </div>
+
+    <el-alert v-if="issues.length" class="issue-alert" type="warning" :closable="false">
+      <template #title>当前过滤器存在 {{ issues.length }} 个失效项，修复后才能执行或保存</template>
+      <div v-for="issue in issues" :key="issue.code + ':' + issue.scope + ':' + issue.attribute" class="issue-row">
+        <span>{{ issue.message }}</span>
+        <el-button
+          v-if="issue.attribute && (issue.scope === 'display' || (issue.scope === 'criteria' && draft.type === 'normal'))"
+          link
+          type="warning"
+          @click="emit('remove-issue', issue)"
+        >
+          移除此项
+        </el-button>
+      </div>
+    </el-alert>
+
+    <div class="toolbar">
+      <span>实体：</span>
+      <el-select v-model="draft.entity" class="entity-select" @change="handleEntityChange">
+        <el-option v-for="entity in entities" :key="entity.name" :value="entity.name" :label="entity.label" />
+      </el-select>
+      <el-segmented v-model="draft.type" :options="typeOptions" @change="handleTypeChange" />
+      <el-button type="primary" :loading="loading" :disabled="!canExecute" @click="emitSearch">
+        <el-icon><Search /></el-icon>
+        搜索
+      </el-button>
+    </div>
+
+    <template v-if="draft.type === 'advanced'">
+      <el-input
+        v-model="draft.sql"
+        class="advanced-input"
+        type="textarea"
+        :rows="3"
+        placeholder="输入受限 where 表达式，例如：attack_state > 1 and src_ip like '%10.0%'"
+        @input="notifyChange"
+      />
+    </template>
+
+    <template v-else>
+      <div v-if="draft.criteria_list.length > 1" class="logic-row">
+        <span>条件关系：</span>
+        <el-segmented v-model="draft.criteria_logic" :options="logicOptions" @change="notifyChange" />
+      </div>
+
+      <div v-for="(criterion, index) in draft.criteria_list" :key="criterion.key" class="criteria-row">
+        <el-select
+          v-model="criterion.attribute"
+          class="attribute-select"
+          placeholder="字段"
+          @change="handleAttributeChange(criterion)"
+        >
+          <el-option
+            v-for="attribute in attributeOptions(criterion.attribute)"
+            :key="attribute.name"
+            :value="attribute.name"
+            :label="attribute.label"
+          />
+        </el-select>
+        <el-select
+          v-model="criterion.operator"
+          class="operator-select"
+          placeholder="操作符"
+          @change="handleOperatorChange(criterion)"
+        >
+          <el-option
+            v-for="operator in operatorOptions(criterion.attribute)"
+            :key="operator.name"
+            :value="operator.name"
+            :label="operator.label"
+          />
+        </el-select>
+
+        <template v-if="!isValueless(criterion.operator)">
+          <template v-if="criterion.operator === 'between'">
+            <el-date-picker
+              v-if="isDateAttribute(criterion.attribute)"
+              v-model="criterion.value_list"
+              type="datetimerange"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              range-separator="至"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              @change="notifyChange"
+            />
+            <div v-else class="range-inputs">
+              <el-input v-model="criterion.value_list[0]" placeholder="起始值" @input="notifyChange" />
+              <span>至</span>
+              <el-input v-model="criterion.value_list[1]" placeholder="结束值" @input="notifyChange" />
+            </div>
+          </template>
+          <el-date-picker
+            v-else-if="isDateAttribute(criterion.attribute)"
+            v-model="criterion.value_text"
+            type="datetime"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            placeholder="选择时间"
+            @change="syncValueText(criterion)"
+          />
+          <el-autocomplete
+            v-else-if="supportsAutoComplete(criterion)"
+            v-model="criterion.value_text"
+            class="criteria-value-input"
+            :fetch-suggestions="(text, callback) => fetchSuggestions(criterion, text, callback)"
+            value-key="label"
+            :trigger-on-focus="false"
+            placeholder="输入值"
+            @input="value => syncValueText(criterion, value)"
+            @select="option => handleSuggestionSelect(criterion, option)"
+          />
+          <el-input
+            v-else
+            v-model="criterion.value_text"
+            class="criteria-value-input"
+            :type="criterion.operator === 'in' ? 'textarea' : 'text'"
+            :rows="criterion.operator === 'in' ? 2 : undefined"
+            :placeholder="criterion.operator === 'in' ? '每行一个值' : '输入值'"
+            @input="value => syncValueText(criterion, value)"
+          />
+        </template>
+        <el-button text type="danger" @click="removeCriterion(index)">
+          <el-icon><Close /></el-icon>
+        </el-button>
+      </div>
+      <el-button class="add-button" :disabled="draft.criteria_list.length >= 50" @click="addCriterion">
+        添加条件
+      </el-button>
+    </template>
   </div>
 </template>
+
 <script setup lang="ts">
-  import {reactive, ref, toRaw, watch, onMounted, onBeforeUnmount} from "vue";
-  import {ls} from "@u/local-storage";
-  import { Search, ArrowDown, ArrowUp , Close } from '@element-plus/icons-vue';
-  import {
-    EntityResponse,
-    TEntityListResponse,
-    AttributeResponse,
-    TCriteriaList,
-    TAttributeListResponse,
-    RetrievalSearchRequest,
-    SelectAttributeItem,
-    RetrievalLogic,
-    AutoCompleteOption,
-  } from "@/types/type-retrieval";
-  import { RetrievalService } from '@/service/api';
-  import {ElMessage} from 'element-plus';
-  import dayjs, {Dayjs} from 'dayjs';
-  import { debounce } from 'lodash-es';
-  const props = defineProps({
-    activeRule: {
-      type: Number,
-      default: () => {
-        return 0
-      }
-    },
-    resetNum: {
-      type: Number,
-      default: () => {
-        return 0
-      }
-    },
-    activeRuleName: {
-      type: String,
-      default: () => {
-        return ''
-      }
-    },
-    ruleDetailNum: {
-      type: Number,
-      default: () => {
-        return 0
-      }
-    },
-  });
-  const emit = defineEmits({
-    'on-query': null,
-    'on-create': null,
-    'on-col': null,
-    'on-update': null,
-    'on-query1': null,
-    'on-query2': null
-  });
-  const filter = ls.get('__filter__') || {}
-  const rule = ls.get('__rule__') || {}
-  const ruleId = ref<number>(rule.ruleId)
-  const entitySelected = ref<string>()
-  const entityListData = ref<TEntityListResponse[]>()
-  const AttributeListData = ref<TAttributeListResponse[]>([])
-  const AttributeListDataCopy = ref<TAttributeListResponse[]>([])
-  const criteriaList = ref<TCriteriaList[]>()
-  const criteriaObject = ref<object>(filter.criteriaObject || {})
-  const senior = ref<boolean>(false)
-  const criteriaLogic = ref<Exclude<RetrievalLogic, 'expression'>>(filter.criteriaLogic === 'or' ? 'or' : 'and')
-  const criteriaLogicOptions = [
-    { label: 'AND', value: 'and' },
-    { label: 'OR', value: 'or' },
-  ]
-  const moreSearch = ref<string>('')
-  const inputSearch = ref<string>('')
-  const sql = ref<string>('')
-  const moreFilterShow = ref<boolean>(false)
-  const filterList = ref<object[]>([{
-    key: 1,
-    name: 1
-  }])
-  const filterKeySelected = ref<string[]>(filter.filterKeySelected || [])
-  const filterSelected = ref<TAttributeListResponse[]>(filter.filterSelected || [])
-  const filterKeySelectedCopy = ref<string[]>(filter.filterKeySelected || [])
-  type AutoCompleteCallback = (items: AutoCompleteOption[]) => void
-  type AutoCompleteFetcher = (queryString: string, callback: AutoCompleteCallback) => void
-  const singleValueAutoCompleteOperators = [
-    'equal',
-    'notequal',
-    'match',
-    'greatthan',
-    'lessthan',
-    'greatequalthan',
-    'lessequalthan',
-  ]
-  const autoCompleteFetchers = new Map<string, AutoCompleteFetcher>()
-  const disabledDate = (current: Dayjs) => {
-    return current && current >= dayjs().endOf('day');
-  };
-  const onResize = (obj) => {
-    obj.col.width = obj.w
-  }
-  watch(
-    () => filterKeySelected.value,
-    (newVal, oldVal) => {
-      filterSelected.value = []
-      AttributeListData.value.map((e) => {
-        if (newVal.indexOf(e.name) != -1) {
-          filterSelected.value.push(e)
-        }
-      })
-      filterKeySelectedCopy.value = JSON.parse(JSON.stringify(filterKeySelected.value))
-    },
-    {
-      deep: true
+import { computed, reactive, watch } from 'vue';
+import { Close, Search } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { RetrievalService } from '@/service/api';
+import type {
+  AutoCompleteOption,
+  OperatorItem,
+  RetrievalRuleIssue,
+  RetrievalSearchRequest,
+  RetrievalType,
+  TAttributeListResponse,
+  TCriteriaList,
+  TEntityListResponse,
+} from '@/types/type-retrieval';
+
+type EditableCriterion = TCriteriaList & {
+  key: number;
+  value_text: string;
+};
+
+type DraftState = {
+  entity: string;
+  type: RetrievalType;
+  criteria_logic: 'and' | 'or';
+  criteria_list: EditableCriterion[];
+  sql: string;
+};
+
+const props = withDefaults(
+  defineProps<{
+    activeRuleName?: string;
+    modelValue?: RetrievalSearchRequest;
+    entities?: TEntityListResponse[];
+    attributes?: TAttributeListResponse[];
+    issues?: RetrievalRuleIssue[];
+    loading?: boolean;
+  }>(),
+  {
+    activeRuleName: '',
+    modelValue: () => ({}),
+    entities: () => [],
+    attributes: () => [],
+    issues: () => [],
+    loading: false,
+  },
+);
+
+const emit = defineEmits<{
+  (event: 'update:modelValue', value: RetrievalSearchRequest): void;
+  (event: 'entity-change', value: string): void;
+  (event: 'search', value: RetrievalSearchRequest): void;
+  (event: 'save', value: RetrievalSearchRequest): void;
+  (event: 'remove-issue', value: RetrievalRuleIssue): void;
+}>();
+
+let criterionKey = 0;
+let applyingProps = false;
+const draft = reactive<DraftState>({
+  entity: '',
+  type: 'normal',
+  criteria_logic: 'and',
+  criteria_list: [],
+  sql: '',
+});
+
+const typeOptions = [
+  { label: '简单', value: 'normal' },
+  { label: '高级', value: 'advanced' },
+];
+const logicOptions = [
+  { label: 'AND', value: 'and' },
+  { label: 'OR', value: 'or' },
+];
+
+const canExecute = computed(() => {
+  const displayFields = props.modelValue.display_list?.[0]?.attribute_list || [];
+  return Boolean(draft.entity && displayFields.length && !props.issues.length && isDraftComplete());
+});
+
+watch(
+  () => props.modelValue,
+  value => {
+    // The parent writes our own update back through v-model. Rebuilding the
+    // criteria array here would remount the active input on every keystroke.
+    if (modelMatchesDraft(value)) {
+      return;
     }
-  )
-  const deleteFilter = (index, item) => {
-    criteriaObject.value[(item as any).name + 'Visible'] = false
-    filterKeySelected.value.splice(index, 1)
-    delete criteriaObject.value[(item as any).name + 'Visible']
-    delete criteriaObject.value[(item as any).name + 'Operator']
-    delete criteriaObject.value[(item as any).name + 'Value']
-    delete criteriaObject.value[(item as any).name + 'Value1']
-    delete criteriaObject.value[(item as any).name + 'Title']
-    delete criteriaObject.value[(item as any).name + 'AllName']
+    applyingProps = true;
+    draft.entity = value.entity || '';
+    draft.type = value.type || 'normal';
+    draft.criteria_logic = value.criteria_logic === 'or' ? 'or' : 'and';
+    draft.sql = value.sql || '';
+    draft.criteria_list = (value.criteria_list || []).map(toEditableCriterion);
+    applyingProps = false;
+  },
+  { deep: true, immediate: true },
+);
+
+function modelMatchesDraft(value: RetrievalSearchRequest): boolean {
+  if (
+    (value.entity || '') !== draft.entity
+    || (value.type || 'normal') !== draft.type
+    || (value.criteria_logic === 'or' ? 'or' : 'and') !== draft.criteria_logic
+    || (value.sql || '') !== draft.sql
+  ) {
+    return false;
   }
-  const onSearch = (val) => {
+
+  const modelCriteria = value.criteria_list || [];
+  if (modelCriteria.length !== draft.criteria_list.length) {
+    return false;
   }
-  const toSenior = () => {
-    senior.value = true
-  }
-  const cancelSenior = () => {
-    senior.value = false
-  }
-  const getSelect = () => {
-    const selectedLength = filterKeySelected.value.length
-    const previousSelectedLength = filterKeySelectedCopy.value.length
-    if (filterKeySelectedCopy.value.length > filterKeySelected.value.length) {
-      filterKeySelectedCopy.value.map((e:any) => {
-        if (filterKeySelected.value.indexOf(e) == -1) {
-          delete criteriaObject.value[e + 'Visible']
-          delete criteriaObject.value[e + 'Operator']
-          delete criteriaObject.value[e + 'Value']
-          delete criteriaObject.value[e + 'Value1']
-          delete criteriaObject.value[e + 'Title']
-          delete criteriaObject.value[e + 'AllName']
-        }
-      })
-    }
-    if (selectedLength !== previousSelectedLength) {
-      closeMoreFilter()
-    }
-  }
-  const isValuelessOperator = (operator?: string): boolean => {
-    return operator === 'isnull' || operator === 'isnotnull'
-  }
-  const isSingleValueAutoCompleteOperator = (operator?: string): boolean => {
-    return singleValueAutoCompleteOperators.includes(operator || '')
-  }
-  const shouldUseAutoComplete = (item: TAttributeListResponse): boolean => {
+
+  return modelCriteria.every((criterion, index) => {
+    const editableCriterion = draft.criteria_list[index];
+    const modelValues = criterion.value_list || [];
+    const draftValues = editableCriterion?.value_list || [];
     return Boolean(
-      item.auto_complete &&
-      entitySelected.value &&
-      isSingleValueAutoCompleteOperator(criteriaObject.value[item.name + 'Operator'])
-    )
-  }
-  const getAutoCompleteFetcher = (item: TAttributeListResponse): AutoCompleteFetcher => {
-    const key = `${entitySelected.value || ''}:${item.name}`
-    const existing = autoCompleteFetchers.get(key)
-    if (existing) {
-      return existing
-    }
-    const fetcher = debounce((queryString: string, callback: AutoCompleteCallback) => {
-      const term = queryString.trim()
-      if (!entitySelected.value || !term) {
-        callback([])
-        return
-      }
-      RetrievalService.autoComplete({
-        entity: entitySelected.value,
-        attribute: item.name,
-        term,
-      }).then((res) => {
-        callback(res.options || [])
-      }).catch(() => {
-        callback([])
-      })
-    }, 250) as AutoCompleteFetcher
-    autoCompleteFetchers.set(key, fetcher)
-    return fetcher
-  }
-  const fetchAutoCompleteSuggestions = (
-    item: TAttributeListResponse,
-    queryString: string,
-    callback: AutoCompleteCallback,
-  ) => {
-    getAutoCompleteFetcher(item)(queryString, callback)
-  }
-  const handleAutoCompleteSelect = (item: TAttributeListResponse, option: AutoCompleteOption) => {
-    criteriaObject.value[item.name + 'Value'] = option.value
-  }
-  const handleOperatorChange = (item: TAttributeListResponse) => {
-    if (isValuelessOperator(criteriaObject.value[item.name + 'Operator'])) {
-      delete criteriaObject.value[item.name + 'Value']
-      delete criteriaObject.value[item.name + 'Value1']
-    }
-  }
-  const hasCriteriaValue = (item: TAttributeListResponse): boolean => {
-    const operator = criteriaObject.value[item.name + 'Operator']
-    const value = criteriaObject.value[item.name + 'Value']
-    const value1 = criteriaObject.value[item.name + 'Value1']
-    if (!operator) {
-      return false
-    }
-    if (isValuelessOperator(operator)) {
-      return true
-    }
-    if (operator === 'between') {
-      if (item.retrieval_type === 'date') {
-        return Array.isArray(value) && Boolean(value[0]) && Boolean(value[1])
-      }
-      return Boolean(value) && Boolean(value1)
-    }
-    return Boolean(value)
-  }
-  const getSelectedOperatorLabel = (item: TAttributeListResponse): string => {
-    const operatorName = criteriaObject.value[item.name + 'Operator']
-    const operator = item.operator_list?.find((operatorItem) => operatorItem.name === operatorName)
-    if (operator) {
-      return operator.label
-    }
-    if (operatorName === '==') {
-      return '等于'
-    }
-    if (operatorName === 'contains') {
-      return '包含'
-    }
-    return operatorName || ''
-  }
-  const hasCompleteSelectedCriteria = (): boolean => {
-    return filterKeySelected.value.every((key) => {
-      const item = AttributeListData.value.find(attribute => attribute.name === key)
-      return Boolean(item && hasCriteriaValue(item))
-    })
-  }
-  const resetCriteriaState = () => {
-    senior.value = false
-    sql.value = ''
-    filterSelected.value = []
-    filterKeySelected.value = []
-    filterKeySelectedCopy.value = []
-    criteriaObject.value = {}
-    criteriaLogic.value = 'and'
-  }
-  const emitCurrentQuery = (search: boolean) => {
-    if (senior.value) {
-      const advancedSql = sql.value.trim()
-      if (!advancedSql) {
-        return
-      }
-      const queryData: RetrievalSearchRequest = {
-        entity: entitySelected.value,
-        type: 'advanced',
-        sql: advancedSql,
-      }
-      if (search) {
-        emit('on-query2', queryData)
-      } else {
-        emit('on-query', queryData)
-      }
-      return
-    }
-    const queryData = getQueryData()
-    if (search) {
-      emit('on-query1', toRaw(queryData))
-    } else {
-      emit('on-query', toRaw(queryData))
-    }
-  }
-  const handleCriteriaLogicChange = () => {
-    if (filterKeySelected.value.length && hasCompleteSelectedCriteria()) {
-      sendQuery1()
-    }
-  }
-  const getQueryData = (): RetrievalSearchRequest => {
-    const queryData: RetrievalSearchRequest = {
-      entity: entitySelected.value,
-      criteria_list: [] as any,
-      criteria_logic: criteriaLogic.value,
-      type: 'normal'
-    }
-    filterSelected.value.map((e: TAttributeListResponse) => {
-      if (hasCriteriaValue(e)) {
-        let arr = [] as any
-        if (isValuelessOperator(criteriaObject.value[e.name + 'Operator'])) {
-          arr = []
-        }
-        if (!isValuelessOperator(criteriaObject.value[e.name + 'Operator']) && criteriaObject.value[e.name + 'Operator'] != 'between' && e.retrieval_type != 'date') {
-          arr = criteriaObject.value[e.name + 'Value'].split('\n')
-        }
-        if (!isValuelessOperator(criteriaObject.value[e.name + 'Operator']) && criteriaObject.value[e.name + 'Operator'] != 'between' && e.retrieval_type == 'date') {
-          arr.push(dayjs(criteriaObject.value[e.name + 'Value']).format('YYYY-MM-DD HH:mm:ss'))
-        }
-        if (criteriaObject.value[e.name + 'Operator'] == 'between' && e.retrieval_type != 'date') {
-          arr.push(criteriaObject.value[e.name + 'Value'])
-          arr.push(criteriaObject.value[e.name + 'Value1'])
-        }
-        if (criteriaObject.value[e.name + 'Operator'] == 'between' && e.retrieval_type == 'date') {
-          arr.push(dayjs(criteriaObject.value[e.name + 'Value'][0]).format('YYYY-MM-DD HH:mm:ss'))
-          arr.push(dayjs(criteriaObject.value[e.name + 'Value'][1]).format('YYYY-MM-DD HH:mm:ss'))
+      editableCriterion
+      && criterion.attribute === editableCriterion.attribute
+      && criterion.operator === editableCriterion.operator
+      && modelValues.length === draftValues.length
+      && modelValues.every((item, valueIndex) => item === draftValues[valueIndex]),
+    );
+  });
+}
 
-        }
-        queryData.criteria_list?.push({
-          attribute: e.name,
-          operator: criteriaObject.value[e.name + 'Operator'],
-          value_list: arr
-        })
-      }
-    })
-    return queryData
-  }
-  const serializeAdvancedValue = (value: string): string => {
-    if (/^-?\d+(\.\d+)?$/.test(value) || /^[A-Za-z0-9_.:/-]+$/.test(value)) {
-      return value
-    }
-    return "'" + value.replace(/'/g, "''") + "'"
-  }
-  const serializeAdvancedCondition = (condition: TCriteriaList): string => {
-    const values = condition.value_list || []
-    switch (condition.operator) {
-      case 'equal':
-        return `${condition.attribute} = ${serializeAdvancedValue(values[0] || '')}`
-      case 'notequal':
-        return `${condition.attribute} != ${serializeAdvancedValue(values[0] || '')}`
-      case 'greatthan':
-        return `${condition.attribute} > ${serializeAdvancedValue(values[0] || '')}`
-      case 'lessthan':
-        return `${condition.attribute} < ${serializeAdvancedValue(values[0] || '')}`
-      case 'greatequalthan':
-        return `${condition.attribute} >= ${serializeAdvancedValue(values[0] || '')}`
-      case 'lessequalthan':
-        return `${condition.attribute} <= ${serializeAdvancedValue(values[0] || '')}`
-      case 'between':
-        return `${condition.attribute} between ${serializeAdvancedValue(values[0] || '')} and ${serializeAdvancedValue(values[1] || '')}`
-      case 'in':
-        return `${condition.attribute} in (${values.map(serializeAdvancedValue).join(', ')})`
-      case 'match':
-        return `${condition.attribute} like ${serializeAdvancedValue(values[0] || '')}`
-      case 'isnull':
-        return `${condition.attribute} is null`
-      case 'isnotnull':
-        return `${condition.attribute} is not null`
-      default:
-        return `${condition.attribute} = ${serializeAdvancedValue(values[0] || '')}`
-    }
-  }
-  const serializeWhereExpression = (filter: { logic: 'and' | 'or'; conditions: TCriteriaList[] }): string => {
-    return filter.conditions.map(serializeAdvancedCondition).join(` ${filter.logic} `)
-  }
-  const getAdvancedQueryData = (): RetrievalSearchRequest | null => {
-    const advancedSql = sql.value.trim()
-    if (!advancedSql) {
-      ElMessage.warning('请完善搜索条件！');
-      return null
-    }
-    return {
-      entity: entitySelected.value,
-      type: 'advanced',
-      sql: advancedSql,
-    }
-  }
-  const sendQuery = () => {
-    const queryData = getQueryData()
-    emit('on-query', toRaw(queryData));
-  }
-  const sendQuery1 = () => {
-    if (senior.value) {
-      const queryData = getAdvancedQueryData()
-      if (queryData) {
-        emit('on-query2', queryData);
-      }
-    } else {
-      let status = false
-      for (let i = 0; i < filterKeySelected.value.length; i++) {
-        const item = AttributeListData.value.find(attribute => attribute.name === filterKeySelected.value[i])
-        if (!item || !hasCriteriaValue(item)) {
-          ElMessage.warning('请完善搜索条件！');
-          status = true
-          break
-        }
-      }
-      if (!status) {
-        const queryData = getQueryData()
-        emit('on-query1', toRaw(queryData));
-      }
-    }
+function toEditableCriterion(criterion: TCriteriaList): EditableCriterion {
+  return {
+    attribute: criterion.attribute,
+    operator: criterion.operator,
+    value_list: [...(criterion.value_list || [])],
+    value_text: criterion.operator === 'in' ? (criterion.value_list || []).join('\n') : criterion.value_list?.[0] || '',
+    key: ++criterionKey,
+  };
+}
 
-  }
-  const closeMoreFilter = () => {
-    moreFilterShow.value = false
-  }
-  const ruleCreate = () => {
-    const queryData = senior.value ? getAdvancedQueryData() : getQueryData()
-    if (!queryData) {
-      return
-    }
-    if (props.activeRule) {
-      emit('on-update', toRaw(queryData));
-    } else {
-      emit('on-create', toRaw(queryData));
-    }
+function buildQuery(): RetrievalSearchRequest {
+  return {
+    ...props.modelValue,
+    entity: draft.entity,
+    type: draft.type,
+    criteria_logic: draft.criteria_logic,
+    criteria_list:
+      draft.type === 'normal'
+        ? draft.criteria_list.map(({ attribute, operator, value_list }) => ({
+            attribute,
+            operator,
+            value_list: [...value_list],
+          }))
+        : [],
+    sql: draft.type === 'advanced' ? draft.sql.trim() : undefined,
+  };
+}
 
+function notifyChange() {
+  if (!applyingProps) {
+    emit('update:modelValue', buildQuery());
   }
-  const togglePopover = (obj) => {
-    criteriaObject.value[obj.name + 'Visible'] = !criteriaObject.value[obj.name + 'Visible']
-  }
-  const cancelCriteria = (obj) => {
-    criteriaObject.value[obj.name + 'Visible'] = false
-  }
-  const saveCriteria = (obj) => {
-    if (hasCriteriaValue(obj)) {
-      let operatorLabel = ''
-      obj.operator_list.map((e:any) => {
-        if (e.name == criteriaObject.value[obj.name + 'Operator']) {
-          operatorLabel = e.label
-        }
-      })
-      if (isValuelessOperator(criteriaObject.value[obj.name + 'Operator'])) {
-        criteriaObject.value[obj.name + 'Title'] = obj.label + ' ' + operatorLabel
-        criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + operatorLabel
-      } else if (criteriaObject.value[obj.name + 'Operator'] == 'between') {
-        if (obj.retrieval_type == 'date') {
-          criteriaObject.value[obj.name + 'Title'] = obj.label + '介于' + dayjs(criteriaObject.value[obj.name + 'Value'][0]).format('YYYY-MM-DD HH:mm:ss') + '、' + dayjs(criteriaObject.value[obj.name + 'Value'][1]).format('YYYY-MM-DD HH:mm:ss') + operatorLabel
-          criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + '介于' + ' <span style="color: #42ac66">' + dayjs(criteriaObject.value[obj.name + 'Value'][0]).format('YYYY-MM-DD HH:mm:ss') + '、' + dayjs(criteriaObject.value[obj.name + 'Value'][1]).format('YYYY-MM-DD HH:mm:ss') + operatorLabel + '</span>'
-        } else {
-          criteriaObject.value[obj.name + 'Title'] = obj.label + '介于' + criteriaObject.value[obj.name + 'Value'] + '、' + criteriaObject.value[obj.name + 'Value1'] + operatorLabel
-          criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + '介于' + ' <span style="color: #42ac66">' + criteriaObject.value[obj.name + 'Value'] + '、' + criteriaObject.value[obj.name + 'Value1'] + operatorLabel + '</span>'
-        }
-      } else {
-        if (obj.retrieval_type == 'date') {
-          criteriaObject.value[obj.name + 'Title'] = obj.label + ' ' + operatorLabel + ' ' + dayjs(criteriaObject.value[obj.name + 'Value']).format('YYYY-MM-DD HH:mm:ss')
-          criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + operatorLabel + ' <span style="color: #42ac66">' + dayjs(criteriaObject.value[obj.name + 'Value']).format('YYYY-MM-DD HH:mm:ss') + '</span>'
-        } else {
-          criteriaObject.value[obj.name + 'Title'] = obj.label + ' ' + operatorLabel + ' ' + criteriaObject.value[obj.name + 'Value'].split('\n')
-          criteriaObject.value[obj.name + 'AllName'] = '<span style="color: #3988ff">' + obj.label + '</span> ' + operatorLabel + ' <span style="color: #42ac66">' + criteriaObject.value[obj.name + 'Value'].split('\n') + '</span>'
-        }
-      }
+}
 
-      criteriaObject.value[obj.name + 'Visible'] = false
+function handleEntityChange(entity: string) {
+  emit('entity-change', entity);
+}
 
-      sendQuery1();
-    } else {
-      ElMessage.warning('请完善搜索条件！');
-    }
-  }
-  const getAttributeList = (val, searchAfterLoad = false, resetBeforeLoad = false) => {
-    let params = {}
-    if (ruleId.value) {
-      params = {entity: val, rule_id: ruleId.value}
-    } else {
-      params = {entity: val}
-    }
-    return RetrievalService.getAttribute(params).then((res: AttributeResponse) => {
-      AttributeListData.value = res.attribute_list
-      AttributeListDataCopy.value = res.attribute_list
-      criteriaLogic.value = res.criteria_logic === 'or' ? 'or' : 'and'
-      if (resetBeforeLoad) {
-        resetCriteriaState()
-      }
-      criteriaLogic.value = res.criteria_logic === 'or' ? 'or' : 'and'
-      if (res.select_attribute_list && res.select_attribute_list.length && res.attribute_list && res.attribute_list.length) {
-        if (res.criteria_logic === 'expression' && res.sql) {
-          senior.value = true
-          sql.value = res.sql
-          return
-        }
-        res.select_attribute_list.map((e: SelectAttributeItem) => {
-          res.attribute_list.map((a: any) => {
-            if (e.name == a.name) {
-              const valueList = e.value_list || []
-              criteriaObject.value[a.name + 'Visible'] = false
-              criteriaObject.value[a.name + 'Operator'] = e.operator_name
-              let operatorLabel = ''
-              a.operator_list.map((e:any) => {
-                if (e.name == criteriaObject.value[a.name + 'Operator']) {
-                  operatorLabel = e.label
-                }
-              })
-              if (isValuelessOperator(criteriaObject.value[a.name + 'Operator'])) {
-                delete criteriaObject.value[a.name + 'Value']
-                delete criteriaObject.value[a.name + 'Value1']
-                criteriaObject.value[a.name + 'Title'] = a.label + ' ' + operatorLabel
-                criteriaObject.value[a.name + 'AllName'] = '<span style="color: #3988ff">' + a.label + '</span> ' + operatorLabel
-              } else if (criteriaObject.value[a.name + 'Operator'] == 'between') {
-                if (a.retrieval_type == 'date') {
-                  criteriaObject.value[a.name + 'Value'] = valueList
-                  criteriaObject.value[a.name + 'Title'] = a.label + '介于' + criteriaObject.value[a.name + 'Value'][0] + '、' + criteriaObject.value[a.name + 'Value'][1] + operatorLabel
-                  criteriaObject.value[a.name + 'AllName'] = '<span style="color: #3988ff">' + a.label + '</span> ' + '介于' + ' <span style="color: #42ac66">' + criteriaObject.value[a.name + 'Value'][0] + '、' + criteriaObject.value[a.name + 'Value'][1] + operatorLabel + '</span>'
-                } else {
-                  criteriaObject.value[a.name + 'Value'] = valueList[0]
-                  criteriaObject.value[a.name + 'Value1'] = valueList[1]
-                  criteriaObject.value[a.name + 'Title'] = a.label + '介于' + criteriaObject.value[a.name + 'Value'] + '、' + criteriaObject.value[a.name + 'Value1'] + operatorLabel
-                  criteriaObject.value[a.name + 'AllName'] = '<span style="color: #3988ff">' + a.label + '</span> ' + '介于' + ' <span style="color: #42ac66">' + criteriaObject.value[a.name + 'Value'] + '、' + criteriaObject.value[a.name + 'Value1'] + operatorLabel + '</span>'
-                }
-              } else {
-                if (a.retrieval_type == 'date') {
-                  criteriaObject.value[a.name + 'Value'] = valueList[0]
-                  criteriaObject.value[a.name + 'Title'] = a.label + ' ' + operatorLabel + ' ' + criteriaObject.value[a.name + 'Value']
-                  criteriaObject.value[a.name + 'AllName'] = '<span style="color: #3988ff">' + a.label + '</span> ' + operatorLabel + ' <span style="color: #42ac66">' + criteriaObject.value[a.name + 'Value'] + '</span>'
-                } else {
-                  criteriaObject.value[a.name + 'Value'] = valueList.join('\n')
-                  criteriaObject.value[a.name + 'Title'] = a.label + ' ' + operatorLabel + ' ' + criteriaObject.value[a.name + 'Value'].split('\n')
-                  criteriaObject.value[a.name + 'AllName'] = '<span style="color: #3988ff">' + a.label + '</span> ' + operatorLabel + ' <span style="color: #42ac66">' + criteriaObject.value[a.name + 'Value'].split('\n') + '</span>'
-                }
+function handleTypeChange() {
+  notifyChange();
+}
 
-              }
-              filterKeySelected.value.push(a.name)
-              filterSelected.value.push(a)
-            }
-          })
-        })
-      }
-    }).then(() => {
-      if (searchAfterLoad) {
-        emitCurrentQuery(true)
-      }
-    })
+function attributeOptions(selected: string): TAttributeListResponse[] {
+  if (!selected || props.attributes.some(attribute => attribute.name === selected)) {
+    return props.attributes;
   }
-  const handleChangeEntity = (val) => {
-    autoCompleteFetchers.clear()
-    resetCriteriaState()
-    getAttributeList(val)
-    sendQuery()
-    if (ruleId.value) {
-      emit('on-col', {entity: val, rule_id: ruleId.value});
-    } else {
-      emit('on-col', {entity: val});
-    }
-    const currentLs = ls.get('__filter__')
-    if (currentLs.ruleId) {
-    } else {
-    }
-  }
-  const getEntityList = () => {
-    let params = {}
-    if (ruleId.value) {
-      params = {rule_id: ruleId.value}
-    }
-    RetrievalService.getEntity(params).then((res: EntityResponse) => {
-      entityListData.value = res.entity_list
-      const currentLs = ls.get('__filter__') || {}
-      entitySelected.value = ruleId.value
-        ? ((res.selected_entity && res.selected_entity.length) ? res.selected_entity[0] : res.entity_list[0].name)
-        : (currentLs.entity ? currentLs.entity : ((res.selected_entity && res.selected_entity.length) ? res.selected_entity[0] : res.entity_list[0].name))
-      getAttributeList(entitySelected.value, Boolean(ruleId.value), Boolean(ruleId.value))
-      if (!ruleId.value) {
-        sendQuery()
-      }
-      if (ruleId.value) {
-        emit('on-col', {entity: entitySelected.value, rule_id: ruleId.value});
-      } else {
-        emit('on-col', {entity: entitySelected.value});
-      }
+  return [
+    ...props.attributes,
+    { name: selected, label: `${selected}（已失效）`, operator_list: [] },
+  ];
+}
 
-    })
-  }
-  watch(
-    () => props.ruleDetailNum,
-    (newVal, oldVal) => {
-      ruleId.value = props.activeRule
-      getEntityList()
-    }
-  )
-  watch(
-    () => props.resetNum,
-    (newVal, oldVal) => {
-      ruleId.value = 0
-      resetCriteriaState()
-      getEntityList()
-    }
-  )
+function operatorOptions(attributeName: string): OperatorItem[] {
+  return props.attributes.find(attribute => attribute.name === attributeName)?.operator_list || [];
+}
 
-  const closeAllPopovers = () => {
-    for (const key in criteriaObject.value) {
-      if (key.endsWith('Visible')) {
-        criteriaObject.value[key] = false
-      }
-    }
-  }
-  const handleDocumentClick = () => {
-    closeMoreFilter()
-    closeAllPopovers()
-  }
+function isDateAttribute(attributeName: string): boolean {
+  return props.attributes.find(attribute => attribute.name === attributeName)?.retrieval_type === 'date';
+}
 
-  onMounted(() => {
-    getEntityList()
-    document.addEventListener('click', handleDocumentClick)
+function isValueless(operator: string): boolean {
+  return operator === 'isnull' || operator === 'isnotnull';
+}
+
+function supportsAutoComplete(criterion: EditableCriterion): boolean {
+  const attribute = props.attributes.find(item => item.name === criterion.attribute);
+  return Boolean(attribute?.auto_complete && !['between', 'in', 'isnull', 'isnotnull'].includes(criterion.operator));
+}
+
+function addCriterion() {
+  const attribute = props.attributes[0];
+  if (!attribute) {
+    ElMessage.warning('当前实体没有可检索字段');
+    return;
+  }
+  const operator = attribute.operator_list?.[0]?.name || '';
+  draft.criteria_list.push({
+    key: ++criterionKey,
+    attribute: attribute.name,
+    operator,
+    value_list: isValueless(operator) ? [] : [''],
+    value_text: '',
+  });
+  notifyChange();
+}
+
+function removeCriterion(index: number) {
+  draft.criteria_list.splice(index, 1);
+  notifyChange();
+}
+
+function handleAttributeChange(criterion: EditableCriterion) {
+  criterion.operator = operatorOptions(criterion.attribute)[0]?.name || '';
+  criterion.value_list = isValueless(criterion.operator) ? [] : [''];
+  criterion.value_text = '';
+  notifyChange();
+}
+
+function handleOperatorChange(criterion: EditableCriterion) {
+  criterion.value_list = isValueless(criterion.operator)
+    ? []
+    : criterion.operator === 'between'
+      ? ['', '']
+      : [''];
+  criterion.value_text = '';
+  notifyChange();
+}
+
+function syncValueText(criterion: EditableCriterion, inputValue?: unknown) {
+  if (typeof inputValue === 'string' || typeof inputValue === 'number') {
+    criterion.value_text = String(inputValue);
+  }
+  criterion.value_list = criterion.operator === 'in'
+    ? criterion.value_text.split(/\r?\n|,/).map(value => value.trim()).filter(Boolean)
+    : [criterion.value_text];
+  notifyChange();
+}
+
+function fetchSuggestions(
+  criterion: EditableCriterion,
+  text: string,
+  callback: (items: AutoCompleteOption[]) => void,
+) {
+  if (!draft.entity || !text.trim()) {
+    callback([]);
+    return;
+  }
+  RetrievalService.autoComplete({
+    entity: draft.entity,
+    attribute: criterion.attribute,
+    term: text.trim(),
   })
+    .then(result => callback(result.options || []))
+    .catch(() => callback([]));
+}
 
-  onBeforeUnmount(() => {
-    document.removeEventListener('click', handleDocumentClick)
-    autoCompleteFetchers.clear()
-  })
+function handleSuggestionSelect(criterion: EditableCriterion, option: AutoCompleteOption) {
+  criterion.value_text = option.value;
+  syncValueText(criterion);
+}
+
+function isDraftComplete(): boolean {
+  if (draft.type === 'advanced') {
+    return Boolean(draft.sql.trim());
+  }
+  return draft.criteria_list.every(criterion => {
+    if (!criterion.attribute || !criterion.operator) return false;
+    if (isValueless(criterion.operator)) return true;
+    if (criterion.operator === 'between') return Boolean(criterion.value_list[0] && criterion.value_list[1]);
+    return Boolean(criterion.value_list.length && criterion.value_list.every(Boolean));
+  });
+}
+
+function emitSearch() {
+  if (!canExecute.value) {
+    ElMessage.warning('请先修复失效项并完善检索配置');
+    return;
+  }
+  emit('search', buildQuery());
+}
+
+function emitSave() {
+  if (!canExecute.value) {
+    ElMessage.warning('请先修复失效项并完善检索配置');
+    return;
+  }
+  emit('save', buildQuery());
+}
 </script>
+
 <style lang="scss" scoped>
-  .filter-div{
-    margin-bottom: 20px;
-  }
-  .filter-div1{
-    margin-bottom: 20px;
-  }
-  .margin-l{
-    margin-left: 8px;
-  }
-  .filter-toolbar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  .filter-toolbar .entity-col,
-  .filter-toolbar .more-filter-col,
-  .filter-toolbar .action-col {
-    flex: 0 0 auto;
-    max-width: none;
-    width: auto;
-  }
-  .filter-toolbar .entity-col,
-  .filter-toolbar .action-col {
-    display: inline-flex;
-    align-items: center;
-  }
-  .filter-toolbar .advanced-input-col {
-    flex: 1 1 420px;
-    max-width: 720px;
-  }
-  .more-filter-col{
-    position: relative;
-    line-height: 35px;
-  }
-  .more-filter{
-    border-radius: 5px;
-    padding: 10px;
-    line-height: 35px;
-    max-height: 300px;
-    overflow-y: auto;
-    background-color: #fff;
-  }
-  .all-filter {
-    border-top: 1px solid #bec1c6;
-    height: 35px;
-    line-height: 35px;
-    font-size: 16px;
-    margin-top: 10px;
-  }
-  .option{
-    color: #3988ff;
-    cursor: pointer;
-  }
-  .condition-logic-bar {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-    margin-right: 16px;
-    height: 32px;
-    vertical-align: top;
-  }
-  .condition-logic-label {
-    color: #606266;
-    font-size: 14px;
-    white-space: nowrap;
-  }
-  .cur-po{
-    cursor: pointer;
-  }
-  .add-filter{
-    display: inline-block;
-    margin-right: 20px;
-    margin-top: 10px;
-  }
-  .filter-tag{
-    display: inline-flex;
-    align-items: center;
-    background: #fff;
-    border: 1px solid #d5d7db;
-    border-radius: 4px;
-    padding: 4px 6px;
-    cursor: pointer;
-  }
-  .tag-label{
-    color: #409eff;
-    font-weight: 500;
-    margin-right: 4px;
-  }
-  .tag-operator{
-    margin-right: 4px;
-  }
-  .tag-value{
-    margin-right: 4px;
-    max-width: 80px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .tag-arrow{
-    font-size: 14px;
-    margin-right: 4px;
-    color: #999;
-  }
-  .tag-close{
-    color: #fff;
-    background: #ff4d4f;
-    border-radius: 50%;
-    width: 16px;
-    height: 16px;
-    line-height: 14px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-left: 4px;
-    cursor: pointer;
-  }
-  .popover-content {
-    padding: 8px;
-    min-width: 500px;
-    background: #fff;
-    border-radius: 4px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-    border: 1px solid #dcdfe6;
-    overflow: hidden;
-  }
-  .popover-body {
-    padding: 0;
-  }
-  .form-row {
-    display: flex;
-    align-items: stretch;
-    gap: 8px;
-  }
-  .form-item {
-    display: flex;
-    flex-direction: column;
-  }
-  .form-item.operator-item {
-    width: 120px;
-    border-right: none;
-  }
-  .form-item.value-item {
-    flex: 1;
-  }
-  .form-select {
-    width: 100%;
-    border-radius: 4px 0 0 4px;
-    border-right: none;
-  }
-  .form-input {
-    width: 100%;
-    border-radius: 0 4px 4px 0;
-  }
-  .form-date-picker {
-    width: 100%;
-    border-radius: 0 4px 4px 0;
-  }
-  .range-input-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-  }
-  .range-input-group .form-input {
-    flex: 1;
-    border-radius: 4px;
-  }
-  .range-separator {
-    font-size: 14px;
-    color: #999;
-    font-weight: 500;
-  }
-  .popover-footer {
-    padding: 8px 0 0;
-    border-top: none;
-    background: transparent;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 8px;
-    border-top: 1px solid #f5f7fa;
-  }
-  .btn-cancel {
-    color: #606266;
-    border-color: #dcdfe6;
-    background: #fff;
-  }
-  .btn-confirm {
-    background: #409eff;
-    border-color: #409eff;
-  }
+.filter-div {
+  margin-bottom: 20px;
+}
+
+.filter-header,
+.toolbar,
+.criteria-row,
+.logic-row,
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-header {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.entity-select {
+  width: 180px;
+}
+
+.issue-alert,
+.advanced-input,
+.logic-row,
+.criteria-row {
+  margin-bottom: 12px;
+}
+
+.issue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.criteria-row {
+  align-items: flex-start;
+}
+
+.attribute-select {
+  width: 200px;
+}
+
+.operator-select {
+  width: 150px;
+}
+
+.criteria-row :deep(.el-input),
+.criteria-row :deep(.el-textarea),
+.range-inputs {
+  width: 360px;
+}
+
+.criteria-value-input :deep(.el-input__inner),
+.criteria-value-input :deep(.el-textarea__inner) {
+  color: var(--el-text-color-regular, #606266);
+  -webkit-text-fill-color: currentcolor;
+}
+
+.range-inputs :deep(.el-input) {
+  width: 160px;
+}
+
+.add-button {
+  margin-top: 4px;
+}
 </style>

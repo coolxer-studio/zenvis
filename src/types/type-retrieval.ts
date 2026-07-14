@@ -1,25 +1,32 @@
-export type EntityResponse = {
-  entity_list: TEntityListResponse[];
-  selected_entity: string[];
-}
+export type RetrievalType = 'normal' | 'advanced';
+export type RetrievalPersistedType = RetrievalType | 'legacy_sql' | 'invalid';
+export type RetrievalLogic = 'and' | 'or' | 'expression';
+
 export type TEntityListResponse = {
   name: string;
   label: string;
   description?: string;
 };
+
+export type EntityResponse = {
+  entity_list: TEntityListResponse[];
+  selected_entity: string[];
+};
+
 export type TCriteriaList = {
   attribute: string;
   operator: string;
   value_list: string[];
-}
-export type RetrievalLogic = 'and' | 'or' | 'expression';
+};
+
 export type RetrievalDisplay = {
   entity: string;
   attribute_list: string[];
 };
+
 export type RetrievalSearchRequest = {
   id?: number | string;
-  type?: 'normal' | 'advanced';
+  type?: RetrievalType;
   entity?: string;
   criteria_list?: TCriteriaList[];
   criteria_logic?: RetrievalLogic;
@@ -32,13 +39,23 @@ export type RetrievalSearchRequest = {
   sort_by?: string;
   order?: 'asc' | 'desc';
 };
-export type AttributeResponse = {
-  attribute_list: TAttributeListResponse[];
-  select_attribute_list?: SelectAttributeItem[];
-  criteria_logic?: RetrievalLogic;
-  sql?: string;
-  entity?: string;
-}
+
+export type OperatorItem = {
+  name: string;
+  label: string;
+};
+
+export type TAttributeListResponse = {
+  name: string;
+  label: string;
+  description?: string;
+  operator_list: OperatorItem[];
+  retrieval_type?: string;
+  display_type?: string;
+  aggregate_link?: boolean;
+  auto_complete?: boolean;
+};
+
 export type SelectAttributeItem = {
   name: string;
   label: string;
@@ -47,102 +64,115 @@ export type SelectAttributeItem = {
   aggregate_link?: boolean;
   value_list?: string[];
 };
-export type TAttributeListResponse = {
-  display?: string;
-  name: string;
-  label: string;
-  description: string;
-  operator_list: OperatorItem[];
-  title?: string;
-  allName?: string;
-  type?: string;
-  retrieval_type?: string;
-  display_type?: string;
-  aggregate_link?: boolean;
-  auto_complete?: boolean;
-};
-export type OperatorItem = {
-  name: string;
-  label: string;
+
+export type AttributeResponse = {
+  attribute_list: TAttributeListResponse[];
+  select_attribute_list?: SelectAttributeItem[];
+  criteria_logic?: RetrievalLogic;
+  sql?: string;
+  entity?: string;
 };
 
 export type AutoCompleteOption = {
   label: string;
   value: string;
 };
+
 export type AutoCompleteResponse = {
   options: AutoCompleteOption[];
 };
 
-// 候选值响应
-export type CandidateItem = {
-  value: string;
-  label: string;
-  count?: number;
-};
 export type CandidateResponse = {
-  candidate_list?: CandidateItem[];
   datalist?: string[];
   total?: number;
 };
 
-// 显示实体响应
-export type DisplayEntityItem = {
-  name: string;
-  label: string;
-  description?: string;
-};
 export type DisplayEntityResponse = {
-  entity_list: DisplayEntityItem[];
+  entity_list: TEntityListResponse[];
 };
 
-// 显示属性响应
-export type DisplayAttributeItem = {
-  name: string;
-  label: string;
-  display?: boolean;
-  type?: string;
-  display_type?: string;
-  aggregate_link?: boolean;
-};
-export type DisplayAttributeResponse = {
-  attribute_list: DisplayAttributeItem[];
-  select_attribute_list?: SelectAttributeItem[];
+export type DisplayAttributeResponse = AttributeResponse;
+
+export type RetrievalRuleIssue = {
+  code: string;
+  scope: 'rule' | 'entity' | 'criteria' | 'display' | string;
   entity?: string;
+  attribute?: string;
+  message: string;
 };
 
-// 规则参数
-export type RuleParams = RetrievalSearchRequest;
-
-// 规则响应
-export type RuleResponse = {
-  success: boolean;
-  message?: string;
-  rule_id?: string;
-};
-
-// 规则详情响应
-export type RuleDetailResponse = {
-  id: string;
-  name: string;
-  description?: string;
+export type RetrievalRuleConfig = {
+  type: RetrievalPersistedType;
   entity: string;
   criteria_list: TCriteriaList[];
-  attribute_list: string[];
-  criteria_logic?: RetrievalLogic;
+  criteria_logic: RetrievalLogic;
+  sql?: string;
+  display_list: RetrievalDisplay[];
+};
+
+export type RetrievalRuleListItem = {
+  id: number;
+  name: string;
+  description?: string;
   create_time?: string;
   update_time?: string;
+  status: 'valid' | 'invalid';
+  issue_count: number;
 };
 
-// 删除规则参数
-export type DeleteRuleParams = {
-  rule_id?: string;
-  id?: string;
-  [key: string]: unknown;
+export type RetrievalRuleDetail = {
+  id: number;
+  name: string;
+  description?: string;
+  create_time?: string;
+  update_time?: string;
+  config: RetrievalRuleConfig;
+  status: 'valid' | 'invalid';
+  issues: RetrievalRuleIssue[];
+  entity_list: TEntityListResponse[];
+  attribute_list: TAttributeListResponse[];
 };
 
-// 删除规则响应
-export type DeleteRuleResponse = {
-  success: boolean;
-  message?: string;
+export type RuleParams = RetrievalSearchRequest;
+export type RuleResponse = { id: number };
+export type RuleDetailResponse = RetrievalRuleDetail;
+export type DeleteRuleParams = { id: number | string };
+export type DeleteRuleResponse = void;
+
+export type RetrievalTableColumn = {
+  title: string;
+  dataIndex: string;
+  isLink?: boolean;
+  resizable: boolean;
+  width: number;
+  minWidth: number;
+  fixed: false | 'left' | 'right';
+  sorter: boolean;
+  firstIndex: number;
+  type?: string;
+};
+
+export type RetrievalTableState = {
+  loading: boolean;
+  sourceColumns: RetrievalTableColumn[];
+  disabledTitles: string[];
+  selectedCol: RetrievalTableColumn[];
+  selectedKeyCol: string[];
+  columns: RetrievalTableColumn[];
+  data: Record<string, unknown>[];
+  entity?: string;
+  width: number;
+  minWidth: number;
+  pagination: import('./type-public').TPagination;
+};
+
+export type RetrievalTableSorter = {
+  prop?: string;
+  field?: string;
+  order?: 'ascending' | 'descending' | 'ascend' | 'descend' | null;
+};
+
+export type RetrievalTableChange = {
+  pagination?: Partial<import('./type-public').TPagination>;
+  sorter?: RetrievalTableSorter;
 };

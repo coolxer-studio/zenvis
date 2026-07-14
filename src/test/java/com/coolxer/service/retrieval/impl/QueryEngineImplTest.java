@@ -3,14 +3,22 @@ package com.coolxer.service.retrieval.impl;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.retrieval.query.ColumnCriteria;
 import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
+import com.coolxer.model.retrieval.query.DisplayColumn;
+import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class QueryEngineImplTest {
 
@@ -70,6 +78,43 @@ class QueryEngineImplTest {
         ))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("排序字段不合法");
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                queryEngine, "buildPage", new RetrievalPageable(0, 10, null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("分页参数");
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                queryEngine, "buildPage", new RetrievalPageable(1, 201, null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("分页参数");
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                queryEngine, "buildPage", new RetrievalPageable(1, 10, "server_time", "sideways")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("排序方向");
+    }
+
+    @Test
+    void dateConversionUsesConfiguredBusinessTimeZone() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+
+        String value = ReflectionTestUtils.invokeMethod(
+                queryEngine, "convertValueList", "1970-01-01 08:00:00", "date");
+
+        assertThat(value).isEqualTo("0");
+    }
+
+    @Test
+    void displayColumnAlwaysUsesLogicalNameAsResponseAlias() {
+        DataAttribute attribute = new DataAttribute();
+        attribute.setName("device_name");
+        attribute.setColumnName("dev_name");
+        attribute.setDisplayName("设备名称");
+
+        DisplayColumn column = new DisplayColumn().fromDisplayColumn(attribute);
+
+        assertThat(column.getDisplayName()).isEqualTo("device_name");
+        assertThat(column.getColumnName()).isEqualTo("dev_name");
     }
 
     @Test
@@ -91,6 +136,25 @@ class QueryEngineImplTest {
         );
 
         assertThat(criteriaSql).isEqualTo("(module_type_name = '网站攻击' and (attack_type_name = '信息泄露' or attack_type_name = 'SQL注入'))");
+    }
+
+    @Test
+    void singleNullJsonColumnKeepsLogicalKeyAndNullValue() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery("select payload from asset")).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.singletonList(null));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        DisplayColumn column = new DisplayColumn();
+        column.setColumnName("payload_json");
+        column.setDisplayName("payload");
+        column.setDisplayType("json");
+
+        List<Map<String, Object>> result = ReflectionTestUtils.invokeMethod(
+                queryEngine, "queryResultList", "select payload from asset", List.of(column));
+
+        assertThat(result).containsExactly(Collections.singletonMap("payload", null));
     }
 
     private ColumnCriteria criteria(String column, String columnType, String operator, String value) {

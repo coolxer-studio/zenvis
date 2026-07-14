@@ -3,16 +3,25 @@ package com.coolxer.service.retrieval.impl;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.MetaData;
 import com.coolxer.model.retrieval.vo.DataAttributeVo;
+import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.utils.JacksonUtil;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class MetaDataServiceImplTest {
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void supplementOperatorsAddsTypeAwareOperators() {
@@ -60,6 +69,59 @@ class MetaDataServiceImplTest {
         dataAttributeVo.setAutoComplete(true);
 
         assertThat(JacksonUtil.toMap(dataAttributeVo)).containsEntry("auto_complete", true);
+    }
+
+    @Test
+    void loadsIdIndexesAndKeepsPreviousSnapshotWhenReloadFails() throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, """
+                {
+                  "entity": [{"id": 1, "name": "asset", "label": "资产", "table_name": "asset_table", "sort_column": "src_ip"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "ip", "label": "IP", "column_name": "src_ip", "column_type": "String", "operators": ["equal"]}],
+                  "operator": [{"id": 1, "name": "equal", "label": "等于"}]
+                }
+                """);
+        CustomWebConfig config = mock(CustomWebConfig.class);
+        when(config.getRetrievalMetaFilePath()).thenReturn(tempDir.toString());
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        ReflectionTestUtils.setField(service, "customWebConfig", config);
+
+        MetaData first = service.loadMetaData();
+
+        assertThat(first).isNotNull();
+        assertThat(service.getDataEntityById(1).getName()).isEqualTo("asset");
+        assertThat(service.getDataAttributeById(10).getName()).isEqualTo("ip");
+        assertThat(service.getAllDataAttribute()).hasSize(1);
+
+        Files.writeString(metadata, "{ invalid json }");
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataEntityByName("asset")).isNotNull();
+    }
+
+    @Test
+    void duplicateDefinitionDoesNotReplacePreviousSnapshot() throws Exception {
+        Path firstFile = tempDir.resolve("01-first.json");
+        Files.writeString(firstFile, """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table", "sort_column": "src_ip"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "ip", "column_name": "src_ip", "column_type": "String"}]
+                }
+                """);
+        CustomWebConfig config = mock(CustomWebConfig.class);
+        when(config.getRetrievalMetaFilePath()).thenReturn(tempDir.toString());
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        ReflectionTestUtils.setField(service, "customWebConfig", config);
+        MetaData first = service.loadMetaData();
+
+        Files.writeString(tempDir.resolve("02-duplicate.json"), """
+                {"entity": [{"id": 2, "name": "asset", "table_name": "other_table"}]}
+                """);
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataEntityByName("asset").getTableName()).isEqualTo("asset_table");
     }
 
     private DataAttribute attribute(String name, String columnType, String retrievalType, List<String> operators) {

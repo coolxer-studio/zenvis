@@ -156,7 +156,7 @@ ZenVis 采用双数据源设计，MySQL 和 ClickHouse 分工明确：
 
 ## AI Agent 架构
 
-详见 [AI智能分析](ai-analysis.md)
+详见 [MCP Client 与 Agent 设计](../DIH/MCP-Client-Agent-Design.md)
 
 ## 插件系统
 
@@ -194,6 +194,8 @@ ZenVis 核心设计理念是**配置驱动**，通过 JSON 配置文件定义：
 
 配置目录：`deploy/open_config/`
 
+全局检索是配置驱动的典型模块：元数据定义逻辑实体、字段、物理表列、操作符和展示行为；运行时通过原子快照绑定当前配置，已保存过滤器只保存逻辑字段。详见 [Retrieval 全局检索模块快速上手](retrieval-module.md)。
+
 ## 请求处理流程
 
 ```
@@ -223,6 +225,7 @@ Client Request
 
 ## 下一步
 
-- [AI智能分析详解](ai-analysis.md)
+- [Retrieval 全局检索模块](retrieval-module.md)
+- [MCP Client 与 Agent 设计](../DIH/MCP-Client-Agent-Design.md)
 - [插件开发指南](plugin-development.md)
 - [部署配置](deployment.md)

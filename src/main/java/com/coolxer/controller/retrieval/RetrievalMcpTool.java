@@ -3,6 +3,9 @@ package com.coolxer.controller.retrieval;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dashboard.vo.StackedLineChartVo;
 import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleDeleteDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleUpdateDto;
 import com.coolxer.model.retrieval.vo.AggregateMsgInfoVo;
 import com.coolxer.model.retrieval.vo.DataAttributeResultVo;
 import com.coolxer.model.retrieval.vo.DataEntityResultVo;
@@ -11,6 +14,8 @@ import com.coolxer.service.retrieval.AggregateService;
 import com.coolxer.service.retrieval.EntityCoreService;
 import com.coolxer.service.retrieval.RetrievalService;
 import com.coolxer.service.dih.mcp.McpToolApproval;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.mcp.McpInvocationContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -55,8 +60,8 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "retrieval_create_rule", description = "创建一个新的检索规则")
-    public Boolean createSearchRule(@ToolParam(description = "检索规则请求参数") RetrievalRequestDto request) {
-        return retrievalService.createRule(request);
+    public Boolean createSearchRule(@ToolParam(description = "检索规则请求参数") RetrievalRuleCreateDto request) {
+        return retrievalService.createRule(request == null ? null : request.toRetrievalRequestDto(), currentUserId()) != null;
     }
 
     /**
@@ -64,8 +69,8 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "retrieval_update_rule", description = "更新已有的检索规则")
-    public Boolean updateSearchRule(@ToolParam(description = "检索规则请求参数") RetrievalRequestDto request) {
-        return retrievalService.updateRule(request);
+    public Boolean updateSearchRule(@ToolParam(description = "检索规则请求参数") RetrievalRuleUpdateDto request) {
+        return retrievalService.updateRule(request == null ? null : request.toRetrievalRequestDto(), currentUserId()) != null;
     }
 
     /**
@@ -73,8 +78,8 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "retrieval_delete_rule", description = "删除指定的检索规则")
-    public Boolean deleteSearchRule(@ToolParam(description = "检索规则请求参数，包含规则ID") RetrievalRequestDto request) {
-        return retrievalService.deleteRule(request);
+    public Boolean deleteSearchRule(@ToolParam(description = "检索规则请求参数，包含规则ID") RetrievalRuleDeleteDto request) {
+        return retrievalService.deleteRule(request == null ? null : request.getId(), currentUserId());
     }
 
     /**
@@ -83,7 +88,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_rule", description = "获取所有检索规则列表")
     public DataListVo listSearchRule() {
-        return retrievalService.listRule();
+        return retrievalService.listRule(currentUserId());
     }
 
     /**
@@ -92,7 +97,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_entity", description = "获取数据实体列表，可按规则ID过滤")
     public DataEntityResultVo listEntity(@ToolParam(description = "规则ID，可选") Integer ruleId) {
-        return retrievalService.listEntity(ruleId);
+        return retrievalService.listEntity(ruleId, currentUserId());
     }
 
     /**
@@ -102,7 +107,7 @@ public class RetrievalMcpTool {
     @Tool(name = "retrieval_list_attribute", description = "获取数据属性列表，可按实体或规则ID过滤")
     public DataAttributeResultVo listAttribute(@ToolParam(description = "实体名称，可选") String entity,
                                                @ToolParam(description = "规则ID，可选") Integer ruleId) {
-        return retrievalService.listAttribute(entity, ruleId);
+        return retrievalService.listAttribute(entity, ruleId, currentUserId());
     }
 
     /**
@@ -121,7 +126,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_display_entity", description = "获取展示用的实体列表，可按规则ID过滤")
     public DataEntityResultVo listDisplayEntity(@ToolParam(description = "规则ID，可选") Integer ruleId) {
-        return retrievalService.listEntity(ruleId);
+        return retrievalService.listEntity(ruleId, currentUserId());
     }
 
     /**
@@ -131,7 +136,7 @@ public class RetrievalMcpTool {
     @Tool(name = "retrieval_list_display_attribute", description = "获取展示用的属性列表，可按实体或规则ID过滤")
     public DataAttributeResultVo listDisplayAttribute(@ToolParam(description = "实体名称，可选") String entity,
                                                       @ToolParam(description = "规则ID，可选") Integer ruleId) {
-        return retrievalService.listAttributeForDisplay(entity, ruleId);
+        return retrievalService.listAttributeForDisplay(entity, ruleId, currentUserId());
     }
 
     /**
@@ -255,5 +260,10 @@ public class RetrievalMcpTool {
     public Map<String, Object> entityView(@ToolParam(description = "实体名称") String entity,
                                            @ToolParam(description = "记录ID") String id) {
         return entityCoreService.getOne(entity, id);
+    }
+
+    private Integer currentUserId() {
+        McpInvocationContext context = McpInvocationContextHolder.current();
+        return context == null ? null : context.requesterUserId();
     }
 }

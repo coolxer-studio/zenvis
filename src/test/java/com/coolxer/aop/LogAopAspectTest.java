@@ -1,12 +1,19 @@
 package com.coolxer.aop;
 
+import com.coolxer.model.retrieval.dto.RequestCriteriaDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.Signature;
 import org.aspectj.lang.reflect.SourceLocation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 class LogAopAspectTest {
@@ -26,6 +33,25 @@ class LogAopAspectTest {
             aspect.doBefore(joinPoint);
             aspect.doAfterReturning(null);
         }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void ruleMutationLogSummaryDoesNotContainSqlOrConditionValues() {
+        RetrievalRuleCreateDto request = new RetrievalRuleCreateDto();
+        request.setType("advanced");
+        request.setEntity("asset");
+        request.setSql("secret SQL value");
+        RequestCriteriaDto criteria = new RequestCriteriaDto();
+        criteria.setAttribute("ip");
+        criteria.setOperator("equal");
+        criteria.setValueList(List.of("secret condition value"));
+        request.setCriteriaList(List.of(criteria));
+
+        Map<String, Object> safe = ReflectionTestUtils.invokeMethod(
+                new LogAopAspect(), "sanitizeRuleConfig", request);
+
+        assertThat(safe).containsEntry("sql", "***").containsEntry("criteria_count", 1);
+        assertThat(safe.toString()).doesNotContain("secret SQL value", "secret condition value");
     }
 
     private static class TestJoinPoint implements JoinPoint {

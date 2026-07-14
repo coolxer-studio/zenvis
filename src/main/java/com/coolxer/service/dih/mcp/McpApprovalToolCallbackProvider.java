@@ -68,14 +68,15 @@ public class McpApprovalToolCallbackProvider implements ToolCallbackProvider {
         @Override
         public String call(String toolInput) {
             McpInvocationContext context = McpInvocationContext.background(null);
-            return approvalService.execute(descriptor, toolInput, context, () -> delegate.call(toolInput));
+            return approvalService.execute(descriptor, toolInput, context,
+                    () -> McpInvocationContextHolder.callWith(context, () -> delegate.call(toolInput)));
         }
 
         @Override
         public String call(String toolInput, ToolContext toolContext) {
             McpInvocationContext context = resolveContext(toolContext);
             return approvalService.execute(descriptor, toolInput, context,
-                    () -> delegate.call(toolInput, toolContext));
+                    () -> McpInvocationContextHolder.callWith(context, () -> delegate.call(toolInput, toolContext)));
         }
 
         private McpInvocationContext resolveContext(ToolContext toolContext) {

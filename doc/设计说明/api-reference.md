@@ -21,6 +21,13 @@ http://localhost:11001/swagger-ui/index.html
 | [McpController](../api接口文档/McpController.md) | MCP 服务、策略、通用审批和调用审计接口 |
 | [SkillController](../api接口文档/SkillController.md) | Skill 扫描、启停、Agent 加载和任务选项接口 |
 
+## 全局检索专题
+
+| 文档 | 说明 |
+| :--- | :--- |
+| [Retrieval 模块快速上手](retrieval-module.md) | 产品行为、前后端状态流、规则兼容、元数据和排障 |
+| [RetrievalController](../api接口文档/RetrievalController.md) | 检索、过滤器和元数据 REST 契约 |
+
 ## 当前接口模块
 
 当前有效 Markdown 文档如下：
@@ -110,7 +117,7 @@ http://localhost:11001/swagger-ui/index.html
 }
 ```
 
-历史检索接口仍可能返回 `datalist/size/page/total`，前端通过兼容类型继续适配。
+Retrieval 列表接口使用 `{ "total": 100, "datalist": [] }`；`POST /retrieval/do` 还会返回查询上下文 `token`。其 `page/size` 是请求字段，不会原样放入响应。
 
 ### 鉴权方式
 

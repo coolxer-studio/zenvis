@@ -21,10 +21,11 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -37,6 +38,9 @@ public class QueryEngineImpl implements QueryEngine {
     private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 200;
+
+    @Value("${app.retrieval.time-zone:Asia/Shanghai}")
+    private String retrievalTimeZone = "Asia/Shanghai";
 
     /**
      * entityManager实现原生查询，unitName是通过clickHouseEntityManagerFactoryBean注入时候指定的名字
@@ -98,7 +102,7 @@ public class QueryEngineImpl implements QueryEngine {
     public Map<String, Object> findById(String tableName, String id, List<DataAttribute> dataAttributes) {
         List<DisplayColumn> displayColumnList = dataAttributes.stream().map(attribute -> new DisplayColumn().fromDisplayColumn(attribute)).toList();
         List<String> selectColumnList = displayColumnList.stream().map(this::convertDisplayColumn).toList();
-        List<String> columnList = displayColumnList.stream().map(DisplayColumn::getColumnName).toList();
+        List<String> columnList = displayColumnList.stream().map(DisplayColumn::getDisplayName).toList();
         String columnSelectSql = StringUtils.join(selectColumnList, ",");
 
         String selectSql = "select " + columnSelectSql + " from " + requireIdentifier(tableName, "表名") + " where id = " + quote(id);
@@ -265,7 +269,9 @@ public class QueryEngineImpl implements QueryEngine {
 
     @Override
     public Map<String, Object> queryWithRetrieval(DataQuery dataQuery, RetrievalPageable pageable) {
-
+        if (dataQuery == null || CollectionUtils.isEmpty(dataQuery.getDisplayColumnList())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "展示字段不能为空");
+        }
         String tableName = requireIdentifier(dataQuery.getTableName(), "表名");
         List<ColumnCriteria> columnCriteria = dataQuery.getColumnCriteria();
         String whereClause = "";
@@ -284,7 +290,7 @@ public class QueryEngineImpl implements QueryEngine {
 
         String columnSelectSql = StringUtils.join(selectColumnList, ",");
         String querySql = "select " + columnSelectSql + " from " + tableName + whereClause + pageClause;
-        log.info("get sql {}", querySql);
+        log.debug("retrieval sql={}", querySql);
         Map<String, Object> resultMap = new HashMap<>();
         resultMap.put("total", queryCount(tableName, whereClause));
         resultMap.put("data", queryResultList(querySql, dataQuery.getDisplayColumnList()));
@@ -395,17 +401,21 @@ public class QueryEngineImpl implements QueryEngine {
     private String buildPage(RetrievalPageable pageable) {
         int page = pageable != null && Objects.nonNull(pageable.getPage()) ? pageable.getPage() : 1;
         int size = pageable != null && Objects.nonNull(pageable.getSize()) ? pageable.getSize() : DEFAULT_PAGE_SIZE;
-        page = Math.max(page, 1);
-        size = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        if (page < 1 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "分页参数不合法");
+        }
 
         String pageStr = "";
         if (pageable != null && StringUtils.isNotBlank(pageable.getSortBy())) {
             String sortBy = pageable.getSortBy();
             String order = pageable.getOrder();
+            if (StringUtils.isNotBlank(order) && !StringUtils.equalsAnyIgnoreCase(order, "asc", "desc")) {
+                throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "排序方向仅支持asc或desc");
+            }
             String orderStr = StringUtils.equalsIgnoreCase(order, "asc") ? "asc" : "desc";
             pageStr = " order by " + requireIdentifier(sortBy, "排序字段") + " " + orderStr;
         }
-        pageStr += " limit " + (page - 1) * size + "," + size;
+        pageStr += " limit " + ((long) (page - 1) * size) + "," + size;
         return pageStr;
     }
 
@@ -481,7 +491,8 @@ public class QueryEngineImpl implements QueryEngine {
     private String convertValueList(String origin, String retrievalType) {
         switch (retrievalType) {
             case "date":
-                long epoch = LocalDateTime.parse(origin, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).toEpochSecond(ZoneOffset.UTC) * 1000;
+                long epoch = LocalDateTime.parse(origin, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                        .atZone(ZoneId.of(retrievalTimeZone)).toInstant().toEpochMilli();
                 return Long.toString(epoch);
             default:
                 return origin;
@@ -576,6 +587,10 @@ public class QueryEngineImpl implements QueryEngine {
             Map<String, Object> resultMap = new HashMap<>();
             for (int i = 0; i < columnList.size(); i++) {
                 DisplayColumn displayColumn = columnList.get(i);
+                if (rowValues[i] == null) {
+                    resultMap.put(displayColumn.getDisplayName(), null);
+                    continue;
+                }
                 if ("json".equals(displayColumn.getDisplayType())) {
                     String jsonString = rowValues[i].toString();
                     if (jsonString.startsWith("[") && jsonString.endsWith("]")) {

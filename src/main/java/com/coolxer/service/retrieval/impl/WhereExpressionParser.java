@@ -11,7 +11,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+/**
+ * Parser for the deliberately restricted advanced where expression language.
+ *
+ * <p>The parser is stateless. All cursor/depth/count data belongs to one parse
+ * invocation, so a singleton service can safely use the same parser instance.</p>
+ */
 class WhereExpressionParser {
+
+    static final int MAX_EXPRESSION_LENGTH = 8 * 1024;
+    static final int MAX_CONDITION_COUNT = 50;
+    static final int MAX_NESTING_DEPTH = 10;
+    static final int MAX_IN_VALUES = 200;
+    static final int MAX_VALUE_LENGTH = 2 * 1024;
 
     private static final Pattern FIELD_PATTERN = Pattern.compile("[A-Za-z_][\\w]*");
     private static final Map<String, String> OPERATOR_MAP = Map.of(
@@ -25,20 +37,16 @@ class WhereExpressionParser {
             "<=", "lessequalthan"
     );
 
-    private List<Token> tokens = List.of();
-    private int position = 0;
-
     WhereExpression parse(String expression) {
         String normalizedExpression = normalizeExpression(expression);
-        this.tokens = tokenize(normalizedExpression);
-        this.position = 0;
-        WhereNode root = parseOrExpression();
-        expect(TokenType.END, "高级where表达式格式不正确");
-        List<RequestCriteriaDto> criteriaList = new ArrayList<>();
-        collectCriteria(root, criteriaList);
-        if (criteriaList.isEmpty()) {
+        ParserState state = new ParserState(tokenize(normalizedExpression));
+        WhereNode root = parseOrExpression(state, 0);
+        state.expect(TokenType.END, "高级where表达式格式不正确");
+        if (state.conditionCount == 0) {
             throw invalid("高级where表达式条件不能为空");
         }
+        List<RequestCriteriaDto> criteriaList = new ArrayList<>();
+        collectCriteria(root, criteriaList);
         return new WhereExpression(root, root.logicOrDefault(), criteriaList, normalizedExpression);
     }
 
@@ -47,6 +55,9 @@ class WhereExpressionParser {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "高级where表达式不能为空");
         }
         String trimmed = expression.trim();
+        if (trimmed.length() > MAX_EXPRESSION_LENGTH) {
+            throw invalid("高级where表达式长度不能超过" + MAX_EXPRESSION_LENGTH + "个字符");
+        }
         if (trimmed.toLowerCase(Locale.ROOT).startsWith("where ")) {
             trimmed = trimmed.substring("where ".length()).trim();
         }
@@ -56,90 +67,101 @@ class WhereExpressionParser {
         return trimmed;
     }
 
-    private WhereNode parseOrExpression() {
-        WhereNode left = parseAndExpression();
-        while (matchKeyword("or")) {
-            left = group("or", left, parseAndExpression());
+    private WhereNode parseOrExpression(ParserState state, int depth) {
+        WhereNode left = parseAndExpression(state, depth);
+        while (state.matchKeyword("or")) {
+            left = group("or", left, parseAndExpression(state, depth));
         }
         return left;
     }
 
-    private WhereNode parseAndExpression() {
-        WhereNode left = parsePrimary();
-        while (matchKeyword("and")) {
-            left = group("and", left, parsePrimary());
+    private WhereNode parseAndExpression(ParserState state, int depth) {
+        WhereNode left = parsePrimary(state, depth);
+        while (state.matchKeyword("and")) {
+            left = group("and", left, parsePrimary(state, depth));
         }
         return left;
     }
 
-    private WhereNode parsePrimary() {
-        if (match(TokenType.LPAREN)) {
-            WhereNode nested = parseOrExpression();
-            expect(TokenType.RPAREN, "高级where表达式括号不匹配");
+    private WhereNode parsePrimary(ParserState state, int depth) {
+        if (state.match(TokenType.LPAREN)) {
+            int nestedDepth = depth + 1;
+            if (nestedDepth > MAX_NESTING_DEPTH) {
+                throw invalid("高级where表达式括号嵌套不能超过" + MAX_NESTING_DEPTH + "层");
+            }
+            WhereNode nested = parseOrExpression(state, nestedDepth);
+            state.expect(TokenType.RPAREN, "高级where表达式括号不匹配");
             return nested;
         }
-        return WhereNode.condition(parseCondition());
+        state.conditionCount++;
+        if (state.conditionCount > MAX_CONDITION_COUNT) {
+            throw invalid("高级where表达式条件不能超过" + MAX_CONDITION_COUNT + "个");
+        }
+        return WhereNode.condition(parseCondition(state));
     }
 
-    private RequestCriteriaDto parseCondition() {
-        String field = expectIdentifier("高级where表达式字段不合法");
+    private RequestCriteriaDto parseCondition(ParserState state) {
+        String field = normalizeField(state.expectIdentifier("高级where表达式字段不合法"));
         validateField(field);
 
-        if (matchKeyword("between")) {
-            return criteria(field, "between", List.of(parseValue(), parseBetweenSecondValue()));
+        if (state.matchKeyword("between")) {
+            return criteria(field, "between", List.of(parseValue(state), parseBetweenSecondValue(state)));
         }
-        if (matchKeyword("in")) {
-            expect(TokenType.LPAREN, "in操作符需要使用括号");
+        if (state.matchKeyword("in")) {
+            state.expect(TokenType.LPAREN, "in操作符需要使用括号");
             List<String> values = new ArrayList<>();
-            values.add(parseValue());
-            while (match(TokenType.COMMA)) {
-                values.add(parseValue());
+            values.add(parseValue(state));
+            while (state.match(TokenType.COMMA)) {
+                if (values.size() >= MAX_IN_VALUES) {
+                    throw invalid("in操作符的值不能超过" + MAX_IN_VALUES + "个");
+                }
+                values.add(parseValue(state));
             }
-            expect(TokenType.RPAREN, "in操作符括号不匹配");
+            state.expect(TokenType.RPAREN, "in操作符括号不匹配");
             return criteria(field, "in", values);
         }
-        if (matchKeyword("like")) {
-            return criteria(field, "match", List.of(normalizeLikeValue(parseValue())));
+        if (state.matchKeyword("like")) {
+            return criteria(field, "match", List.of(normalizeLikeValue(parseValue(state))));
         }
-        if (matchKeyword("is")) {
-            if (matchKeyword("not")) {
-                expectNullKeyword();
+        if (state.matchKeyword("is")) {
+            if (state.matchKeyword("not")) {
+                expectNullKeyword(state);
                 return criteria(field, "isnotnull", List.of());
             }
-            expectNullKeyword();
+            expectNullKeyword(state);
             return criteria(field, "isnull", List.of());
         }
 
-        Token operatorToken = peek();
+        Token operatorToken = state.peek();
         if (operatorToken.type() == TokenType.IDENT) {
             String operator = operatorToken.text().toLowerCase(Locale.ROOT);
             if (List.of("isnull", "isnotnull").contains(operator)) {
-                position++;
+                state.advance();
                 return criteria(field, operator, List.of());
             }
             if (List.of("equal", "notequal", "match", "contains", "greatthan", "lessthan", "greatequalthan", "lessequalthan").contains(operator)) {
-                position++;
-                return criteria(field, "contains".equals(operator) ? "match" : operator, List.of(parseValue()));
+                state.advance();
+                return criteria(field, "contains".equals(operator) ? "match" : operator, List.of(parseValue(state)));
             }
         }
         if (operatorToken.type() == TokenType.OPERATOR && OPERATOR_MAP.containsKey(operatorToken.text())) {
-            position++;
-            return criteria(field, OPERATOR_MAP.get(operatorToken.text()), List.of(parseValue()));
+            state.advance();
+            return criteria(field, OPERATOR_MAP.get(operatorToken.text()), List.of(parseValue(state)));
         }
         throw invalid("高级where表达式操作符不正确");
     }
 
-    private void expectNullKeyword() {
-        if (!matchKeyword("null")) {
+    private void expectNullKeyword(ParserState state) {
+        if (!state.matchKeyword("null")) {
             throw invalid("is操作符仅支持null判断");
         }
     }
 
-    private String parseBetweenSecondValue() {
-        if (!matchKeyword("and")) {
+    private String parseBetweenSecondValue(ParserState state) {
+        if (!state.matchKeyword("and")) {
             throw invalid("between操作符需要两个值");
         }
-        return parseValue();
+        return parseValue(state);
     }
 
     private RequestCriteriaDto criteria(String attribute, String operator, List<String> values) {
@@ -180,6 +202,16 @@ class WhereExpressionParser {
             char current = source.charAt(index);
             if (Character.isWhitespace(current)) {
                 index++;
+                continue;
+            }
+            if (current == '`') {
+                int end = source.indexOf('`', index + 1);
+                if (end < 0) {
+                    throw invalid("高级where表达式反引号不匹配");
+                }
+                String identifier = source.substring(index + 1, end);
+                result.add(new Token(TokenType.IDENT, "`" + identifier + "`"));
+                index = end + 1;
                 continue;
             }
             char quoteEnd = quoteEnd(current);
@@ -244,27 +276,25 @@ class WhereExpressionParser {
             result.add(new Token(TokenType.IDENT, source.substring(start, index)));
         }
         result.add(new Token(TokenType.END, ""));
-        return result;
+        return List.copyOf(result);
     }
 
     private boolean isDelimiter(char value) {
         return value == '(' || value == ')' || value == ',' || value == '=' || value == '>' || value == '<' || value == '!';
     }
 
-    private String expectIdentifier(String message) {
-        Token token = expect(TokenType.IDENT, message);
-        return token.text();
-    }
-
-    private String parseValue() {
-        Token token = peek();
+    private String parseValue(ParserState state) {
+        Token token = state.peek();
         if (token.type() != TokenType.STRING && token.type() != TokenType.IDENT) {
             throw invalid("检索条件值不能为空");
         }
-        position++;
+        state.advance();
         String value = token.text().trim();
         if (StringUtils.isBlank(value)) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索条件值不能为空");
+        }
+        if (value.length() > MAX_VALUE_LENGTH) {
+            throw invalid("检索条件单值不能超过" + MAX_VALUE_LENGTH + "个字符");
         }
         if (token.type() == TokenType.IDENT && isUnsafeRawValue(value)) {
             throw invalid("高级where表达式值必须为数字、无空格文本或引号包裹文本");
@@ -280,42 +310,19 @@ class WhereExpressionParser {
                 || value.contains("*/");
     }
 
-    private Token expect(TokenType type, String message) {
-        Token token = peek();
-        if (token.type() != type) {
-            throw invalid(message);
-        }
-        position++;
-        return token;
-    }
-
-    private boolean match(TokenType type) {
-        if (peek().type() == type) {
-            position++;
-            return true;
-        }
-        return false;
-    }
-
-    private boolean matchKeyword(String keyword) {
-        Token token = peek();
-        if (token.type() == TokenType.IDENT && keyword.equalsIgnoreCase(token.text())) {
-            position++;
-            return true;
-        }
-        return false;
-    }
-
-    private Token peek() {
-        return tokens.get(position);
-    }
-
     private String normalizeLikeValue(String value) {
         return StringUtils.removeEnd(StringUtils.removeStart(value, "%"), "%");
     }
 
+    private String normalizeField(String field) {
+        if (field != null && field.length() >= 2 && field.startsWith("`") && field.endsWith("`")) {
+            return field.substring(1, field.length() - 1);
+        }
+        return field;
+    }
+
     private void validateField(String field) {
-        if (!FIELD_PATTERN.matcher(field).matches()) {
+        if (!FIELD_PATTERN.matcher(StringUtils.defaultString(field)).matches()) {
             throw invalid("高级where表达式字段不合法: " + field);
         }
     }
@@ -344,11 +351,59 @@ class WhereExpressionParser {
         }
 
         static WhereNode group(String logic, List<WhereNode> children) {
-            return new WhereNode("group", logic, null, children);
+            return new WhereNode("group", logic, null, List.copyOf(children));
         }
 
         String logicOrDefault() {
             return StringUtils.defaultIfBlank(logic, "and");
+        }
+    }
+
+    private static final class ParserState {
+        private final List<Token> tokens;
+        private int position;
+        private int conditionCount;
+
+        private ParserState(List<Token> tokens) {
+            this.tokens = tokens;
+        }
+
+        private Token peek() {
+            return tokens.get(position);
+        }
+
+        private void advance() {
+            position++;
+        }
+
+        private Token expect(TokenType type, String message) {
+            Token token = peek();
+            if (token.type() != type) {
+                throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), message);
+            }
+            advance();
+            return token;
+        }
+
+        private String expectIdentifier(String message) {
+            return expect(TokenType.IDENT, message).text();
+        }
+
+        private boolean match(TokenType type) {
+            if (peek().type() == type) {
+                advance();
+                return true;
+            }
+            return false;
+        }
+
+        private boolean matchKeyword(String keyword) {
+            Token token = peek();
+            if (token.type() == TokenType.IDENT && keyword.equalsIgnoreCase(token.text())) {
+                advance();
+                return true;
+            }
+            return false;
         }
     }
 

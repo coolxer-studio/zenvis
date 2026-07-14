@@ -17,4 +17,8 @@ public class RetrievalRuleVo {
 
     private Date updateTime;
 
+    private String status;
+
+    private Integer issueCount;
+
 }

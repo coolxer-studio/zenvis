@@ -279,7 +279,7 @@ class RetrievalRuleServiceImplTest {
     private RequestDisplayDto display(String entity, String attribute) {
         RequestDisplayDto display = new RequestDisplayDto();
         display.setEntity(entity);
-        display.setAttributeList(List.of(attribute, attribute));
+        display.setAttributeList(List.of(attribute));
         return display;
     }
 

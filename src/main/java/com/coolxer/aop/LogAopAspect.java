@@ -1,6 +1,11 @@
 package com.coolxer.aop;
 
 import com.coolxer.utils.JacksonUtil;
+import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleConfigDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleDeleteDto;
+import com.coolxer.model.retrieval.dto.RetrievalRuleUpdateDto;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +22,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 请求拦截器
@@ -59,6 +66,7 @@ public class LogAopAspect {
         log.info("远程地址: {}", request.getRemoteAddr());
         // 打印请求参数
         Object[] args = joinPoint.getArgs();
+        boolean retrievalEndpoint = request.getRequestURI().startsWith("/api/v1/retrieval");
 
         Object[] arguments = new Object[args.length];
         for (int i = 0; i < args.length; i++) {
@@ -68,6 +76,16 @@ public class LogAopAspect {
                 arguments[i] = "response";
             } else if (args[i] instanceof MultipartFile) {
                 arguments[i] = "file";
+            } else if (args[i] instanceof RetrievalRequestDto retrievalRequest) {
+                arguments[i] = sanitizeRetrievalRequest(retrievalRequest);
+            } else if (args[i] instanceof RetrievalRuleConfigDto ruleConfig) {
+                arguments[i] = sanitizeRuleConfig(ruleConfig);
+            } else if (args[i] instanceof RetrievalRuleDeleteDto deleteRequest) {
+                Map<String, Object> safeDelete = new LinkedHashMap<>();
+                safeDelete.put("id", deleteRequest.getId());
+                arguments[i] = safeDelete;
+            } else if (retrievalEndpoint && "listCandidateValue".equals(joinPoint.getSignature().getName()) && i == 3) {
+                arguments[i] = args[i] == null ? null : "***";
             } else {
                 arguments[i] = args[i];
             }
@@ -77,6 +95,47 @@ public class LogAopAspect {
         if (log.isInfoEnabled()) {
             log.info("请求的参数: {}", JacksonUtil.toJson(arguments));
         }
+    }
+
+    private Map<String, Object> sanitizeRetrievalRequest(RetrievalRequestDto request) {
+        Map<String, Object> safe = new LinkedHashMap<>();
+        safe.put("id", request.getId());
+        safe.put("type", request.getType());
+        safe.put("entity", request.getEntity());
+        safe.put("rule_name", request.getRuleName());
+        safe.put("criteria_count", request.getCriteriaList() == null ? 0 : request.getCriteriaList().size());
+        safe.put("display_count", request.getDisplayList() == null ? 0 : request.getDisplayList().stream()
+                .filter(Objects::nonNull)
+                .mapToInt(display -> display.getAttributeList() == null ? 0 : display.getAttributeList().size()).sum());
+        safe.put("sql", request.getSql() == null ? null : "***");
+        safe.put("token", request.getToken() == null ? null : "***");
+        safe.put("page", request.getPage());
+        safe.put("size", request.getSize());
+        safe.put("sort_by", request.getSortBy());
+        safe.put("order", request.getOrder());
+        return safe;
+    }
+
+    private Map<String, Object> sanitizeRuleConfig(RetrievalRuleConfigDto request) {
+        Map<String, Object> safe = new LinkedHashMap<>();
+        if (request instanceof RetrievalRuleUpdateDto update) {
+            safe.put("id", update.getId());
+            safe.put("rule_name", update.getRuleName());
+        } else if (request instanceof RetrievalRuleCreateDto create) {
+            safe.put("rule_name", create.getRuleName());
+        }
+        safe.put("type", request.getType());
+        safe.put("entity", request.getEntity());
+        safe.put("criteria_count", request.getCriteriaList() == null ? 0 : request.getCriteriaList().size());
+        safe.put("display_count", request.getDisplayList() == null ? 0 : request.getDisplayList().stream()
+                .filter(Objects::nonNull)
+                .mapToInt(display -> display.getAttributeList() == null ? 0 : display.getAttributeList().size()).sum());
+        safe.put("sql", request.getSql() == null ? null : "***");
+        safe.put("page", request.getPage());
+        safe.put("size", request.getSize());
+        safe.put("sort_by", request.getSortBy());
+        safe.put("order", request.getOrder());
+        return safe;
     }
 
     @AfterReturning(returning = "ret", pointcut = "logAspect()")
@@ -99,7 +158,7 @@ public class LogAopAspect {
             }
 
             log.warn("URL [{}]，Filter condition [{}]，Time consuming [{}]ms!!!",
-                    request1.getRequestURL().toString(), JacksonUtil.toJson(request1.getParameterMap()),
+                    request1.getRequestURL().toString(), JacksonUtil.toJson(sanitizeRequestParameters(request1)),
                     timeConsuming);
         }
 
@@ -113,6 +172,20 @@ public class LogAopAspect {
             return servletRequestAttributes.getRequest();
         }
         return null;
+    }
+
+    private Map<String, Object> sanitizeRequestParameters(HttpServletRequest request) {
+        Map<String, Object> safe = new LinkedHashMap<>();
+        boolean retrievalEndpoint = request.getRequestURI().startsWith("/api/v1/retrieval");
+        request.getParameterMap().forEach((name, values) -> {
+            String lowerName = name.toLowerCase(java.util.Locale.ROOT);
+            boolean sensitive = retrievalEndpoint && (lowerName.contains("sql")
+                    || lowerName.contains("token")
+                    || lowerName.contains("value")
+                    || lowerName.equals("text"));
+            safe.put(name, sensitive ? "***" : values);
+        });
+        return safe;
     }
 
 }

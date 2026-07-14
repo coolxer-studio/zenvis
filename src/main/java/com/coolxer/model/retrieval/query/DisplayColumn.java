@@ -2,7 +2,6 @@ package com.coolxer.model.retrieval.query;
 
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import lombok.Data;
-import org.apache.commons.lang3.StringUtils;
 
 @Data
 public class DisplayColumn {
@@ -18,8 +17,9 @@ public class DisplayColumn {
     public DisplayColumn fromDisplayColumn(DataAttribute dataAttribute) {
         this.setColumnName(dataAttribute.getColumnName());
         this.setColumnType(dataAttribute.getColumnType());
-        this.setDisplayName(StringUtils.isEmpty(dataAttribute.getDisplayName()) ? dataAttribute.getColumnName() : dataAttribute.getDisplayName());
-        this.setDisplayType(StringUtils.isEmpty(dataAttribute.getDisplayType()) ? dataAttribute.getColumnType() : dataAttribute.getDisplayType());
+        // SQL aliases and response keys are always the stable logical attribute name.
+        this.setDisplayName(dataAttribute.getName());
+        this.setDisplayType(dataAttribute.getDisplayType());
         return this;
     }
 

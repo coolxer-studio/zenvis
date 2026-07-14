@@ -1,18 +1,19 @@
-package com.coolxer.model.retrieval.dto;
+package com.coolxer.model.retrieval.rule;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
+import com.coolxer.model.retrieval.dto.RequestCriteriaDto;
+import com.coolxer.model.retrieval.dto.RequestDisplayDto;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Data;
 
 import java.util.List;
 
+/** Canonical, metadata-independent persisted retrieval rule schema. */
 @Data
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class RetrievalRequestDto {
+public class PersistedRetrievalRule {
 
-    @JsonAlias("rule_id")
-    private Integer id;
+    private Integer schemaVersion = 2;
 
     private String type;
 
@@ -22,15 +23,9 @@ public class RetrievalRequestDto {
 
     private String criteriaLogic;
 
-    private List<RequestDisplayDto> displayList;
-
-    private String token;
-
-    private String ruleName;
-
-    private String ruleDescription;
-
     private String sql;
+
+    private List<RequestDisplayDto> displayList;
 
     private Integer page;
 
@@ -39,5 +34,4 @@ public class RetrievalRequestDto {
     private String sortBy;
 
     private String order;
-
 }

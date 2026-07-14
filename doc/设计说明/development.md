@@ -247,6 +247,16 @@ mvn spring-boot:run -Dspring-boot.run.fork=false
 
 ## 调试技巧
 
+### Retrieval 模块
+
+修改全局检索前先阅读 [Retrieval 全局检索模块快速上手](retrieval-module.md)。该模块由元数据、规则兼容、受限表达式、查询引擎和前端异步状态共同组成，不应绕过规则生成逻辑直接拼接自由 SQL。
+
+后端重点回归命令：
+
+```bash
+mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleServiceImplTest,MetaDataServiceImplTest,QueryEngineImplTest,RetrievalControllerTest,LogAopAspectTest' test
+```
+
 ### 接口调试
 
 启动应用后访问 Swagger UI：
@@ -311,6 +321,6 @@ docker ps
 
 ## 下一步
 
-- [AI智能分析](ai-analysis.md)
+- [MCP Client 与 Agent 设计](../DIH/MCP-Client-Agent-Design.md)
 - [插件开发](plugin-development.md)
 - [API参考](api-reference.md)

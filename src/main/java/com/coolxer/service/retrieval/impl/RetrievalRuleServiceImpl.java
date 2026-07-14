@@ -11,10 +11,11 @@ import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.DataOperator;
 import com.coolxer.model.retrieval.rule.DisplayAttribute;
+import com.coolxer.model.retrieval.rule.PersistedRetrievalRule;
 import com.coolxer.model.retrieval.rule.RetrievalCriteriaExpression;
 import com.coolxer.model.retrieval.rule.RetrievalCriteria;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
-import com.coolxer.model.retrieval.vo.RetrievalRuleVo;
+import com.coolxer.model.retrieval.vo.*;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.retrieval.RetrievalRuleService;
 import com.coolxer.utils.JacksonUtil;
@@ -26,8 +27,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -42,20 +46,25 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
     private final WhereExpressionParser whereExpressionParser = new WhereExpressionParser();
 
     @Override
-    public com.coolxer.model.retrieval.rule.RetrievalRule getRuleById(Integer id) {
-        RetrievalRule retrievalRuleEntity = retrievalRuleRepository.findById(id).orElse(null);
-        if (retrievalRuleEntity == null) {
-            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索规则不存在");
+    public com.coolxer.model.retrieval.rule.RetrievalRule getRuleById(Integer id, Integer ownerId) {
+        RetrievalRule entity = requireOwnedRule(id, ownerId);
+        RetrievalRequestDto config = readStoredConfig(entity);
+        if ("legacy_sql".equals(config.getType())) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "旧自由SQL检索规则已禁用，请编辑后保存");
         }
-        com.coolxer.model.retrieval.rule.RetrievalRule retrievalRule = JacksonUtil.toObject(retrievalRuleEntity.getRuleString(), com.coolxer.model.retrieval.rule.RetrievalRule.class);
-        return hydrateRule(retrievalRule);
+        com.coolxer.model.retrieval.rule.RetrievalRule rule = generateRetrievalRule(config);
+        rule.setId(entity.getId());
+        rule.setName(entity.getName());
+        rule.setDescription(entity.getDescription());
+        return rule;
     }
 
     @Override
-    public List<RetrievalRuleVo> getAllRule() {
-        List<RetrievalRule> retrievalRuleList = retrievalRuleRepository.findAll();
-        List<RetrievalRuleVo> retrievalRuleVoList = retrievalRuleList.stream().map(this::toRetrievalRuleVo).toList();
-        return retrievalRuleVoList;
+    public List<RetrievalRuleVo> getAllRule(Integer ownerId) {
+        requireOwner(ownerId);
+        return retrievalRuleRepository.findAllByCreateByOrderByUpdateTimeDesc(ownerId).stream()
+                .map(this::toRetrievalRuleVo)
+                .toList();
     }
 
     private RetrievalRuleVo toRetrievalRuleVo(RetrievalRule retrievalRule) {
@@ -65,17 +74,45 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         retrievalRuleVo.setId(retrievalRule.getId());
         retrievalRuleVo.setCreateTime(retrievalRule.getCreateTime());
         retrievalRuleVo.setUpdateTime(retrievalRule.getUpdateTime());
+        List<RetrievalRuleIssueVo> issues = validateStoredConfig(readStoredConfig(retrievalRule));
+        retrievalRuleVo.setStatus(issues.isEmpty() ? "valid" : "invalid");
+        retrievalRuleVo.setIssueCount(issues.size());
         return retrievalRuleVo;
     }
 
     @Override
-    public void saveRule(com.coolxer.model.retrieval.rule.RetrievalRule retrievalRule) {
-        RetrievalRule retrievalRuleEntity = new RetrievalRule();
-        retrievalRuleEntity.setId(retrievalRule.getId());
-        retrievalRuleEntity.setName(retrievalRule.getName());
-        retrievalRuleEntity.setDescription(retrievalRule.getDescription());
-        retrievalRuleEntity.setRuleString(JacksonUtil.toJson(compactRuleForPersistence(retrievalRule)));
-        retrievalRuleRepository.save(retrievalRuleEntity);
+    public Integer createRule(RetrievalRequestDto request, Integer ownerId) {
+        requireOwner(ownerId);
+        validateCreateRequest(request);
+        com.coolxer.model.retrieval.rule.RetrievalRule generated = generateRetrievalRule(request);
+        RetrievalRule entity = new RetrievalRule();
+        entity.setName(request.getRuleName().trim());
+        entity.setDescription(request.getRuleDescription());
+        entity.setCreateBy(ownerId);
+        entity.setUpdateBy(ownerId);
+        entity.setRuleString(JacksonUtil.toJson(toPersistedRule(request, generated)));
+        return retrievalRuleRepository.save(entity).getId();
+    }
+
+    @Override
+    public Integer updateRule(RetrievalRequestDto request, Integer ownerId) {
+        requireOwner(ownerId);
+        if (request == null || request.getId() == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则ID不能为空");
+        }
+        RetrievalRule entity = requireOwnedRule(request.getId(), ownerId);
+        RetrievalRequestDto previous = readStoredConfig(entity);
+        RetrievalRequestDto merged = mergeForUpdate(previous, request);
+        com.coolxer.model.retrieval.rule.RetrievalRule generated = generateRetrievalRule(merged);
+        if (StringUtils.isNotBlank(request.getRuleName())) {
+            entity.setName(request.getRuleName().trim());
+        }
+        if (request.getRuleDescription() != null) {
+            entity.setDescription(request.getRuleDescription());
+        }
+        entity.setUpdateBy(ownerId);
+        entity.setRuleString(JacksonUtil.toJson(toPersistedRule(merged, generated)));
+        return retrievalRuleRepository.save(entity).getId();
     }
 
     private com.coolxer.model.retrieval.rule.RetrievalRule compactRuleForPersistence(com.coolxer.model.retrieval.rule.RetrievalRule retrievalRule) {
@@ -128,13 +165,373 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
     }
 
     @Override
-    public void deleteRule(Integer id) {
-        RetrievalRule retrievalRule = retrievalRuleRepository.findById(id).orElse(null);
-        if (Objects.nonNull(retrievalRule)) {
-            retrievalRuleRepository.delete(retrievalRule);
-        } else {
-            log.error("no exist rule id {}", id);
+    public void deleteRule(Integer id, Integer ownerId) {
+        retrievalRuleRepository.delete(requireOwnedRule(id, ownerId));
+    }
+
+    @Override
+    public RetrievalRuleDetailVo getRuleDetail(Integer id, Integer ownerId) {
+        RetrievalRule entity = requireOwnedRule(id, ownerId);
+        RetrievalRequestDto config = readStoredConfig(entity);
+        List<RetrievalRuleIssueVo> issues = validateStoredConfig(config);
+        RetrievalRuleDetailVo detail = new RetrievalRuleDetailVo();
+        detail.setId(entity.getId());
+        detail.setName(entity.getName());
+        detail.setDescription(entity.getDescription());
+        detail.setCreateTime(entity.getCreateTime());
+        detail.setUpdateTime(entity.getUpdateTime());
+        detail.setConfig(toConfigVo(config));
+        detail.setIssues(issues);
+        detail.setStatus(issues.isEmpty() ? "valid" : "invalid");
+        detail.setEntityList(metaDataService.getAllDataEntity().stream().map(this::toDataEntityVo).toList());
+        DataEntity selectedEntity = metaDataService.getDataEntityByName(config.getEntity());
+        detail.setAttributeList(selectedEntity == null ? List.of() : metaDataService.getAllDataAttributeByEntity(selectedEntity)
+                .stream().map(this::toDataAttributeVo).toList());
+        return detail;
+    }
+
+    private RetrievalRule requireOwnedRule(Integer id, Integer ownerId) {
+        requireOwner(ownerId);
+        if (id == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则ID不能为空");
         }
+        return retrievalRuleRepository.findByIdAndCreateBy(id, ownerId)
+                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索规则不可用"));
+    }
+
+    private void requireOwner(Integer ownerId) {
+        if (ownerId == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "当前用户未登录");
+        }
+    }
+
+    private void validateCreateRequest(RetrievalRequestDto request) {
+        if (request == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则不能为空");
+        }
+        if (StringUtils.isBlank(request.getRuleName())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则名称不能为空");
+        }
+        if (StringUtils.isBlank(request.getEntity())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索实体不能为空");
+        }
+        if (!StringUtils.equalsAnyIgnoreCase(request.getType(), "normal", "advanced")) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索类型仅支持normal或advanced");
+        }
+        if (CollectionUtils.isEmpty(request.getDisplayList())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "展示字段不能为空");
+        }
+    }
+
+    private RetrievalRequestDto mergeForUpdate(RetrievalRequestDto previous, RetrievalRequestDto incoming) {
+        RetrievalRequestDto merged = new RetrievalRequestDto();
+        String previousEntity = previous.getEntity();
+        String entity = StringUtils.defaultIfBlank(incoming.getEntity(), previousEntity);
+        String type = StringUtils.defaultIfBlank(incoming.getType(), previous.getType());
+        boolean entityChanged = !Objects.equals(previousEntity, entity);
+        boolean typeChanged = incoming.getType() != null && !StringUtils.equalsIgnoreCase(previous.getType(), type);
+
+        if (entityChanged) {
+            if (incoming.getDisplayList() == null) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "切换实体时必须显式提交展示字段");
+            }
+            if (StringUtils.equalsIgnoreCase(type, "advanced") && StringUtils.isBlank(incoming.getSql())) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "切换实体时必须显式提交高级where表达式");
+            }
+            if (StringUtils.equalsIgnoreCase(type, "normal") && incoming.getCriteriaList() == null) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "切换实体时必须显式提交普通检索条件");
+            }
+        }
+        if (typeChanged && StringUtils.equalsIgnoreCase(type, "advanced") && StringUtils.isBlank(incoming.getSql())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "切换为高级检索时必须提交where表达式");
+        }
+        if (typeChanged && StringUtils.equalsIgnoreCase(type, "normal") && incoming.getCriteriaList() == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "切换为普通检索时必须提交检索条件");
+        }
+
+        merged.setId(incoming.getId());
+        merged.setType(type);
+        merged.setEntity(entity);
+        merged.setCriteriaLogic(incoming.getCriteriaLogic() == null ? previous.getCriteriaLogic() : incoming.getCriteriaLogic());
+        merged.setDisplayList(incoming.getDisplayList() == null ? previous.getDisplayList() : incoming.getDisplayList());
+        if (StringUtils.equalsIgnoreCase(type, "advanced")) {
+            merged.setSql(incoming.getSql() == null ? previous.getSql() : incoming.getSql());
+            merged.setCriteriaList(List.of());
+        } else {
+            merged.setCriteriaList(incoming.getCriteriaList() == null ? previous.getCriteriaList() : incoming.getCriteriaList());
+            merged.setSql(null);
+        }
+        merged.setPage(incoming.getPage() == null ? previous.getPage() : incoming.getPage());
+        merged.setSize(incoming.getSize() == null ? previous.getSize() : incoming.getSize());
+        merged.setSortBy(entityChanged ? incoming.getSortBy()
+                : incoming.getSortBy() == null ? previous.getSortBy() : incoming.getSortBy());
+        merged.setOrder(entityChanged ? incoming.getOrder()
+                : incoming.getOrder() == null ? previous.getOrder() : incoming.getOrder());
+        return merged;
+    }
+
+    private PersistedRetrievalRule toPersistedRule(RetrievalRequestDto request,
+                                                    com.coolxer.model.retrieval.rule.RetrievalRule generated) {
+        PersistedRetrievalRule persisted = new PersistedRetrievalRule();
+        persisted.setSchemaVersion(2);
+        persisted.setType(StringUtils.isNotBlank(generated.getWhereExpression()) ? "advanced" : "normal");
+        persisted.setEntity(request.getEntity());
+        persisted.setCriteriaLogic(generated.getCriteriaLogic());
+        persisted.setSql(generated.getWhereExpression());
+        persisted.setCriteriaList(StringUtils.isNotBlank(generated.getWhereExpression()) || generated.getRetrievalCriteria() == null
+                ? List.of()
+                : generated.getRetrievalCriteria().stream().map(this::toRequestCriteriaDto).toList());
+        persisted.setDisplayList(toRequestDisplayDtoList(generated.getDisplayAttributes()));
+        persisted.setPage(request.getPage());
+        persisted.setSize(request.getSize());
+        persisted.setSortBy(request.getSortBy());
+        persisted.setOrder(request.getOrder());
+        return persisted;
+    }
+
+    private RetrievalRequestDto readStoredConfig(RetrievalRule entity) {
+        try {
+            return doReadStoredConfig(entity);
+        } catch (RuntimeException ex) {
+            log.warn("invalid persisted retrieval rule, id={}, reason={}", entity.getId(), ex.getMessage());
+            RetrievalRequestDto invalid = new RetrievalRequestDto();
+            invalid.setType("invalid");
+            invalid.setCriteriaList(List.of());
+            invalid.setDisplayList(List.of());
+            return invalid;
+        }
+    }
+
+    private RetrievalRequestDto doReadStoredConfig(RetrievalRule entity) {
+        Map<String, Object> raw = JacksonUtil.toMap(entity.getRuleString(), new com.fasterxml.jackson.core.type.TypeReference<>() {
+        });
+        Object schemaVersion = raw.get("schema_version");
+        if (Objects.equals(2, schemaVersion) || Objects.equals(2L, schemaVersion)
+                || "2".equals(String.valueOf(schemaVersion))) {
+            PersistedRetrievalRule persisted = JacksonUtil.toObject(entity.getRuleString(), PersistedRetrievalRule.class);
+            return fromPersistedRule(persisted);
+        }
+        com.coolxer.model.retrieval.rule.RetrievalRule legacy = JacksonUtil.toObject(
+                entity.getRuleString(), com.coolxer.model.retrieval.rule.RetrievalRule.class);
+        return fromLegacyRule(legacy);
+    }
+
+    private RetrievalRequestDto fromPersistedRule(PersistedRetrievalRule persisted) {
+        RetrievalRequestDto request = new RetrievalRequestDto();
+        request.setType(persisted.getType());
+        request.setEntity(persisted.getEntity());
+        request.setCriteriaList(persisted.getCriteriaList());
+        request.setCriteriaLogic(persisted.getCriteriaLogic());
+        request.setSql(persisted.getSql());
+        request.setDisplayList(persisted.getDisplayList());
+        request.setPage(persisted.getPage());
+        request.setSize(persisted.getSize());
+        request.setSortBy(persisted.getSortBy());
+        request.setOrder(persisted.getOrder());
+        return request;
+    }
+
+    private RetrievalRequestDto fromLegacyRule(com.coolxer.model.retrieval.rule.RetrievalRule legacy) {
+        RetrievalRequestDto request = new RetrievalRequestDto();
+        if (legacy == null) {
+            request.setType("invalid");
+            return request;
+        }
+        if (legacy.getRetrievalSql() != null) {
+            request.setType("legacy_sql");
+            request.setEntity(legacy.getRetrievalSql().getEntity() == null ? null : legacy.getRetrievalSql().getEntity().getName());
+            request.setSql(legacy.getRetrievalSql().getSql());
+        } else {
+            request.setType(StringUtils.isNotBlank(legacy.getWhereExpression()) ? "advanced" : "normal");
+            request.setSql(legacy.getWhereExpression());
+            request.setCriteriaLogic(legacy.getCriteriaLogic());
+            request.setCriteriaList(legacy.getRetrievalCriteria() == null ? List.of() : legacy.getRetrievalCriteria().stream()
+                    .map(this::toRequestCriteriaDto).toList());
+        }
+        request.setDisplayList(toRequestDisplayDtoList(legacy.getDisplayAttributes()));
+        request.setEntity(resolveLegacyEntity(legacy, request.getDisplayList()));
+        if (legacy.getRetrievalPageable() != null) {
+            request.setPage(legacy.getRetrievalPageable().getPage());
+            request.setSize(legacy.getRetrievalPageable().getSize());
+            request.setOrder(legacy.getRetrievalPageable().getOrder());
+            request.setSortBy(resolveLogicalSort(request.getEntity(), legacy.getRetrievalPageable().getSortBy()));
+        }
+        return request;
+    }
+
+    private String resolveLegacyEntity(com.coolxer.model.retrieval.rule.RetrievalRule legacy,
+                                       List<RequestDisplayDto> displayList) {
+        if (CollectionUtils.isNotEmpty(displayList) && StringUtils.isNotBlank(displayList.get(0).getEntity())) {
+            return displayList.get(0).getEntity();
+        }
+        if (CollectionUtils.isNotEmpty(legacy.getRetrievalCriteria())) {
+            RetrievalCriteria criteria = legacy.getRetrievalCriteria().get(0);
+            if (criteria.getEntity() != null) {
+                return criteria.getEntity().getName();
+            }
+            if (criteria.getAttribute() != null) {
+                return criteria.getAttribute().getEntity();
+            }
+        }
+        if (legacy.getRetrievalSql() != null && legacy.getRetrievalSql().getEntity() != null) {
+            return legacy.getRetrievalSql().getEntity().getName();
+        }
+        return null;
+    }
+
+    private String resolveLogicalSort(String entity, String storedSort) {
+        if (StringUtils.isBlank(storedSort)) {
+            return null;
+        }
+        DataAttribute logical = metaDataService.getDataAttributeByName(entity, storedSort);
+        if (logical != null) {
+            return logical.getName();
+        }
+        return metaDataService.getAllDataAttribute().stream()
+                .filter(attribute -> Objects.equals(entity, attribute.getEntity()))
+                .filter(attribute -> Objects.equals(storedSort, attribute.getColumnName()))
+                .map(DataAttribute::getName)
+                .findFirst().orElse(null);
+    }
+
+    private RequestCriteriaDto toRequestCriteriaDto(RetrievalCriteria criteria) {
+        RequestCriteriaDto dto = new RequestCriteriaDto();
+        dto.setAttribute(criteria == null || criteria.getAttribute() == null ? null : criteria.getAttribute().getName());
+        dto.setOperator(criteria == null || criteria.getOperator() == null ? null : criteria.getOperator().getName());
+        dto.setValueList(criteria == null || criteria.getValueList() == null ? List.of() : criteria.getValueList());
+        return dto;
+    }
+
+    private List<RequestDisplayDto> toRequestDisplayDtoList(List<DisplayAttribute> displayAttributes) {
+        if (CollectionUtils.isEmpty(displayAttributes)) {
+            return List.of();
+        }
+        return displayAttributes.stream().map(display -> {
+            RequestDisplayDto dto = new RequestDisplayDto();
+            dto.setEntity(display == null || display.getEntity() == null ? null : display.getEntity().getName());
+            dto.setAttributeList(display == null || display.getAttributeList() == null ? List.of() :
+                    display.getAttributeList().stream().map(attribute -> attribute == null ? null : attribute.getName()).toList());
+            return dto;
+        }).toList();
+    }
+
+    private List<RetrievalRuleIssueVo> validateStoredConfig(RetrievalRequestDto config) {
+        List<RetrievalRuleIssueVo> issues = new ArrayList<>();
+        if (config == null) {
+            issues.add(issue("RULE_EMPTY", "rule", null, null, "规则配置为空"));
+            return issues;
+        }
+        if ("legacy_sql".equals(config.getType())) {
+            issues.add(issue("LEGACY_SQL_DISABLED", "rule", config.getEntity(), null, "旧自由SQL规则已禁用，请重新配置"));
+            return issues;
+        }
+        DataEntity entity = metaDataService.getDataEntityByName(config.getEntity());
+        if (entity == null) {
+            issues.add(issue("ENTITY_MISSING", "entity", config.getEntity(), null, "检索实体不存在"));
+        }
+        if (CollectionUtils.isEmpty(config.getDisplayList())) {
+            issues.add(issue("DISPLAY_EMPTY", "display", config.getEntity(), null, "至少需要一个展示字段"));
+        } else {
+            config.getDisplayList().forEach(display -> {
+                if (display == null || !Objects.equals(config.getEntity(), display.getEntity())) {
+                    issues.add(issue("DISPLAY_ENTITY_MISMATCH", "display", display == null ? null : display.getEntity(), null,
+                            "展示实体与检索实体不一致"));
+                    return;
+                }
+                if (CollectionUtils.isEmpty(display.getAttributeList())) {
+                    issues.add(issue("DISPLAY_EMPTY", "display", display.getEntity(), null, "至少需要一个展示字段"));
+                    return;
+                }
+                display.getAttributeList().forEach(attribute -> {
+                    if (metaDataService.getDataAttributeByName(display.getEntity(), attribute) == null) {
+                        issues.add(issue("DISPLAY_FIELD_MISSING", "display", display.getEntity(), attribute,
+                                "展示字段不存在: " + attribute));
+                    }
+                });
+            });
+        }
+        if (StringUtils.equalsIgnoreCase(config.getType(), "advanced")) {
+            try {
+                WhereExpressionParser.WhereExpression expression = whereExpressionParser.parse(config.getSql());
+                expression.criteriaList().forEach(criteria -> {
+                    if (metaDataService.getDataAttributeByName(config.getEntity(), criteria.getAttribute()) == null) {
+                        issues.add(issue("CRITERIA_FIELD_MISSING", "criteria", config.getEntity(), criteria.getAttribute(),
+                                "检索字段不存在: " + criteria.getAttribute()));
+                    }
+                    if (metaDataService.getDataOperatorByName(criteria.getOperator()) == null) {
+                        issues.add(issue("OPERATOR_MISSING", "criteria", config.getEntity(), criteria.getAttribute(),
+                                "检索操作符不存在: " + criteria.getOperator()));
+                    }
+                });
+            } catch (RuntimeException ex) {
+                issues.add(issue("INVALID_EXPRESSION", "criteria", config.getEntity(), null, ex.getMessage()));
+            }
+        } else if (StringUtils.equalsIgnoreCase(config.getType(), "normal")) {
+            for (RequestCriteriaDto criteria : config.getCriteriaList() == null ? List.<RequestCriteriaDto>of() : config.getCriteriaList()) {
+                if (criteria == null || metaDataService.getDataAttributeByName(config.getEntity(), criteria.getAttribute()) == null) {
+                    issues.add(issue("CRITERIA_FIELD_MISSING", "criteria", config.getEntity(),
+                            criteria == null ? null : criteria.getAttribute(), "检索字段不存在"));
+                }
+                if (criteria != null && metaDataService.getDataOperatorByName(criteria.getOperator()) == null) {
+                    issues.add(issue("OPERATOR_MISSING", "criteria", config.getEntity(), criteria.getAttribute(),
+                            "检索操作符不存在: " + criteria.getOperator()));
+                }
+            }
+        } else {
+            issues.add(issue("TYPE_INVALID", "rule", config.getEntity(), null, "检索类型不正确"));
+        }
+        if (issues.isEmpty()) {
+            try {
+                generateRetrievalRule(config);
+            } catch (RuntimeException ex) {
+                issues.add(issue("RULE_INVALID", "rule", config.getEntity(), null, ex.getMessage()));
+            }
+        }
+        return issues;
+    }
+
+    private RetrievalRuleIssueVo issue(String code, String scope, String entity, String attribute, String message) {
+        return new RetrievalRuleIssueVo(code, scope, entity, attribute, message);
+    }
+
+    private RetrievalRuleConfigVo toConfigVo(RetrievalRequestDto config) {
+        RetrievalRuleConfigVo vo = new RetrievalRuleConfigVo();
+        vo.setType(config.getType());
+        vo.setEntity(config.getEntity());
+        vo.setCriteriaList(config.getCriteriaList() == null ? List.of() : config.getCriteriaList());
+        vo.setCriteriaLogic(config.getCriteriaLogic());
+        vo.setSql(config.getSql());
+        vo.setDisplayList(config.getDisplayList() == null ? List.of() : config.getDisplayList());
+        return vo;
+    }
+
+    private DataEntityVo toDataEntityVo(DataEntity entity) {
+        DataEntityVo vo = new DataEntityVo();
+        vo.setName(entity.getName());
+        vo.setLabel(entity.getLabel());
+        vo.setDescription(entity.getDescription());
+        return vo;
+    }
+
+    private DataAttributeVo toDataAttributeVo(DataAttribute attribute) {
+        DataAttributeVo vo = new DataAttributeVo();
+        vo.setName(attribute.getName());
+        vo.setLabel(attribute.getLabel());
+        vo.setDescription(attribute.getDescription());
+        vo.setRetrievalType(attribute.getRetrievalType());
+        vo.setDisplayType(attribute.getDisplayType());
+        vo.setAggregateLink(attribute.isAggregateLink());
+        vo.setAutoComplete(attribute.isAutoComplete());
+        vo.setOperatorList(attribute.getOperators() == null ? List.of() : attribute.getOperators().stream()
+                .map(metaDataService::getDataOperatorByName)
+                .filter(Objects::nonNull)
+                .map(operator -> {
+                    OperatorVo operatorVo = new OperatorVo();
+                    operatorVo.setName(operator.getName());
+                    operatorVo.setLabel(operator.getLabel());
+                    return operatorVo;
+                }).toList());
+        return vo;
     }
 
     @Override
@@ -142,6 +539,7 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         if (retrievalRequestDTO == null) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索请求不能为空");
         }
+        validateRetrievalRequest(retrievalRequestDTO);
         com.coolxer.model.retrieval.rule.RetrievalRule retrievalRule = new com.coolxer.model.retrieval.rule.RetrievalRule();
 
         if (StringUtils.equalsIgnoreCase(retrievalRequestDTO.getType(), "advanced") && StringUtils.isBlank(retrievalRequestDTO.getSql())) {
@@ -175,6 +573,69 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         retrievalRule.setRetrievalPageable(pageable);
 
         return retrievalRule;
+    }
+
+    private void validateRetrievalRequest(RetrievalRequestDto request) {
+        if (StringUtils.isBlank(request.getEntity())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索实体不能为空");
+        }
+        if (metaDataService.getDataEntityByName(request.getEntity()) == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索实体不存在: " + request.getEntity());
+        }
+        String type = StringUtils.defaultIfBlank(request.getType(), StringUtils.isNotBlank(request.getSql()) ? "advanced" : "normal");
+        if (!StringUtils.equalsAnyIgnoreCase(type, "normal", "advanced")) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索类型仅支持normal或advanced");
+        }
+        if (StringUtils.equalsIgnoreCase(type, "advanced") && StringUtils.isBlank(request.getSql())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "高级where表达式不能为空");
+        }
+        if (StringUtils.equalsIgnoreCase(type, "normal") && StringUtils.isNotBlank(request.getSql())) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "普通检索不能提交高级where表达式");
+        }
+        if (CollectionUtils.size(request.getCriteriaList()) > WhereExpressionParser.MAX_CONDITION_COUNT) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索条件不能超过" + WhereExpressionParser.MAX_CONDITION_COUNT + "个");
+        }
+        if (request.getCriteriaList() != null) {
+            request.getCriteriaList().forEach(criteria -> {
+                List<String> values = criteria == null || criteria.getValueList() == null ? List.of() : criteria.getValueList();
+                if (values.size() > WhereExpressionParser.MAX_IN_VALUES) {
+                    throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "单个检索条件的值不能超过" + WhereExpressionParser.MAX_IN_VALUES + "个");
+                }
+                values.stream().filter(Objects::nonNull).filter(value -> value.length() > WhereExpressionParser.MAX_VALUE_LENGTH)
+                        .findFirst().ifPresent(value -> {
+                            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                                    "检索条件单值不能超过" + WhereExpressionParser.MAX_VALUE_LENGTH + "个字符");
+                        });
+            });
+        }
+        if (CollectionUtils.size(request.getDisplayList()) != 1) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "检索只支持单个展示实体");
+        }
+        RequestDisplayDto display = request.getDisplayList().get(0);
+        if (display == null || !Objects.equals(request.getEntity(), display.getEntity())) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "展示实体必须与检索实体一致");
+        }
+        int displayCount = CollectionUtils.size(display.getAttributeList());
+        if (displayCount < 1 || displayCount > 100) {
+            throw new ApiException(ResultCodeEnum.DISPLAY_LIMIT_ERROR.getCode(), "展示字段数量必须为1到100个");
+        }
+        Set<String> distinctDisplay = new LinkedHashSet<>(display.getAttributeList());
+        if (distinctDisplay.size() != displayCount || distinctDisplay.contains(null)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "展示字段不能重复或为空");
+        }
+        if (request.getPage() != null && request.getPage() < 1) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "页码必须大于等于1");
+        }
+        if (request.getSize() != null && (request.getSize() < 1 || request.getSize() > 200)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "页大小必须为1到200");
+        }
+        if (StringUtils.isNotBlank(request.getOrder()) && !StringUtils.equalsAnyIgnoreCase(request.getOrder(), "asc", "desc")) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "排序方向仅支持asc或desc");
+        }
+        if (StringUtils.isNotBlank(request.getSortBy())
+                && metaDataService.getDataAttributeByName(request.getEntity(), request.getSortBy()) == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "排序字段不存在: " + request.getSortBy());
+        }
     }
 
     private List<RetrievalCriteria> generateRetrievalCriteriaList(RetrievalRequestDto retrievalRequestDTO) {
@@ -496,6 +957,9 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
             dataAttribute = metaDataService.getDataAttributeByName(retrievalRequestDto.getEntity(), retrievalRequestDto.getSortBy());
         }
         String sortByColumnName;
+        if (StringUtils.isNotBlank(retrievalRequestDto.getSortBy()) && dataAttribute == null) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "排序字段不存在: " + retrievalRequestDto.getSortBy());
+        }
         if (dataAttribute == null) {
             // 未指定排序字段，使用默认值
             DataEntity entity = metaDataService.getDataEntityByName(retrievalRequestDto.getEntity());

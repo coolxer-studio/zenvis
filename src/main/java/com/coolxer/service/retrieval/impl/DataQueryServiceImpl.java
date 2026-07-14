@@ -31,12 +31,22 @@ public class DataQueryServiceImpl implements DataQueryService {
 
     @Override
     public DataQueryContext query(RetrievalRule retrievalRule) {
+        long startedAt = System.nanoTime();
         DataQueryContext context = generateQueryContext(retrievalRule);
         executeQuery(context);
+        String entity = retrievalRule.getDisplayAttributes().get(0).getEntity().getName();
+        int conditionCount = CollectionUtils.size(retrievalRule.getRetrievalCriteria());
+        int fieldCount = CollectionUtils.size(retrievalRule.getDisplayAttributes().get(0).getAttributeList());
+        log.info("retrieval query completed, context_id={}, entity={}, conditions={}, fields={}, duration_ms={}",
+                context.getContextId(), entity, conditionCount, fieldCount,
+                (System.nanoTime() - startedAt) / 1_000_000);
         return context;
     }
 
     private DataQueryContext generateQueryContext(RetrievalRule retrievalRule) {
+        if (retrievalRule == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则不能为空");
+        }
         DataQueryContext dataQueryContext = new DataQueryContext();
         dataQueryContext.setContextId(UUID.randomUUID().toString());
         List<DataQuery> dataQueryList;
@@ -45,6 +55,9 @@ public class DataQueryServiceImpl implements DataQueryService {
 
         } else {
             dataQueryList = generateDataQueryList(retrievalRule);
+        }
+        if (CollectionUtils.isEmpty(dataQueryList)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则缺少可执行查询");
         }
         dataQueryContext.setQueryChain(dataQueryList);
         RetrievalPageable pageable = retrievalRule.getRetrievalPageable();
@@ -55,8 +68,14 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private List<DataQuery> generateDataQueryList(RetrievalRule retrievalRule) {
+        if (CollectionUtils.isEmpty(retrievalRule.getDisplayAttributes())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "展示字段不能为空");
+        }
         Map<String, List<DisplayColumn>> displayColumnNameMap = new HashMap<>();
         retrievalRule.getDisplayAttributes().forEach(table -> {
+            if (table == null || table.getEntity() == null || CollectionUtils.isEmpty(table.getAttributeList())) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "展示字段不能为空");
+            }
             List<DisplayColumn> displayColumnList = table.getAttributeList().stream()
                     .map(attribute -> new DisplayColumn().fromDisplayColumn(attribute))
                     .toList();
@@ -65,7 +84,9 @@ public class DataQueryServiceImpl implements DataQueryService {
         if (Objects.nonNull(retrievalRule.getCriteriaExpression())) {
             return generateExpressionDataQueryList(retrievalRule, displayColumnNameMap);
         }
-        List<DataQuery> dataQueryList = retrievalRule.getRetrievalCriteria().stream()
+        List<RetrievalCriteria> criteriaList = retrievalRule.getRetrievalCriteria() == null
+                ? Collections.emptyList() : retrievalRule.getRetrievalCriteria();
+        List<DataQuery> dataQueryList = criteriaList.stream()
                 .map(this::toColumnCriteria)
                 .collect(Collectors.groupingBy(ColumnCriteria::getTableName))
                 .entrySet().stream()
@@ -185,7 +206,9 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private void singleQuery(DataQueryContext context) {
-
+        if (context == null || CollectionUtils.isEmpty(context.getQueryChain())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "检索规则缺少可执行查询");
+        }
         DataQuery dataQuery = context.getQueryChain().get(0);
         RetrievalPageable pageable = context.getPageable();
         Map<String, Object> resultMap = queryEngine.queryWithRetrieval(dataQuery, pageable);

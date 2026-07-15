@@ -86,4 +86,21 @@ class AuthorityInterceptorTest {
         assertThat(result).isFalse();
         assertThat(response.getContentAsString()).contains("\"status\":101");
     }
+
+    @Test
+    void shouldReleaseOnlyExactBusinessServicePostReportPaths() throws Exception {
+        when(customWebConfig.getNeedCheckPath()).thenReturn("/api/v1");
+
+        assertThat(preHandle("POST", "/api/v1/public/business-services/heartbeat")).isTrue();
+        assertThat(preHandle("POST", "/api/v1/public/business-services/events")).isTrue();
+        assertThat(preHandle("GET", "/api/v1/public/business-services/heartbeat")).isFalse();
+        assertThat(preHandle("POST", "/api/v1/public/business-services/heartbeat/extra")).isFalse();
+        assertThat(preHandle("GET", "/api/v1/system/business-services/summary")).isFalse();
+    }
+
+    private boolean preHandle(String method, String path) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, path);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        return interceptor.preHandle(request, response, new Object());
+    }
 }

@@ -66,6 +66,9 @@ public class DataInitiator {
         // 更新内置菜单名称
         updateBuiltInMenuNames();
 
+        // 补充业务应用服务菜单并继承父菜单权限
+        ensureBusinessServiceMenu();
+
         // 初始化超级管理员账号
         initDefaultSuperAdminUser();
 
@@ -108,6 +111,7 @@ public class DataInitiator {
             Menu serviceMenu = menuRepository.save(new Menu().setName("服务管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(4).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("数据推送服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("push-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
             menuRepository.save(new Menu().setName("AI分析任务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("analysis-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("业务应用服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("business-service").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(3).setLevel(MenuLevel.LEVEL_2));
 
             Menu systemMenu = menuRepository.save(new Menu().setName("系统管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(5).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("菜单管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("menu").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
@@ -150,6 +154,55 @@ public class DataInitiator {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 为已有环境幂等补充业务应用服务菜单，并让已拥有服务管理权限的角色继承该子菜单。
+     */
+    private void ensureBusinessServiceMenu() {
+        List<Menu> menus = menuRepository.findAll();
+        Menu serviceMenu = menus.stream()
+                .filter(menu -> Integer.valueOf(0).equals(menu.getParentId()))
+                .filter(menu -> "服务管理".equals(menu.getName()))
+                .filter(menu -> Boolean.FALSE.equals(menu.getIsEditable()))
+                .findFirst()
+                .orElse(null);
+        if (serviceMenu == null) {
+            log.warn("未找到内置服务管理菜单，跳过业务应用服务菜单初始化");
+            return;
+        }
+
+        Menu businessServiceMenu = menus.stream()
+                .filter(menu -> serviceMenu.getId().equals(menu.getParentId()))
+                .filter(menu -> "business-service".equals(menu.getParams()))
+                .findFirst()
+                .orElse(null);
+        if (businessServiceMenu == null) {
+            businessServiceMenu = menuRepository.save(new Menu()
+                    .setName("业务应用服务")
+                    .setType(MenuType.LOW_CODE_PAGE)
+                    .setRoute(MenuType.LOW_CODE_PAGE.getRoute())
+                    .setParams("business-service")
+                    .setIsEditable(false)
+                    .setParentId(serviceMenu.getId())
+                    .setOrderNumber(3)
+                    .setLevel(MenuLevel.LEVEL_2));
+            log.info("已新增内置业务应用服务菜单");
+        }
+
+        Integer permissionId = businessServiceMenu.getId();
+        List<RolePermission> inheritedPermissions = rolePermissionRepository
+                .findByPermissionId(serviceMenu.getId()).stream()
+                .map(RolePermission::getRoleId)
+                .distinct()
+                .filter(roleId -> rolePermissionRepository
+                        .findByRoleIdAndPermissionId(roleId, permissionId) == null)
+                .map(roleId -> new RolePermission(roleId, permissionId))
+                .toList();
+        if (CollectionUtils.isNotEmpty(inheritedPermissions)) {
+            rolePermissionRepository.saveAll(inheritedPermissions);
+            log.info("已为 {} 个角色继承业务应用服务菜单权限", inheritedPermissions.size());
+        }
     }
 
     /**

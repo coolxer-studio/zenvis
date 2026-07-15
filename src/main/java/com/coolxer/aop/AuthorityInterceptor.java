@@ -20,6 +20,7 @@ import java.security.MessageDigest;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 权限验证拦截器
@@ -33,6 +34,11 @@ public class AuthorityInterceptor extends AbstractInterceptor {
     public static final String API_BEARER_USER_NAME_ATTR = "zenvis.apiBearer.userName";
 
     private static final String BEARER_SCHEME = "Bearer";
+
+    private static final Set<String> PUBLIC_BUSINESS_SERVICE_REPORT_PATHS = Set.of(
+            "/api/v1/public/business-services/heartbeat",
+            "/api/v1/public/business-services/events"
+    );
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
@@ -66,6 +72,10 @@ public class AuthorityInterceptor extends AbstractInterceptor {
             throws Exception {
 
         String requestUri = request.getRequestURI();
+        if ("POST".equalsIgnoreCase(request.getMethod())
+                && PUBLIC_BUSINESS_SERVICE_REPORT_PATHS.contains(requestUri)) {
+            return true;
+        }
         List<Boolean> booleans = releases.stream().map(requestUri::contains)
                 .toList();
         if (booleans.contains(true)) {

@@ -43,7 +43,9 @@ public class LogAopAspect {
     }
 
 
-    @Pointcut("controllerAspect()")
+    @Pointcut("controllerAspect()"
+            + " && !@annotation(com.coolxer.aop.SkipRequestLog)"
+            + " && !@within(com.coolxer.aop.SkipRequestLog)")
     private void logAspect() {
     }
 

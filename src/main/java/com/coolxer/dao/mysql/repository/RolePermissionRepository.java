@@ -18,6 +18,14 @@ public interface RolePermissionRepository extends BaseRepository<RolePermission,
     List<RolePermission> findByRoleId(Integer roleId);
 
     /**
+     * 查询拥有指定菜单权限的角色。
+     *
+     * @param permissionId 菜单权限id
+     * @return 角色权限列表
+     */
+    List<RolePermission> findByPermissionId(Integer permissionId);
+
+    /**
      * 查询指定角色和权限关系
      *
      * @param roleId       角色id

@@ -1,0 +1,209 @@
+# BusinessServiceController 业务应用服务接口
+
+## 1. 基础信息
+
+- 功能：收集业务服务程序的心跳和事件，提供只读运行状态查询。
+- 公开上报路径：`/api/v1/public/business-services`。
+- 管理查询路径：`/api/v1/system/business-services`。
+- 数据格式：JSON，字段使用 `snake_case`。
+- 时间格式：`yyyy-MM-dd HH:mm:ss`。
+- 响应格式：`{status,msg,data}`，业务成功以 `status === 0` 为准。
+
+只有以下两个精确的 `POST` 路径无需 Session 或 Bearer Token：
+
+```text
+POST /api/v1/public/business-services/heartbeat
+POST /api/v1/public/business-services/events
+```
+
+其他 HTTP 方法、相似路径和所有 `/api/v1/system/business-services/**` 查询接口仍需要登录 Session 或 REST API Bearer Token。公开上报接口不提供应用层签名和限流，生产部署必须在网关、防火墙或服务网络侧限制来源。
+
+## 2. 心跳上报
+
+```http
+POST /api/v1/public/business-services/heartbeat
+Content-Type: application/json
+```
+
+实例由 `service_code + instance_id` 唯一标识。首次心跳自动注册，后续心跳更新当前状态；同一个 `service_code` 可以有多个不同 `instance_id`。
+
+| 字段 | 类型 | 必填 | 限制与说明 |
+|---|---|---:|---|
+| `service_code` | String | 是 | 最长 64；字母或数字开头，只允许字母、数字、`.`、`_`、`-` |
+| `service_name` | String | 是 | 最长 128 |
+| `instance_id` | String | 是 | 最长 128；字母或数字开头，只允许字母、数字、`.`、`_`、`:`、`-` |
+| `status` | Enum | 是 | `UP`、`DEGRADED`、`DOWN` |
+| `status_message` | String | 否 | 最长 512 |
+| `version` | String | 否 | 最长 64 |
+| `environment` | String | 否 | 最长 64 |
+| `host` | String | 否 | 最长 255 |
+| `port` | Integer | 否 | 1～65535 |
+| `management_url` | String | 否 | 最长 512 |
+| `heartbeat_time` | Date | 否 | 客户端时间，只用于展示 |
+| `metadata` | Object | 否 | JSON 对象，UTF-8 序列化后不超过 16 KiB |
+
+请求示例：
+
+```bash
+curl -X POST "http://localhost:11001/api/v1/public/business-services/heartbeat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service_code": "order-api",
+    "service_name": "订单服务",
+    "instance_id": "order-api-10.0.0.8-8080",
+    "status": "UP",
+    "status_message": "ready",
+    "version": "2.3.1",
+    "environment": "prod",
+    "host": "10.0.0.8",
+    "port": 8080,
+    "management_url": "http://10.0.0.8:8080/actuator",
+    "heartbeat_time": "2026-07-15 08:00:00",
+    "metadata": {
+      "region": "cn-east",
+      "zone": "az-1"
+    }
+  }'
+```
+
+首次注册响应：
+
+```json
+{
+  "status": 0,
+  "msg": "请求成功",
+  "data": {
+    "service_code": "order-api",
+    "instance_id": "order-api-10.0.0.8-8080",
+    "registered": true,
+    "received_at": "2026-07-15 08:00:01",
+    "effective_status": "UP",
+    "offline_after_seconds": 90
+  }
+}
+```
+
+`received_at` 是服务器接收时间，也是在线判定和数据保留的时间依据。客户端伪造或漂移的 `heartbeat_time` 不会延长在线时间。
+
+## 3. 事件上报
+
+```http
+POST /api/v1/public/business-services/events
+Content-Type: application/json
+```
+
+事件上报前，目标实例必须至少成功上报过一次心跳。已注册但当前为 `OFFLINE` 的实例仍可以上报事件。
+
+| 字段 | 类型 | 必填 | 限制与说明 |
+|---|---|---:|---|
+| `event_id` | String | 是 | 全局唯一，最长 128；允许字母、数字、`.`、`_`、`:`、`-` |
+| `service_code` | String | 是 | 最长 64，必须与已注册实例一致 |
+| `instance_id` | String | 是 | 最长 128，必须与已注册实例一致 |
+| `event_type` | String | 是 | 最长 64；允许字母、数字、`.`、`_`、`:`、`-` |
+| `severity` | Enum | 是 | `INFO`、`WARN`、`ERROR`、`CRITICAL` |
+| `title` | String | 是 | 最长 255 |
+| `message` | String | 否 | 最长 4000 |
+| `occurred_at` | Date | 否 | 客户端事件发生时间，只用于展示和查询 |
+| `trace_id` | String | 否 | 最长 128 |
+| `data` | Object | 否 | JSON 对象，UTF-8 序列化后不超过 64 KiB |
+
+```bash
+curl -X POST "http://localhost:11001/api/v1/public/business-services/events" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "order-api-1-20260715-0001",
+    "service_code": "order-api",
+    "instance_id": "order-api-10.0.0.8-8080",
+    "event_type": "ORDER_SYNC_FAILED",
+    "severity": "ERROR",
+    "title": "订单同步失败",
+    "message": "下游接口返回 503",
+    "occurred_at": "2026-07-15 08:05:00",
+    "trace_id": "4f43d6c98b7a",
+    "data": {
+      "downstream": "inventory-api",
+      "retry_count": 3
+    }
+  }'
+```
+
+```json
+{
+  "status": 0,
+  "msg": "请求成功",
+  "data": {
+    "event_id": "order-api-1-20260715-0001",
+    "accepted_at": "2026-07-15 08:05:01",
+    "duplicate": false
+  }
+}
+```
+
+相同实例使用同一个 `event_id` 重试时返回第一次保存的记录，并将 `duplicate` 设为 `true`。如果该 `event_id` 已属于其他 `service_code + instance_id`，返回业务状态 `409`。
+
+## 4. 有效状态
+
+管理页面显示的是实时计算的 `effective_status`：
+
+| 条件 | 有效状态 |
+|---|---|
+| 最后心跳早于当前服务器时间减离线阈值 | `OFFLINE` |
+| 未超时且上报 `UP` | `UP` |
+| 未超时且上报 `DEGRADED` | `DEGRADED` |
+| 未超时且上报 `DOWN` | `DOWN` |
+
+默认离线阈值为 90 秒。最后心跳恰好位于 90 秒边界时仍按上报状态显示，超过边界后显示 `OFFLINE`。
+
+## 5. 管理查询接口
+
+以下接口需要登录 Session 或 `Authorization: Bearer <API_BEARER_TOKEN>`。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/system/business-services/summary` | 服务、实例、状态和近 24 小时事件概览 |
+| GET | `/api/v1/system/business-services/instances` | 实例分页列表 |
+| GET | `/api/v1/system/business-services/instances/{id}` | 实例详情 |
+| GET | `/api/v1/system/business-services/events` | 事件分页列表 |
+
+实例列表参数：
+
+| 参数 | 说明 |
+|---|---|
+| `keyword` | 匹配服务标识、服务名称、实例标识或主机 |
+| `environment` | 环境精确匹配，不区分大小写 |
+| `status` | `UP`、`DEGRADED`、`DOWN`、`OFFLINE` |
+| `page` / `per_page` | 页码和每页数量；每页最多 100 |
+
+事件列表参数：
+
+| 参数 | 说明 |
+|---|---|
+| `keyword` | 匹配事件 ID、标题、内容或 Trace ID |
+| `serviceCode` / `instanceId` | 指定服务和实例 |
+| `severity` | `INFO`、`WARN`、`ERROR`、`CRITICAL` |
+| `eventType` | 事件类型 |
+| `startTime` / `endTime` | `yyyy-MM-dd HH:mm:ss`，按客户端事件发生时间过滤 |
+| `page` / `per_page` | 页码和每页数量；每页最多 100 |
+
+列表响应的 `data` 为 `{rows,total}`。实例详情包含上报状态、有效状态、版本、地址、首次/最后心跳、最后事件和 `metadata`；事件列表行包含消息、Trace ID 和扩展 `data`，可直接用于只读详情展示。
+
+## 6. 配置和清理
+
+| 配置项 | 环境变量 | 默认值 | 说明 |
+|---|---|---:|---|
+| `app.business-service.offline-threshold-seconds` | `APP_BUSINESS_SERVICE_OFFLINE_THRESHOLD_SECONDS` | 90 | 心跳离线阈值，秒 |
+| `app.business-service.event-retention-days` | `APP_BUSINESS_SERVICE_EVENT_RETENTION_DAYS` | 30 | 事件接收记录保留天数 |
+| `app.business-service.instance-retention-days` | `APP_BUSINESS_SERVICE_INSTANCE_RETENTION_DAYS` | 30 | 长期离线实例保留天数 |
+| `app.business-service.cleanup-delay-ms` | `APP_BUSINESS_SERVICE_CLEANUP_DELAY_MS` | 3600000 | 清理任务间隔，毫秒 |
+
+每小时先删除接收时间超过事件保留期的事件，再删除最后心跳和最后事件接收时间均超过实例保留期的实例。近期事件会阻止对应实例被提前清理。
+
+## 7. 常见失败
+
+| `status` | 场景 |
+|---:|---|
+| 400 | 缺少必填字段、枚举非法、字段格式/长度非法、JSON 扩展数据超限 |
+| 404 | 事件对应实例尚未通过心跳注册，或管理详情不存在 |
+| 409 | `event_id` 已被其他实例使用 |
+| 101 | 管理查询接口未登录；两个精确公开 POST 上报路径不会返回此错误 |
+

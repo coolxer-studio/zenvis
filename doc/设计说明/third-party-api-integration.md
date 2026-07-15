@@ -10,6 +10,7 @@ ZenVis 后端以 `/api/v1` 为主要 REST API 前缀，围绕“配置化数据�
 | :--- | :--- | :--- |
 | 登录与系统信息 | `/api/v1/system/login/**`、`/api/v1/system/about/**` | Web 登录、验证码、公钥、系统关于信息 |
 | 系统管理 | `/api/v1/system/user/**`、`/role/**`、`/menu/**` | 用户、角色、菜单、权限管理 |
+| 业务应用服务 | `/api/v1/public/business-services/**`、`/api/v1/system/business-services/**` | 心跳/事件公开上报与受认证只读管理查询 |
 | 插件与配置 | `/api/v1/system/plugin/**`、`/api/v1/config/{type}/**` | 插件安装、文档、配置文件读写与应用 |
 | 数据检索 | `/api/v1/retrieval/**`、`/api/v1/entity/{entity}/**` | 元数据驱动检索、动态实体 CRUD、统计趋势 |
 | 看板与业务模块 | `/api/v1/dashboard/home/**`、`/api/v1/asset/rule/**`、`/api/v1/operation/**`、`/api/v1/risk/**` | 首页看板、资产规则、运营分析、风险总览 |
@@ -49,6 +50,45 @@ Authorization: Bearer <API_BEARER_TOKEN>
 ## 认证方式
 
 ZenVis 当前支持两套认证方式，可同时存在。
+
+### 公开业务应用服务上报
+
+业务服务程序可以直接调用以下两个精确的公开 `POST` 路径，无需 Cookie 或 Bearer Token：
+
+```text
+POST /api/v1/public/business-services/heartbeat
+POST /api/v1/public/business-services/events
+```
+
+该放行不覆盖 `GET`、子路径或 `/api/v1/system/business-services/**` 管理查询。公开接口没有应用层签名和限流，生产环境应通过网关、防火墙或内部服务网络控制可访问来源。
+
+最小接入顺序是先心跳注册，再上报事件：
+
+```bash
+curl -X POST "http://<host>:11001/api/v1/public/business-services/heartbeat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service_code": "payment-api",
+    "service_name": "支付服务",
+    "instance_id": "payment-api-10.0.0.9-8080",
+    "status": "UP",
+    "version": "1.4.0",
+    "environment": "prod"
+  }'
+
+curl -X POST "http://<host>:11001/api/v1/public/business-services/events" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "payment-api-20260715-0001",
+    "service_code": "payment-api",
+    "instance_id": "payment-api-10.0.0.9-8080",
+    "event_type": "PAYMENT_TIMEOUT",
+    "severity": "ERROR",
+    "title": "支付请求超时"
+  }'
+```
+
+调用方应为每个进程或副本生成稳定且唯一的 `instance_id`，为每个事件生成全局唯一的 `event_id`，并以小于离线阈值的间隔持续发送心跳。完整字段、限制和幂等规则见 [业务应用服务接口文档](../api接口文档/BusinessServiceController.md)。
 
 ### 1. Web Session/Cookie
 
@@ -156,6 +196,9 @@ curl -H "Authorization: Bearer <API_BEARER_TOKEN>" \
 | 现象 | 常见原因 | 处理方式 |
 | :--- | :--- | :--- |
 | 返回 `status=101` | 未携带 Cookie，也未携带正确 Bearer Token | 检查 `Authorization: Bearer ...`，或重新登录获取 `JSESSIONID` |
+| 业务应用服务实例显示 `OFFLINE` | 心跳停止，或心跳间隔超过默认 90 秒 | 检查实例 ID 是否稳定、网络和上报调度；客户端时间不会影响在线判定 |
+| 事件返回 `status=404` | 对应 `service_code + instance_id` 尚未心跳注册 | 先成功上报一次心跳，并确保两个请求的联合标识完全一致 |
+| 事件返回 `status=409` | `event_id` 已属于其他实例 | 为新事件生成全局唯一 ID；同实例原事件可用原 ID 安全重试 |
 | 返回 `status=100` | Bearer Token 未配置，或 `API_BEARER_USER` 不存在 | 配置 `API_BEARER_TOKEN`，确认用户邮箱存在 |
 | HTTP 200 但业务失败 | 业务状态码不为 0 | 以响应体 `status` 和 `msg` 判断 |
 | JSON 字段收不到 | 使用了驼峰字段或 query 参数名不匹配 | JSON 优先使用 `snake_case`；分页 query 用 `per_page` |
@@ -172,4 +215,3 @@ curl -H "Authorization: Bearer <API_BEARER_TOKEN>" \
 | `src/main/java/com/coolxer/configuration/JpaAuditingConfiguration.java` | JPA 创建人/更新人审计用户解析 |
 | `src/main/java/com/coolxer/configuration/OpenApiConfig.java` | Swagger/OpenAPI 安全方案定义 |
 | `src/main/java/com/coolxer/configuration/JacksonConfig.java` | JSON 字段命名、时间格式和反序列化规则 |
-

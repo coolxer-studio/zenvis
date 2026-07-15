@@ -82,6 +82,11 @@ ZenVis平台基于先进的AI大模型技术和大数据分析能力，为用户
 - [Retrieval 产品与技术设计](../设计说明/retrieval-module.md)
 - [Retrieval REST API](../api接口文档/RetrievalController.md)
 
+### 服务管理快速上手
+
+- [服务管理使用手册](功能说明-服务管理.md)
+- [业务应用服务接口文档](../api接口文档/BusinessServiceController.md)
+
 ### 近期核心功能快速上手
 
 - [近期核心功能快速上手](近期核心功能快速上手.md)

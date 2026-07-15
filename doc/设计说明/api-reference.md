@@ -28,6 +28,13 @@ http://localhost:11001/swagger-ui/index.html
 | [Retrieval 模块快速上手](retrieval-module.md) | 产品行为、前后端状态流、规则兼容、元数据和排障 |
 | [RetrievalController](../api接口文档/RetrievalController.md) | 检索、过滤器和元数据 REST 契约 |
 
+## 服务管理专题
+
+| 文档 | 说明 |
+| :--- | :--- |
+| [业务应用服务接口](../api接口文档/BusinessServiceController.md) | 无认证心跳/事件上报、受认证管理查询、状态与保留规则 |
+| [服务管理使用手册](../使用手册/功能说明-服务管理.md) | 数据推送服务、AI分析任务和业务应用服务的页面使用说明 |
+
 ## 当前接口模块
 
 当前有效 Markdown 文档如下：
@@ -38,6 +45,7 @@ http://localhost:11001/swagger-ui/index.html
 | [AggregateController](../api接口文档/AggregateController.md) | 数据聚合 |
 | [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | AI分析任务 |
 | [AssetRuleController](../api接口文档/AssetRuleController.md) | 资产规则 |
+| [BusinessServiceController](../api接口文档/BusinessServiceController.md) | 业务应用服务注册、事件与只读管理查询 |
 | [ChatController](../api接口文档/ChatController.md) | AI 对话、上传与预览 |
 | [ChatSessionController](../api接口文档/ChatSessionController.md) | AI 对话会话 |
 | [ConfigController](../api接口文档/ConfigController.md) | 配置文件管理 |
@@ -125,6 +133,8 @@ Retrieval 列表接口使用 `{ "total": 100, "datalist": [] }`；`POST /retriev
 
 - Web 前端默认使用服务端 Session/Cookie 鉴权，登录相关接口、系统公开信息和健康检查接口按拦截器配置放行。
 - 第三方系统可配置 `API_BEARER_TOKEN` 后使用 `Authorization: Bearer <token>` 直接调用普通 REST API。调用身份由 `API_BEARER_USER` 映射到系统用户，详见 [第三方 REST API 对接指南](third-party-api-integration.md)。
+
+业务应用服务只有 `POST /api/v1/public/business-services/heartbeat` 和 `POST /api/v1/public/business-services/events` 两个精确路径无需认证。相似路径、其他 HTTP 方法及其管理查询接口均不放行。
 
 MCP Server SSE/消息端点使用独立的 `MCP_BEARER_TOKEN`，由 MCP 专用拦截器校验，不与普通 REST API token 混用。
 

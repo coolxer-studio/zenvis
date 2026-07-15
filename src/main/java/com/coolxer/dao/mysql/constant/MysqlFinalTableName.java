@@ -21,6 +21,16 @@ public class MysqlFinalTableName {
     public static final String T_SYS_PUSH_TASK = TABLE_PREFIX + "sys_push_task";
 
     /**
+     * 业务应用服务实例表
+     */
+    public static final String T_SYS_BUSINESS_SERVICE_INSTANCE = TABLE_PREFIX + "sys_business_service_instance";
+
+    /**
+     * 业务应用服务事件表
+     */
+    public static final String T_SYS_BUSINESS_SERVICE_EVENT = TABLE_PREFIX + "sys_business_service_event";
+
+    /**
      * 菜单表
      */
     public static final String T_SYS_MENU = TABLE_PREFIX + "sys_menu";

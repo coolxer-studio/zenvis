@@ -51,7 +51,6 @@ src/
 ├── utils/           # 工具函数
 └── views/           # 页面视图
     ├── about/       # 关于页面
-    ├── aggregate/   # 聚合分析
     ├── dashboard/   # 仪表盘
     ├── dih/         # 数据集成处理
     ├── external-app/ # 外部应用

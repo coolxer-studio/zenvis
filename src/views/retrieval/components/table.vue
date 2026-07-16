@@ -77,15 +77,15 @@
                 </el-tooltip>
               </template>
               <template v-else>
-                <template v-if="item.isLink">
+                <template v-if="resolveLink(item, scope.row)">
                   <template v-if="scope.row[item.dataIndex] && scope.row[item.dataIndex].length > 8">
-                    <span @click="goAggregate(item.dataIndex, scope.row[item.dataIndex])" class="dev-style">
+                    <span @click="openLink(item, scope.row)" class="dev-style">
                       {{ scope.row[item.dataIndex].substr(0,4) }}...{{ scope.row[item.dataIndex].substr(scope.row[item.dataIndex].length-4,4) }}
                     </span>
                     <el-icon class="copy-outlined-ico" title="点击复制" @click.stop="touchCopy(scope.row[item.dataIndex])"><DocumentCopy /></el-icon>
                   </template>
                   <template v-else>
-                    <span @click="goAggregate(item.dataIndex, scope.row[item.dataIndex])" class="dev-style">
+                    <span @click="openLink(item, scope.row)" class="dev-style">
                       {{ scope.row[item.dataIndex] }}
                     </span>
                   </template>
@@ -129,6 +129,7 @@ import type {
   RetrievalTableState,
   RetrievalTableSorter,
 } from '@/types/type-retrieval';
+import { resolveRetrievalLink } from '@/utils/retrieval-link';
 
 const props = defineProps<{ state: RetrievalTableState }>();
 const emit = defineEmits<{
@@ -176,12 +177,13 @@ function getSelect(value: string[]) {
   colShow.value = false;
 }
 
-function goAggregate(field: string, value: unknown) {
-  const query = new URLSearchParams({
-    entity_name: props.state.entity || '',
-    [field]: String(value),
-  });
-  window.open(`/#/aggregate/index?${query.toString()}`, '_blank', 'noopener,noreferrer');
+function resolveLink(column: RetrievalTableColumn, row: Record<string, unknown>) {
+  return resolveRetrievalLink(column.linkTemplate, row, props.state.selectedKeyCol);
+}
+
+function openLink(column: RetrievalTableColumn, row: Record<string, unknown>) {
+  const link = resolveLink(column, row);
+  if (link) window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 function handleCurrentChange(value: number) {

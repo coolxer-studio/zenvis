@@ -542,7 +542,7 @@ const renderChartPreview = (schema: Record<string, unknown>) => {
   return `
     <section class="dv-preview-chart">
       <div class="dv-preview-panel-title">${escapeHtml(title.text || schema.title || '图表预览')}</div>
-      <div class="dv-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/retrieval/aggregate/trend')}</div>
+      <div class="dv-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/entity/trend')}</div>
       <div class="dv-preview-bars">
         <span style="height:42%"></span>
         <span style="height:58%"></span>

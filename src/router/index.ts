@@ -29,18 +29,6 @@ const basicRoutes: Array<RouteRecordRaw> = [
     ]
   },
   {
-    path: `/aggregate`,
-    component: layout_header,
-    redirect: `/aggregate/index`,
-    children: [
-      {
-        path: 'index',
-        component: () => import('@v/aggregate/index.vue'),
-        name: 'aggregate'
-      }
-    ]
-  },
-  {
     path: `/dashboard`,
     component: layout_full,
     redirect: `/dashboard/index`,
@@ -60,17 +48,6 @@ const basicRoutes: Array<RouteRecordRaw> = [
         path: 'index',
         component: () => import('@v/retrieval/index.vue'),
         name: 'retrieval'
-      }
-    ]
-  },
-  {
-    path: `/chatgpt`,
-    component: layout_header,
-    children: [
-      {
-        path: 'index',
-        component: () => import('@v/chatgpt/index.vue'),
-        name: 'chatgpt'
       }
     ]
   },

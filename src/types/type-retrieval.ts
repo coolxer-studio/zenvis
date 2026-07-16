@@ -52,7 +52,7 @@ export type TAttributeListResponse = {
   operator_list: OperatorItem[];
   retrieval_type?: string;
   display_type?: string;
-  aggregate_link?: boolean;
+  link_template?: string;
   auto_complete?: boolean;
 };
 
@@ -61,7 +61,7 @@ export type SelectAttributeItem = {
   label: string;
   display_type?: string;
   operator_name?: string;
-  aggregate_link?: boolean;
+  link_template?: string;
   value_list?: string[];
 };
 
@@ -142,7 +142,7 @@ export type DeleteRuleResponse = void;
 export type RetrievalTableColumn = {
   title: string;
   dataIndex: string;
-  isLink?: boolean;
+  linkTemplate?: string;
   resizable: boolean;
   width: number;
   minWidth: number;

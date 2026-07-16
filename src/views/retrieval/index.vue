@@ -344,7 +344,7 @@ function applyColumns(entity: string, attributes: TAttributeListResponse[], sele
   const columns = attributes.map<RetrievalTableColumn>((attribute, index) => ({
     title: attribute.label,
     dataIndex: attribute.name,
-    isLink: attribute.aggregate_link,
+    linkTemplate: attribute.link_template,
     resizable: true,
     width,
     minWidth: 80,

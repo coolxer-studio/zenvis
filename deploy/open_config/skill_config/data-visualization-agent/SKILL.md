@@ -35,7 +35,7 @@
 
 - 元数据与字段确认：`retrieval_list_display_entity`、`retrieval_list_display_attribute`、`retrieval_list_entity`、`retrieval_list_attribute`、`retrieval_list_rule`、`retrieval_list_candidate`。
 - 明细查询：`retrieval_search`、`entity_list`、`entity_view`。
-- 统计分析：`entity_count`、`entity_trend`、`entity_statistics`、`retrieval_msg_trend`、`retrieval_msg_tag`。
+- 统计分析：`entity_count`、`entity_trend`、`entity_statistics`。
 - 配置写入：`policy_config_ensure_root`、`policy_config_add`、`policy_config_apply`、`policy_config_read`。
 - 看板管理：`dashboard_create`、`dashboard_list`、`dashboard_view`。
 - 菜单管理：`menu_create`、`menu_list`、`menu_view`、`menu_type_options`、`menu_parent_options`。
@@ -44,11 +44,11 @@
 
 1. 先获取实体：使用 `retrieval_list_display_entity(ruleId)` 或 `retrieval_list_entity(ruleId)`。
 2. 校验字段：使用 `retrieval_list_display_attribute(entity, ruleId)` 或 `retrieval_list_attribute(entity, ruleId)`。
-3. 查询证据：明细用 `retrieval_search` 或 `entity_list`；趋势和 TopN 用 `entity_trend`、`entity_statistics`、`retrieval_msg_trend`、`retrieval_msg_tag`。
+3. 查询证据：明细用 `retrieval_search` 或 `entity_list`；趋势和 TopN 用 `entity_trend`、`entity_statistics`。
 4. 选择展示方式：
    - 临时图表：生成 amis 图表 JSON，并输出 `zenvis:visualization-chart-preview` 在对话中预览；用户确认加入图表库后再输出 `zenvis:visualization-chart-record`。
    - 低代码页面/应用：生成 amis JSON 配置，确认后写入 `<configIndex>_config/index.json` 或 `<configIndex>_config/site.json`。
-   - 静态 HTML：生成完整 HTML 单页面，页面内直接请求 `/api/v1/entity/{entity}/list`、`/api/v1/retrieval/do` 或 `/api/v1/retrieval/aggregate/*`。
+   - 静态 HTML：生成完整 HTML 单页面，页面内直接请求 `/api/v1/entity/{entity}/list`、`/api/v1/entity/trend`、`/api/v1/entity/statistics` 或 `/api/v1/retrieval/do`。
    - 大屏看板：确认后创建 Dashboard，并输出 `zenvis:dashboard-config-record`。
    - 菜单配置：确认后创建 Menu，并输出 `zenvis:menu-config-record`。
 
@@ -73,7 +73,7 @@
 ### 临时图表预览
 
 ```zenvis:visualization-chart-preview
-{"title":"登录事件趋势图","content":"按小时聚合登录事件数量。","chartType":"line","entity":"user_event","api":"/api/v1/retrieval/aggregate/trend","echartsOption":{"xAxis":{"type":"category","data":[]},"yAxis":{"type":"value"},"series":[]},"amisConfig":{"type":"chart","api":"/api/v1/retrieval/aggregate/trend","config":{"xAxis":{},"yAxis":{},"series":[]}}}
+{"title":"登录事件趋势图","content":"按天统计登录事件数量。","chartType":"line","entity":"user_event","api":"/api/v1/entity/trend?entities=user_event","echartsOption":{"xAxis":{"type":"category","data":[]},"yAxis":{"type":"value"},"series":[]},"amisConfig":{"type":"chart","api":"/api/v1/entity/trend?entities=user_event","config":{"xAxis":{"data":"${xaxis_data || []}"},"yAxis":{},"series":[]}}}
 ```
 
 ### 临时图表

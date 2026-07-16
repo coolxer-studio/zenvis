@@ -345,7 +345,7 @@ field is not null
         "label": "风险等级",
         "retrieval_type": "number",
         "display_type": null,
-        "aggregate_link": false,
+        "link_template": "/asset/risk?level={risk_level}",
         "auto_complete": false,
         "operator_list": [
           { "name": "equal", "label": "等于" }
@@ -418,7 +418,7 @@ field is not null
         "label": "IP 地址",
         "retrieval_type": "string",
         "display_type": null,
-        "aggregate_link": false,
+        "link_template": "/asset/detail?ip={ip}",
         "auto_complete": true,
         "operator_list": [
           { "name": "equal", "label": "等于" },
@@ -438,6 +438,8 @@ field is not null
 `GET /api/v1/retrieval/display/attribute/list?entity=asset`
 
 响应结构与条件字段列表相同。`select_attribute_list` 为元数据中 `display_selected: true` 的默认展示字段。`/display/entity/list` 与 `/entity/list` 结构相同。
+
+字段可选返回 `link_template: string`，表示结果单元格的页面跳转模板。`{属性名}` 引用当前结果行中同名逻辑属性的值，前端替换时会执行 URL 编码；模板可使用相对地址或 `http/https` 地址。未配置时不返回该字段。为保证链接可解析，模板引用的属性必须同时包含在当前展示字段中。
 
 ### 6.4 候选值
 

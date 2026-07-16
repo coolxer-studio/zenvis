@@ -405,7 +405,6 @@ zenvis-backend/
 
 | 功能   | 控制器                     | 说明     |
 | :--- | :---------------------- | :----- |
-| 聚合查询 | `AggregateController`   | 数据聚合统计 |
 | 实体核心 | `EntityCoreController`  | 实体数据查询 |
 | 实体计数 | `EntityCountController` | 实体数量统计 |
 | 检索服务 | `RetrievalController`   | 通用检索接口 |

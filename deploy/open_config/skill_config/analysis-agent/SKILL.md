@@ -108,7 +108,7 @@
 
 - 实体与字段确认：`retrieval_list_display_entity`、`retrieval_list_display_attribute`、`retrieval_list_entity`、`retrieval_list_attribute`、`retrieval_list_rule`。
 - 明细证据查询：`retrieval_search(request)`、`entity_list(entity, params)`、`entity_view(entity, id)`。
-- 数量、趋势和分布：`entity_count`、`entity_trend`、`entity_statistics`、`retrieval_msg_trend`、`retrieval_msg_tag`。
+- 数量、趋势和分布：`entity_count`、`entity_trend`、`entity_statistics`。
 
 执行要求：
 

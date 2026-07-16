@@ -157,6 +157,9 @@ class RetrievalRuleLifecycleTest {
         assertThat(detail.getStatus()).isEqualTo("valid");
         assertThat(detail.getConfig().getEntity()).isEqualTo("asset");
         assertThat(detail.getConfig().getCriteriaList()).hasSize(1);
+        assertThat(detail.getAttributeList()).singleElement()
+                .extracting("linkTemplate")
+                .isEqualTo("/asset/detail?ip={ip}");
     }
 
     @Test
@@ -250,6 +253,7 @@ class RetrievalRuleLifecycleTest {
             attribute.setColumnName("src_ip");
             attribute.setColumnType("String");
             attribute.setOperators(List.of("equal", "isnull"));
+            attribute.setLinkTemplate("/asset/detail?ip={ip}");
         }
 
         @Override public MetaData loadMetaData() { return null; }

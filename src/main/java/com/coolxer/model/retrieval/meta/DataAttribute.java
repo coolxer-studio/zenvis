@@ -1,5 +1,9 @@
 package com.coolxer.model.retrieval.meta;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Data;
@@ -14,6 +18,8 @@ import java.util.Map;
 @Data
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class DataAttribute {
+
+    private static final String DEPRECATED_LINK_FIELD = String.join("_", "aggregate", "link");
 
     /**
      * 属性id，如果放数据库管理则是表主键
@@ -92,8 +98,37 @@ public class DataAttribute {
     private Map<String, Object> mapping;
 
     /**
-     * 标识该属性是否开启聚合链接
+     * 属性链接跳转模板，支持使用{属性name}引用当前结果行字段
      */
-    private boolean aggregateLink;
+    private String linkTemplate;
+
+    @JsonGetter("link_template")
+    public String getLinkTemplate() {
+        return linkTemplate;
+    }
+
+    public void setLinkTemplate(String linkTemplate) {
+        this.linkTemplate = linkTemplate;
+    }
+
+    @JsonSetter("link_template")
+    public void readLinkTemplate(JsonNode linkTemplateNode) {
+        if (linkTemplateNode == null || linkTemplateNode.isNull()) {
+            linkTemplate = null;
+            return;
+        }
+        if (linkTemplateNode.isTextual()) {
+            linkTemplate = linkTemplateNode.textValue();
+            return;
+        }
+        throw new IllegalArgumentException("link_template仅支持字符串");
+    }
+
+    @JsonAnySetter
+    public void rejectDeprecatedLinkField(String propertyName, JsonNode ignoredValue) {
+        if (DEPRECATED_LINK_FIELD.equals(propertyName)) {
+            throw new IllegalArgumentException("旧跳转链接字段已废弃，请使用link_template");
+        }
+    }
 
 }

@@ -35,7 +35,7 @@ class McpToolApprovalAnnotationTest {
                 .filter(method -> method.isAnnotationPresent(Tool.class))
                 .toList();
 
-        assertThat(methods).hasSize(69);
+        assertThat(methods).hasSize(67);
         assertThat(methods).allSatisfy(method -> {
             McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
             assertThat(approval)

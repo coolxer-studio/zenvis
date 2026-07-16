@@ -36,8 +36,6 @@ public class AgentMcpToolService {
             "retrieval_list_candidate",
             "retrieval_list_display_entity",
             "retrieval_list_display_attribute",
-            "retrieval_msg_tag",
-            "retrieval_msg_trend",
             "entity_count",
             "entity_trend",
             "entity_statistics",

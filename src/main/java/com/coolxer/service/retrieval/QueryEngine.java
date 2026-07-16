@@ -47,10 +47,4 @@ public interface QueryEngine {
 
     public Map<String, Object> queryWithRetrieval(DataQuery dataQuery, RetrievalPageable pageable);
 
-    public Map<String, Object> groupAgendaTagsWithWhereClause(String tableName, String whereClause);
-
-    public List<Map<String, Object>> countTypeByHourWithWhereClause(String tableName, String whereClause);
-
-    public List<Map<String, Object>> countTypeByDayWithWhereClause(String tableName, String whereClause);
-
 }

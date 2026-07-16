@@ -520,7 +520,7 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         vo.setDescription(attribute.getDescription());
         vo.setRetrievalType(attribute.getRetrievalType());
         vo.setDisplayType(attribute.getDisplayType());
-        vo.setAggregateLink(attribute.isAggregateLink());
+        vo.setLinkTemplate(attribute.getLinkTemplate());
         vo.setAutoComplete(attribute.isAutoComplete());
         vo.setOperatorList(attribute.getOperators() == null ? List.of() : attribute.getOperators().stream()
                 .map(metaDataService::getDataOperatorByName)

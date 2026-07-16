@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -38,6 +41,10 @@ public class MetaDataServiceImpl implements MetaDataService {
 
     private static final Pattern LOGICAL_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final Pattern PHYSICAL_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?");
+    private static final Pattern LINK_TEMPLATE_PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*)}");
+    private static final Pattern URI_SCHEME = Pattern.compile("^[A-Za-z][A-Za-z0-9+.-]*:");
+    private static final Pattern HTTP_URL = Pattern.compile("^https?://", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONTROL_CHARACTER = Pattern.compile("[\\x00-\\x1F\\x7F]");
     private static final Map<String, String> DEFAULT_OPERATOR_LABEL_MAP = new LinkedHashMap<>();
 
     static {
@@ -66,6 +73,7 @@ public class MetaDataServiceImpl implements MetaDataService {
         try {
             LoadedMetadata loaded = readMetaData(metadataPath);
             supplementBuiltInAttributes(loaded.metaData(), metadataPath, loaded.sourceByObject());
+            normalizeLinkTemplates(loaded.metaData());
             supplementOperators(loaded.metaData());
             MetadataSnapshot next = buildSnapshot(loaded.metaData(), metadataPath, loaded.sourceByObject());
             snapshotRef.set(next);
@@ -166,6 +174,10 @@ public class MetaDataServiceImpl implements MetaDataService {
             }
         }
 
+        for (DataAttribute attribute : safe(metaData.getAttribute())) {
+            validateLinkTemplate(attribute, attributesByEntity, sourceOf(attribute, sourceByObject, sourcePath));
+        }
+
         for (DataEntity entity : entitiesByName.values()) {
             String itemSource = sourceOf(entity, sourceByObject, sourcePath);
             if (StringUtils.isNotBlank(entity.getSortColumn())) {
@@ -218,6 +230,72 @@ public class MetaDataServiceImpl implements MetaDataService {
 
     private <T> List<T> safe(List<T> values) {
         return values == null ? Collections.emptyList() : values;
+    }
+
+    private void normalizeLinkTemplates(MetaData metaData) {
+        if (metaData == null) {
+            return;
+        }
+        for (DataAttribute attribute : safe(metaData.getAttribute())) {
+            if (attribute == null) {
+                continue;
+            }
+            if (StringUtils.isBlank(attribute.getLinkTemplate())) {
+                attribute.setLinkTemplate(null);
+            } else {
+                attribute.setLinkTemplate(attribute.getLinkTemplate().trim());
+            }
+        }
+    }
+
+    private void validateLinkTemplate(DataAttribute attribute,
+                                      Map<String, Map<String, DataAttribute>> attributesByEntity,
+                                      String sourcePath) {
+        if (attribute == null || StringUtils.isBlank(attribute.getLinkTemplate())) {
+            return;
+        }
+        String template = attribute.getLinkTemplate();
+        Matcher matcher = LINK_TEMPLATE_PLACEHOLDER.matcher(template);
+        StringBuffer resolvedTemplate = new StringBuffer();
+        while (matcher.find()) {
+            String placeholder = matcher.group(1);
+            if (!attributesByEntity.getOrDefault(attribute.getEntity(), Collections.emptyMap())
+                    .containsKey(placeholder)) {
+                throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                        + "的link_template引用未知属性: " + placeholder);
+            }
+            matcher.appendReplacement(resolvedTemplate, "value");
+        }
+        matcher.appendTail(resolvedTemplate);
+        if (resolvedTemplate.indexOf("{") >= 0 || resolvedTemplate.indexOf("}") >= 0) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_template占位符格式不正确");
+        }
+        validateLinkTemplateUrl(attribute, resolvedTemplate.toString(), sourcePath);
+    }
+
+    private void validateLinkTemplateUrl(DataAttribute attribute, String resolvedTemplate, String sourcePath) {
+        String candidate = StringUtils.trimToEmpty(resolvedTemplate);
+        if (candidate.isEmpty() || candidate.startsWith("//") || candidate.contains("\\")
+                || CONTROL_CHARACTER.matcher(candidate).find()) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_template地址不合法");
+        }
+        if (URI_SCHEME.matcher(candidate).find() && !HTTP_URL.matcher(candidate).find()) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_template仅支持相对地址或http/https地址");
+        }
+        try {
+            URI uri = new URI(candidate);
+            if (uri.isAbsolute() && (!StringUtils.equalsAnyIgnoreCase(uri.getScheme(), "http", "https")
+                    || StringUtils.isBlank(uri.getRawAuthority()))) {
+                throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                        + "的link_template仅支持相对地址或http/https地址");
+            }
+        } catch (URISyntaxException ex) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_template地址不合法");
+        }
     }
 
     private void supplementBuiltInAttributes(MetaData metaData,

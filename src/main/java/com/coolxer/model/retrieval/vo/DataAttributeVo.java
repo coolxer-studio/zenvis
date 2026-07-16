@@ -17,7 +17,7 @@ public class DataAttributeVo {
 
     private String description;
 
-    private boolean aggregateLink;
+    private String linkTemplate;
 
     private boolean autoComplete;
 

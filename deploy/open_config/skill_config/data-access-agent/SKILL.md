@@ -119,8 +119,10 @@
 - 默认生成 `entity.auto_create`，必须包含 `engine: "MergeTree"`、`order_by`、`partition_by`；`order_by` 中字段必须存在于本实体 attribute 的 `column_name`。
 - 需要实体 CRUD/MCP 工具稳定工作时，必须包含物理列 `id`。
 - 平台会为每个实体自动注入 `zenvis_insert_time` 创建时间字段，并在写入时自动赋值；元数据 JSON 不得生成该保留字段，数据样例和推送映射也不得写入该字段。实体趋势统计直接使用此字段，不需要用户另行配置时间属性。
-- 需要 `retrieval_msg_trend` 时包含 `server_time` 和 `fact_type`；需要 `retrieval_msg_tag` 时包含 `agenda_tags`，推荐 `Array(String)`。
 - 每个 `attribute` 必填 `id`、`entity`、`name`、`label`、`description`、`column_name`、`column_type`、`operators`、`display_selected`。
+- 需要为结果字段配置页面跳转时，使用可选字符串 `link_template`，例如 `"/device/detail?guid={guid}"`；不得使用布尔值、数字、数组或对象。
+- `link_template` 的 `{属性名}` 只能引用当前实体中已定义的逻辑属性 `name`，不得引用 `column_name`、标签或特殊变量；被引用属性必须作为展示字段返回，否则该行不会生成链接。
+- `link_template` 只允许相对地址或 `http/https` 地址，禁止 `javascript:`、`data:`、`blob:`、`file:` 和 `//host`。
 - `Array(String)` 字段设置 `display_type: "array"`；JSON 字段设置 `display_type: "json"`。
 - `display_name` 一般不要生成；如必须生成，只能是 SQL select/alias 可映射字段名，不能是中文。
 - `retrieval_type` 仅在实际按 epoch 毫秒存储且需要日期输入转换时使用 `date`；普通 `DateTime64(3)` 不要使用。

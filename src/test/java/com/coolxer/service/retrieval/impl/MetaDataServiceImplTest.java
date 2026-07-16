@@ -8,6 +8,8 @@ import com.coolxer.model.retrieval.vo.DataAttributeVo;
 import com.coolxer.utils.JacksonUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
@@ -61,6 +63,141 @@ class MetaDataServiceImplTest {
 
         assertThat(metaData.getAttribute()).hasSize(1);
         assertThat(metaData.getAttribute().get(0).isAutoComplete()).isTrue();
+    }
+
+    @Test
+    void readsLinkTemplateStringAndSerializesVoAsSnakeCase() {
+        MetaData metaData = JacksonUtil.toObject("""
+                {
+                  "attribute": [
+                    {
+                      "entity": "asset",
+                      "name": "device_name",
+                      "link_template": "/detail?name={device_name}"
+                    }
+                  ]
+                }
+                """, MetaData.class);
+        DataAttributeVo dataAttributeVo = new DataAttributeVo();
+        dataAttributeVo.setName("device_name");
+        dataAttributeVo.setLinkTemplate(metaData.getAttribute().get(0).getLinkTemplate());
+
+        assertThat(metaData.getAttribute().get(0).getLinkTemplate())
+                .isEqualTo("/detail?name={device_name}");
+        assertThat(JacksonUtil.toMap(dataAttributeVo))
+                .containsEntry("link_template", "/detail?name={device_name}");
+        assertThat(JacksonUtil.toMap(new DataAttributeVo()))
+                .doesNotContainKey("link_template");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "\"link_template\": true",
+            "\"link_template\": false",
+            "\"link_template\": 123",
+            "\"link_template\": []",
+            "\"link_template\": {}"
+    })
+    void nonStringLinkTemplateKeepsPreviousSnapshot(String linkProperty) throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, metadataWithLinkTemplate("/detail?ip={ip}"));
+        MetaDataServiceImpl service = metadataService(tempDir);
+        MetaData first = service.loadMetaData();
+
+        Files.writeString(metadata, metadataWithLinkProperty(linkProperty));
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataAttributeByName("asset", "ip").getLinkTemplate())
+                .isEqualTo("/detail?ip={ip}");
+    }
+
+    @Test
+    void deprecatedLinkFieldKeepsPreviousSnapshot() throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, metadataWithLinkTemplate("/detail?ip={ip}"));
+        MetaDataServiceImpl service = metadataService(tempDir);
+        MetaData first = service.loadMetaData();
+        String deprecatedField = String.join("_", "aggregate", "link");
+
+        Files.writeString(metadata, metadataWithLinkProperty(
+                "\"" + deprecatedField + "\": \"/detail?ip={ip}\""));
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataAttributeByName("asset", "ip").getLinkTemplate())
+                .isEqualTo("/detail?ip={ip}");
+    }
+
+    @Test
+    void acceptsLinkTemplateWithMultipleAndRepeatedPlaceholders() throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset"}],
+                  "attribute": [
+                    {
+                      "id": 10,
+                      "entity": "asset",
+                      "name": "ip",
+                      "column_name": "ip",
+                      "column_type": "String",
+                      "link_template": "https://example.com/detail?ip={ip}&copy={ip}&name={name}"
+                    },
+                    {
+                      "id": 11,
+                      "entity": "asset",
+                      "name": "name",
+                      "column_name": "name",
+                      "column_type": "String"
+                    }
+                  ]
+                }
+                """);
+        MetaDataServiceImpl service = metadataService(tempDir);
+
+        MetaData loaded = service.loadMetaData();
+
+        assertThat(loaded).isNotNull();
+        assertThat(service.getDataAttributeByName("asset", "ip").getLinkTemplate())
+                .isEqualTo("https://example.com/detail?ip={ip}&copy={ip}&name={name}");
+    }
+
+    @Test
+    void acceptsStaticRelativeLinkTemplate() throws Exception {
+        Files.writeString(tempDir.resolve("meta.json"), metadataWithLinkTemplate("/asset/help"));
+        MetaDataServiceImpl service = metadataService(tempDir);
+
+        MetaData loaded = service.loadMetaData();
+
+        assertThat(loaded).isNotNull();
+        assertThat(service.getDataAttributeByName("asset", "ip").getLinkTemplate())
+                .isEqualTo("/asset/help");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/detail?ip={missing}",
+            "/detail?ip={ip",
+            "/detail?ip={}",
+            "javascript:alert(1)",
+            "data:text/plain,test",
+            "blob:https://example.com/id",
+            "file:///tmp/file",
+            "//example.com/detail"
+    })
+    void invalidLinkTemplateKeepsPreviousSnapshot(String linkTemplate) throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, metadataWithLinkTemplate("/detail?ip={ip}"));
+        MetaDataServiceImpl service = metadataService(tempDir);
+        MetaData first = service.loadMetaData();
+
+        Files.writeString(metadata, metadataWithLinkTemplate(linkTemplate));
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataAttributeByName("asset", "ip").getLinkTemplate())
+                .isEqualTo("/detail?ip={ip}");
     }
 
     @Test
@@ -211,5 +348,35 @@ class MetaDataServiceImplTest {
         attribute.setRetrievalType(retrievalType);
         attribute.setOperators(operators);
         return attribute;
+    }
+
+    private MetaDataServiceImpl metadataService(Path metadataPath) {
+        CustomWebConfig config = mock(CustomWebConfig.class);
+        when(config.getRetrievalMetaFilePath()).thenReturn(metadataPath.toString());
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        ReflectionTestUtils.setField(service, "customWebConfig", config);
+        return service;
+    }
+
+    private String metadataWithLinkTemplate(String linkTemplate) {
+        return metadataWithLinkProperty("\"link_template\": \"" + linkTemplate + "\"");
+    }
+
+    private String metadataWithLinkProperty(String linkProperty) {
+        return """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset"}],
+                  "attribute": [
+                    {
+                      "id": 10,
+                      "entity": "asset",
+                      "name": "ip",
+                      "column_name": "ip",
+                      "column_type": "String",
+                      %s
+                    }
+                  ]
+                }
+                """.formatted(linkProperty);
     }
 }

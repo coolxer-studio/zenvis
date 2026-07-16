@@ -251,7 +251,7 @@ class SkillServiceTest {
                 .contains("修改报表")
                 .contains("汇总多智能体结果")
                 .contains("retrieval_search")
-                .contains("retrieval_msg_trend")
+                .contains("entity_trend")
                 .contains("analysis_task_view")
                 .contains("zenvis:report-document-config")
                 .contains("证据记录与查询结果")

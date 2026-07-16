@@ -61,7 +61,7 @@ public class DataVisualizationDemoResponseService {
               "body": [
                 {
                   "type": "chart",
-                  "api": "/zenvis/api/v1/retrieval/aggregate/trend?entity=user-event&timeField=server_time&interval=hour&metric=count",
+                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
                   "config": {
                     "title": {
                       "text": "用户事件上报趋势"
@@ -70,16 +70,22 @@ public class DataVisualizationDemoResponseService {
                       "trigger": "axis"
                     },
                     "legend": {
-                      "data": ["登录", "点击", "浏览", "删除", "修改"]
+                      "data": "${legend_data || []}"
                     },
                     "xAxis": {
                       "type": "category",
-                      "data": "${xAxis || []}"
+                      "data": "${xaxis_data || []}"
                     },
                     "yAxis": {
                       "type": "value"
                     },
-                    "series": "${series || []}"
+                    "series": [
+                      {
+                        "name": "用户事件",
+                        "type": "line",
+                        "data": "${series_data_user\\\\-event || []}"
+                      }
+                    ]
                   }
                 }
               ]
@@ -268,13 +274,14 @@ public class DataVisualizationDemoResponseService {
               "body": [
                 {
                   "type": "chart",
-                  "api": "/zenvis/api/v1/retrieval/aggregate/trend?entity=user-event&timeField=server_time&interval=hour&metric=count",
+                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
                   "config": {
                     "title": {"text": "用户事件上报趋势"},
                     "tooltip": {"trigger": "axis"},
-                    "xAxis": {"type": "category", "data": "${xAxis || []}"},
+                    "legend": {"data": "${legend_data || []}"},
+                    "xAxis": {"type": "category", "data": "${xaxis_data || []}"},
                     "yAxis": {"type": "value"},
-                    "series": "${series || []}"
+                    "series": [{"name": "用户事件", "type": "line", "data": "${series_data_user\\\\-event || []}"}]
                   }
                 }
               ]
@@ -307,14 +314,14 @@ public class DataVisualizationDemoResponseService {
                 },
                 {
                   "type": "chart",
-                  "api": "/zenvis/api/v1/retrieval/aggregate/trend?entity=user-event&timeField=server_time&interval=hour&metric=count",
+                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
                   "config": {
-                    "title": {"text": "近 24 小时上报趋势"},
+                    "title": {"text": "近 7 天上报趋势"},
                     "tooltip": {"trigger": "axis"},
-                    "legend": {"data": "${legend || []}"},
-                    "xAxis": {"type": "category", "data": "${xAxis || []}"},
+                    "legend": {"data": "${legend_data || []}"},
+                    "xAxis": {"type": "category", "data": "${xaxis_data || []}"},
                     "yAxis": {"type": "value"},
-                    "series": "${series || []}"
+                    "series": [{"name": "用户事件", "type": "line", "data": "${series_data_user\\\\-event || []}"}]
                   }
                 }
               ]
@@ -818,7 +825,7 @@ public class DataVisualizationDemoResponseService {
                       "description": "确认看板展示指标。",
                       "suggestions": [
                         {"label": "上报量 + 类型分布", "value": "展示总上报量、登录事件、删除事件、修改事件和事件类型分布"},
-                        {"label": "趋势优先", "value": "重点展示近 24 小时上报趋势"},
+                        {"label": "趋势优先", "value": "重点展示近 7 天上报趋势"},
                         {"label": "运营概览", "value": "展示核心指标卡片、趋势图和事件类型分布"}
                       ],
                       "placeholder": "也可以补充指标名称和布局要求"
@@ -863,10 +870,10 @@ public class DataVisualizationDemoResponseService {
                 ```zenvis:visualization-chart-preview
                 {
                   "title": "用户事件上报趋势图",
-                  "content": "按 server_time 小时聚合，并按 event_type 分组展示用户事件上报趋势。",
+                  "content": "按系统创建时间统计近 7 天用户事件上报趋势。",
                   "chartType": "line",
                   "entity": "%s",
-                  "api": "/zenvis/api/v1/retrieval/aggregate/trend?entity=user-event&timeField=server_time&interval=hour&metric=count",
+                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
                   "echartsOption": %s,
                   "amisConfig": %s,
                   "action": "%s"
@@ -889,10 +896,10 @@ public class DataVisualizationDemoResponseService {
                   "id": "demo-user-event-report-trend",
                   "title": "图表库记录已创建",
                   "name": "用户事件上报趋势图",
-                  "description": "按小时和事件类型统计用户事件上报趋势的临时 amis 图表配置。",
+                  "description": "按系统创建时间统计近 7 天用户事件上报趋势的临时 amis 图表配置。",
                   "entity": "%s",
                   "chartType": "line",
-                  "api": "/zenvis/api/v1/retrieval/aggregate/trend?entity=user-event&timeField=server_time&interval=hour&metric=count",
+                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
                   "status": "temporary",
                   "config": %s
                 }

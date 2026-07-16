@@ -2,6 +2,7 @@ package com.coolxer.service.dih;
 
 import com.coolxer.commons.enums.MenuLevel;
 import com.coolxer.commons.enums.MenuType;
+import com.coolxer.commons.enums.MessageType;
 import com.coolxer.dao.mysql.entity.Dashboard;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.Menu;
@@ -82,9 +83,16 @@ class DataVisualizationDemoResponseServiceTest {
                 .contains("zenvis:visualization-chart-preview")
                 .contains("echartsOption")
                 .contains("amisConfig")
+                .contains("/zenvis/api/v1/entity/trend?entities=user-event")
+                .contains("legend_data")
+                .contains("xaxis_data")
+                .contains("series_data_user\\\\-event")
                 .contains("\"action\": \"data_visualization.add_chart_library\"")
                 .doesNotContain("```zenvis:confirm")
                 .doesNotContain("是否加入图表库");
+        assertThat(new ChatMessagePartParser().parse(response, MessageType.TEXT))
+                .extracting("type")
+                .contains("visualization-chart-preview");
     }
 
     @Test

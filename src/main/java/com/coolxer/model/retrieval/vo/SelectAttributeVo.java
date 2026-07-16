@@ -15,7 +15,7 @@ public class SelectAttributeVo {
 
     private String operatorName;
 
-    private boolean aggregateLink;
+    private String linkTemplate;
 
     private List<String> valueList;
 

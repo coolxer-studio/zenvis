@@ -42,7 +42,6 @@ http://localhost:11001/swagger-ui/index.html
 | 文档 | 说明 |
 | :--- | :--- |
 | [AboutController](../api接口文档/AboutController.md) | 系统关于信息 |
-| [AggregateController](../api接口文档/AggregateController.md) | 数据聚合 |
 | [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | AI分析任务 |
 | [AssetRuleController](../api接口文档/AssetRuleController.md) | 资产规则 |
 | [BusinessServiceController](../api接口文档/BusinessServiceController.md) | 业务应用服务注册、事件与只读管理查询 |

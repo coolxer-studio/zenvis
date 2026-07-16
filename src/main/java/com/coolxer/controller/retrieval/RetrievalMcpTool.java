@@ -1,16 +1,13 @@
 package com.coolxer.controller.retrieval;
 
 import com.coolxer.model.base.vo.PageRowsVo;
-import com.coolxer.model.dashboard.vo.StackedLineChartVo;
 import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleDeleteDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleUpdateDto;
-import com.coolxer.model.retrieval.vo.AggregateMsgInfoVo;
 import com.coolxer.model.retrieval.vo.DataAttributeResultVo;
 import com.coolxer.model.retrieval.vo.DataEntityResultVo;
 import com.coolxer.model.retrieval.vo.DataListVo;
-import com.coolxer.service.retrieval.AggregateService;
 import com.coolxer.service.retrieval.EntityCoreService;
 import com.coolxer.service.retrieval.RetrievalService;
 import com.coolxer.service.dih.mcp.McpToolApproval;
@@ -36,9 +33,6 @@ import static com.coolxer.commons.enums.McpToolRiskLevel.LOW;
 @Slf4j
 @Service
 public class RetrievalMcpTool {
-
-    @Autowired
-    private AggregateService aggregateService;
 
     @Autowired
     private EntityCoreService entityCoreService;
@@ -137,24 +131,6 @@ public class RetrievalMcpTool {
     public DataAttributeResultVo listDisplayAttribute(@ToolParam(description = "实体名称，可选") String entity,
                                                       @ToolParam(description = "规则ID，可选") Integer ruleId) {
         return retrievalService.listAttributeForDisplay(entity, ruleId, currentUserId());
-    }
-
-    /**
-     * msg基础数据标签
-     */
-    @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_msg_tag", description = "获取msg基础数据标签信息")
-    public AggregateMsgInfoVo msgTag(@ToolParam(description = "查询参数，Map形式") Map<String, String> params) {
-        return aggregateService.findAgendaTagsByParams(params);
-    }
-
-    /**
-     * 数据分布趋势
-     */
-    @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_msg_trend", description = "获取数据分布趋势图数据")
-    public StackedLineChartVo msgTrend(@ToolParam(description = "查询参数，Map形式") Map<String, String> params) {
-        return aggregateService.findMsgTrend(params);
     }
 
     /**

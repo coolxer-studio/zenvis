@@ -172,7 +172,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         dataAttributeVo.setName(dataAttribute.getName());
         dataAttributeVo.setLabel(dataAttribute.getLabel());
         dataAttributeVo.setDescription(dataAttribute.getDescription());
-        dataAttributeVo.setAggregateLink(dataAttribute.isAggregateLink());
+        dataAttributeVo.setLinkTemplate(dataAttribute.getLinkTemplate());
         dataAttributeVo.setAutoComplete(dataAttribute.isAutoComplete());
         if (Objects.nonNull(dataAttribute.getRetrievalType())) {
             dataAttributeVo.setRetrievalType(dataAttribute.getRetrievalType());
@@ -199,7 +199,7 @@ public class RetrievalServiceImpl implements RetrievalService {
             selectAttributeVo.setName(criteria.getAttribute().getName());
             selectAttributeVo.setLabel(criteria.getAttribute().getLabel());
             selectAttributeVo.setOperatorName(criteria.getOperator().getName());
-            selectAttributeVo.setAggregateLink(criteria.getAttribute().isAggregateLink());
+            selectAttributeVo.setLinkTemplate(criteria.getAttribute().getLinkTemplate());
             if (Objects.nonNull(criteria.getAttribute().getDisplayType())) {
                 selectAttributeVo.setDisplayType(criteria.getAttribute().getDisplayType());
             }
@@ -239,7 +239,7 @@ public class RetrievalServiceImpl implements RetrievalService {
             SelectAttributeVo selectAttributeVo = new SelectAttributeVo();
             selectAttributeVo.setName(attribute.getName());
             selectAttributeVo.setLabel(attribute.getLabel());
-            selectAttributeVo.setAggregateLink(attribute.isAggregateLink());
+            selectAttributeVo.setLinkTemplate(attribute.getLinkTemplate());
             if (Objects.nonNull(attribute.getDisplayType())) {
                 selectAttributeVo.setDisplayType(attribute.getDisplayType());
             }
@@ -256,7 +256,7 @@ public class RetrievalServiceImpl implements RetrievalService {
                     SelectAttributeVo selectAttributeVo = new SelectAttributeVo();
                     selectAttributeVo.setName(attribute.getName());
                     selectAttributeVo.setLabel(attribute.getLabel());
-                    selectAttributeVo.setAggregateLink(attribute.isAggregateLink());
+                    selectAttributeVo.setLinkTemplate(attribute.getLinkTemplate());
                     if (Objects.nonNull(attribute.getDisplayType())) {
                         selectAttributeVo.setDisplayType(attribute.getDisplayType());
                     }

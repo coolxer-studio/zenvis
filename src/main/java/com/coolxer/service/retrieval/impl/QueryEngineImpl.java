@@ -387,67 +387,6 @@ public class QueryEngineImpl implements QueryEngine {
         return resultMap;
     }
 
-    @Override
-    @Transactional
-    public Map<String, Object> groupAgendaTagsWithWhereClause(String tableName, String whereClause) {
-        if (StringUtils.isNotEmpty(whereClause)) {
-            whereClause += " and length(agenda_tags) > 0";
-        }
-        String sql = "select arrayStringConcat(groupArray(arrayStringConcat(agenda_tags,',')),',') as agenda_tags_array from " +
-                requireIdentifier(tableName, "表名") + " ";
-        String querySql = sql + whereClause;
-        Query query = entityManager.createNativeQuery(querySql);
-        // 执行查询
-        List<String> result = query.getResultList();
-        String agendaTagsArrayString = "";
-        if (result.size() > 0) {
-            agendaTagsArrayString = result.get(0);
-        }
-        Map<String, Object> resultMap = new HashMap<>();
-        resultMap.put("agenda_tags_array", agendaTagsArrayString);
-        return resultMap;
-    }
-
-    @Override
-    public List<Map<String, Object>> countTypeByHourWithWhereClause(String tableName, String whereClause) {
-        String querySql = "select count(*) as msg_count, fact_type as group_key, toHour(server_time) as time from " +
-                requireIdentifier(tableName, "表名") +
-                " " +
-                whereClause +
-                " group by fact_type ,time order by fact_type ,time";
-        return countTypeWithWhereClause(querySql);
-    }
-
-    @Override
-    public List<Map<String, Object>> countTypeByDayWithWhereClause(String tableName, String whereClause) {
-        String querySql = "select count(*) as msg_count, fact_type as group_key, toDate(server_time) as time from " +
-                requireIdentifier(tableName, "表名") +
-                " " +
-                whereClause +
-                " group by fact_type ,time order by fact_type ,time";
-        return countTypeWithWhereClause(querySql);
-    }
-
-    @Transactional
-    private List<Map<String, Object>> countTypeWithWhereClause(String querySql) {
-        Query query = entityManager.createNativeQuery(querySql);
-        // 执行查询
-        List<Map<String, Object>> resultMapList = new ArrayList<>();
-        List<Object[]> result = query.getResultList();
-        result.forEach(row -> {
-            if (row.length < 3) {
-                // 日志记录或抛出自定义异常
-                throw new IllegalArgumentException("查询结果字段数量不足，期望至少3个字段");
-            }
-            Map<String, Object> resultMap = new HashMap<>();
-            resultMap.put("msg_count", row[0]);
-            resultMap.put("group_key", row[1]);
-            resultMap.put("time", row[2]);
-            resultMapList.add(resultMap);
-        });
-        return resultMapList;
-    }
-
     @Transactional
     private BigDecimal queryCount(String tableName, String whereClause) {
         String countSql = "select count(*) from " + requireIdentifier(tableName, "表名") + whereClause;

@@ -77,6 +77,11 @@ class PushTaskMcpToolTest {
         }
 
         @Override
+        public List<PushTaskVo> findAll() {
+            return List.of();
+        }
+
+        @Override
         public List<PushTaskVo> findBySourceMark(String sourceMark) {
             findBySourceMarkValue = sourceMark;
             return findBySourceMarkResult;

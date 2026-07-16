@@ -86,14 +86,21 @@ public class PushTashServiceImpl implements PushTaskService {
     }
 
     @Override
-    public List<PushTaskVo> findBySourceMark(String sourceMark) {
+    public List<PushTaskVo> findAll() {
         ResponseModel response = restTemplate.getForObject(customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/all", ResponseModel.class);
-        if (response.succeed()) {
-            List<PushTaskVo> pushTaskList = JacksonConfig.OBJECT_MAPPER.convertValue(response.getData(),
+        if (response != null && response.succeed()) {
+            return JacksonConfig.OBJECT_MAPPER.convertValue(response.getData(),
                     JacksonConfig.OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, PushTaskVo.class));
-            return pushTaskList.stream().filter(pushTaskVo -> pushTaskVo.getSource().equals("SYSTEM") && pushTaskVo.getMark() != null && pushTaskVo.getMark().equals(sourceMark)).toList();
         }
-        return Collections.emptyList();
+        throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "数据推送服务返回失败");
+    }
+
+    @Override
+    public List<PushTaskVo> findBySourceMark(String sourceMark) {
+        return findAll().stream()
+                .filter(pushTaskVo -> "SYSTEM".equals(pushTaskVo.getSource()))
+                .filter(pushTaskVo -> Objects.equals(pushTaskVo.getMark(), sourceMark))
+                .toList();
     }
 
     @Override

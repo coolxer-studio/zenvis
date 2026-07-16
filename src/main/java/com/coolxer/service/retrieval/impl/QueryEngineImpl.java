@@ -3,6 +3,7 @@ package com.coolxer.service.retrieval.impl;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.retrieval.meta.DataAttribute;
+import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.model.retrieval.query.ColumnCriteria;
 import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
 import com.coolxer.model.retrieval.query.DataQuery;
@@ -38,6 +39,8 @@ public class QueryEngineImpl implements QueryEngine {
     private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 200;
+    private static final DateTimeFormatter TREND_BOUNDARY_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     @Value("${app.retrieval.time-zone:Asia/Shanghai}")
     private String retrievalTimeZone = "Asia/Shanghai";
@@ -143,7 +146,7 @@ public class QueryEngineImpl implements QueryEngine {
                     .collect(Collectors.joining(" and "));
         }
         // 补充时间条件
-        whereClause += " and insert_time >= toStartOfDay(now())";
+        whereClause += " and " + MetaDataConstants.INSERT_TIME_COLUMN + " >= toStartOfDay(now())";
         return queryCount(tableName, whereClause);
     }
 
@@ -165,6 +168,93 @@ public class QueryEngineImpl implements QueryEngine {
             resultMap.put(String.valueOf(row[0]), row[1]);
         });
         return resultMap;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Long> countByTimeRange(String tableName,
+                                              String timeField,
+                                              String columnType,
+                                              String timeUnit,
+                                              Date startTime,
+                                              Date endTime,
+                                              boolean hourly) {
+        if (startTime == null || endTime == null || !startTime.before(endTime)) {
+            throw new ApiException(ResultCodeEnum.INVALID_TIME_RANGE.getCode(), "趋势统计时间范围不合法");
+        }
+        String safeTable = requireIdentifier(tableName, "表名");
+        String safeField = requireIdentifier(timeField, "字段名");
+        String timeExpression = trendTimeExpression(safeField, columnType, timeUnit);
+        String bucketExpression = hourly
+                ? "formatDateTime(toStartOfHour(" + timeExpression + "), '%H:00')"
+                : "formatDateTime(toStartOfDay(" + timeExpression + "), '%F')";
+        String timezone = ZoneId.of(retrievalTimeZone).getId().replace("'", "''");
+        String sql = "SELECT " + bucketExpression + " AS group_key, COUNT(*) AS count FROM "
+                + safeTable + " WHERE " + timeExpression + " >= toDateTime64(:startTime, 3, '" + timezone + "') AND "
+                + timeExpression + " < toDateTime64(:endTime, 3, '" + timezone
+                + "') GROUP BY group_key ORDER BY group_key";
+        Query query = entityManager.createNativeQuery(sql);
+        query.setParameter("startTime", formatTrendBoundary(startTime));
+        query.setParameter("endTime", formatTrendBoundary(endTime));
+        Map<String, Long> resultMap = new LinkedHashMap<>();
+        List<Object[]> result = query.getResultList();
+        for (Object[] row : result) {
+            if (row == null || row.length < 2) {
+                throw new IllegalArgumentException("趋势统计查询结果字段数量不足");
+            }
+            Object count = row[1];
+            long value = count instanceof Number number
+                    ? number.longValue() : Long.parseLong(String.valueOf(count));
+            resultMap.put(String.valueOf(row[0]), value);
+        }
+        return resultMap;
+    }
+
+    private String formatTrendBoundary(Date value) {
+        return TREND_BOUNDARY_FORMATTER.format(value.toInstant().atZone(ZoneId.of(retrievalTimeZone)));
+    }
+
+    private String trendTimeExpression(String safeField, String columnType, String timeUnit) {
+        String baseType = unwrapColumnType(columnType).toLowerCase(Locale.ROOT);
+        String timezone = ZoneId.of(retrievalTimeZone).getId().replace("'", "''");
+        if (baseType.startsWith("datetime")) {
+            return "toTimeZone(" + safeField + ", '" + timezone + "')";
+        }
+        if (baseType.startsWith("date")) {
+            return "toDateTime(" + safeField + ", '" + timezone + "')";
+        }
+        if (isNumericTrendType(baseType)) {
+            String normalizedUnit = StringUtils.lowerCase(StringUtils.trim(timeUnit), Locale.ROOT);
+            if ("seconds".equals(normalizedUnit)) {
+                return "toDateTime(" + safeField + ", '" + timezone + "')";
+            }
+            if ("milliseconds".equals(normalizedUnit)) {
+                return "toDateTime(" + safeField + " / 1000, '" + timezone + "')";
+            }
+        }
+        throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "趋势时间字段类型或单位不受支持");
+    }
+
+    private String unwrapColumnType(String columnType) {
+        String current = StringUtils.trimToEmpty(columnType);
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (String wrapper : List.of("Nullable", "LowCardinality")) {
+                String prefix = wrapper + "(";
+                if (current.regionMatches(true, 0, prefix, 0, prefix.length()) && current.endsWith(")")) {
+                    current = current.substring(prefix.length(), current.length() - 1).trim();
+                    changed = true;
+                }
+            }
+        }
+        return current;
+    }
+
+    private boolean isNumericTrendType(String columnType) {
+        return columnType.matches("u?int(8|16|32|64|128|256)")
+                || columnType.matches("float(32|64)")
+                || columnType.startsWith("decimal");
     }
 
     @Override
@@ -424,7 +514,9 @@ public class QueryEngineImpl implements QueryEngine {
         String operatorName = columnCriteria.getOperatorName();
         List<String> valueList = columnCriteria.getValueList() == null ? Collections.emptyList() : columnCriteria.getValueList();
         if (StringUtils.isNotBlank(columnCriteria.getRetrievalType())) {
-            valueList = valueList.stream().map(value -> convertValueList(value, columnCriteria.getRetrievalType())).toList();
+            valueList = valueList.stream()
+                    .map(value -> convertValueList(value, columnCriteria.getRetrievalType(), columnCriteria.getColumnType()))
+                    .toList();
         }
         if (isNullOperator(operatorName)) {
             return buildNullCriteriaSql(columnName, operatorName, columnCriteria.getColumnType());
@@ -488,9 +580,12 @@ public class QueryEngineImpl implements QueryEngine {
                 .collect(Collectors.joining(" " + logic + " ")) + ")";
     }
 
-    private String convertValueList(String origin, String retrievalType) {
+    private String convertValueList(String origin, String retrievalType, String columnType) {
         switch (retrievalType) {
             case "date":
+                if (isTemporalType(columnType)) {
+                    return origin;
+                }
                 long epoch = LocalDateTime.parse(origin, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                         .atZone(ZoneId.of(retrievalTimeZone)).toInstant().toEpochMilli();
                 return Long.toString(epoch);
@@ -529,10 +624,26 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     private String formatSingleValue(String value, String columnType, String retrievalType) {
+        if (StringUtils.equalsIgnoreCase(retrievalType, "date") && isTemporalType(columnType)) {
+            return temporalLiteral(value, columnType);
+        }
         if (StringUtils.equalsIgnoreCase(retrievalType, "date") || isNumericType(columnType)) {
             return requireNumberLiteral(value);
         }
         return quote(value);
+    }
+
+    private String temporalLiteral(String value, String columnType) {
+        String baseType = unwrapColumnType(columnType).toLowerCase(Locale.ROOT);
+        if (baseType.startsWith("datetime64")) {
+            String timezone = ZoneId.of(retrievalTimeZone).getId().replace("'", "''");
+            return "toDateTime64(" + quote(value) + ", 3, '" + timezone + "')";
+        }
+        if (baseType.startsWith("datetime")) {
+            String timezone = ZoneId.of(retrievalTimeZone).getId().replace("'", "''");
+            return "toDateTime(" + quote(value) + ", '" + timezone + "')";
+        }
+        return "toDate(" + quote(value) + ")";
     }
 
     private String requireNumberLiteral(String value) {
@@ -551,6 +662,10 @@ public class QueryEngineImpl implements QueryEngine {
                 || lowerType.contains("float")
                 || lowerType.contains("decimal")
                 || lowerType.contains("double");
+    }
+
+    private boolean isTemporalType(String columnType) {
+        return unwrapColumnType(columnType).toLowerCase(Locale.ROOT).startsWith("date");
     }
 
     private boolean isStringType(String columnType) {

@@ -1,9 +1,10 @@
 package com.coolxer.service.retrieval.impl;
 
+import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.MetaData;
+import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.model.retrieval.vo.DataAttributeVo;
-import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.utils.JacksonUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -63,6 +64,84 @@ class MetaDataServiceImplTest {
     }
 
     @Test
+    void injectsBuiltInInsertTimeForEveryEntity() throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, """
+                {
+                  "entity": [{
+                    "id": 1,
+                    "name": "asset",
+                    "table_name": "asset_table"
+                  }],
+                  "attribute": [{
+                    "id": 10,
+                    "entity": "asset",
+                    "name": "name",
+                    "column_name": "name",
+                    "column_type": "String"
+                  }]
+                }
+                """);
+        CustomWebConfig config = mock(CustomWebConfig.class);
+        when(config.getRetrievalMetaFilePath()).thenReturn(tempDir.toString());
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        ReflectionTestUtils.setField(service, "customWebConfig", config);
+
+        MetaData loaded = service.loadMetaData();
+        DataAttribute insertTime = service.getDataAttributeByName(
+                "asset", MetaDataConstants.INSERT_TIME_ATTRIBUTE);
+
+        assertThat(loaded.getAttribute()).hasSize(2);
+        assertThat(insertTime).isNotNull();
+        assertThat(insertTime.getLabel()).isEqualTo("创建时间");
+        assertThat(insertTime.getDescription()).isEqualTo("创建时间");
+        assertThat(insertTime.getColumnName()).isEqualTo(MetaDataConstants.INSERT_TIME_COLUMN);
+        assertThat(insertTime.getColumnType()).isEqualTo("DateTime64(3)");
+        assertThat(insertTime.getRetrievalType()).isEqualTo("date");
+        assertThat(insertTime.isDisplaySelected()).isTrue();
+        assertThat(insertTime.isMustCandidate()).isFalse();
+        assertThat(insertTime.getOperators()).contains(
+                "greatthan", "lessthan", "greatequalthan", "lessequalthan");
+    }
+
+    @Test
+    void reservedInsertTimeCollisionKeepsPreviousSnapshot() throws Exception {
+        Path metadata = tempDir.resolve("meta.json");
+        Files.writeString(metadata, """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "name", "column_name": "name", "column_type": "String"}]
+                }
+                """);
+        CustomWebConfig config = mock(CustomWebConfig.class);
+        when(config.getRetrievalMetaFilePath()).thenReturn(tempDir.toString());
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        ReflectionTestUtils.setField(service, "customWebConfig", config);
+        MetaData first = service.loadMetaData();
+
+        Files.writeString(metadata, """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [{
+                    "id": 10,
+                    "entity": "asset",
+                    "name": "zenvis_insert_time",
+                    "column_name": "created_at",
+                    "column_type": "DateTime64(3)"
+                  }]
+                }
+                """);
+
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataAttributeByName("asset", MetaDataConstants.INSERT_TIME_ATTRIBUTE))
+                .isNotNull()
+                .extracting(DataAttribute::getColumnName)
+                .isEqualTo(MetaDataConstants.INSERT_TIME_COLUMN);
+    }
+
+    @Test
     void serializesDataAttributeVoAutoCompleteAsSnakeCase() {
         DataAttributeVo dataAttributeVo = new DataAttributeVo();
         dataAttributeVo.setName("device_name");
@@ -91,7 +170,7 @@ class MetaDataServiceImplTest {
         assertThat(first).isNotNull();
         assertThat(service.getDataEntityById(1).getName()).isEqualTo("asset");
         assertThat(service.getDataAttributeById(10).getName()).isEqualTo("ip");
-        assertThat(service.getAllDataAttribute()).hasSize(1);
+        assertThat(service.getAllDataAttribute()).hasSize(2);
 
         Files.writeString(metadata, "{ invalid json }");
         MetaData retained = service.loadMetaData();

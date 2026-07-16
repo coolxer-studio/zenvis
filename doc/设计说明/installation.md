@@ -143,6 +143,14 @@ docker run -d \
 cat deploy/open_config/web_config/init/clickhouse-init.sql | docker exec -i zenvis-clickhouse clickhouse-client
 ```
 
+当前版本不再创建固定的 `zenvis.msg` 业务表，实体表由元数据 `auto_create` 配置按需创建。旧版本升级后如已确认不再需要历史 `msg` 数据，可手工清理：
+
+```sql
+DROP TABLE IF EXISTS zenvis.msg;
+```
+
+升级过程不会自动执行该语句，避免误删已有数据。
+
 #### Redis
 
 ```bash

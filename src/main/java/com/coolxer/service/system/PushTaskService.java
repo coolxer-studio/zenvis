@@ -12,6 +12,8 @@ public interface PushTaskService {
 
     boolean createAndStart(PushTaskDto pushTaskDto);
 
+    List<PushTaskVo> findAll();
+
     List<PushTaskVo> findBySourceMark(String sourceMark);
 
     boolean deleteBySourceMark(String sourceMark);

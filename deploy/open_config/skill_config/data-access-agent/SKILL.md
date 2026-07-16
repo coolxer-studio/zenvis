@@ -118,7 +118,8 @@
 - `data_source` 固定填 `clickhouse`。
 - 默认生成 `entity.auto_create`，必须包含 `engine: "MergeTree"`、`order_by`、`partition_by`；`order_by` 中字段必须存在于本实体 attribute 的 `column_name`。
 - 需要实体 CRUD/MCP 工具稳定工作时，必须包含物理列 `id`。
-- 需要 `entity_trend` 时包含 `insert_time`；需要 `retrieval_msg_trend` 时包含 `server_time` 和 `fact_type`；需要 `retrieval_msg_tag` 时包含 `agenda_tags`，推荐 `Array(String)`。
+- 平台会为每个实体自动注入 `zenvis_insert_time` 创建时间字段，并在写入时自动赋值；元数据 JSON 不得生成该保留字段，数据样例和推送映射也不得写入该字段。实体趋势统计直接使用此字段，不需要用户另行配置时间属性。
+- 需要 `retrieval_msg_trend` 时包含 `server_time` 和 `fact_type`；需要 `retrieval_msg_tag` 时包含 `agenda_tags`，推荐 `Array(String)`。
 - 每个 `attribute` 必填 `id`、`entity`、`name`、`label`、`description`、`column_name`、`column_type`、`operators`、`display_selected`。
 - `Array(String)` 字段设置 `display_type: "array"`；JSON 字段设置 `display_type: "json"`。
 - `display_name` 一般不要生成；如必须生成，只能是 SQL select/alias 可映射字段名，不能是中文。

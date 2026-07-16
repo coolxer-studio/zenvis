@@ -84,14 +84,30 @@ public class DataInitiator {
      * 初始化默认看板
      */
     private void initDefaultDashboard() {
+        if (dashboardRepository.findByCode("system-board").isPresent()) {
+            return;
+        }
+        Dashboard legacyDashboard = dashboardRepository.findByCode("msg-board").orElse(null);
+        if (legacyDashboard != null) {
+            legacyDashboard.setName("系统状态总览");
+            legacyDashboard.setCode("system-board");
+            dashboardRepository.save(legacyDashboard);
+            log.info("已将内置看板编码从 msg-board 迁移为 system-board");
+            return;
+        }
         if (CollectionUtils.isEmpty(dashboardRepository.findAll())) {
             // 需要初始化
             ArrayList<Dashboard> dashboardArrayList = new ArrayList<>();
-            dashboardArrayList.add(new Dashboard().setName("系统总览").setCode("msg-board").setType(DashboardType.BUILT).setUrl(""));
+            dashboardArrayList.add(new Dashboard().setName("系统状态总览").setCode("system-board").setType(DashboardType.BUILT).setUrl(""));
             dashboardArrayList.add(new Dashboard().setName("外链接视图-测试").setCode("link-test-baidu").setType(DashboardType.LINK).setUrl("https://www.baidu.com"));
             dashboardRepository.saveAll(dashboardArrayList);
-
+            return;
         }
+        dashboardRepository.save(new Dashboard()
+                .setName("系统状态总览")
+                .setCode("system-board")
+                .setType(DashboardType.BUILT)
+                .setUrl(""));
     }
 
     /**

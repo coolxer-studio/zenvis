@@ -1,7 +1,9 @@
 package com.coolxer.service.core.impl;
 
 import com.coolxer.model.retrieval.meta.DataAttribute;
+import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.MetaData;
+import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.service.core.ClickhouseSchemeService;
 import com.coolxer.service.retrieval.MetaDataService;
 import jakarta.persistence.EntityManager;
@@ -88,9 +90,8 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                     .append(dataEntity.getTableName())
                     .append(" (");
             List<DataAttribute> attributeList = metaDataService.getAllDataAttributeByEntity(dataEntity);
-            attributeList.stream().forEach(dataAttribute -> {
-                alterTableSql.append(dataAttribute.getColumnName()).append(" ").append(dataAttribute.getColumnType()).append(",");
-            });
+            attributeList.forEach(dataAttribute -> alterTableSql
+                    .append(columnDefinition(dataAttribute)).append(","));
             alterTableSql.deleteCharAt(alterTableSql.length() - 1);
             String orderBy = String.format(" ORDER BY ( %s )", String.join(",", dataEntity.getAutoCreate().getOrderBy()));
             String engine = String.format(" ENGINE = %s", dataEntity.getAutoCreate().getEngine());
@@ -99,10 +100,33 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
             alterTableSql.append(")").append(engine).append(orderBy).append(partitionBy)
                     .append(";");
         });
-        // 检查所有sql，修改表结构变化的为alter语句
+        metaData.getEntity().stream()
+                .filter(this::isClickHouseEntity)
+                .forEach(dataEntity -> alterTableSql.append("ALTER TABLE ")
+                        .append(dataEntity.getTableName())
+                        .append(" ADD COLUMN IF NOT EXISTS ")
+                        .append(MetaDataConstants.INSERT_TIME_COLUMN)
+                        .append(" ")
+                        .append(MetaDataConstants.INSERT_TIME_COLUMN_TYPE)
+                        .append(" DEFAULT ")
+                        .append(MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION)
+                        .append(";"));
 
         executeSql(alterTableSql.toString());
         log.info("clickhouse scheme init successfully.");
+    }
+
+    private String columnDefinition(DataAttribute attribute) {
+        String definition = attribute.getColumnName() + " " + attribute.getColumnType();
+        if (MetaDataConstants.isInsertTime(attribute)) {
+            return definition + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION;
+        }
+        return definition;
+    }
+
+    private boolean isClickHouseEntity(DataEntity entity) {
+        return entity != null && (StringUtils.isBlank(entity.getDataSource())
+                || "clickhouse".equalsIgnoreCase(entity.getDataSource()));
     }
 
     @Override
@@ -118,10 +142,11 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                 try {
                     entityManager.createNativeQuery(query).getResultList();
                 } catch (Exception e) {
-                    if (e.getCause().getMessage().contains("TABLE_ALREADY_EXISTS")) {
-                        log.warn(e.getCause().getMessage());
+                    String message = e.getCause() == null ? e.getMessage() : e.getCause().getMessage();
+                    if (StringUtils.contains(message, "TABLE_ALREADY_EXISTS")) {
+                        log.warn(message);
                     } else {
-                        e.printStackTrace();
+                        log.error("ClickHouse schema statement failed: {}", query, e);
                     }
                 }
             }

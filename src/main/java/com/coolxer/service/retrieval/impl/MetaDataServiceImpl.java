@@ -5,6 +5,7 @@ import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.DataOperator;
 import com.coolxer.model.retrieval.meta.MetaData;
+import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.utils.JacksonUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,7 @@ public class MetaDataServiceImpl implements MetaDataService {
         String metadataPath = customWebConfig.getRetrievalMetaFilePath();
         try {
             LoadedMetadata loaded = readMetaData(metadataPath);
+            supplementBuiltInAttributes(loaded.metaData(), metadataPath, loaded.sourceByObject());
             supplementOperators(loaded.metaData());
             MetadataSnapshot next = buildSnapshot(loaded.metaData(), metadataPath, loaded.sourceByObject());
             snapshotRef.set(next);
@@ -216,6 +218,62 @@ public class MetaDataServiceImpl implements MetaDataService {
 
     private <T> List<T> safe(List<T> values) {
         return values == null ? Collections.emptyList() : values;
+    }
+
+    private void supplementBuiltInAttributes(MetaData metaData,
+                                             String sourcePath,
+                                             Map<Object, String> sourceByObject) {
+        if (metaData == null) {
+            return;
+        }
+        if (metaData.getAttribute() == null) {
+            metaData.setAttribute(new ArrayList<>());
+        }
+        List<DataAttribute> attributes = metaData.getAttribute();
+        for (DataEntity entity : safe(metaData.getEntity())) {
+            if (entity == null || StringUtils.isBlank(entity.getName())) {
+                continue;
+            }
+            DataAttribute compatibleConfiguredAttribute = null;
+            for (DataAttribute attribute : new ArrayList<>(attributes)) {
+                if (attribute == null || !entity.getName().equals(attribute.getEntity())) {
+                    continue;
+                }
+                boolean reservedName = MetaDataConstants.INSERT_TIME_ATTRIBUTE.equals(attribute.getName());
+                boolean reservedColumn = MetaDataConstants.INSERT_TIME_COLUMN.equals(attribute.getColumnName());
+                if (!reservedName && !reservedColumn) {
+                    continue;
+                }
+                if (reservedName && reservedColumn) {
+                    compatibleConfiguredAttribute = attribute;
+                    continue;
+                }
+                throw invalid(sourceOf(attribute, sourceByObject, sourcePath),
+                        "字段名和列名" + MetaDataConstants.INSERT_TIME_ATTRIBUTE + "为平台保留字段");
+            }
+            if (compatibleConfiguredAttribute != null) {
+                attributes.remove(compatibleConfiguredAttribute);
+                log.warn("实体{}显式配置了平台内置创建时间字段，已使用系统定义替代", entity.getName());
+            }
+            DataAttribute insertTime = builtInInsertTime(entity.getName());
+            attributes.add(insertTime);
+            sourceByObject.put(insertTime, sourceOf(entity, sourceByObject, sourcePath));
+        }
+    }
+
+    private DataAttribute builtInInsertTime(String entityName) {
+        DataAttribute attribute = new DataAttribute();
+        attribute.setEntity(entityName);
+        attribute.setName(MetaDataConstants.INSERT_TIME_ATTRIBUTE);
+        attribute.setLabel("创建时间");
+        attribute.setDescription("创建时间");
+        attribute.setColumnName(MetaDataConstants.INSERT_TIME_COLUMN);
+        attribute.setColumnType(MetaDataConstants.INSERT_TIME_COLUMN_TYPE);
+        attribute.setRetrievalType("date");
+        attribute.setOperators(List.of("greatthan", "lessthan", "greatequalthan", "lessequalthan"));
+        attribute.setDisplaySelected(true);
+        attribute.setMustCandidate(false);
+        return attribute;
     }
 
     private void supplementOperators(MetaData metaData) {

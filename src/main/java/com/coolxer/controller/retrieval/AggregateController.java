@@ -1,167 +1,46 @@
 package com.coolxer.controller.retrieval;
 
-import com.coolxer.configuration.CustomWebConfig;
-import com.coolxer.controller.BaseController;
-import com.coolxer.dao.clickhouse.repository.MsgRepository;
-import com.coolxer.model.base.dto.BaseQueryDto;
-import com.coolxer.model.base.vo.PageView;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.dashboard.vo.StackedLineChartVo;
 import com.coolxer.model.retrieval.vo.AggregateMsgInfoVo;
-import com.coolxer.model.retrieval.vo.DataMsgVo;
 import com.coolxer.service.retrieval.AggregateService;
-import com.coolxer.utils.DateUtil;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
-import java.util.Date;
 import java.util.Map;
 
-/**
- * 数据检索
- */
 @Tag(name = "数据检索")
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/retrieval/aggregate")
-public class AggregateController extends BaseController {
+public class AggregateController {
 
+    private final AggregateService aggregateService;
 
-    @Autowired
-    private CustomWebConfig customWebConfig;
+    public AggregateController(AggregateService aggregateService) {
+        this.aggregateService = aggregateService;
+    }
 
-    @Autowired
-    private MsgRepository msgRepository;
-
-    @Autowired
-    private AggregateService aggregateService;
-
-    /**
-     * 设备详情
-     *
-     * @return 结果
-     */
-    @GetMapping(value = "/msg/tag")
-    @Operation(summary = "msg基础数据标签", description = "msg基础数据标签")
+    @GetMapping("/msg/tag")
+    @Operation(summary = "实体聚合标签", description = "按实体元数据和检索条件统计标签")
     public ResponseWrap<AggregateMsgInfoVo> msgTag(@RequestParam Map<String, String> params) {
-        // 验证必需参数
-        if (params == null || params.isEmpty()) {
-            throw new IllegalArgumentException("缺少必需参数");
-        }
-        //返回数据
+        requireParams(params);
         return ResponseWrap.success(aggregateService.findAgendaTagsByParams(params));
     }
 
-    /**
-     * 数据分布
-     *
-     * @return 结果
-     */
-    @GetMapping(value = "/msg/trend")
-    @Operation(summary = "数据分布", description = "数据分布")
+    @GetMapping("/msg/trend")
+    @Operation(summary = "实体数据分布", description = "按实体元数据和检索条件统计数据分布")
     public ResponseWrap<StackedLineChartVo> msgTrend(@RequestParam Map<String, String> params) {
-        // 验证必需参数
-        if (params == null || params.isEmpty()) {
-            throw new IllegalArgumentException("缺少必需参数");
-        }
-
-        //返回数据
+        requireParams(params);
         return ResponseWrap.success(aggregateService.findMsgTrend(params));
     }
 
-
-//    /**
-//     * 设备详情
-//     *
-//     * @return 结果
-//     */
-//    @GetMapping(value = "/info")
-//    @Operation(summary = "设备详情", description = "设备详情")
-//    public ResponseWrap<DeviceInfoVo> info(@RequestParam(value = "id") String id, @RequestParam(value = "start_time") @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date startTime, @RequestParam(value = "end_time") @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date endTime) {
-//
-//        // 1
-//        DeviceInfoVo.Info deviceInfo = null;
-//        Map<String, String> msgDevice = msgDeviceRepository.findOneByDeviceId(id);
-//        if (msgDevice != null) {
-//            deviceInfo = new DeviceInfoVo.Info(msgDevice.get("manufacturer"), msgDevice.get("model"),
-//                    msgDevice.get("system_name") + msgDevice.get("system_version"), msgDevice.get("net_type"),
-//                    msgDevice.get("lan_ip"), msgDevice.get("wan_ip"),
-//                    msgDevice.get("platform"), msgDevice.get("detail"));
-//        }
-//
-//        // 2
-//        Map<String, Object> agendaTagsMap = msgRepository.findAgendaTagsByDeviceId(id, startTime, endTime);
-//        ArrayList<DeviceInfoVo.Tag> tags = new ArrayList<>();
-//
-//        if (Objects.nonNull(agendaTagsMap) && agendaTagsMap.containsKey("agenda_tags_array")) {
-//            String agendaTagsArrayString = (String) agendaTagsMap.get("agenda_tags_array");
-//            // 使用flatMap将二维集合展平成一维
-//            List<String> agendaTagsList = List.of(agendaTagsArrayString.split(","));
-//            // 使用Collectors.groupingBy和Collectors.counting来统计元素出现次数
-//            Map<String, Long> agendaTagsCountMap = agendaTagsList.stream()
-//                    .collect(Collectors.groupingBy(e -> e, Collectors.counting()));
-//
-//
-//            Map<String, List<String>> tagMap = new HashMap<>();
-//
-//            agendaTagsCountMap.entrySet().forEach(entry -> {
-//                String key = entry.getKey();
-//                String label = key;
-//                String level = "other";
-//                if (key.contains(":")) {
-//                    label = StringUtils.substringBeforeLast(entry.getKey(), ":");
-//                    level = StringUtils.substringAfterLast(entry.getKey(), ":").toLowerCase();
-//                }
-//                String value = label + "(" + entry.getValue() + ")";
-//                List valueList = tagMap.computeIfAbsent(level, v -> new ArrayList<String>());
-//                valueList.add(value);
-//            });
-//
-//
-//            for (Map.Entry<String, List<String>> entry : tagMap.entrySet()) {
-//                tags.add(new DeviceInfoVo.Tag(entry.getKey(), entry.getValue()));
-//            }
-//        }
-//
-//        //返回数据
-//        return ResponseWrap.success(new DeviceInfoVo(tags, deviceInfo));
-//    }
-
-    /**
-     * 数据链列表
-     *
-     * @param baseQueryDto 分页传输实体
-     * @return 结果
-     */
-    @PostMapping(value = "/detail/{id}")
-    @Operation(summary = "数据链列表", description = "数据链列表")
-    public ResponseWrap<PageView<DataMsgVo>> searchDetailByPage(@PathVariable("id") String id, @RequestBody BaseQueryDto baseQueryDto) {
-
-        Page<Map<String, Object>> msgPage = msgRepository.findByPage(PageRequest.of(baseQueryDto.getPage() - 1, baseQueryDto.getSize()), id, baseQueryDto.getStartTime(), baseQueryDto.getEndTime());
-        PageView<DataMsgVo> pageView = new PageView<>();
-        pageView.setPage(baseQueryDto.getPage());
-        pageView.setSize(baseQueryDto.getSize());
-        pageView.setTotal(msgPage.getTotalElements());
-        pageView.setItems(msgPage.stream().map(
-                msgMap -> {
-                    return new DataMsgVo((BigDecimal) msgMap.get("start_id"), (String) msgMap.get("app_name"), (String) msgMap.get("app_version"),
-                            (String) msgMap.get("platform"), (String) msgMap.get("lan_ip"), (String) msgMap.get("wan_ip"),
-                            (String) msgMap.get("fact_type"), (String) msgMap.get("agenda_tags"), (String) msgMap.get("punish_types"),
-                            (String) msgMap.get("country") + (String) msgMap.get("province") + (String) msgMap.get("city") + (String) msgMap.get("county") + (String) msgMap.get("thoroughfare"),
-                            DateUtil.SIMPLE_DATE_FORMAT.format((Date) msgMap.get("client_time")),
-                            DateUtil.SIMPLE_DATE_FORMAT.format((Date) msgMap.get("server_time")),
-                            (String) msgMap.get("data"));
-                }
-        ).toList());
-
-        return ResponseWrap.success(pageView);
+    private void requireParams(Map<String, String> params) {
+        if (params == null || params.isEmpty()) {
+            throw new IllegalArgumentException("缺少必需参数");
+        }
     }
-
-
 }

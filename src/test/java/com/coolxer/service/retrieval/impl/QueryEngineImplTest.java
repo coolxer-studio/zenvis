@@ -9,16 +9,20 @@ import com.coolxer.model.retrieval.rule.RetrievalPageable;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class QueryEngineImplTest {
 
@@ -99,9 +103,65 @@ class QueryEngineImplTest {
         ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
 
         String value = ReflectionTestUtils.invokeMethod(
-                queryEngine, "convertValueList", "1970-01-01 08:00:00", "date");
+                queryEngine, "convertValueList", "1970-01-01 08:00:00", "date", "Int64");
 
         assertThat(value).isEqualTo("0");
+    }
+
+    @Test
+    void dateRetrievalTypeUsesDateTime64LiteralForTemporalColumn() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+        ColumnCriteria criteria = criteria(
+                "zenvis_insert_time", "DateTime64(3)", "greatequalthan", "2026-07-15 09:00:00");
+        criteria.setRetrievalType("date");
+
+        String criteriaSql = ReflectionTestUtils.invokeMethod(queryEngine, "buildCriteriaSql", criteria);
+
+        assertThat(criteriaSql).isEqualTo(
+                "zenvis_insert_time >= toDateTime64('2026-07-15 09:00:00', 3, 'Asia/Shanghai')");
+    }
+
+    @Test
+    void trendTimeExpressionSupportsSecondsMillisecondsAndDateTime() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+
+        String seconds = ReflectionTestUtils.invokeMethod(
+                queryEngine, "trendTimeExpression", "event_time", "Int64", "seconds");
+        String milliseconds = ReflectionTestUtils.invokeMethod(
+                queryEngine, "trendTimeExpression", "event_time", "Nullable(UInt64)", "milliseconds");
+        String dateTime = ReflectionTestUtils.invokeMethod(
+                queryEngine, "trendTimeExpression", "event_time", "DateTime64(3)", null);
+
+        assertThat(seconds).isEqualTo("toDateTime(event_time, 'Asia/Shanghai')");
+        assertThat(milliseconds).isEqualTo("toDateTime(event_time / 1000, 'Asia/Shanghai')");
+        assertThat(dateTime).isEqualTo("toTimeZone(event_time, 'Asia/Shanghai')");
+    }
+
+    @Test
+    void countByTimeRangeReturnsBucketCounts() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.singletonList(new Object[]{"09:00", 7L}));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+        Date start = new Date(1_000L);
+        Date end = new Date(2_000L);
+
+        Map<String, Long> result = queryEngine.countByTimeRange(
+                "asset_table", "event_time", "Int64", "seconds", start, end, true);
+
+        assertThat(result).containsEntry("09:00", 7L);
+        verify(query).setParameter("startTime", "1970-01-01 08:00:01.000");
+        verify(query).setParameter("endTime", "1970-01-01 08:00:02.000");
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains(
+                "toDateTime64(:startTime, 3, 'Asia/Shanghai')",
+                "toDateTime64(:endTime, 3, 'Asia/Shanghai')");
     }
 
     @Test

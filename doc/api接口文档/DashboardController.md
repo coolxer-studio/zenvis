@@ -16,7 +16,7 @@
 {
   "id": 1,                    // Integer - 看板ID（更新时使用，创建时不传）
   "name": "数据分析看板",     // String - 看板名称（必填）
-  "code": "msg-board",        // String - 路由编码（仅内置看板 BUILT 必填）
+  "code": "system-board",     // String - 路由编码（仅内置看板 BUILT 必填）
   "type": "BUILT",            // DashboardType - 看板类型（必填）
   "configIndex": "user-event-dashboard", // String - 低代码页面看板配置索引
   "htmlPath": "/html-page/demo.html",    // String - HTML页面路径
@@ -49,7 +49,7 @@
 {
   "id": 1,                    // Integer - 看板ID
   "name": "数据分析看板",     // String - 看板名称
-  "code": "msg-board",        // String - 内置看板编码，非内置可为空
+  "code": "system-board",     // String - 内置看板编码，非内置可为空
   "type": "BUILT",            // DashboardType - 看板类型
   "typeDescription": "内置看板", // String - 类型描述
   "configIndex": "",          // String - 低代码页面配置索引
@@ -118,7 +118,7 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/add \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试看板",
-    "code": "msg-board",
+    "code": "system-board",
     "type": "BUILT"
   }'
 ```

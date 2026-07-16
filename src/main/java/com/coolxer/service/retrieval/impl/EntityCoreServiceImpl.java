@@ -5,6 +5,7 @@ import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
+import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
 import com.coolxer.service.retrieval.EntityCoreService;
 import com.coolxer.service.retrieval.MetaDataService;
@@ -237,7 +238,8 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             if (dataEntity != null) {
                 assetNames.add(dataEntity.getName());
                 assetLabels.add(dataEntity.getLabel());
-                Map<String, Object> result = queryEngine.countByDateOfWeek(dataEntity.getTableName(), "insert_time");
+                Map<String, Object> result = queryEngine.countByDateOfWeek(
+                        dataEntity.getTableName(), MetaDataConstants.INSERT_TIME_COLUMN);
                 trendDataList.add(result);
             }
         }
@@ -314,6 +316,10 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             DataAttribute dataAttribute = metaDataService.getDataAttributeByName(entityName, columnName);
             if (dataAttribute == null) {
                 throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "字段不存在: " + columnName);
+            }
+            if (MetaDataConstants.isInsertTime(dataAttribute)) {
+                throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                        MetaDataConstants.INSERT_TIME_ATTRIBUTE + "由系统自动维护，不允许手工写入");
             }
             if (dataAttribute.isMustCandidate() && !dataAttribute.getMapping().containsValue(entry.getValue())) {
                 throw new ApiException(ResultCodeEnum.FIELD_NOT_CANDIDATE.getCode(), ResultCodeEnum.FIELD_NOT_CANDIDATE.getDescription());

@@ -5,6 +5,7 @@ import com.coolxer.model.retrieval.query.DataQuery;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
 
 import java.math.BigDecimal;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -25,6 +26,14 @@ public interface QueryEngine {
     public BigDecimal countToday(String tableName, Map<String, Object> searchMap);
 
     Map<String, Object> countByDateOfWeek(String tableName, String timeField);
+
+    Map<String, Long> countByTimeRange(String tableName,
+                                       String timeField,
+                                       String columnType,
+                                       String timeUnit,
+                                       Date startTime,
+                                       Date endTime,
+                                       boolean hourly);
 
     Map<String, Object> countByField(String tableName, String field);
 

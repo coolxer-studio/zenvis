@@ -4,390 +4,115 @@
 
 | 属性 | 值 |
 | :--- | :--- |
-| **模块** | dashboard（仪表盘） |
-| **Controller** | HomeBoardController |
-| **基础路径** | `/api/v1/dashboard/home` |
-| **描述** | 首页仪表盘数据接口，提供速率、汇总、状态、效率、实时信息及图表数据 |
+| 模块 | dashboard（系统状态看板） |
+| Controller | `HomeBoardController` |
+| 基础路径 | `/api/v1/dashboard/home` |
+| 描述 | 提供平台内容概览、服务健康度、AI任务状态和通用实体上报统计 |
 
----
+## 查询系统状态概览
 
-## 数据模型定义
+- 方法：`GET`
+- 路径：`/api/v1/dashboard/home/overview`
 
-### 3.1 请求模型
+响应数据包括：
 
-#### BaseQueryDto
-
-| 字段名 | 类型 | 必填 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- | :--- |
-| `startTime` | Long | 是 | 查询开始时间（时间戳） | 1704067200000 |
-| `endTime` | Long | 是 | 查询结束时间（时间戳） | 1704153600000 |
-
-### 3.2 响应模型
-
-#### SpeedVo（速率对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `receiveTimeAverage` | double | 平均接收时间 | 12.5 |
-| `receiveTimeCurrent` | double | 当前接收时间 | 10.2 |
-| `processTimeAverage` | double | 平均处理时间 | 8.3 |
-| `processTimeCurrent` | double | 当前处理时间 | 6.1 |
-| `countOfSecondAverage` | double | 平均每秒处理数 | 100.5 |
-| `countOfSecondCurrent` | double | 当前每秒处理数 | 120.0 |
-
-#### SummaryVo（汇总对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `msgTotal` | long | 消息总数 | 1000000 |
-| `deviceTotal` | long | 设备总数 | 10000 |
-| `startTotal` | long | 启动总数 | 5000 |
-
-#### StatusVo（状态对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `status` | String | 系统状态 | "running" |
-| `serviceStatus` | Notice | 服务状态 | {"count": 0, "info": "正常"} |
-| `msgStatus` | Notice | 消息状态 | {"count": 100, "info": "待处理"} |
-| `toDo` | Notice | 待办事项 | {"count": 5, "info": "待审核"} |
-
-**Notice（通知内部类）**
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `count` | int | 数量 | 10 |
-| `info` | String | 描述信息 | "正常" |
-
-#### EfficiencyVo（效率对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `ratio` | int | 效率比率 | 95 |
-| `receiveDelay` | String | 当前接收延迟 | "10ms" |
-| `receiveDelayAverage` | String | 平均接收延迟 | "12ms" |
-| `processDelay` | String | 当前处理延迟 | "8ms" |
-| `processDelayAverage` | String | 平均处理延迟 | "10ms" |
-| `msgCountForMinute` | String | 当前每分钟消息数 | "12000" |
-| `msgCountForMinuteAverage` | String | 平均每分钟消息数 | "10000" |
-
-#### RealInfoVo（实时信息对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `infoList` | List\<String\> | 实时信息列表 | ["设备上线", "告警触发"] |
-
-#### StackedBarChartVo（堆叠柱状图对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `xAxis` | List\<String\> | X轴数据 | ["北京", "上海", "广州"] |
-| `yAxisName` | Set\<String\> | Y轴名称集合 | {"Android", "iOS"} |
-| `yAxisData` | List\<List\<Long\>\> | Y轴数据 | [[1000, 2000], [1500, 2500]] |
-
-#### StackedLineChartVo（堆叠折线图对象）
-
-| 字段名 | 类型 | 含义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `xAxis` | List\<String\> | X轴数据 | ["00:00", "01:00", "02:00"] |
-| `yAxisName` | Set\<String\> | Y轴名称集合 | {"消息数", "设备数"} |
-| `yAxisData` | List\<List\<Long\>\> | Y轴数据 | [[10000, 5000], [12000, 6000]] |
-
----
-
-## 接口列表
-
-| API 路径 | HTTP 方法 | 所属文件 | 功能描述 |
-| :--- | :--- | :--- | :--- |
-| `/api/v1/dashboard/home/speed-stat` | POST | HomeBoardController.java | 获取速率表数据 |
-| `/api/v1/dashboard/home/summary` | POST | HomeBoardController.java | 获取数据总计 |
-| `/api/v1/dashboard/home/status` | POST | HomeBoardController.java | 获取状态信息 |
-| `/api/v1/dashboard/home/efficiency` | POST | HomeBoardController.java | 获取效率数据 |
-| `/api/v1/dashboard/home/real-info` | POST | HomeBoardController.java | 获取实时信息 |
-| `/api/v1/dashboard/home/province-city-stat` | POST | HomeBoardController.java | 获取省-市地域分布 |
-| `/api/v1/dashboard/home/manufacture-system-stat` | POST | HomeBoardController.java | 获取厂商-操作系统分布 |
-| `/api/v1/dashboard/home/msg-trend` | POST | HomeBoardController.java | 获取数据分布趋势 |
-
----
-
-## 接口详细描述
-
-### 5.1 获取速率表数据
-
-- **路径**: `POST /api/v1/dashboard/home/speed-stat`
-- **功能**: 获取当前和平均的接收时间、处理时间及每秒处理数
-
-**请求体**
-
-无请求参数
-
-**成功响应**
+- `status`、`status_description`：`HEALTHY/正常运行` 或 `DEGRADED/部分异常`。
+- `summary`：实体类型数、数据推送任务数、AI分析任务数、业务应用服务数。
+- `notices`：业务服务异常、未正常运行的推送任务、等待审批的AI任务。
+- `service_health`：业务服务实例健康度和近24小时事件数。
+- `business_service_status`：业务应用服务实例按实时有效状态（正常、性能下降、故障、离线）的数量分布。
+- `analysis_task_status`：所有AI分析任务状态及数量，没有数据的状态补零。
+- `recent_analysis_tasks`：最近更新的10个AI分析任务。
+- `push_task_source_available`：数据推送服务是否可访问；不可访问时 `push_task_count` 为 `null`。
 
 ```json
 {
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "receiveTimeAverage": 12.5,
-        "receiveTimeCurrent": 10.2,
-        "processTimeAverage": 8.3,
-        "processTimeCurrent": 6.1,
-        "countOfSecondAverage": 100.5,
-        "countOfSecondCurrent": 120.0
-    }
+  "status": 0,
+  "msg": "请求成功",
+  "data": {
+    "checked_at": "2026-07-15 09:00:00",
+    "status": "HEALTHY",
+    "status_description": "正常运行",
+    "summary": {
+      "entity_count": 2,
+      "push_task_count": 4,
+      "analysis_task_count": 8,
+      "business_service_count": 3
+    },
+    "notices": [],
+    "service_health": {
+      "ratio": 75,
+      "instance_count": 4,
+      "up_count": 3,
+      "abnormal_count": 1,
+      "event_count_24h": 5
+    },
+    "business_service_status": [
+      {"status": "UP", "description": "正常", "count": 3},
+      {"status": "DEGRADED", "description": "性能下降", "count": 1},
+      {"status": "DOWN", "description": "故障", "count": 0},
+      {"status": "OFFLINE", "description": "离线", "count": 0}
+    ],
+    "analysis_task_status": [],
+    "recent_analysis_tasks": [],
+    "push_task_source_available": true
+  }
 }
 ```
 
----
+## 查询实体统计
 
-### 5.2 获取数据总计
+- 方法：`GET`
+- 路径：`/api/v1/dashboard/home/entity-statistics`
+- 参数：`range`，可选值为 `TODAY`、`YESTERDAY`、`LAST_7_DAYS`，默认 `TODAY`。
 
-- **路径**: `POST /api/v1/dashboard/home/summary`
-- **功能**: 获取指定时间范围内的消息总数、设备总数和启动总数
-
-**请求体**
+今天和昨天返回完整24小时横轴，最近7天返回7个自然日横轴。接口按所选时段总量展示Top 10实体，并返回未展示和未参与统计的实体信息。
 
 ```json
 {
-    "startTime": 1704067200000,
-    "endTime": 1704153600000
+  "status": 0,
+  "msg": "请求成功",
+  "data": {
+    "range": "TODAY",
+    "start_time": "2026-07-15 00:00:00",
+    "end_time": "2026-07-15 09:00:00",
+    "granularity": "HOUR",
+    "x_axis": ["00:00", "01:00", "02:00"],
+    "series": [
+      {"name": "security_event", "label": "安全事件", "data": [0, 3, 7], "total": 10}
+    ],
+    "ranking": [
+      {"name": "security_event", "label": "安全事件", "count": 10}
+    ],
+    "omitted_entity_count": 0,
+    "skipped_entities": []
+  }
 }
 ```
 
-**成功响应**
+## 实体元数据要求
+
+平台在加载元数据时会为每个实体自动注入以下只读创建时间属性，用户无需在元数据 JSON 中自行配置；若旧配置中存在同名同列字段，系统会忽略该定义并替换为内置定义：
 
 ```json
 {
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "msgTotal": 1000000,
-        "deviceTotal": 10000,
-        "startTotal": 5000
-    }
+  "entity": "security_event",
+  "name": "zenvis_insert_time",
+  "label": "创建时间",
+  "description": "创建时间",
+  "column_name": "zenvis_insert_time",
+  "column_type": "DateTime64(3)",
+  "retrieval_type": "date",
+  "operators": ["greatthan", "lessthan", "greatequalthan", "lessequalthan"],
+  "display_selected": true,
+  "must_candidate": false
 }
 ```
 
-**失败响应**
+- ClickHouse 自动建表时该列使用 `DateTime64(3) DEFAULT now64(3)`，普通数据写入无需传值。
+- 已有实体表会在启动时通过 `ADD COLUMN IF NOT EXISTS` 补充该字段，不覆盖已有表结构。
+- 系统看板统一使用 `zenvis_insert_time` 统计实体上报趋势；单个实体缺少物理列或查询失败时会在 `skipped_entities` 中返回原因，不影响其他实体。
 
-```json
-{
-    "code": 400,
-    "message": "开始时间不能为空",
-    "data": null
-}
-```
+## 已下线接口
 
----
-
-### 5.3 获取状态信息
-
-- **路径**: `POST /api/v1/dashboard/home/status`
-- **功能**: 获取系统状态、服务状态、消息状态和待办事项
-
-**请求体**
-
-无请求参数
-
-**成功响应**
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "status": "running",
-        "serviceStatus": {
-            "count": 0,
-            "info": "正常"
-        },
-        "msgStatus": {
-            "count": 100,
-            "info": "待处理"
-        },
-        "toDo": {
-            "count": 5,
-            "info": "待审核"
-        }
-    }
-}
-```
-
----
-
-### 5.4 获取效率数据
-
-- **路径**: `POST /api/v1/dashboard/home/efficiency`
-- **功能**: 获取系统效率相关数据
-
-**请求体**
-
-无请求参数
-
-**成功响应**
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "ratio": 95,
-        "receiveDelay": "10ms",
-        "receiveDelayAverage": "12ms",
-        "processDelay": "8ms",
-        "processDelayAverage": "10ms",
-        "msgCountForMinute": "12000",
-        "msgCountForMinuteAverage": "10000"
-    }
-}
-```
-
----
-
-### 5.5 获取实时信息
-
-- **路径**: `POST /api/v1/dashboard/home/real-info`
-- **功能**: 获取系统实时信息列表
-
-**请求体**
-
-无请求参数
-
-**成功响应**
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "infoList": [
-            "设备[192.168.1.100]上线",
-            "告警[高风险]触发",
-            "策略[policy_v1]已应用"
-        ]
-    }
-}
-```
-
----
-
-### 5.6 获取省-市地域分布
-
-- **路径**: `POST /api/v1/dashboard/home/province-city-stat`
-- **功能**: 获取指定时间范围内按省-市维度的地域分布数据
-
-**请求体**
-
-```json
-{
-    "startTime": 1704067200000,
-    "endTime": 1704153600000
-}
-```
-
-**成功响应**
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "xAxis": ["北京", "上海", "广州"],
-        "yAxisName": {"Android", "iOS"},
-        "yAxisData": [
-            [1000, 800],
-            [1200, 900],
-            [800, 700]
-        ]
-    }
-}
-```
-
----
-
-### 5.7 获取厂商-操作系统分布
-
-- **路径**: `POST /api/v1/dashboard/home/manufacture-system-stat`
-- **功能**: 获取指定时间范围内按厂商-操作系统维度的分布数据
-
-**请求体**
-
-```json
-{
-    "startTime": 1704067200000,
-    "endTime": 1704153600000
-}
-```
-
-**成功响应**
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "xAxis": ["华为", "小米", "苹果"],
-        "yAxisName": {"Android", "iOS"},
-        "yAxisData": [
-            [5000, 0],
-            [4000, 0],
-            [0, 3000]
-        ]
-    }
-}
-```
-
----
-
-### 5.8 获取数据分布趋势
-
-- **路径**: `POST /api/v1/dashboard/home/msg-trend`
-- **功能**: 获取指定时间范围内的数据分布趋势
-
-**请求体**
-
-```json
-{
-    "startTime": 1704067200000,
-    "endTime": 1704153600000
-}
-```
-
-**成功响应**
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {
-        "xAxis": ["00:00", "01:00", "02:00", "03:00"],
-        "yAxisName": {"消息数", "设备数"},
-        "yAxisData": [
-            [10000, 5000],
-            [12000, 6000],
-            [8000, 4500],
-            [15000, 7000]
-        ]
-    }
-}
-```
-
----
-
-## 通用响应格式
-
-所有接口返回统一响应结构：
-
-```json
-{
-    "code": 200,
-    "message": "操作成功",
-    "data": {}
-}
-```
-
-| 字段 | 类型 | 含义 |
-| :--- | :--- | :--- |
-| `code` | Integer | 状态码，200表示成功，其他表示失败 |
-| `message` | String | 提示信息 |
-| `data` | Object | 返回的数据，可为任意类型或null |
+消息、设备和启动统计相关的 `/speed-stat`、`/summary`、`/status`、`/efficiency`、`/real-info`、`/province-city-stat`、`/manufacture-system-stat`、`/msg-trend` 已移除。

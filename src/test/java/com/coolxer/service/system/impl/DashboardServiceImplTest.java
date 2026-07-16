@@ -97,7 +97,7 @@ class DashboardServiceImplTest {
         assertMissingParameter(() -> dashboardService.update(1L, dto));
         verify(dashboardRepository, never()).findById(any());
 
-        dto.setCode("msg-board");
+        dto.setCode("system-board");
         Dashboard existing = new Dashboard();
         existing.setId(1);
         when(dashboardRepository.findById(1L)).thenReturn(Optional.of(existing));
@@ -106,7 +106,7 @@ class DashboardServiceImplTest {
         assertThat(dashboardService.update(1L, dto)).isTrue();
         ArgumentCaptor<Dashboard> captor = ArgumentCaptor.forClass(Dashboard.class);
         verify(dashboardRepository).save(captor.capture());
-        assertThat(captor.getValue().getCode()).isEqualTo("msg-board");
+        assertThat(captor.getValue().getCode()).isEqualTo("system-board");
     }
 
     private static DashboardDto baseDto(DashboardType type) {

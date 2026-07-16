@@ -20,6 +20,12 @@ import java.util.Optional;
  */
 public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Integer> {
 
+    interface StatusCount {
+        AnalysisTaskStatus getStatus();
+
+        long getCount();
+    }
+
     Optional<AnalysisTask> findById(Integer id);
 
     List<AnalysisTask> findByStatus(AnalysisTaskStatus status);
@@ -27,6 +33,11 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
     long countByStatus(AnalysisTaskStatus status);
 
     long countByStatusIn(List<AnalysisTaskStatus> statuses);
+
+    @Query("SELECT a.status AS status, COUNT(a) AS count FROM AnalysisTask a GROUP BY a.status")
+    List<StatusCount> countGroupByStatus();
+
+    List<AnalysisTask> findTop10ByOrderByUpdateTimeDesc();
 
     Optional<AnalysisTask> findFirstByStatusOrderByStartTimeAsc(AnalysisTaskStatus status);
 

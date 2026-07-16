@@ -70,29 +70,25 @@
             </div>
           </template>
           <template #default="scope">
-            <div class="cell-style" :title="scope.row[item.dataIndex]">
+            <div class="cell-style" :title="cellTitle(scope.row[item.dataIndex])">
               <template v-if="item.type == 'json'">
                 <el-tooltip content="数据查看" placement="top">
                   <img class="json-svg" src="/src/assets/svg-icon/json.svg" @click="showData(scope.row[item.dataIndex])" alt="">
                 </el-tooltip>
               </template>
               <template v-else>
-                <template v-if="resolveLink(item, scope.row)">
-                  <template v-if="scope.row[item.dataIndex] && scope.row[item.dataIndex].length > 8">
-                    <span @click="openLink(item, scope.row)" class="dev-style">
-                      {{ scope.row[item.dataIndex].substr(0,4) }}...{{ scope.row[item.dataIndex].substr(scope.row[item.dataIndex].length-4,4) }}
-                    </span>
-                    <el-icon class="copy-outlined-ico" title="点击复制" @click.stop="touchCopy(scope.row[item.dataIndex])"><DocumentCopy /></el-icon>
-                  </template>
-                  <template v-else>
-                    <span @click="openLink(item, scope.row)" class="dev-style">
-                      {{ scope.row[item.dataIndex] }}
-                    </span>
-                  </template>
-                </template>
-                <template v-else>
-                  {{ scope.row[item.dataIndex] }}
-                </template>
+                <span
+                  v-if="resolveLink(item, scope.row)"
+                  class="cell-text dev-style"
+                  @click="openLink(item, scope.row)"
+                >{{ scope.row[item.dataIndex] }}</span>
+                <span v-else class="cell-text">{{ scope.row[item.dataIndex] }}</span>
+                <el-icon
+                  v-if="item.copyable && hasCopyableValue(scope.row[item.dataIndex])"
+                  class="copy-outlined-ico"
+                  title="点击复制"
+                  @click.stop="touchCopy(scope.row[item.dataIndex])"
+                ><DocumentCopy /></el-icon>
               </template>
             </div>
           </template>
@@ -146,14 +142,34 @@ const moreSearch = ref('');
 async function copy(value: string) {
   try {
     await toClipboard(value);
-    ElMessage.success(`已复制: ${value}`);
+    ElMessage.success('复制成功');
   } catch {
     ElMessage.error('复制失败,请手动复制!');
   }
 }
 
+function serializeCopyValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value !== null && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function hasCopyableValue(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== '';
+}
+
 function touchCopy(value: unknown) {
-  void copy(String(value));
+  void copy(serializeCopyValue(value));
+}
+
+function cellTitle(value: unknown): string {
+  return hasCopyableValue(value) ? serializeCopyValue(value) : '';
 }
 
 function getMinWidth(title: string): number {
@@ -222,6 +238,14 @@ onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick)
     margin-top: 10px;
   }
   .cell-style{
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .cell-text{
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -236,6 +260,7 @@ onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick)
     font-size: 18px;
     color: #34a062;
     margin-left: 10px;
+    flex: 0 0 auto;
   }
   .header-cell {
     display: flex;

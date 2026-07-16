@@ -53,6 +53,7 @@ export type TAttributeListResponse = {
   retrieval_type?: string;
   display_type?: string;
   link_template?: string;
+  copyable?: boolean;
   auto_complete?: boolean;
 };
 
@@ -62,6 +63,7 @@ export type SelectAttributeItem = {
   display_type?: string;
   operator_name?: string;
   link_template?: string;
+  copyable?: boolean;
   value_list?: string[];
 };
 
@@ -143,6 +145,7 @@ export type RetrievalTableColumn = {
   title: string;
   dataIndex: string;
   linkTemplate?: string;
+  copyable?: boolean;
   resizable: boolean;
   width: number;
   minWidth: number;

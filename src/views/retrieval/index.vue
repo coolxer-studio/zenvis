@@ -345,6 +345,7 @@ function applyColumns(entity: string, attributes: TAttributeListResponse[], sele
     title: attribute.label,
     dataIndex: attribute.name,
     linkTemplate: attribute.link_template,
+    copyable: attribute.copyable,
     resizable: true,
     width,
     minWidth: 80,

@@ -158,8 +158,10 @@ class RetrievalRuleLifecycleTest {
         assertThat(detail.getConfig().getEntity()).isEqualTo("asset");
         assertThat(detail.getConfig().getCriteriaList()).hasSize(1);
         assertThat(detail.getAttributeList()).singleElement()
-                .extracting("linkTemplate")
-                .isEqualTo("/asset/detail?ip={ip}");
+                .satisfies(attribute -> {
+                    assertThat(attribute.getLinkTemplate()).isEqualTo("/asset/detail?ip={ip}");
+                    assertThat(attribute.isCopyable()).isTrue();
+                });
     }
 
     @Test
@@ -254,6 +256,7 @@ class RetrievalRuleLifecycleTest {
             attribute.setColumnType("String");
             attribute.setOperators(List.of("equal", "isnull"));
             attribute.setLinkTemplate("/asset/detail?ip={ip}");
+            attribute.setCopyable(true);
         }
 
         @Override public MetaData loadMetaData() { return null; }

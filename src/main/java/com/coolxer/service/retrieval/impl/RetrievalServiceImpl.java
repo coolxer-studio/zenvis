@@ -174,6 +174,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         dataAttributeVo.setDescription(dataAttribute.getDescription());
         dataAttributeVo.setLinkTemplate(dataAttribute.getLinkTemplate());
         dataAttributeVo.setAutoComplete(dataAttribute.isAutoComplete());
+        dataAttributeVo.setCopyable(dataAttribute.isCopyable());
         if (Objects.nonNull(dataAttribute.getRetrievalType())) {
             dataAttributeVo.setRetrievalType(dataAttribute.getRetrievalType());
         }
@@ -200,6 +201,7 @@ public class RetrievalServiceImpl implements RetrievalService {
             selectAttributeVo.setLabel(criteria.getAttribute().getLabel());
             selectAttributeVo.setOperatorName(criteria.getOperator().getName());
             selectAttributeVo.setLinkTemplate(criteria.getAttribute().getLinkTemplate());
+            selectAttributeVo.setCopyable(criteria.getAttribute().isCopyable());
             if (Objects.nonNull(criteria.getAttribute().getDisplayType())) {
                 selectAttributeVo.setDisplayType(criteria.getAttribute().getDisplayType());
             }
@@ -240,6 +242,7 @@ public class RetrievalServiceImpl implements RetrievalService {
             selectAttributeVo.setName(attribute.getName());
             selectAttributeVo.setLabel(attribute.getLabel());
             selectAttributeVo.setLinkTemplate(attribute.getLinkTemplate());
+            selectAttributeVo.setCopyable(attribute.isCopyable());
             if (Objects.nonNull(attribute.getDisplayType())) {
                 selectAttributeVo.setDisplayType(attribute.getDisplayType());
             }
@@ -257,6 +260,7 @@ public class RetrievalServiceImpl implements RetrievalService {
                     selectAttributeVo.setName(attribute.getName());
                     selectAttributeVo.setLabel(attribute.getLabel());
                     selectAttributeVo.setLinkTemplate(attribute.getLinkTemplate());
+                    selectAttributeVo.setCopyable(attribute.isCopyable());
                     if (Objects.nonNull(attribute.getDisplayType())) {
                         selectAttributeVo.setDisplayType(attribute.getDisplayType());
                     }

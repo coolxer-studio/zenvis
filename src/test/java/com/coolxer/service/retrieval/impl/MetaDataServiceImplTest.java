@@ -46,7 +46,7 @@ class MetaDataServiceImplTest {
     }
 
     @Test
-    void readsAutoCompleteFlagFromSnakeCaseMeta() {
+    void readsBooleanFlagsFromSnakeCaseMetaAndKeepsCompatibleDefaults() {
         MetaData metaData = JacksonUtil.toObject("""
                 {
                   "attribute": [
@@ -55,14 +55,23 @@ class MetaDataServiceImplTest {
                       "name": "device_name",
                       "column_type": "String",
                       "operators": ["equal"],
-                      "auto_complete": true
+                      "auto_complete": true,
+                      "copyable": true
+                    },
+                    {
+                      "entity": "asset",
+                      "name": "legacy_field",
+                      "column_type": "String",
+                      "operators": ["equal"]
                     }
                   ]
                 }
                 """, MetaData.class);
 
-        assertThat(metaData.getAttribute()).hasSize(1);
+        assertThat(metaData.getAttribute()).hasSize(2);
         assertThat(metaData.getAttribute().get(0).isAutoComplete()).isTrue();
+        assertThat(metaData.getAttribute().get(0).isCopyable()).isTrue();
+        assertThat(metaData.getAttribute().get(1).isCopyable()).isFalse();
     }
 
     @Test
@@ -283,8 +292,11 @@ class MetaDataServiceImplTest {
         DataAttributeVo dataAttributeVo = new DataAttributeVo();
         dataAttributeVo.setName("device_name");
         dataAttributeVo.setAutoComplete(true);
+        dataAttributeVo.setCopyable(true);
 
-        assertThat(JacksonUtil.toMap(dataAttributeVo)).containsEntry("auto_complete", true);
+        assertThat(JacksonUtil.toMap(dataAttributeVo))
+                .containsEntry("auto_complete", true)
+                .containsEntry("copyable", true);
     }
 
     @Test

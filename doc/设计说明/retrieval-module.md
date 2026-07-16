@@ -252,6 +252,7 @@ V2 不保存完整实体、字段和操作符对象，加载时始终绑定当�
       "column_type": "String",
       "display_selected": true,
       "auto_complete": true,
+      "copyable": true,
       "link_template": "/asset/detail?name={device_name}",
       "operators": ["equal", "notequal", "match", "in"]
     }
@@ -277,6 +278,8 @@ V2 不保存完整实体、字段和操作符对象，加载时始终绑定当�
 前端只从 `/retrieval/do` 返回的完整行数据解析占位符，不额外查询隐藏字段。字符串、数值和布尔值按字符串编码，数组和对象先转为 JSON，再对每个值执行 URL 编码。模板引用字段未展示、值为空或解析出的 URL 不安全时，单元格按普通文本显示；相对地址和 `http/https` 地址在新标签页打开。
 
 `candidate/list` 支持两种定位方式：优先使用 `entity + attribute`，也兼容稳定且非零的 `attributeId`。前端输入自动补全走实体通用接口 `/api/v1/entity/{entity}/{attribute}/auto-complete`，只有元数据 `auto_complete: true` 时启用。
+
+`copyable` 是可选布尔值，用于标识字段值是否支持在页面复制；未配置时默认为 `false`。该标记会透传到条件字段、展示字段和规则详情接口。
 
 ## 8. 前端状态编排原则
 

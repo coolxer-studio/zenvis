@@ -21,6 +21,8 @@ public class DataAttributeVo {
 
     private boolean autoComplete;
 
+    private boolean copyable;
+
     private List<OperatorVo> operatorList;
 
 }

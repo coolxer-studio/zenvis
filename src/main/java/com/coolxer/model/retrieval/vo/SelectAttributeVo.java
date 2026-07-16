@@ -17,6 +17,8 @@ public class SelectAttributeVo {
 
     private String linkTemplate;
 
+    private boolean copyable;
+
     private List<String> valueList;
 
 }

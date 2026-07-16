@@ -93,6 +93,11 @@ public class DataAttribute {
     private boolean autoComplete;
 
     /**
+     * 标识该属性值是否支持在页面复制
+     */
+    private boolean copyable;
+
+    /**
      * 属性字典映射关系
      */
     private Map<String, Object> mapping;

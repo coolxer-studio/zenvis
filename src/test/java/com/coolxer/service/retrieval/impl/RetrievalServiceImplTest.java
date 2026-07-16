@@ -17,7 +17,7 @@ import static org.mockito.Mockito.when;
 class RetrievalServiceImplTest {
 
     @Test
-    void returnsLinkTemplateForAttributeAndDefaultDisplayLists() {
+    void returnsPresentationFlagsForAttributeAndDefaultDisplayLists() {
         DataEntity entity = new DataEntity();
         entity.setName("msg");
         entity.setTableName("msg");
@@ -30,6 +30,7 @@ class RetrievalServiceImplTest {
         attribute.setOperators(List.of("equal"));
         attribute.setDisplaySelected(true);
         attribute.setLinkTemplate("/device/detail?guid={guid}");
+        attribute.setCopyable(true);
         DataOperator operator = new DataOperator();
         operator.setName("equal");
         operator.setLabel("等于");
@@ -44,10 +45,14 @@ class RetrievalServiceImplTest {
         DataAttributeResultVo displayResult = service.listAttributeForDisplay("msg", null, 7);
 
         assertThat(attributeResult.getAttributeList()).singleElement()
-                .extracting("linkTemplate")
-                .isEqualTo("/device/detail?guid={guid}");
+                .satisfies(result -> {
+                    assertThat(result.getLinkTemplate()).isEqualTo("/device/detail?guid={guid}");
+                    assertThat(result.isCopyable()).isTrue();
+                });
         assertThat(displayResult.getSelectAttributeList()).singleElement()
-                .extracting("linkTemplate")
-                .isEqualTo("/device/detail?guid={guid}");
+                .satisfies(result -> {
+                    assertThat(result.getLinkTemplate()).isEqualTo("/device/detail?guid={guid}");
+                    assertThat(result.isCopyable()).isTrue();
+                });
     }
 }

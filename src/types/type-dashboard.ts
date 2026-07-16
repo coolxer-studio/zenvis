@@ -1,81 +1,88 @@
-export type TSpeedStatResponse = {
-  receive_time_average: number;
-  receive_time_current: number;
-  process_time_average: number;
-  process_time_current: number;
-  count_of_second_average: number;
-  count_of_second_current: number;
-}
+export type TEntityStatisticsRange = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS';
 
-export type TGetLocationStat = {
+export type TSystemOverviewSummary = {
+  entity_count: number;
+  push_task_count: number | null;
+  analysis_task_count: number;
+  business_service_count: number;
+};
+
+export type TSystemNotice = {
+  key: string;
+  count: number;
+  info: string;
+  level: 'NORMAL' | 'WARNING' | 'ERROR';
+};
+
+export type TServiceHealth = {
+  ratio: number | null;
+  instance_count: number;
+  up_count: number;
+  abnormal_count: number;
+  event_count_24h: number;
+};
+
+export type TAnalysisTaskStatus = {
+  status: string;
+  description: string;
+  count: number;
+};
+
+export type TBusinessServiceStatus = {
+  status: 'UP' | 'DEGRADED' | 'DOWN' | 'OFFLINE';
+  description: string;
+  count: number;
+};
+
+export type TRecentAnalysisTask = {
+  id: number;
+  name: string;
+  status: string | null;
+  status_description: string | null;
+  update_time: string | null;
+};
+
+export type TSystemOverviewResponse = {
+  checked_at: string;
+  status: 'HEALTHY' | 'DEGRADED';
+  status_description: string;
+  summary: TSystemOverviewSummary;
+  notices: TSystemNotice[];
+  service_health: TServiceHealth;
+  business_service_status: TBusinessServiceStatus[];
+  analysis_task_status: TAnalysisTaskStatus[];
+  recent_analysis_tasks: TRecentAnalysisTask[];
+  push_task_source_available: boolean;
+};
+
+export type TEntitySeries = {
+  name: string;
+  label: string;
+  data: number[];
+  total: number;
+};
+
+export type TEntityRanking = {
+  name: string;
+  label: string;
+  count: number;
+};
+
+export type TSkippedEntity = {
+  name: string;
+  label: string;
+  reason: string;
+  message: string;
+};
+
+export type TEntityStatisticsResponse = {
+  range: TEntityStatisticsRange;
   start_time: string;
-  end_time:string;
-}
-export type TGetDeviceStat = {
-  start_time: string;
-  end_time:string;
-}
-export type TGetMsgTrend = {
-  start_time: string;
-  end_time:string;
-}
-export type TLocationStatResponse = {
-  xaxis: string[];
-  yaxis_name: string[];
-  yaxis_data: number[][];
-}
-export type TDeviceStatResponse = {
-  xaxis: string[];
-  yaxis_name: string[];
-  yaxis_data: number[][];
-}
-export type TMsgTrendResponse = {
-  xaxis: string[];
-  yaxis_name: string[];
-  yaxis_data: number[][];
-}
-
-// 系统状态响应
-export type TSystemStatusResponse = {
-  status: 'running' | 'stopped' | 'error';
-  uptime?: number;
-  cpu_usage?: number;
-  memory_usage?: number;
-  disk_usage?: number;
-};
-
-// 系统概要参数
-export type TGetSystemSummary = {
-  start_time?: string;
-  end_time?: string;
-};
-
-// 系统概要响应
-export type TSystemSummaryResponse = {
-  total_messages: number;
-  success_messages: number;
-  failed_messages: number;
-  avg_process_time: number;
-  peak_time?: string;
-  daily_stats?: {
-    date: string;
-    count: number;
-  }[];
-};
-
-// 系统效率响应
-export type TSystemEfficiencyResponse = {
-  efficiency: number;
-  throughput: number;
-  latency: number;
-  availability: number;
-};
-
-// 系统实时信息响应
-export type TSystemRealInfoResponse = {
-  timestamp: string;
-  active_connections: number;
-  queue_size: number;
-  processing_rate: number;
-  error_rate: number;
+  end_time: string;
+  granularity: 'HOUR' | 'DAY';
+  x_axis: string[];
+  series: TEntitySeries[];
+  ranking: TEntityRanking[];
+  omitted_entity_count: number;
+  skipped_entities: TSkippedEntity[];
 };

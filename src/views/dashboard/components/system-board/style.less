@@ -688,3 +688,81 @@
     }
   }
 }
+
+.dashboard-wrap {
+  .message-bar-item {
+    small {
+      display: block;
+      color: #ffca7a;
+      font-size: 10px;
+      line-height: 12px;
+    }
+  }
+
+  .center-area,
+  .chart-bar-item {
+    .board-state {
+      position: absolute;
+      z-index: 2;
+      inset: 50px 20px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      pointer-events: none;
+
+      &.error {
+        color: #ff7a70;
+      }
+    }
+  }
+
+  .center-area .board-state {
+    inset: 50px 68px 20px;
+  }
+
+  .statistics-hint {
+    position: absolute;
+    z-index: 2;
+    right: 90px;
+    top: 42px;
+    color: #ffca7a;
+    font-size: 10px;
+  }
+
+  :deep(.chart-shell) {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  :deep(.chart-canvas) {
+    width: 100%;
+    height: 100%;
+  }
+
+  :deep(.view-type) {
+    width: 100%;
+    height: 260px;
+  }
+
+  :deep(.view-location),
+  :deep(.view-device) {
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0);
+  }
+
+  :deep(.chart-empty) {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    pointer-events: none;
+  }
+}
+

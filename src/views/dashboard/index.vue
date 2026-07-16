@@ -18,9 +18,7 @@
       <div>
         <template v-for="item in dashboardListData" :key="item.id">
           <div
-            :class="
-              'dashboard-div ' + (isCurrentDashboard(item) ? 'active-dashboard' : '')
-            "
+            :class="'dashboard-div ' + (isCurrentDashboard(item) ? 'active-dashboard' : '')"
             @click="setDashboard(item)"
           >
             {{ item.name }}
@@ -51,12 +49,13 @@ import { ArrowRight, ArrowLeft } from '@element-plus/icons-vue';
 import linkBoard from './components/link-board/index.vue';
 import lowCodeBoard from './components/low-code-board/index.vue';
 import htmlBoard from './components/html-board/index.vue';
-import msgBoard from './components/msg-board/index.vue';
+import systemBoard from './components/system-board/index.vue';
 
 import { SystemService } from '@/service/api';
 
 const builtInDashboardMap = {
-  'msg-board': msgBoard,
+  'system-board': systemBoard,
+  'msg-board': systemBoard,
 };
 
 const visible = ref(false);
@@ -67,7 +66,9 @@ const currentDashboard = ref({
   code: '',
 });
 const dashboardListData = ref([]);
-const currentBuiltInDashboard = computed(() => builtInDashboardMap[currentDashboard.value?.code || ''] || null);
+const currentBuiltInDashboard = computed(
+  () => builtInDashboardMap[currentDashboard.value?.code || ''] || null,
+);
 
 const onOpen = () => {
   visible.value = true;
@@ -79,7 +80,7 @@ const onClose = () => {
 
 const getDashboardList = () => {
   SystemService.getDashboardList()
-      .then(data => {
+    .then(data => {
       dashboardListData.value = data;
       selectDashboardFromRoute();
     })
@@ -95,9 +96,11 @@ const selectDashboardFromRoute = () => {
   const targetCode = route.query.code?.toString() || '';
   const targetName = route.query.name?.toString() || '';
   const matched = dashboardListData.value.find(item => {
-    return (targetId && String(item.id) === targetId)
-      || (targetCode && item.code === targetCode)
-      || (targetName && item.name === targetName);
+    return (
+      (targetId && String(item.id) === targetId) ||
+      (targetCode && item.code === targetCode) ||
+      (targetName && item.name === targetName)
+    );
   });
   currentDashboard.value = matched || dashboardListData.value[0];
 };

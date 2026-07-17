@@ -97,15 +97,16 @@
           to = location.pathname + to;
         }
 
-        const idx = to.indexOf('?');
-        const idx2 = to.indexOf('#');
-        let pathname = ~idx
-          ? to.substring(0, idx)
-          : ~idx2
-            ? to.substring(0, idx2)
-            : to;
-        let search = ~idx ? to.substring(idx, ~idx2 ? idx2 : undefined) : '';
-        let hash = ~idx2 ? to.substring(idx2) : location.hash;
+        const queryIndex = to.indexOf('?');
+        const hashIndex = to.indexOf('#');
+        const pathnameEnd = [queryIndex, hashIndex]
+          .filter(index => index >= 0)
+          .reduce((minimum, index) => Math.min(minimum, index), to.length);
+        let pathname = to.substring(0, pathnameEnd);
+        let search = queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex)
+          ? to.substring(queryIndex, hashIndex >= 0 ? hashIndex : undefined)
+          : '';
+        let hash = hashIndex >= 0 ? to.substring(hashIndex) : location.hash;
 
         if (!pathname) {
           pathname = location.pathname;

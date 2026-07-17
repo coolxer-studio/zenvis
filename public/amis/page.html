@@ -38,15 +38,35 @@
       // 获取site配置参数的值
       const pageConfig = urlParams.get('config');
       const apiBaseUrl = (urlParams.get('baseUrl') || '').replace(/\/+$/, '');
+      const pageParams = {};
+      urlParams.forEach(function (value, key) {
+        if (key !== 'config' && key !== 'baseUrl') {
+          pageParams[key] = value;
+        }
+      });
       const withApiBaseUrl = function (path) {
         return apiBaseUrl + (path.charAt(0) === '/' ? path : '/' + path);
       };
       // 请求 JSON 配置
       axios.get(withApiBaseUrl('/api/v1/config/' + encodeURIComponent(pageConfig || '') + '/get?file_name=index.json')).then(function (response) {
         var amisJSON = response.data; // 获取到的 JSON 配置
+        if (!amisJSON || typeof amisJSON !== 'object' || !amisJSON.type) {
+          throw new Error((amisJSON && amisJSON.msg) || '低代码页面配置无效');
+        }
         // 渲染 amis 页面
         var amis = amisRequire('amis/embed');
-        amis.embed('#root', amisJSON);
+        amis.embed('#root', amisJSON, {
+          data: Object.assign({}, pageParams, {
+            params: Object.assign({}, pageParams)
+          })
+        });
+      }).catch(function (error) {
+        var message = error && error.message ? error.message : '低代码页面加载失败';
+        document.getElementById('root').innerHTML =
+          '<div style="padding:24px;color:#a8071a;background:#fff1f0;border:1px solid #ffa39e">' +
+          '<strong>页面加载失败：</strong>' + message.replace(/[&<>"']/g, function (char) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+          }) + '</div>';
       });
     };
   </script>

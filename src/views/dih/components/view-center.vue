@@ -10,7 +10,7 @@
       <!-- Enter提示信息 -->
       <!-- 已移除原来的 enter-tip 元素，改为使用 ElMessage 实现 toast 提示 -->
       <div class="message-list">
-        <div v-for="(message, index) in messages" :key="index" class="message-item">
+        <div v-for="(message, index) in messages" :key="messageRenderKey(message)" class="message-item">
           <div v-if="message.sender === 'ai'" class="ai-message-container"
             @mouseenter="handleMouseEnter('ai', index)" 
             @mouseleave="handleMouseLeave('ai')">
@@ -39,10 +39,10 @@
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：AI消息的交互按钮 -->
               <div class="message-actions" v-show="isHoveredAiMessage === index">
-                <el-button @click="copyMessage(message.content)" size="small" icon="CopyDocument">复制</el-button>
-                <el-button @click="shareMessage(message.content)" size="small" icon="Share">分享</el-button>
-                <el-button @click="likeMessage(index)" size="small" icon="Sunny">准确</el-button>
-                <el-button @click="dislikeMessage(index)" size="small" icon="Lightning">不准确</el-button>
+                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument">复制</el-button>
+                <el-button @click="shareMessage(message.content)" size="small" :icon="Share">分享</el-button>
+                <el-button @click="likeMessage(index)" size="small" :icon="Sunny">准确</el-button>
+                <el-button @click="dislikeMessage(index)" size="small" :icon="Lightning">不准确</el-button>
               </div>
             </div>
           </div>
@@ -75,7 +75,7 @@
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：用户消息的交互按钮 -->
               <div class="message-actions" v-show="isHoveredUserMessage === index">
-                <el-button @click="copyMessage(message.content)" size="small" icon="CopyDocument">复制</el-button>
+                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument">复制</el-button>
               </div>
             </div>
           </div>
@@ -190,7 +190,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
-  Close, Loading, Monitor, Paperclip, Position, Opportunity
+  Close, CopyDocument, Lightning, Loading, Monitor, Opportunity, Paperclip, Position, Share, Sunny
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { DihService } from '@/service/api'
@@ -200,11 +200,44 @@ import {getCurrentFormattedDate} from '@/utils/util-time'
 import { copyTextToClipboard } from '@/utils/clipboard';
 import { withBaseUrl } from '@/utils/url';
 import ChatMessageRenderer from './chat-message-renderer.vue';
+import {
+  DATA_ACCESS_RECORD_EVENT,
+  DATA_ANALYSIS_RECORD_EVENT,
+  DATA_ANALYSIS_RECORD_REQUEST_EVENT,
+  DATA_REPORT_RECORD_EVENT,
+  DATA_REPORT_RECORD_REQUEST_EVENT,
+  DATA_VISUALIZATION_RECORD_EVENT,
+  POLICY_RECORD_ACTION_EVENT,
+  POLICY_RECORD_EVENT,
+  POLICY_RECORD_REQUEST_EVENT,
+  REPORT_EXTRA_DATA_CHANGED_EVENT,
+  REPORT_QUICK_ACTION_EVENT,
+  REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
+} from '../events';
+import type {
+  PolicyRecordActionEventDetail,
+  ReportExtraDataChangedEventDetail,
+  ReportQuickActionEventDetail,
+} from '../events';
 import type { AnalysisRecord, ChatAttachment, ChatMessage, ChatMessagePart, ChatSession, McpApprovalData, McpApprovalDecision, PolicyRecord } from '@/types/type-dih';
 
 const router = useRouter();
 
 const chatContentRef = ref<HTMLElement | null>(null);
+const messageRenderKeys = new WeakMap<ChatMessage, string>();
+let nextMessageRenderKey = 0;
+
+const messageRenderKey = (message: ChatMessage): string => {
+  const existingKey = messageRenderKeys.get(message);
+  if (existingKey) return existingKey;
+  let key = message.id;
+  if (!key) {
+    nextMessageRenderKey += 1;
+    key = `client-message-${nextMessageRenderKey}`;
+  }
+  messageRenderKeys.set(message, key);
+  return key;
+};
 
 const scrollToBottom = async (): Promise<void> => {
   await nextTick();
@@ -263,18 +296,6 @@ type InfoStepAnswer = {
   source: 'suggestion' | 'custom';
 };
 
-const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
-const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
-const DATA_ANALYSIS_RECORD_EVENT = 'dihAnalysisRecordsUpdated';
-const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihAnalysisRecordsRequested';
-const POLICY_RECORD_EVENT = 'dihPolicyRecordsUpdated';
-const POLICY_RECORD_REQUEST_EVENT = 'dihPolicyRecordsRequested';
-const POLICY_RECORD_ACTION_EVENT = 'dihPolicyRecordActionRequested';
-const DATA_REPORT_RECORD_EVENT = 'dihReportRecordsUpdated';
-const DATA_REPORT_RECORD_REQUEST_EVENT = 'dihReportRecordsRequested';
-const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested';
-const REPORT_EXTRA_DATA_CHANGED_EVENT = 'dihReportExtraDataChanged';
-const REPORT_SELECTION_REWRITE_COMPLETED_EVENT = 'dihReportSelectionRewriteCompleted';
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const MAX_FILES_PER_PICK = 10;
 const UPLOAD_CONCURRENCY = 3;
@@ -1442,23 +1463,6 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
   }
 }
 
-type ReportQuickActionEventDetail = {
-  displayContent?: string;
-  requestContent?: string;
-  target?: 'document' | 'selection';
-  actionKey?: string;
-  selectionId?: string;
-};
-
-type ReportExtraDataChangedEventDetail = {
-  extraData?: string;
-};
-
-type PolicyRecordActionEventDetail = {
-  action?: 'trial' | 'apply';
-  record?: PolicyRecord;
-};
-
 const handleReportRecordsRequested = () => {
   publishReportRecords();
 };
@@ -1759,8 +1763,7 @@ const toggleTask = (index: number) => {
 }
 
 // 切换面板展开状态
-const togglePanel = (panelName: string) => {
-  // @ts-ignore
+const togglePanel = (panelName: keyof typeof panelStates) => {
   panelStates[panelName] = !panelStates[panelName]
 }
 

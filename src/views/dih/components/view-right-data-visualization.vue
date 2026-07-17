@@ -100,6 +100,8 @@ import { CopyDocument, Document, View } from '@element-plus/icons-vue'
 import DOMPurify from 'dompurify'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { PolicyService } from '@/service/api'
+import { DATA_VISUALIZATION_RECORD_EVENT } from '../events'
+import type { DataVisualizationRecordEventDetail } from '../events'
 
 type VisualizationRecord = Record<string, unknown> & {
   id?: string
@@ -122,15 +124,6 @@ type VisualizationRecord = Record<string, unknown> & {
   api?: string
   htmlPath?: string
 }
-
-type DataVisualizationRecordEventDetail = {
-  chartLibrary?: unknown[]
-  visualizationConfigs?: unknown[]
-  dashboardConfigs?: unknown[]
-  menuConfigs?: unknown[]
-}
-
-const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated'
 
 const activeTab = ref('chartLibrary')
 const chartLibrary = ref<VisualizationRecord[]>([])

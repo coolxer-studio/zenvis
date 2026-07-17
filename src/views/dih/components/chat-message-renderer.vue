@@ -590,7 +590,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   CaretBottom,
@@ -611,6 +611,8 @@ import {
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import * as echarts from 'echarts';
+import { useSecondClock } from '@/composables/use-second-clock';
+import { useWindowResize } from '@/composables/use-window-resize';
 import type { ChatMessage, ChatMessagePart, McpApprovalDecision } from '@/types/type-dih';
 
 type InfoStepSuggestion = {
@@ -660,14 +662,7 @@ const emit = defineEmits<{
   (e: 'selectPromptSuggestion', prompt: string): void;
 }>();
 
-const approvalNow = ref(Date.now());
-let approvalClock: number | undefined;
-
-onMounted(() => {
-  approvalClock = window.setInterval(() => {
-    approvalNow.value = Date.now();
-  }, 1000);
-});
+const approvalNow = useSecondClock();
 
 const expandedThinking = reactive<Record<string, boolean>>({});
 const hiddenThinking = reactive<Record<string, boolean>>({});
@@ -792,8 +787,14 @@ const parseFallbackThinkingParts = (content: string): ChatMessagePart[] => {
   ];
 };
 
+const markdownCache = new Map<string, string>();
 const parseMarkdown = (content: string) => {
-  return DOMPurify.sanitize(marked.parse(content) as string);
+  const cached = markdownCache.get(content);
+  if (cached !== undefined) return cached;
+  const sanitized = DOMPurify.sanitize(marked.parse(content) as string);
+  if (markdownCache.size >= 50) markdownCache.clear();
+  markdownCache.set(content, sanitized);
+  return sanitized;
 };
 
 const copyPart = (content: string) => {
@@ -987,6 +988,8 @@ const renderChartPreviews = () => {
 const resizeChartPreviews = () => {
   chartPreviewInstances.forEach(instance => instance.resize());
 };
+
+useWindowResize(resizeChartPreviews);
 
 const configKindText = (part: ChatMessagePart) => {
   const kind = metadataText(part, 'configKind');
@@ -1726,14 +1729,11 @@ watch(
   { deep: true, immediate: true },
 );
 
-window.addEventListener('resize', resizeChartPreviews);
-
 onBeforeUnmount(() => {
-  if (approvalClock !== undefined) window.clearInterval(approvalClock);
-  window.removeEventListener('resize', resizeChartPreviews);
   chartPreviewInstances.forEach(instance => instance.dispose());
   chartPreviewInstances.clear();
   chartPreviewEls.clear();
+  markdownCache.clear();
 });
 </script>
 

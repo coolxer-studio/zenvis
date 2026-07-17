@@ -73,13 +73,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { AnalysisRecord } from '@/types/type-dih'
+import {
+  DATA_ANALYSIS_RECORD_EVENT,
+  DATA_ANALYSIS_RECORD_REQUEST_EVENT,
+} from '../events'
+import type { AnalysisRecordEventDetail } from '../events'
 
 type RowRecord = Record<string, unknown>
 type TimelineType = 'primary' | 'success' | 'warning' | 'danger' | 'info'
 type TagType = 'success' | 'warning' | 'danger' | 'info' | 'primary' | ''
-
-const DATA_ANALYSIS_RECORD_EVENT = 'dihAnalysisRecordsUpdated'
-const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihAnalysisRecordsRequested'
 
 const activeTab = ref('logAggregation')
 const records = ref<AnalysisRecord[]>([])
@@ -155,12 +157,7 @@ const prettyJson = (value: unknown) => {
 }
 
 const handleAnalysisRecordsUpdated = (event: Event) => {
-  const detail = (event as CustomEvent<{
-    records?: AnalysisRecord[]
-    aggregatedLogs?: RowRecord[]
-    sandboxResults?: RowRecord[]
-    conclusionTimeline?: RowRecord[]
-  }>).detail || {}
+  const detail = (event as CustomEvent<AnalysisRecordEventDetail>).detail || {}
   records.value = Array.isArray(detail.records) ? detail.records : []
   aggregatedLogs.value = Array.isArray(detail.aggregatedLogs) ? detail.aggregatedLogs : []
   sandboxResults.value = Array.isArray(detail.sandboxResults) ? detail.sandboxResults : []

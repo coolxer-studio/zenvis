@@ -66,6 +66,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { DATA_ACCESS_RECORD_EVENT } from '../events'
+import type { DataAccessRecordEventDetail } from '../events'
 
 type ConsoleRecord = Record<string, unknown> & {
   id?: string
@@ -77,13 +79,6 @@ type ConsoleRecord = Record<string, unknown> & {
   taskId?: string
   description?: string
 }
-
-type DataAccessRecordEventDetail = {
-  metadataConfigs?: unknown[]
-  dataPushServices?: unknown[]
-}
-
-const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated'
 
 const activeTab = ref('metadataConfigs')
 const metadataConfigs = ref<ConsoleRecord[]>([])

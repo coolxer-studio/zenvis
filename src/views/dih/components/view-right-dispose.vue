@@ -102,10 +102,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as monaco from 'monaco-editor'
 import type { PolicyRecord } from '@/types/type-dih'
 import { setupMonacoWorkers } from '@u/monaco-workers'
-
-const POLICY_RECORD_EVENT = 'dihPolicyRecordsUpdated'
-const POLICY_RECORD_REQUEST_EVENT = 'dihPolicyRecordsRequested'
-const POLICY_RECORD_ACTION_EVENT = 'dihPolicyRecordActionRequested'
+import {
+  POLICY_RECORD_ACTION_EVENT,
+  POLICY_RECORD_EVENT,
+  POLICY_RECORD_REQUEST_EVENT,
+} from '../events'
+import type { PolicyRecordEventDetail } from '../events'
 
 const activeTab = ref('records')
 const records = ref<PolicyRecord[]>([])
@@ -268,7 +270,7 @@ const requestApply = (record: PolicyRecord) => {
 }
 
 const handleRecordsUpdated = (event: Event) => {
-  const detail = (event as CustomEvent<{ records?: PolicyRecord[] }>).detail || {}
+  const detail = (event as CustomEvent<PolicyRecordEventDetail>).detail || {}
   records.value = Array.isArray(detail.records) ? detail.records : []
 }
 

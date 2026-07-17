@@ -149,15 +149,17 @@ import DOMPurify from 'dompurify'
 import { DihService } from '@/service/api'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import type { ReportArtifact, ReportDocument } from '@/types/type-dih'
-
-type ReportRecordEventDetail = {
-  currentDocument?: ReportDocument
-  documents?: ReportDocument[]
-  artifacts?: ReportArtifact[]
-  extraData?: string
-  sessionRecordId?: string
-  sessionId?: string
-}
+import {
+  DATA_REPORT_RECORD_EVENT,
+  DATA_REPORT_RECORD_REQUEST_EVENT,
+  REPORT_EXTRA_DATA_CHANGED_EVENT,
+  REPORT_QUICK_ACTION_EVENT,
+  REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
+} from '../events'
+import type {
+  ReportRecordEventDetail,
+  SelectionRewriteCompletedEventDetail,
+} from '../events'
 
 type OutlineItem = {
   id: string
@@ -183,17 +185,6 @@ type PendingSelectionRewrite = {
   editorRange?: unknown
   browserRange?: Range
 }
-
-type SelectionRewriteCompletedEventDetail = {
-  selectionId?: string
-  content?: string
-}
-
-const DATA_REPORT_RECORD_EVENT = 'dihReportRecordsUpdated'
-const DATA_REPORT_RECORD_REQUEST_EVENT = 'dihReportRecordsRequested'
-const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested'
-const REPORT_EXTRA_DATA_CHANGED_EVENT = 'dihReportExtraDataChanged'
-const REPORT_SELECTION_REWRITE_COMPLETED_EVENT = 'dihReportSelectionRewriteCompleted'
 
 const activeTab = ref('document')
 const editorRef = shallowRef<any>(null)

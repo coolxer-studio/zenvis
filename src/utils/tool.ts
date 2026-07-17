@@ -37,7 +37,7 @@ const rules = {
 
   // 密码校验
   passwordRule: (str: string): boolean => {
-    var check= /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@#!$])[A-Za-z\d@#!$]{8,16}$/;
+    const check= /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@#!$])[A-Za-z\d@#!$]{8,16}$/;
     if (!check.test(str)) {
       return false
     }else{

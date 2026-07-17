@@ -2,7 +2,6 @@ import { defineConfig, loadEnv } from 'vite';
 import { createSvgIconsPlugin } from 'vite-plugin-svg-icons';
 import { resolve } from 'path';
 import vue from '@vitejs/plugin-vue';
-import vueJsx from '@vitejs/plugin-vue-jsx';
 import viteCompression from 'vite-plugin-compression';
 
 // https://vitejs.dev/config/
@@ -53,22 +52,6 @@ export default ({ mode }) => {
               return 'static/other/[name]-[hash][extname]';
             }
           },
-          manualChunks(id) {
-            if (!id.includes('node_modules')) return;
-            if (/[\\/]node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)) {
-              return 'vue';
-            }
-            if (id.includes('element-plus')) {
-              return 'element-plus';
-            }
-            if (id.includes('monaco-editor')) {
-              return 'monaco';
-            }
-            if (id.includes('echarts')) {
-              return 'echarts';
-            }
-            return 'vendor';
-          },
         },
       },
       chunkSizeWarningLimit: 10240,
@@ -108,10 +91,7 @@ export default ({ mode }) => {
         algorithm: 'gzip',
         ext: '.gz',
       }),
-      vueJsx({
-        // options are passed on to @vue/babel-plugin-jsx
-      }),
-      // splitVendorChunkPlugin() 已被移除，使用上面的 manualChunks 替代
+      // 保留路由动态导入边界，避免兜底分组反向预加载异步依赖
       createSvgIconsPlugin({
         // 指定需要缓存的图标文件夹
         iconDirs: [resolve(__dirname, 'src/assets/svg-icon')],

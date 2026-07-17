@@ -3,11 +3,6 @@ import { createApp } from 'vue';
 // 引入 Element Plus
 import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
-// 引入 Element Plus 图标
-import * as ElementPlusIconsVue from '@element-plus/icons-vue';
-
-import JsonViewer from 'vue3-json-viewer';
-import 'vue3-json-viewer/dist/vue3-json-viewer.css';
 
 import 'virtual:svg-icons-register';
 
@@ -24,15 +19,11 @@ async function initApp() {
   const app = createApp(RootApp)
     .use(pinia)
     .use(router)
-    .use(ElementPlus) // 使用 Element Plus
-    .use(JsonViewer);
-    
-  // 注册所有 Element Plus 图标
-  for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-    app.component(key, component);
-  }
+    .use(ElementPlus); // 使用 Element Plus
 
-  app.config.warnHandler = () => null;
+  if (import.meta.env.PROD) {
+    app.config.warnHandler = () => null;
+  }
 
   // 注册所有组件
   setupComponent(app);

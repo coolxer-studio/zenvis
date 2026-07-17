@@ -44,7 +44,7 @@
               <span class="asset-title">页面 ico</span>
               <span class="asset-format">.ico</span>
             </div>
-            <el-button @click="triggerLogoUpload" icon="Upload" size="small" type="primary"
+            <el-button @click="triggerLogoUpload" :icon="Upload" size="small" type="primary"
               >上传图标</el-button
             >
             <input
@@ -72,7 +72,7 @@
               <span class="asset-title">系统 Logo</span>
               <span class="asset-format">.png</span>
             </div>
-            <el-button @click="triggerSystemLogoUpload" icon="Upload" size="small" type="primary"
+            <el-button @click="triggerSystemLogoUpload" :icon="Upload" size="small" type="primary"
               >上传Logo</el-button
             >
             <input
@@ -100,7 +100,7 @@
               <span class="asset-title">系统 Banner</span>
               <span class="asset-format">.png</span>
             </div>
-            <el-button @click="triggerBannerUpload" icon="Upload" size="small" type="primary"
+            <el-button @click="triggerBannerUpload" :icon="Upload" size="small" type="primary"
               >上传Banner</el-button
             >
             <input
@@ -158,7 +158,7 @@
                   @click="startFieldEdit(field.key, systemInfo?.[field.key])"
                   aria-label="编辑"
                   circle
-                  icon="Edit"
+                  :icon="Edit"
                   size="small"
                   type="primary"
                 />
@@ -194,7 +194,7 @@
                   @click="startFieldEdit(field.key, systemInfo?.[field.key])"
                   aria-label="编辑"
                   circle
-                  icon="Edit"
+                  :icon="Edit"
                   size="small"
                   type="primary"
                 />
@@ -208,6 +208,7 @@
 </template>
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
+import { Edit, Picture, Upload } from '@element-plus/icons-vue';
 import { SystemService } from '@/service/api';
 import { SystemInfo } from '@/types/type-system';
 import { ElMessage } from 'element-plus';

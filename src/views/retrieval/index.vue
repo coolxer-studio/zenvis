@@ -74,6 +74,8 @@ import axios from 'axios';
 import { ArrowLeft, ArrowRight, Close } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
+import JsonViewer from 'vue3-json-viewer';
+import 'vue3-json-viewer/dist/vue3-json-viewer.css';
 import { RetrievalService } from '@/service/api';
 import type {
   RetrievalTableChange,

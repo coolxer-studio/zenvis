@@ -43,12 +43,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import ViewCenter from '@/views/dih/components/view-center.vue';
+import { Close, TopRight } from '@element-plus/icons-vue';
 import { generateUUID } from '@/utils/util-common';
 import copilotImg from '@/assets/images/copilot.png';
 
+const ViewCenter = defineAsyncComponent(() => import('@/views/dih/components/view-center.vue'));
 const route = useRoute();
 const isExpanded = ref(false);
 const chatSessionId = ref('');

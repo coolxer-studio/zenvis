@@ -118,7 +118,6 @@
 import { ElMessage } from 'element-plus';
 import { ArrowDown, Search, Bottom, ArrowUp, DocumentCopy } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import useClipboard from 'vue-clipboard3';
 import type {
   RetrievalTableChange,
   RetrievalTableColumn,
@@ -126,6 +125,7 @@ import type {
   RetrievalTableSorter,
 } from '@/types/type-retrieval';
 import { resolveRetrievalLink } from '@/utils/retrieval-link';
+import { copyTextToClipboard } from '@/utils/clipboard';
 
 const props = defineProps<{ state: RetrievalTableState }>();
 const emit = defineEmits<{
@@ -134,16 +134,15 @@ const emit = defineEmits<{
   (event: 'on-click', value: unknown): void;
 }>();
 
-const { toClipboard } = useClipboard();
 const tableKey = ref(0);
 const colShow = ref(false);
 const moreSearch = ref('');
 
 async function copy(value: string) {
-  try {
-    await toClipboard(value);
+  const copied = await copyTextToClipboard(value);
+  if (copied) {
     ElMessage.success('复制成功');
-  } catch {
+  } else {
     ElMessage.error('复制失败,请手动复制!');
   }
 }

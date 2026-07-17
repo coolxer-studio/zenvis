@@ -1,6 +1,6 @@
 <template>
   <el-menu mode="horizontal" class="login-header-nav" v-model:active-index="current">
-    <template v-for="(item, index) in menuList">
+    <template v-for="item in menuList" :key="item.code">
       <el-menu-item v-if="!item.children" :index="item.code" class="menu-item-with-superscript" @click="goMenu(item)">
         <span class="nav-menu-link">
           {{item.name}}
@@ -16,7 +16,7 @@
             <div class="nav_triangle"></div>
           </span>
         </template>
-        <el-menu-item v-for="child in item.children" :index="child.code" @click="goMenu(child)">
+        <el-menu-item v-for="child in item.children" :key="child.code" :index="child.code" @click="goMenu(child)">
           <span>{{child.name}}</span>
         </el-menu-item>
       </el-sub-menu>

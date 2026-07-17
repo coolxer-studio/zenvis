@@ -93,14 +93,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Document, View } from '@element-plus/icons-vue'
 import DOMPurify from 'dompurify'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { PolicyService } from '@/service/api'
-import { DATA_VISUALIZATION_RECORD_EVENT } from '../events'
+import { DATA_VISUALIZATION_RECORD_EVENT, useDihEventListener } from '../events'
 import type { DataVisualizationRecordEventDetail } from '../events'
 
 type VisualizationRecord = Record<string, unknown> & {
@@ -600,8 +600,8 @@ const copyRecord = async (record: VisualizationRecord) => {
   }
 }
 
-const handleRecordsUpdated = (event: Event) => {
-  const detail = (event as CustomEvent<DataVisualizationRecordEventDetail>).detail || {}
+const handleRecordsUpdated = (detail: DataVisualizationRecordEventDetail) => {
+  detail ||= {}
   chartLibrary.value = asRecordList(detail.chartLibrary)
   visualizationConfigs.value = asRecordList(detail.visualizationConfigs)
   dashboardConfigs.value = asRecordList(detail.dashboardConfigs)
@@ -612,13 +612,7 @@ const handleRecordsUpdated = (event: Event) => {
   }
 }
 
-onMounted(() => {
-  window.addEventListener(DATA_VISUALIZATION_RECORD_EVENT, handleRecordsUpdated)
-})
-
-onUnmounted(() => {
-  window.removeEventListener(DATA_VISUALIZATION_RECORD_EVENT, handleRecordsUpdated)
-})
+useDihEventListener(DATA_VISUALIZATION_RECORD_EVENT, handleRecordsUpdated)
 </script>
 
 <style scoped>

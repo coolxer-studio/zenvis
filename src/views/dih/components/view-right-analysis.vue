@@ -71,11 +71,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { AnalysisRecord } from '@/types/type-dih'
 import {
   DATA_ANALYSIS_RECORD_EVENT,
   DATA_ANALYSIS_RECORD_REQUEST_EVENT,
+  emitDihEvent,
+  useDihEventListener,
 } from '../events'
 import type { AnalysisRecordEventDetail } from '../events'
 
@@ -156,21 +158,18 @@ const prettyJson = (value: unknown) => {
   }
 }
 
-const handleAnalysisRecordsUpdated = (event: Event) => {
-  const detail = (event as CustomEvent<AnalysisRecordEventDetail>).detail || {}
+const handleAnalysisRecordsUpdated = (detail: AnalysisRecordEventDetail) => {
+  detail ||= {}
   records.value = Array.isArray(detail.records) ? detail.records : []
   aggregatedLogs.value = Array.isArray(detail.aggregatedLogs) ? detail.aggregatedLogs : []
   sandboxResults.value = Array.isArray(detail.sandboxResults) ? detail.sandboxResults : []
   conclusionTimeline.value = Array.isArray(detail.conclusionTimeline) ? detail.conclusionTimeline : []
 }
 
-onMounted(() => {
-  window.addEventListener(DATA_ANALYSIS_RECORD_EVENT, handleAnalysisRecordsUpdated)
-  window.dispatchEvent(new CustomEvent(DATA_ANALYSIS_RECORD_REQUEST_EVENT))
-})
+useDihEventListener(DATA_ANALYSIS_RECORD_EVENT, handleAnalysisRecordsUpdated)
 
-onBeforeUnmount(() => {
-  window.removeEventListener(DATA_ANALYSIS_RECORD_EVENT, handleAnalysisRecordsUpdated)
+onMounted(() => {
+  emitDihEvent(DATA_ANALYSIS_RECORD_REQUEST_EVENT)
 })
 </script>
 

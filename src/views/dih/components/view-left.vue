@@ -80,15 +80,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { 
   Plus, Clock, MoreFilled, EditPen, Top,Bottom, Delete
 } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { DihService } from '@/service/api'
-import type { ChatSession } from '@/types/type-dih'
 import { generateUUID } from '@/utils/util-common'
+import { NEW_CHAT_CREATED_EVENT, useDihEventListener } from '../events'
+import type { DihChatListItem, NewChatCreatedEventDetail } from '../events'
 
 const router = useRouter();
 
@@ -99,10 +100,10 @@ const activePinChat = ref(-1)
 const activeChat = ref(0)
 
 // 置顶的聊天记录
-const chatPinList = ref<ChatSession[]>([])
+const chatPinList = ref<DihChatListItem[]>([])
 
 // 聊天历史数据
-const chatHistory = ref<ChatSession[]>([])
+const chatHistory = ref<DihChatListItem[]>([])
 
 // 分页参数
 const pageParams = ref({
@@ -336,19 +337,10 @@ const viewMoreChats = () => {
 onMounted(() => {
   loadPinnedChats()
   loadChatHistory()
-  
-  // 监听新聊天创建事件
-  window.addEventListener('newChatCreated', handleNewChatCreated as EventListener);
-})
-
-// 组件卸载时移除事件监听
-onUnmounted(() => {
-  window.removeEventListener('newChatCreated', handleNewChatCreated as EventListener);
 })
 
 // 处理新聊天创建事件
-const handleNewChatCreated = (event: CustomEvent) => {
-  const { chatItem } = event.detail;
+const handleNewChatCreated = ({ chatItem }: NewChatCreatedEventDetail) => {
   // 将新的聊天项添加到聊天历史列表的开头
   console.log(chatItem);
   // 判断是否已经存在
@@ -358,6 +350,8 @@ const handleNewChatCreated = (event: CustomEvent) => {
   // 不存在添加进去
   chatHistory.value.unshift(chatItem);
 }
+
+useDihEventListener(NEW_CHAT_CREATED_EVENT, handleNewChatCreated)
 
 </script>
 
@@ -508,8 +502,6 @@ const handleNewChatCreated = (event: CustomEvent) => {
   text-decoration: underline;
 }
 </style>
-
-
 
 
 

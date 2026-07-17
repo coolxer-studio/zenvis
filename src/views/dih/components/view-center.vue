@@ -206,13 +206,17 @@ import {
   DATA_ANALYSIS_RECORD_REQUEST_EVENT,
   DATA_REPORT_RECORD_EVENT,
   DATA_REPORT_RECORD_REQUEST_EVENT,
+  DATA_VISUALIZATION_CHART_DATA_EVENT,
   DATA_VISUALIZATION_RECORD_EVENT,
+  NEW_CHAT_CREATED_EVENT,
   POLICY_RECORD_ACTION_EVENT,
   POLICY_RECORD_EVENT,
   POLICY_RECORD_REQUEST_EVENT,
   REPORT_EXTRA_DATA_CHANGED_EVENT,
   REPORT_QUICK_ACTION_EVENT,
   REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
+  emitDihEvent,
+  useDihEventListener,
 } from '../events';
 import type {
   PolicyRecordActionEventDetail,
@@ -701,33 +705,23 @@ const extractReportRecords = () => {
 };
 
 const publishDataAccessRecords = () => {
-  window.dispatchEvent(new CustomEvent(DATA_ACCESS_RECORD_EVENT, {
-    detail: extractDataAccessRecords(),
-  }));
+  emitDihEvent(DATA_ACCESS_RECORD_EVENT, extractDataAccessRecords());
 };
 
 const publishDataVisualizationRecords = () => {
-  window.dispatchEvent(new CustomEvent(DATA_VISUALIZATION_RECORD_EVENT, {
-    detail: extractDataVisualizationRecords(),
-  }));
+  emitDihEvent(DATA_VISUALIZATION_RECORD_EVENT, extractDataVisualizationRecords());
 };
 
 const publishAnalysisRecords = () => {
-  window.dispatchEvent(new CustomEvent(DATA_ANALYSIS_RECORD_EVENT, {
-    detail: extractAnalysisRecords(),
-  }));
+  emitDihEvent(DATA_ANALYSIS_RECORD_EVENT, extractAnalysisRecords());
 };
 
 const publishPolicyRecords = () => {
-  window.dispatchEvent(new CustomEvent(POLICY_RECORD_EVENT, {
-    detail: extractPolicyRecords(),
-  }));
+  emitDihEvent(POLICY_RECORD_EVENT, extractPolicyRecords());
 };
 
 const publishReportRecords = () => {
-  window.dispatchEvent(new CustomEvent(DATA_REPORT_RECORD_EVENT, {
-    detail: extractReportRecords(),
-  }));
+  emitDihEvent(DATA_REPORT_RECORD_EVENT, extractReportRecords());
 };
 
 watch(chatSessionExtraData, () => {
@@ -1041,14 +1035,12 @@ const markChartAsLoaded = (message: ChatMessage) => {
 };
 
 const dispatchChartData = (jsonData: any) => {
-  window.dispatchEvent(new CustomEvent('dataVisualizationChartData', {
-    detail: {
-      chartType: jsonData.chart_type || 'line',
-      option: jsonData.option || jsonData,
-      rawData: jsonData.raw_data,
-      columns: jsonData.columns
-    }
-  }));
+  emitDihEvent(DATA_VISUALIZATION_CHART_DATA_EVENT, {
+    chartType: jsonData.chart_type || 'line',
+    option: jsonData.option || jsonData,
+    rawData: jsonData.raw_data,
+    columns: jsonData.columns,
+  });
 };
 
 const processMessageFormat = (message: ChatMessage) => {
@@ -1434,9 +1426,7 @@ const sendMessage = async (options: SendMessageOptions = {}) => {
         };
         // 触发事件通知父组件添加新的聊天项
         // 这里可以通过emit或者其他方式通知view-left组件
-        window.dispatchEvent(new CustomEvent('newChatCreated', { 
-          detail: { chatItem: newChatItem } 
-        }));
+        emitDihEvent(NEW_CHAT_CREATED_EVENT, { chatItem: newChatItem });
         const nextQuery = { ...router.currentRoute.value.query };
         delete nextQuery.createSession;
         router.replace({ name: 'service-dih', query: nextQuery });
@@ -1514,8 +1504,8 @@ const policyRecordActionMessage = (action: 'trial' | 'apply', record: PolicyReco
   ].join('\n');
 };
 
-const handlePolicyRecordActionRequested = async (event: Event) => {
-  const detail = (event as CustomEvent<PolicyRecordActionEventDetail>).detail || {};
+const handlePolicyRecordActionRequested = async (detail: PolicyRecordActionEventDetail) => {
+  detail ||= {};
   const action = detail.action;
   const record = detail.record;
   if (!action || !record) {
@@ -1534,8 +1524,8 @@ const handlePolicyRecordActionRequested = async (event: Event) => {
   });
 };
 
-const handleReportExtraDataChanged = (event: Event) => {
-  const detail = (event as CustomEvent<ReportExtraDataChangedEventDetail>).detail || {};
+const handleReportExtraDataChanged = (detail: ReportExtraDataChangedEventDetail) => {
+  detail ||= {};
   if (typeof detail.extraData === 'string') {
     chatSessionExtraData.value = detail.extraData;
   }
@@ -1557,8 +1547,8 @@ const extractSelectionRewriteContent = (message?: ChatMessage) => {
   return stripSelectionRewriteFence(preferredPart?.content || message.content || '');
 };
 
-const handleReportQuickActionRequested = async (event: Event) => {
-  const detail = (event as CustomEvent<ReportQuickActionEventDetail>).detail || {};
+const handleReportQuickActionRequested = async (detail: ReportQuickActionEventDetail) => {
+  detail ||= {};
   const requestContent = detail.requestContent?.trim();
   if (!requestContent) {
     ElMessage.warning('快捷写作指令为空');
@@ -1577,35 +1567,25 @@ const handleReportQuickActionRequested = async (event: Event) => {
     const responseMessage = [...messages.value.slice(messageStartIndex)]
       .reverse()
       .find(message => message.sender === 'ai' && !message.loading && !message.isError);
-    window.dispatchEvent(new CustomEvent(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, {
-      detail: {
-        selectionId: detail.selectionId,
-        actionKey: detail.actionKey,
-        content: extractSelectionRewriteContent(responseMessage),
-      },
-    }));
+    emitDihEvent(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, {
+      selectionId: detail.selectionId,
+      actionKey: detail.actionKey,
+      content: extractSelectionRewriteContent(responseMessage),
+    });
   }
 };
 
+useDihEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
+useDihEventListener(POLICY_RECORD_REQUEST_EVENT, handlePolicyRecordsRequested);
+useDihEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
+useDihEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
+useDihEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
+useDihEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
+
 onMounted(() => {
-  window.addEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
-  window.addEventListener(POLICY_RECORD_REQUEST_EVENT, handlePolicyRecordsRequested);
-  window.addEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
-  window.addEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
-  window.addEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
-  window.addEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
   nextTick(() => publishAnalysisRecords());
   nextTick(() => publishPolicyRecords());
   nextTick(() => publishReportRecords());
-});
-
-onUnmounted(() => {
-  window.removeEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
-  window.removeEventListener(POLICY_RECORD_REQUEST_EVENT, handlePolicyRecordsRequested);
-  window.removeEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
-  window.removeEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
-  window.removeEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
-  window.removeEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
 });
 
 const confirmAction = (part: ChatMessagePart) => {

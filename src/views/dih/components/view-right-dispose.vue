@@ -106,6 +106,8 @@ import {
   POLICY_RECORD_ACTION_EVENT,
   POLICY_RECORD_EVENT,
   POLICY_RECORD_REQUEST_EVENT,
+  emitDihEvent,
+  useDihEventListener,
 } from '../events'
 import type { PolicyRecordEventDetail } from '../events'
 
@@ -258,29 +260,25 @@ const showDiff = (record: PolicyRecord) => {
 
 const requestTrial = (record: PolicyRecord) => {
   activeTab.value = 'trial'
-  window.dispatchEvent(new CustomEvent(POLICY_RECORD_ACTION_EVENT, {
-    detail: { action: 'trial', record },
-  }))
+  emitDihEvent(POLICY_RECORD_ACTION_EVENT, { action: 'trial', record })
 }
 
 const requestApply = (record: PolicyRecord) => {
-  window.dispatchEvent(new CustomEvent(POLICY_RECORD_ACTION_EVENT, {
-    detail: { action: 'apply', record },
-  }))
+  emitDihEvent(POLICY_RECORD_ACTION_EVENT, { action: 'apply', record })
 }
 
-const handleRecordsUpdated = (event: Event) => {
-  const detail = (event as CustomEvent<PolicyRecordEventDetail>).detail || {}
+const handleRecordsUpdated = (detail: PolicyRecordEventDetail) => {
+  detail ||= {}
   records.value = Array.isArray(detail.records) ? detail.records : []
 }
 
+useDihEventListener(POLICY_RECORD_EVENT, handleRecordsUpdated)
+
 onMounted(() => {
-  window.addEventListener(POLICY_RECORD_EVENT, handleRecordsUpdated)
-  window.dispatchEvent(new CustomEvent(POLICY_RECORD_REQUEST_EVENT))
+  emitDihEvent(POLICY_RECORD_REQUEST_EVENT)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener(POLICY_RECORD_EVENT, handleRecordsUpdated)
   disposeDiffEditor()
 })
 </script>

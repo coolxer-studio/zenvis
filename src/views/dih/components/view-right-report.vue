@@ -155,6 +155,8 @@ import {
   REPORT_EXTRA_DATA_CHANGED_EVENT,
   REPORT_QUICK_ACTION_EVENT,
   REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
+  emitDihEvent,
+  useDihEventListener,
 } from '../events'
 import type {
   ReportRecordEventDetail,
@@ -424,8 +426,8 @@ const applyDocument = (document: ReportDocument | ReportArtifact) => {
   })
 }
 
-const handleReportRecordsUpdated = (event: Event) => {
-  const detail = (event as CustomEvent<ReportRecordEventDetail>).detail || {}
+const handleReportRecordsUpdated = (detail: ReportRecordEventDetail) => {
+  detail ||= {}
   sessionRecordId.value = detail.sessionRecordId || sessionRecordId.value
   extraDataText.value = detail.extraData || extraDataText.value
   documents.value = detail.documents || []
@@ -568,15 +570,13 @@ const requestSelectionRewrite = (action: SelectionRewriteAction) => {
     `\`\`\`markdown\n${selectedMarkdown}\n\`\`\``,
   ].join('\n')
   hideSelectionMenu()
-  window.dispatchEvent(new CustomEvent(REPORT_QUICK_ACTION_EVENT, {
-    detail: {
-      target: 'selection',
-      actionKey: action.key,
-      selectionId: pending.id,
-      displayContent: `请${action.label}选中的报表片段。`,
-      requestContent,
-    },
-  }))
+  emitDihEvent(REPORT_QUICK_ACTION_EVENT, {
+    target: 'selection',
+    actionKey: action.key,
+    selectionId: pending.id,
+    displayContent: `请${action.label}选中的报表片段。`,
+    requestContent,
+  })
 }
 
 const replaceSelectionWithContent = (content: string) => {
@@ -618,8 +618,8 @@ const replaceSelectionWithContent = (content: string) => {
   }
 }
 
-const handleSelectionRewriteCompleted = (event: Event) => {
-  const detail = (event as CustomEvent<SelectionRewriteCompletedEventDetail>).detail || {}
+const handleSelectionRewriteCompleted = (detail: SelectionRewriteCompletedEventDetail) => {
+  detail ||= {}
   const pending = pendingSelectionRewrite.value
   if (!pending || detail.selectionId !== pending.id) {
     return
@@ -681,9 +681,7 @@ const persistExtraData = async (nextExtraData: string) => {
   }
   await DihService.updateChatSession(sessionRecordId.value, { extra_data: nextExtraData })
   extraDataText.value = nextExtraData
-  window.dispatchEvent(new CustomEvent(REPORT_EXTRA_DATA_CHANGED_EVENT, {
-    detail: { extraData: nextExtraData },
-  }))
+  emitDihEvent(REPORT_EXTRA_DATA_CHANGED_EVENT, { extraData: nextExtraData })
   return true
 }
 
@@ -843,24 +841,21 @@ const requestQuickAction = (action: QuickAction) => {
     '',
     '请返回完整报表正文，并在回答末尾输出一个 zenvis:report-document-config 围栏代码块，围栏内只放最终 Markdown 或 HTML 正文。',
   ].join('\n')
-  window.dispatchEvent(new CustomEvent(REPORT_QUICK_ACTION_EVENT, {
-    detail: {
-      displayContent: `请${action.label}右侧报表。`,
-      requestContent,
-    },
-  }))
+  emitDihEvent(REPORT_QUICK_ACTION_EVENT, {
+    displayContent: `请${action.label}右侧报表。`,
+    requestContent,
+  })
 }
 
+useDihEventListener(DATA_REPORT_RECORD_EVENT, handleReportRecordsUpdated)
+useDihEventListener(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, handleSelectionRewriteCompleted)
+
 onMounted(() => {
-  window.addEventListener(DATA_REPORT_RECORD_EVENT, handleReportRecordsUpdated)
-  window.dispatchEvent(new CustomEvent(DATA_REPORT_RECORD_REQUEST_EVENT))
-  window.addEventListener(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, handleSelectionRewriteCompleted)
+  emitDihEvent(DATA_REPORT_RECORD_REQUEST_EVENT)
   window.addEventListener('click', hideSelectionMenu)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener(DATA_REPORT_RECORD_EVENT, handleReportRecordsUpdated)
-  window.removeEventListener(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, handleSelectionRewriteCompleted)
   window.removeEventListener('click', hideSelectionMenu)
   if (editorRef.value && !editorRef.value.isDestroyed) {
     editorRef.value.destroy()

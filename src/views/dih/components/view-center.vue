@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import {
   Close, CopyDocument, Lightning, Loading, Monitor, Opportunity, Paperclip, Position, Share, Sunny
 } from '@element-plus/icons-vue'
@@ -196,36 +196,19 @@ import { ElMessage } from 'element-plus'
 import { DihService } from '@/service/api'
 import { useRouter } from 'vue-router'
 import { generateUUID } from '@/utils/util-common'
-import {getCurrentFormattedDate} from '@/utils/util-time'
 import { copyTextToClipboard } from '@/utils/clipboard';
 import ChatMessageRenderer from './chat-message-renderer.vue';
 import { useChatAttachments } from '../composables/use-chat-attachments';
+import { useChatMessageActions } from '../composables/use-chat-message-actions';
 import { useChatSession } from '../composables/use-chat-session';
+import { useChatStream } from '../composables/use-chat-stream';
 import { useMcpApproval } from '../composables/use-mcp-approval';
+import { usePanelRecordSync } from '../composables/use-panel-record-sync';
 import {
-  DATA_ACCESS_RECORD_EVENT,
-  DATA_ANALYSIS_RECORD_EVENT,
-  DATA_ANALYSIS_RECORD_REQUEST_EVENT,
-  DATA_REPORT_RECORD_EVENT,
-  DATA_REPORT_RECORD_REQUEST_EVENT,
   DATA_VISUALIZATION_CHART_DATA_EVENT,
-  DATA_VISUALIZATION_RECORD_EVENT,
-  NEW_CHAT_CREATED_EVENT,
-  POLICY_RECORD_ACTION_EVENT,
-  POLICY_RECORD_EVENT,
-  POLICY_RECORD_REQUEST_EVENT,
-  REPORT_EXTRA_DATA_CHANGED_EVENT,
-  REPORT_QUICK_ACTION_EVENT,
-  REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
   emitDihEvent,
-  useDihEventListener,
 } from '../events';
-import type {
-  PolicyRecordActionEventDetail,
-  ReportExtraDataChangedEventDetail,
-  ReportQuickActionEventDetail,
-} from '../events';
-import type { AnalysisRecord, ChatMessage, ChatMessagePart, ChatSession, McpApprovalData, PolicyRecord } from '@/types/type-dih';
+import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
 
 const router = useRouter();
 
@@ -252,25 +235,6 @@ const scrollToBottom = async (): Promise<void> => {
   }
 };
 
-// 定义基础信息接口
-interface BasicInfo {
-  label: string
-  value: string
-}
-
-// 定义调查结果接口
-interface InvestigationResult {
-  title: string
-  time: string
-}
-
-// 定义任务接口
-interface Task {
-  title: string
-  detail: string
-  expanded: boolean
-}
-
 // 定义建议接口
 interface Suggestion {
   type: string
@@ -283,24 +247,6 @@ interface Props {
   chatSessionId?: string
   chatSessionType?: string
 }
-
-type SendMessageOptions = {
-  content?: string;
-  requestContent?: string;
-};
-
-type DataAccessRecord = Record<string, unknown> & {
-  id?: string;
-  name?: string;
-  status?: string;
-};
-
-type InfoStepAnswer = {
-  id: string;
-  title: string;
-  value: string;
-  source: 'suggestion' | 'custom';
-};
 
 const props = defineProps<Props>()
 
@@ -345,148 +291,15 @@ interface SelectData {
 
 // 输入消息
 const inputMessage = ref('')
-const isStreamingResponse = ref(false)
-const currentChatAbortController = ref<AbortController | null>(null)
-const currentStreamingMessageIndex = ref<number | null>(null)
-const isUserStoppingChat = ref(false)
-const canSendMessage = computed(() => {
-  return !isUploadingAttachment.value
-    && !isStreamingResponse.value
-    && (inputMessage.value.trim().length > 0 || pendingAttachments.value.length > 0)
+const modelSelectData = ref<SelectData>({
+  periodOptions: ['qianwen-max', 'deepseek-R1', 'deepseek-V3'],
+  period: 'qianwen-max',
 })
-
-const AUTO_CONFIRM_ACTIONS = new Set([
-  'analysis.start',
-  'analysis.create_continuous_task',
-  'analysis.confirm_log_aggregation',
-  'analysis.confirm_sandbox_result',
-  'analysis_demo.confirm_log_aggregation',
-  'analysis_demo.confirm_sandbox_result',
-  'policy.confirm_trial',
-  'policy.confirm_apply',
-  'policy_demo.confirm_trial',
-  'policy_demo.confirm_retry_trial',
-  'policy_demo.confirm_apply',
-  'policy.apply_to_production',
-  'data_access.generate_demo_push_config',
-  'data_access.create_demo_push_task',
-  'data_visualization.add_chart_library',
-  'data_visualization.apply_config',
-])
-
-const AUTO_REJECT_ACTIONS = new Set([
-  'analysis.confirm_log_aggregation',
-  'analysis.confirm_sandbox_result',
-  'analysis_demo.confirm_log_aggregation',
-  'analysis_demo.confirm_sandbox_result',
-  'policy.confirm_trial',
-  'policy.confirm_apply',
-  'policy_demo.confirm_trial',
-  'policy_demo.confirm_retry_trial',
-  'policy_demo.confirm_apply',
-  'data_access.generate_demo_push_config',
-  'data_access.create_demo_push_task',
-  'data_visualization.apply_config',
-])
 
 // 添加一个变量来跟踪Enter按键次数
 const enterPressCount = ref(0)
 const enterPressTimer = ref<number | null>(null)
 // 移除了 showEnterTip 变量，因为我们不再使用页面内元素显示提示
-
-// 面板展开状态
-const panelStates = reactive({
-  main: true,
-  info: true,
-  tasks: true
-})
-
-// 基础信息数据
-const basicInfo = ref<BasicInfo[]>([
-  { label: '源IP', value: '10.108.108.23' },
-  { label: '目的IP', value: '10.106.108.110' },
-  { label: '目的端口', value: '8080' },
-  { label: '进程命令行', value: 'c:\\windows\\temp\\frpc.exe -c c:\\windows\\temp\\frpc.toml' }
-])
-
-// 调查结果数据
-const investigationResult = ref<InvestigationResult>({
-  title: '调查结果1：IP地址10.108.108.23在短时间内高频（11次）向目标主机的one.jsp文件发起POST请求，可能存在利用WebShell执行命令或传输恶意数据的行为，需要调查该IP的网络行为是否为攻击源。',
-  time: '调查时间：2025-04-18 16:00:00 - 2025-04-18 20:00:00'
-})
-
-// 任务数据
-const tasks = ref<Task[]>([
-  {
-    title: '分析主机c39842ce43b5ebc8上的网络连接调查frpc.exe(7628)的网络连接情况，特别是到10.106.108.110:8080的连接行为',
-    detail: '这里是任务1的详细信息和结果...',
-    expanded: false
-  },
-  {
-    title: '分析主机c39842ce43b5ebc8上的DNS访问调查frpc.exe(7628)请求过的DNS域名',
-    detail: '这里是任务2的详细信息和结果...',
-    expanded: false
-  },
-  {
-    title: '分析主机c39842ce43b5ebc8上的进程创建调查frpc.exe(7628)创建过哪些子进程',
-    detail: '这里是任务3的详细信息和结果...',
-    expanded: false
-  }
-])
-
-// 计算已完成任务数
-const completedTasks = ref(0)
-
-// 总任务数
-const totalTasks = ref(3)
-
-
-const asObject = (value: unknown): Record<string, unknown> => {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-};
-
-const asRecordList = (value: unknown): DataAccessRecord[] => {
-  return Array.isArray(value)
-    ? value.filter(item => item && typeof item === 'object').map(item => item as DataAccessRecord)
-    : [];
-};
-
-const upsertById = (items: DataAccessRecord[], record: DataAccessRecord) => {
-  const id = String(record.id || record.fileName || record.taskId || record.name || '');
-  if (!id) {
-    return [...items, record];
-  }
-  const next = items.filter(item => String(item.id || item.fileName || item.taskId || item.name || '') !== id);
-  next.push(record);
-  return next;
-};
-
-const upsertInto = (items: DataAccessRecord[], record: DataAccessRecord) => {
-  items.splice(0, items.length, ...upsertById(items, record));
-};
-
-const parseSessionExtraData = () => {
-  if (!chatSessionExtraData.value.trim()) {
-    return {};
-  }
-  try {
-    return asObject(JSON.parse(chatSessionExtraData.value));
-  } catch {
-    return {};
-  }
-};
-
-const textValue = (value: unknown, fallback = '') => {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (value === undefined || value === null) {
-    return fallback;
-  }
-  return String(value);
-};
 
 const queryTextValue = (value: unknown) => {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -516,222 +329,6 @@ const queryPromptValue = (query: Record<string, unknown>) => {
   }
   return queryTextValue(query.msg);
 };
-
-const prettyTextValue = (value: unknown, fallback = '') => {
-  if (typeof value === 'string') {
-    return value.trim() || fallback;
-  }
-  if (value === undefined || value === null || value === '') {
-    return fallback;
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
-const truncateText = (value: string, maxLength = 4000) => {
-  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...` : value;
-};
-
-const buildChartLibraryRecord = (part: ChatMessagePart): DataAccessRecord => {
-  const metadata = asObject(part.metadata);
-  const name = textValue(metadata.title || part.title, '临时可视化图表');
-  const entity = textValue(metadata.entity, '');
-  const chartType = textValue(metadata.chartType, '');
-  return {
-    id: textValue(metadata.id, `chart:${entity || 'unknown'}:${name}`),
-    title: '图表库记录已创建',
-    name,
-    description: textValue(metadata.content || part.content || metadata.description, ''),
-    entity,
-    chartType,
-    api: textValue(metadata.api, ''),
-    status: 'temporary',
-    source: 'session',
-    config: metadata.amisConfig || metadata.config || {},
-  };
-};
-
-const addChartRecordToExtraData = (record: DataAccessRecord) => {
-  const extraData = asObject(parseSessionExtraData());
-  const dataVisualization = asObject(extraData.dataVisualization);
-  extraData.dataVisualization = {
-    ...dataVisualization,
-    chartLibrary: upsertById(asRecordList(dataVisualization.chartLibrary), record),
-  };
-  return JSON.stringify(extraData);
-};
-
-const extractDataAccessRecords = () => {
-  const metadataConfigs: DataAccessRecord[] = [];
-  const dataPushServices: DataAccessRecord[] = [];
-  const dataAccess = asObject(parseSessionExtraData().dataAccess);
-  asRecordList(dataAccess.metadataConfigs).forEach(record => {
-    upsertInto(metadataConfigs, record);
-  });
-  asRecordList(dataAccess.dataPushServices).forEach(record => {
-    upsertInto(dataPushServices, record);
-  });
-  return {
-    metadataConfigs,
-    dataPushServices,
-  };
-};
-
-const extractDataVisualizationRecords = () => {
-  const dataVisualization = asObject(parseSessionExtraData().dataVisualization);
-  return {
-    chartLibrary: asRecordList(dataVisualization.chartLibrary),
-    visualizationConfigs: asRecordList(dataVisualization.visualizationConfigs),
-    dashboardConfigs: asRecordList(dataVisualization.dashboardConfigs),
-    menuConfigs: asRecordList(dataVisualization.menuConfigs),
-  };
-};
-
-const extractAnalysisRecords = () => {
-  const records: AnalysisRecord[] = [];
-  const analysis = asObject(parseSessionExtraData().analysis);
-  asRecordList(analysis.records).forEach(record => {
-    upsertInto(records as DataAccessRecord[], record);
-  });
-  return {
-    records,
-    aggregatedLogs: asRecordList(analysis.aggregatedLogs),
-    sandboxResults: asRecordList(analysis.sandboxResults),
-    conclusionTimeline: asRecordList(analysis.conclusionTimeline),
-  };
-};
-
-const extractPolicyRecords = () => {
-  const records: PolicyRecord[] = [];
-  const policy = asObject(parseSessionExtraData().policy);
-  asRecordList(policy.records).forEach(record => {
-    upsertInto(records as DataAccessRecord[], record);
-  });
-  return { records };
-};
-
-const latestRecord = (records: Record<string, unknown>[]) => records.length ? records[records.length - 1] : {};
-
-const findTimelineContent = (timeline: Record<string, unknown>[], keywords: string[]) => {
-  const matched = [...timeline].reverse().find(item => {
-    const title = textValue(item.title).toLowerCase();
-    const id = textValue(item.id).toLowerCase();
-    return keywords.some(keyword => title.includes(keyword.toLowerCase()) || id.includes(keyword.toLowerCase()));
-  });
-  return prettyTextValue(matched?.content);
-};
-
-const findLatestDisposalStrategyConfig = () => {
-  const disposalPart = [...messages.value]
-    .reverse()
-    .flatMap(message => [...(message.parts || [])].reverse())
-    .find(part => part.type === 'config' && textValue(part.metadata?.configKind) === 'disposal-strategy');
-  return disposalPart?.content?.trim() || '';
-};
-
-const buildDisposeAgentPrompt = (detail?: string) => {
-  const analysisData = extractAnalysisRecords();
-  const timeline = analysisData.conclusionTimeline;
-  const reportRecord = latestRecord(analysisData.records.filter(record => textValue(record.stage) === 'report_output') as Record<string, unknown>[]);
-  const sandboxRecord = latestRecord(analysisData.sandboxResults);
-  const disposalSuggestion = findTimelineContent(timeline, ['处置建议', 'disposal', 'recommendation'])
-    || prettyTextValue((reportRecord.recommendations as unknown[] | undefined)?.join?.('\n'))
-    || '请基于上一轮研判结论生成处置方案。';
-  const analysisTarget = findTimelineContent(timeline, ['分析目标', 'target']);
-  const analysisProcess = findTimelineContent(timeline, ['分析过程', 'process']);
-  const analysisConclusion = findTimelineContent(timeline, ['分析结论', 'conclusion']);
-  const disposalStrategyConfig = findLatestDisposalStrategyConfig();
-  const extraDetail = detail?.trim();
-
-  return truncateText([
-    '请基于以下研判分析结果进入策略控制流程，生成可执行前需确认的处置方案。',
-    '',
-    '## 处置建议',
-    disposalSuggestion,
-    '',
-    '## 研判上下文',
-    analysisTarget ? `分析目标：${analysisTarget}` : '',
-    analysisProcess ? `分析过程：${analysisProcess}` : '',
-    analysisConclusion ? `分析结论：${analysisConclusion}` : '',
-    `聚合日志数量：${analysisData.aggregatedLogs.length}`,
-    sandboxRecord.result ? `沙箱研判结果：\n${prettyTextValue(sandboxRecord.result)}` : '',
-    disposalStrategyConfig ? `处置策略建议配置：\n${disposalStrategyConfig}` : '',
-    extraDetail ? `用户补充要求：\n${extraDetail}` : '',
-    '',
-    '## 输出要求',
-    '1. 先说明拟执行处置动作、影响范围、前置检查和回滚方案。',
-    '2. 生成策略控制智能体可确认的处置配置或策略配置。',
-    '3. 不要直接执行写入、发布、阻断、隔离等副作用动作，必须先等待用户确认。',
-  ].filter(Boolean).join('\n'));
-};
-
-const openDisposeAgentSession = async (prompt: string) => {
-  const nextChatSessionId = generateUUID();
-  const promptRef = generateUUID();
-  try {
-    window.sessionStorage?.setItem(`dih:prefill:${promptRef}`, prompt);
-  } catch {
-    // ignore storage failures and fall back to query string below
-  }
-  let storedPrompt = false;
-  try {
-    storedPrompt = window.sessionStorage?.getItem(`dih:prefill:${promptRef}`) === prompt;
-  } catch {
-    storedPrompt = false;
-  }
-  await router.push({
-    name: 'service-dih',
-    query: {
-      type: 'agent_dispose',
-      chatSessionId: nextChatSessionId,
-      createSession: 1,
-      ...(storedPrompt ? { msgRef: promptRef } : { msg: encodeURIComponent(prompt) }),
-    },
-  });
-};
-
-const extractReportRecords = () => {
-  const report = asObject(parseSessionExtraData().report);
-  return {
-    currentDocument: asObject(report.currentDocument),
-    documents: asRecordList(report.documents),
-    artifacts: asRecordList(report.artifacts),
-    extraData: chatSessionExtraData.value,
-    sessionRecordId: chatSessionRecordId.value,
-    sessionId: chatSessionId.value,
-  };
-};
-
-const publishDataAccessRecords = () => {
-  emitDihEvent(DATA_ACCESS_RECORD_EVENT, extractDataAccessRecords());
-};
-
-const publishDataVisualizationRecords = () => {
-  emitDihEvent(DATA_VISUALIZATION_RECORD_EVENT, extractDataVisualizationRecords());
-};
-
-const publishAnalysisRecords = () => {
-  emitDihEvent(DATA_ANALYSIS_RECORD_EVENT, extractAnalysisRecords());
-};
-
-const publishPolicyRecords = () => {
-  emitDihEvent(POLICY_RECORD_EVENT, extractPolicyRecords());
-};
-
-const publishReportRecords = () => {
-  emitDihEvent(DATA_REPORT_RECORD_EVENT, extractReportRecords());
-};
-
-watch(chatSessionExtraData, () => {
-  publishDataAccessRecords();
-  publishDataVisualizationRecords();
-  publishAnalysisRecords();
-  publishPolicyRecords();
-  publishReportRecords();
-});
 
 /**
  * 健壮的 JSON 解析工具方法
@@ -834,34 +431,6 @@ const createMarkdownParts = (content: string): ChatMessagePart[] => [
   },
 ];
 
-const createThinkingPart = (status: 'running' | 'completed' = 'running'): ChatMessagePart => ({
-  id: generateUUID(),
-  type: 'thinking',
-  title: '思考过程',
-  content: status === 'running' ? '正在深度思考，请稍候...' : '已完成深度思考。',
-  status,
-});
-
-const hasThinkTag = (content: string) => content.includes('<think>');
-
-onUnmounted(() => {
-  isUserStoppingChat.value = true;
-  void rejectPendingMcpApprovals(currentStreamingMessageIndex.value, '聊天页面已关闭');
-  currentChatAbortController.value?.abort();
-});
-
-const createDeepThinkingStreamingParts = (content: string): ChatMessagePart[] => {
-  const parts: ChatMessagePart[] = [createThinkingPart('running')];
-  if (content.trim()) {
-    parts.push({
-      id: generateUUID(),
-      type: 'markdown',
-      content,
-    });
-  }
-  return parts;
-};
-
 const {
   isMcpApprovalPart,
   upsertMcpApprovalPart,
@@ -872,25 +441,6 @@ const {
   messages,
   createMarkdownParts,
 });
-
-const appendStreamingDelta = (message: ChatMessage, delta: string, accumulatedContent: string) => {
-  const containsApproval = message.parts?.some(isMcpApprovalPart) === true;
-  if (!containsApproval) {
-    message.parts = isDeepThinking.value && !hasThinkTag(accumulatedContent)
-      ? createDeepThinkingStreamingParts(accumulatedContent)
-      : undefined;
-    return;
-  }
-  if (!delta) return;
-  const parts = message.parts ? [...message.parts] : [];
-  const last = parts.at(-1);
-  if (last?.type === 'markdown') {
-    last.content = `${last.content || ''}${delta}`;
-  } else {
-    parts.push({ id: generateUUID(), type: 'markdown', content: delta });
-  }
-  message.parts = parts;
-};
 
 const getChartContent = (message: ChatMessage) => {
   const chartPart = message.parts?.find(part => part.type === 'chart');
@@ -943,8 +493,64 @@ const processMessageFormat = (message: ChatMessage) => {
   }
 };
 
+const {
+  isStreamingResponse,
+  canSendMessage,
+  sendMessage,
+  stopCurrentChat,
+} = useChatStream({
+  router,
+  messages,
+  inputMessage,
+  pendingAttachments,
+  isUploadingAttachment,
+  isDeepThinking,
+  selectedModel: computed(() => modelSelectData.value.period),
+  chatSessionId,
+  chatSessionRecordId,
+  chatSessionType,
+  chatSessionExtraData,
+  scrollToBottom,
+  processMessageFormat,
+  refreshChatSessionExtraData,
+  isMcpApprovalPart,
+  upsertMcpApprovalPart,
+  mergeFinalApprovalParts,
+  rejectPendingMcpApprovals,
+});
+
 onMounted(() => {
   void fetchModelList();
+});
+
+const {
+  addChartRecordToExtraData,
+  buildDisposeAgentPrompt,
+  openDisposeAgentSession,
+} = usePanelRecordSync({
+  router,
+  messages,
+  chatSessionExtraData,
+  chatSessionRecordId,
+  chatSessionId,
+  isStreamingResponse,
+  sendMessage,
+});
+
+const {
+  handleInfoStepsSubmit,
+  handleActionDecision,
+  handleAddChartLibrary,
+  handleAnalysisDecision,
+  handleDataAccessDecision,
+} = useChatMessageActions({
+  chatSessionId,
+  chatSessionExtraData,
+  sendMessage,
+  ensureChatSessionRecordId,
+  addChartRecordToExtraData,
+  buildDisposeAgentPrompt,
+  openDisposeAgentSession,
 });
 
 const fetchModelList = async () => {
@@ -1024,506 +630,6 @@ const insertLineBreak = () => {
   }
 }
 
-const markMessageStopped = (messageIndex: number | null) => {
-  if (messageIndex === null || !messages.value[messageIndex]) {
-    return;
-  }
-  const message = messages.value[messageIndex];
-  message.loading = false;
-  message.isError = false;
-  if (message.content?.includes('[已停止生成]')) {
-    return;
-  }
-  message.content = message.content?.trim()
-    ? `${message.content}\n\n[已停止生成]`
-    : '已停止生成';
-  const approvalParts = (message.parts || []).filter(isMcpApprovalPart);
-  message.parts = approvalParts.length
-    ? [...approvalParts, ...createMarkdownParts(message.content)]
-    : undefined;
-};
-
-const stopCurrentChat = async () => {
-  if (!currentChatAbortController.value || !isStreamingResponse.value) {
-    return;
-  }
-  isUserStoppingChat.value = true;
-  await rejectPendingMcpApprovals(currentStreamingMessageIndex.value, '用户停止生成');
-  currentChatAbortController.value.abort();
-  markMessageStopped(currentStreamingMessageIndex.value);
-  ElMessage.info('已停止生成');
-  scrollToBottom();
-};
-
-// 发送消息
-const sendMessage = async (options: SendMessageOptions = {}) => {
-  const explicitMessage = options.content?.trim();
-  const explicitRequestMessage = options.requestContent?.trim();
-  const canSend = explicitMessage
-    ? !isUploadingAttachment.value && !isStreamingResponse.value
-    : canSendMessage.value;
-
-  if (canSend) {
-    // 清空输入框 
-    const currentInputMessage = inputMessage.value.trim();
-    const sendMessage = explicitRequestMessage || explicitMessage || currentInputMessage;
-    const messageAttachments = explicitMessage ? [] : pendingAttachments.value.slice();
-    const displayMessage = explicitMessage || currentInputMessage || '请分析上传的附件内容。';
-    if (!explicitMessage) {
-      inputMessage.value = ''
-      pendingAttachments.value = []
-    }
-    // 添加用户消息
-    messages.value.push({
-      sender: 'user',
-      content: displayMessage,
-      time: getCurrentFormattedDate(),
-      attachments: messageAttachments,
-    })
-
-    // 添加AI回复占位消息
-    const aiMessageIndex = messages.value.length;
-    messages.value.push({
-      sender: 'ai',
-      content: '',
-      time: getCurrentFormattedDate(),
-      loading: true,
-      parts: isDeepThinking.value ? [createThinkingPart('running')] : undefined,
-    })
-
-    scrollToBottom();
-
-    
-    const abortController = new AbortController();
-    currentChatAbortController.value = abortController;
-    currentStreamingMessageIndex.value = aiMessageIndex;
-    isUserStoppingChat.value = false;
-    isStreamingResponse.value = true;
-
-    try {
-      let accumulatedContent = '';
-      const streamOk = await DihService.chatEvents({
-        type: chatSessionType.value,
-        message: sendMessage,
-        model: modelSelectData.value.period,
-        deep_think: isDeepThinking.value,
-        chat_id: chatSessionId.value, // 使用正确的chatSessionId
-        attachments: messageAttachments,
-      }, async event => {
-        if (event.event === 'delta') {
-          const delta = event.content || '';
-          accumulatedContent += delta;
-          if (messages.value[aiMessageIndex].loading) {
-            messages.value[aiMessageIndex].loading = false;
-          }
-          messages.value[aiMessageIndex].content = accumulatedContent;
-          appendStreamingDelta(messages.value[aiMessageIndex], delta, accumulatedContent);
-          await nextTick();
-          scrollToBottom();
-          return;
-        }
-
-        if ((event.event === 'approval_required' || event.event === 'approval_updated') && event.data) {
-          upsertMcpApprovalPart(messages.value[aiMessageIndex], event.data as McpApprovalData, accumulatedContent);
-          await nextTick();
-          scrollToBottom();
-          return;
-        }
-
-        if (event.event === 'done') {
-          if (event.message && typeof event.message !== 'string') {
-            const liveParts = messages.value[aiMessageIndex].parts;
-            messages.value[aiMessageIndex] = {
-              ...event.message,
-              parts: mergeFinalApprovalParts(liveParts, event.message.parts),
-              loading: false,
-            };
-            processMessageFormat(messages.value[aiMessageIndex]);
-            await refreshChatSessionExtraData();
-          } else {
-            messages.value[aiMessageIndex].loading = false;
-            messages.value[aiMessageIndex].content = accumulatedContent;
-          }
-          await nextTick();
-          scrollToBottom();
-          return;
-        }
-
-        if (event.event === 'error') {
-          messages.value[aiMessageIndex].loading = false;
-          messages.value[aiMessageIndex].isError = true;
-          messages.value[aiMessageIndex].content = typeof event.message === 'string'
-            ? event.message
-            : '抱歉，回复失败，请稍后重试~';
-          await nextTick();
-          scrollToBottom();
-        }
-      }, { signal: abortController.signal });
-
-      if (!streamOk) {
-        if (abortController.signal.aborted || isUserStoppingChat.value) {
-          markMessageStopped(aiMessageIndex);
-          return;
-        }
-        messages.value[aiMessageIndex].loading = false;
-        messages.value[aiMessageIndex].isError = true;
-        messages.value[aiMessageIndex].content = '抱歉，回复失败，请稍后重试~';
-        return;
-      }
-      
-      // 判断是否为新聊天会话
-      const isNewChat = router.currentRoute.value.query.createSession;
-      // 如果是新聊天且至少有一条完整的消息交互，则添加到聊天列表
-      if (isNewChat && messages.value.length >= 2) {
-        let createdSession: ChatSession | null = null;
-        try {
-          createdSession = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
-          chatSessionRecordId.value = createdSession?.id || chatSessionRecordId.value;
-          chatSessionExtraData.value = createdSession?.extraData || chatSessionExtraData.value;
-        } catch (error) {
-          console.warn('获取新会话真实ID失败，将使用sessionId作为临时ID:', error);
-        }
-        // 创建新的聊天记录项
-        const newChatItem = {
-          id: createdSession?.id || chatSessionId.value,
-          type: createdSession?.type || chatSessionType.value,
-          sessionId: createdSession?.sessionId || chatSessionId.value,
-          title: createdSession?.title || `${displayMessage.substring(0, 20)}${displayMessage.length > 20 ? '...' : ''}`,
-          pin: createdSession?.pin || false,
-        };
-        // 触发事件通知父组件添加新的聊天项
-        // 这里可以通过emit或者其他方式通知view-left组件
-        emitDihEvent(NEW_CHAT_CREATED_EVENT, { chatItem: newChatItem });
-        const nextQuery = { ...router.currentRoute.value.query };
-        delete nextQuery.createSession;
-        router.replace({ name: 'service-dih', query: nextQuery });
-      }
-    } catch (error) {
-      if (abortController.signal.aborted || isUserStoppingChat.value) {
-        markMessageStopped(aiMessageIndex);
-        return;
-      }
-      console.error('聊天接口调用失败:', error);
-      messages.value[aiMessageIndex].loading = false;
-      messages.value[aiMessageIndex].isError = true;
-      messages.value[aiMessageIndex].content = '抱歉，回复失败，请稍后重试~';
-    } finally {
-      if (currentChatAbortController.value === abortController) {
-        currentChatAbortController.value = null;
-      }
-      if (currentStreamingMessageIndex.value === aiMessageIndex) {
-        currentStreamingMessageIndex.value = null;
-      }
-      isStreamingResponse.value = false;
-      isUserStoppingChat.value = false;
-    }
-  }
-}
-
-const handleReportRecordsRequested = () => {
-  publishReportRecords();
-};
-
-const handleAnalysisRecordsRequested = () => {
-  publishAnalysisRecords();
-};
-
-const handlePolicyRecordsRequested = () => {
-  publishPolicyRecords();
-};
-
-const policyRecordLabel = (record?: PolicyRecord) => {
-  return textValue(record?.fileName || record?.id || record?.recordId, '当前策略记录');
-};
-
-const policyRecordActionMessage = (action: 'trial' | 'apply', record: PolicyRecord) => {
-  const recordId = textValue(record.id || record.recordId);
-  const configText = prettyTextValue(record.newConfig);
-  if (action === 'trial') {
-    const retry = textValue(record.id || record.recordId).includes('v2') || record.changeMode === 'modify';
-    const firstLine = retry ? '我已确认重新进入试验场验证。' : '我已确认进入试验场验证。';
-    return [
-      firstLine,
-      `请基于策略记录 ${recordId || policyRecordLabel(record)} 执行试验场验证，并在验证完成后输出 zenvis:policy-record 更新验证状态。`,
-      '',
-      JSON.stringify({
-        recordId,
-        policyType: record.policyType,
-        configType: record.configType,
-        fileName: record.fileName,
-        newConfig: record.newConfig,
-      }, null, 2),
-      configText ? `\n策略配置：\n${configText}` : '',
-    ].filter(Boolean).join('\n');
-  }
-  return [
-    '我已确认下发策略到系统正式生效。',
-    `请基于策略记录 ${recordId || policyRecordLabel(record)} 调用配置管理 MCP 写入并应用策略，成功后输出 zenvis:policy-record 将生效状态更新为 yes。`,
-    '',
-    JSON.stringify({
-      recordId,
-      policyType: record.policyType,
-      configType: record.configType,
-      fileName: record.fileName,
-      validationStatus: record.validationStatus,
-      newConfig: record.newConfig,
-    }, null, 2),
-  ].join('\n');
-};
-
-const handlePolicyRecordActionRequested = async (detail: PolicyRecordActionEventDetail) => {
-  detail ||= {};
-  const action = detail.action;
-  const record = detail.record;
-  if (!action || !record) {
-    ElMessage.warning('缺少策略记录，无法执行操作');
-    return;
-  }
-  if (isStreamingResponse.value) {
-    ElMessage.warning('当前正在生成，请稍后再试');
-    return;
-  }
-  await sendMessage({
-    content: action === 'trial'
-      ? `我已确认将「${policyRecordLabel(record)}」推送到试验场验证。`
-      : `我已确认下发「${policyRecordLabel(record)}」到系统正式生效。`,
-    requestContent: policyRecordActionMessage(action, record),
-  });
-};
-
-const handleReportExtraDataChanged = (detail: ReportExtraDataChangedEventDetail) => {
-  detail ||= {};
-  if (typeof detail.extraData === 'string') {
-    chatSessionExtraData.value = detail.extraData;
-  }
-};
-
-const stripSelectionRewriteFence = (content = '') => {
-  const trimmed = content.trim();
-  const match = trimmed.match(/^```(?:[\w:-]+)?\s*\n?([\s\S]*?)\n?```$/);
-  return (match?.[1] || trimmed).trim();
-};
-
-const extractSelectionRewriteContent = (message?: ChatMessage) => {
-  if (!message) {
-    return '';
-  }
-  const preferredPart = message.parts?.find(part => {
-    return ['report-document', 'markdown', 'code'].includes(part.type) && !!part.content?.trim();
-  });
-  return stripSelectionRewriteFence(preferredPart?.content || message.content || '');
-};
-
-const handleReportQuickActionRequested = async (detail: ReportQuickActionEventDetail) => {
-  detail ||= {};
-  const requestContent = detail.requestContent?.trim();
-  if (!requestContent) {
-    ElMessage.warning('快捷写作指令为空');
-    return;
-  }
-  if (isStreamingResponse.value) {
-    ElMessage.warning('当前正在生成，请稍后再试');
-    return;
-  }
-  const messageStartIndex = messages.value.length;
-  await sendMessage({
-    content: detail.displayContent || '请根据右侧文档执行 AI 写作操作。',
-    requestContent,
-  });
-  if (detail.target === 'selection') {
-    const responseMessage = [...messages.value.slice(messageStartIndex)]
-      .reverse()
-      .find(message => message.sender === 'ai' && !message.loading && !message.isError);
-    emitDihEvent(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, {
-      selectionId: detail.selectionId,
-      actionKey: detail.actionKey,
-      content: extractSelectionRewriteContent(responseMessage),
-    });
-  }
-};
-
-useDihEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, handleAnalysisRecordsRequested);
-useDihEventListener(POLICY_RECORD_REQUEST_EVENT, handlePolicyRecordsRequested);
-useDihEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
-useDihEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, handleReportRecordsRequested);
-useDihEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
-useDihEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
-
-onMounted(() => {
-  nextTick(() => publishAnalysisRecords());
-  nextTick(() => publishPolicyRecords());
-  nextTick(() => publishReportRecords());
-});
-
-const confirmAction = (part: ChatMessagePart) => {
-  const action = part.metadata?.action;
-  return typeof action === 'string' ? action : '';
-};
-
-const autoConfirmMessage = (action: string) => {
-  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
-    return '我已确认日志聚合结果，请进入沙箱研判阶段。';
-  }
-  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
-    return '我已确认沙箱研判结果，结果满意，请进入分析结论阶段。';
-  }
-  if (action === 'policy.confirm_trial' || action === 'policy_demo.confirm_trial') {
-    return '我已确认进入试验场验证，请将当前策略记录推送到试验场做测试验证，并输出 zenvis:policy-record 更新验证状态。';
-  }
-  if (action === 'policy_demo.confirm_retry_trial') {
-    return '我已确认重新进入试验场验证，请将修复后的策略记录推送到试验场重新测试验证，并输出 zenvis:policy-record 更新验证状态。';
-  }
-  if (action === 'policy.confirm_apply' || action === 'policy_demo.confirm_apply') {
-    return '我已确认下发策略到系统正式生效，请调用配置管理 MCP 写入并应用策略，成功后输出 zenvis:policy-record 将生效状态更新为 yes。';
-  }
-  if (action === 'analysis.create_continuous_task') {
-    return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与 AI分析任务。';
-  }
-  if (action === 'policy.apply_to_production') {
-    return '我已确认更新生产策略配置，请根据上一条确认卡、模拟测试结果和配置块，通过配置管理 MCP 写入系统配置。';
-  }
-  if (action === 'data_access.generate_demo_push_config') {
-    return '我已确认继续生成用户事件数据推送服务配置。请先生成完整的数据推送服务配置并展示给我确认，不要创建或启动数据推送服务。';
-  }
-  if (action === 'data_access.create_demo_push_task') {
-    return '我已确认创建用户事件数据推送服务，请根据上一条确认卡和数据推送配置创建并启动数据推送服务。';
-  }
-  if (action === 'data_visualization.apply_config') {
-    return '我已确认并授权应用上一轮数据可视化配置。请根据上一条确认卡和已生成的配置内容，按需调用配置、看板和菜单 MCP 工具写入系统；写入或创建成功后，请输出 zenvis:visualization-config-record、zenvis:dashboard-config-record、zenvis:menu-config-record 等记录围栏。';
-  }
-  if (action === 'data_visualization.add_chart_library') {
-    return '我已确认把上一轮临时图表加入图表库，请记录该图表的 amis 配置并输出 zenvis:visualization-chart-record。';
-  }
-  return '我已确认研判分析方案，请根据上一条确认卡开始执行一次性研判分析。';
-};
-
-const autoRejectMessage = (action: string) => {
-  if (
-    action === 'analysis.confirm_log_aggregation'
-    || action === 'analysis.confirm_sandbox_result'
-  ) {
-    return '我已取消研判流程，请暂停当前研判，不要进入下一阶段。';
-  }
-  if (action === 'analysis_demo.confirm_log_aggregation' || action === 'analysis_demo.confirm_sandbox_result') {
-    return '我已取消研判演示流程，请暂停当前研判演示，不要进入下一阶段。';
-  }
-  if (action === 'policy.confirm_trial' || action === 'policy.confirm_apply') {
-    return '我已取消当前策略控制流程，请暂停当前策略操作，不要进入下一阶段。';
-  }
-  if (
-    action === 'policy_demo.confirm_trial'
-    || action === 'policy_demo.confirm_retry_trial'
-    || action === 'policy_demo.confirm_apply'
-  ) {
-    return '我已取消策略控制演示流程，请暂停当前策略控制演示，不要进入下一阶段。';
-  }
-  if (action === 'data_access.generate_demo_push_config') {
-    return '我已取消生成用户事件数据推送服务配置。请记录本次演示到元数据配置阶段结束，不要生成数据推送配置，也不要创建数据推送服务。';
-  }
-  if (action === 'data_access.create_demo_push_task') {
-    return '我已取消创建用户事件数据推送服务。请记录数据推送配置已生成但未添加到系统，不要创建或启动数据推送服务。';
-  }
-  if (action === 'data_visualization.apply_config') {
-    return '我选择放弃本次数据可视化配置。请记录本次配置已放弃，不要写入 open_config，不要创建菜单，也不要创建看板。';
-  }
-  return '我已取消本次操作。';
-};
-
-const dataVisualizationDecisionMessage = (decision: 'revise', detail?: string) => {
-  const focus = detail?.trim() || '请基于上一轮数据可视化配置继续优化展示字段、图表布局、菜单或看板配置。';
-  return `我需要补充信息继续更新数据可视化配置。调整要求如下：\n${focus}\n请基于上一轮数据可视化配置重新生成完整配置，并再次展示完整配置和后续选择。`;
-};
-
-const dataVisualizationDecisionDisplayMessage = (decision: 'revise', detail?: string) => {
-  const focus = detail?.trim() || '继续优化数据可视化配置。';
-  return `我已补充数据可视化配置调整要求：\n${focus}`;
-};
-
-const analysisDemoConfirmReviseMessage = (action: string, detail?: string) => {
-  const focus = detail?.trim() || '请基于上一阶段结果补充更多关联数据。';
-  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
-    return `我需要补充更多日志聚合数据。补充内容如下：\n${focus}\n请基于上一轮日志聚合结果继续补充相关日志，并再次展示日志聚合结果让我确认。`;
-  }
-  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
-    return `我需要补充信息继续沙箱研判。补充研判重点如下：\n${focus}\n请基于上一轮沙箱研判结果继续补充分析，并再次展示沙箱研判结果让我确认。`;
-  }
-  return focus;
-};
-
-const analysisDemoConfirmReviseDisplayMessage = (action: string, detail?: string) => {
-  const focus = detail?.trim() || '继续补充研判信息。';
-  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
-    return `我已补充日志聚合数据：\n${focus}`;
-  }
-  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
-    return `我已补充沙箱研判信息：\n${focus}`;
-  }
-  return focus;
-};
-
-const policyConfirmReviseMessage = (detail?: string) => {
-  const focus = detail?.trim() || '请基于上一轮策略配置继续补充更新。';
-  return `我需要补充更新策略配置。调整要求如下：\n${focus}\n请基于上一轮策略记录重新生成策略配置，并再次输出 zenvis:policy-record 后让我确认是否进入试验场验证。`;
-};
-
-const policyConfirmReviseDisplayMessage = (detail?: string) => {
-  const focus = detail?.trim() || '继续补充更新策略配置。';
-  return `我已补充策略更新要求：\n${focus}`;
-};
-
-const analysisDecisionMessage = (decision: 'dispose' | 'ignore' | 'continue', detail?: string) => {
-  if (decision === 'dispose') {
-    return '我选择执行处置。请基于上一轮研判结论、关键证据和处置策略配置，进入处置执行准备流程；先说明拟执行动作、影响范围、回滚方案和需要我确认的配置。';
-  }
-  if (decision === 'ignore') {
-    return '我选择忽略本次告警。请基于上一轮研判结论记录忽略原因、适用条件和后续观察建议，不执行处置动作。';
-  }
-  const focus = detail?.trim() || '请围绕上一轮尚未闭环的疑点继续补充证据。';
-  return `我需要补充信息继续研判。补充研判重点如下：\n${focus}\n请基于上一轮证据继续研判，并说明新增证据、结论变化和下一步建议。`;
-};
-
-const dataAccessDecisionMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
-  if (decision === 'apply_config') {
-    return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. policy_config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 policy_config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 policy_config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 policy_config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才用 Markdown 围栏代码块输出 zenvis:meta-config-record 记录；zenvis:meta-config-record 不是工具名，请不要调用它。';
-  }
-  if (decision === 'abandon') {
-    return '我选择放弃本次元数据配置。请记录本次配置已放弃，不要写入系统，也不要继续创建或更新相关配置。';
-  }
-  const focus = detail?.trim() || '请基于上一轮配置继续优化字段、实体或展示规则。';
-  return `我需要补充信息继续更新元数据配置。调整要求如下：\n${focus}\n请基于上一轮 meta 配置重新生成完整配置，并再次展示完整配置和后续选择。`;
-};
-
-const dataAccessDecisionDisplayMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
-  if (decision === 'apply_config') {
-    return '我已确认添加配置到系统。';
-  }
-  if (decision === 'abandon') {
-    return '我已放弃本次元数据配置。';
-  }
-  const focus = detail?.trim() || '继续优化元数据配置。';
-  return `我已补充配置调整要求：\n${focus}`;
-};
-
-// 切换任务折叠状态
-const toggleTask = (index: number) => {
-  tasks.value[index].expanded = !tasks.value[index].expanded
-}
-
-// 切换面板展开状态
-const togglePanel = (panelName: keyof typeof panelStates) => {
-  panelStates[panelName] = !panelStates[panelName]
-}
-
-// 展开更多信息
-const expandInfo = () => {
-}
-
-// 可选择的模型
-const modelSelectData = ref<SelectData>({
-  periodOptions: ['qianwen-max', 'deepseek-R1', 'deepseek-V3'],
-  period: 'qianwen-max',
-})
-
 // 选择建议
 const selectSuggestion = (index: number) => {
   const suggestion = props.suggestions[index]
@@ -1574,220 +680,6 @@ const copyMessage = async (content: string) => {
 
 const fillPromptSuggestion = (prompt: string) => {
   inputMessage.value = prompt;
-};
-
-const infoStepsDisplayMessage = (part: ChatMessagePart, answers: InfoStepAnswer[]) => {
-  const title = part.title || '需要补充信息';
-  if (!answers.length) {
-    return `我已补充「${title}」所需信息。`;
-  }
-  return `我已补充以下信息：\n${answers.map(answer => `- ${answer.title}：${answer.value}`).join('\n')}`;
-};
-
-const infoStepsRequestMessage = (part: ChatMessagePart, answers: InfoStepAnswer[]) => {
-  return [
-    '我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。',
-    '',
-    JSON.stringify({
-      title: part.title || '需要补充信息',
-      content: part.content || '',
-      answers,
-    }, null, 2),
-  ].join('\n');
-};
-
-const handleInfoStepsSubmit = async (
-  message: ChatMessage,
-  payload: { part: ChatMessagePart; answers: InfoStepAnswer[] }
-) => {
-  if (!chatSessionId.value || !message.id || !payload.part.id) {
-    ElMessage.warning('缺少补充信息卡片标识，无法记录提交结果');
-    return;
-  }
-
-  try {
-    await DihService.recordActionDecision({
-      chat_id: chatSessionId.value,
-      message_id: message.id,
-      part_id: payload.part.id,
-      decision: 'submitted',
-    });
-  } catch (error) {
-    console.error('记录补充信息提交失败:', error);
-  }
-  payload.part.status = 'submitted';
-  ElMessage.success('已提交补充信息');
-  await nextTick();
-  await sendMessage({
-    content: infoStepsDisplayMessage(payload.part, payload.answers),
-    requestContent: infoStepsRequestMessage(payload.part, payload.answers),
-  });
-};
-
-const handleActionDecision = async (
-  message: ChatMessage,
-  payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' | 'revise'; detail?: string }
-) => {
-  if (!chatSessionId.value || !message.id || !payload.part.id) {
-    ElMessage.warning('缺少确认记录标识，无法记录操作结果');
-    return;
-  }
-
-  try {
-    await DihService.recordActionDecision({
-      chat_id: chatSessionId.value,
-      message_id: message.id,
-      part_id: payload.part.id,
-      decision: payload.decision,
-    });
-  } catch (error) {
-    console.error('记录确认结果失败:', error);
-  }
-  payload.part.status = payload.decision;
-  const action = confirmAction(payload.part);
-  if (payload.decision === 'revise' && action === 'data_visualization.apply_config') {
-    ElMessage.success('已提交配置调整要求');
-    await nextTick();
-    await sendMessage({
-      content: dataVisualizationDecisionDisplayMessage(payload.decision, payload.detail),
-      requestContent: dataVisualizationDecisionMessage(payload.decision, payload.detail),
-    });
-    return;
-  }
-  if (payload.decision === 'revise' && (
-    action === 'analysis.confirm_log_aggregation'
-    || action === 'analysis.confirm_sandbox_result'
-    || action === 'analysis_demo.confirm_log_aggregation'
-    || action === 'analysis_demo.confirm_sandbox_result'
-  )) {
-    ElMessage.success('已提交补充信息');
-    await nextTick();
-    await sendMessage({
-      content: analysisDemoConfirmReviseDisplayMessage(action, payload.detail),
-      requestContent: analysisDemoConfirmReviseMessage(action, payload.detail),
-    });
-    return;
-  }
-  if (payload.decision === 'revise' && (
-    action === 'policy.confirm_trial'
-    || action === 'policy_demo.confirm_trial'
-    || action === 'policy_demo.confirm_retry_trial'
-  )) {
-    ElMessage.success('已提交策略更新要求');
-    await nextTick();
-    await sendMessage({
-      content: policyConfirmReviseDisplayMessage(payload.detail),
-      requestContent: policyConfirmReviseMessage(payload.detail),
-    });
-    return;
-  }
-  ElMessage.success(payload.decision === 'approved' ? '已确认执行' : '已取消操作');
-  if (payload.decision === 'approved' && AUTO_CONFIRM_ACTIONS.has(action)) {
-    await nextTick();
-    await sendMessage({ content: autoConfirmMessage(action) });
-  } else if (payload.decision === 'rejected' && AUTO_REJECT_ACTIONS.has(action)) {
-    await nextTick();
-    await sendMessage({ content: autoRejectMessage(action) });
-  }
-};
-
-const handleAddChartLibrary = async (_message: ChatMessage, part: ChatMessagePart) => {
-  const action = confirmAction(part);
-  if (action !== 'data_visualization.add_chart_library') {
-    ElMessage.warning('当前图表不支持加入图表库');
-    return;
-  }
-  if (part.status === 'submitted' || part.status === 'added') {
-    ElMessage.info('该图表已加入图表库');
-    return;
-  }
-  const previousExtraData = chatSessionExtraData.value;
-  const previousStatus = part.status;
-  try {
-    const sessionRecordId = await ensureChatSessionRecordId();
-    if (!sessionRecordId) {
-      ElMessage.warning('当前会话尚未创建完成，无法加入图表库');
-      return;
-    }
-    const record = buildChartLibraryRecord(part);
-    const nextExtraData = addChartRecordToExtraData(record);
-    part.status = 'added';
-    chatSessionExtraData.value = nextExtraData;
-    await DihService.updateChatSession(sessionRecordId, { extra_data: nextExtraData });
-    ElMessage.success('已加入图表库');
-  } catch (error) {
-    console.error('加入图表库失败:', error);
-    part.status = previousStatus;
-    chatSessionExtraData.value = previousExtraData;
-    ElMessage.error('加入图表库失败');
-  }
-};
-
-const handleAnalysisDecision = async (
-  message: ChatMessage,
-  payload: { part: ChatMessagePart; decision: 'dispose' | 'ignore' | 'continue'; detail?: string }
-) => {
-  if (!chatSessionId.value || !message.id || !payload.part.id) {
-    ElMessage.warning('缺少研判选择记录标识，无法记录操作结果');
-    return;
-  }
-
-  try {
-    await DihService.recordActionDecision({
-      chat_id: chatSessionId.value,
-      message_id: message.id,
-      part_id: payload.part.id,
-      decision: payload.decision,
-    });
-  } catch (error) {
-    console.error('记录研判后续选择失败:', error);
-  }
-  payload.part.status = payload.decision;
-  const toastMap = {
-    dispose: '已选择执行处置',
-    ignore: '已选择忽略告警',
-    continue: '已提交补充研判重点',
-  };
-  ElMessage.success(toastMap[payload.decision]);
-  await nextTick();
-  if (payload.decision === 'dispose') {
-    await openDisposeAgentSession(buildDisposeAgentPrompt(payload.detail));
-    return;
-  }
-  await sendMessage({ content: analysisDecisionMessage(payload.decision, payload.detail) });
-};
-
-const handleDataAccessDecision = async (
-  message: ChatMessage,
-  payload: { part: ChatMessagePart; decision: 'apply_config' | 'abandon' | 'revise'; detail?: string }
-) => {
-  if (!chatSessionId.value || !message.id || !payload.part.id) {
-    ElMessage.warning('缺少数据接入选择记录标识，无法记录操作结果');
-    return;
-  }
-
-  try {
-    await DihService.recordActionDecision({
-      chat_id: chatSessionId.value,
-      message_id: message.id,
-      part_id: payload.part.id,
-      decision: payload.decision,
-    });
-  } catch (error) {
-    console.error('记录数据接入后续选择失败:', error);
-  }
-  payload.part.status = payload.decision;
-  const toastMap = {
-    apply_config: '已选择添加配置到系统',
-    abandon: '已放弃本次配置',
-    revise: '已提交配置调整要求',
-  };
-  ElMessage.success(toastMap[payload.decision]);
-  await nextTick();
-  await sendMessage({
-    content: dataAccessDecisionDisplayMessage(payload.decision, payload.detail),
-    requestContent: dataAccessDecisionMessage(payload.decision, payload.detail),
-  });
 };
 
 // 分享消息（示例）

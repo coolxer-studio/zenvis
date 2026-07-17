@@ -81,14 +81,5 @@ export function request<R>(
     config.data = params;
   }
 
-  return requestClient(config).then(res => {
-    if (!options.silent) {
-      return apiResponse<R>(res);
-    }
-    const businessCode = res.data.status ?? res.data.code;
-    if (res.status === 200 && businessCode === 0) {
-      return res.data.data;
-    }
-    return Promise.reject(res.data);
-  });
+  return requestClient(config).then(res => apiResponse<R>(res, options));
 }

@@ -28,7 +28,7 @@ export default {
 
     const loadSystemInfo = async () => {
       try {
-        const res: any = await SystemService.getSystemInfo();
+        const res = await SystemService.getSystemInfo();
         if (res?.systemIcon) {
           updateFavicon(res.systemIcon);
         }

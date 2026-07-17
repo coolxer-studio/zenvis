@@ -36,12 +36,17 @@ export function successResponse<R>(data: TStandardResponse<R>): Promise<R> {
 /*
  * 接口返回统一处理
  * */
-export function apiResponse<R>(res: IResult<R>) {
+export function apiResponse<R>(res: IResult<R>, options: { silent?: boolean } = {}) {
   return new Promise<R>((resolve, reject) => {
     const businessCode = res.data.status ?? res.data.code;
 
     if (res.status === 200 && businessCode === 0) {
       resolve(res.data.data);
+      return;
+    }
+
+    if (options.silent) {
+      reject(res.data);
       return;
     }
 

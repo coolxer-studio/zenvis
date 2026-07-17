@@ -16,10 +16,12 @@ import { hasOwn } from '@/utils/tool';
  */
 declare global {
   interface Window {
-    esl: never | any;
-    kk: never;
+    esl?: Record<string, string>;
+    kk?: string;
   }
 }
+
+const DEFAULT_EXPIRE = 2592e8;
 
 class CLocalStorage {
   isEncrypted: boolean;
@@ -34,11 +36,11 @@ class CLocalStorage {
     this.isEncrypted = isEncrypted;
   }
 
-  readF(key: string, value: string): any {
+  readF(_key: string, value: string): any {
     if (value) {
       const item = JSON.parse(value);
       if (item.expiredAt && Number(item.expiredAt) >= Number(Date.now())) {
-        return this.isEncrypted ? enc.Decrypt(item.value, enc.k(window.kk)) : item.value;
+        return this.isEncrypted ? enc.Decrypt(item.value, enc.k(window.kk!)) : item.value;
       }
     }
     return '';
@@ -46,8 +48,8 @@ class CLocalStorage {
 
   setF(key: string, e: any, expire?: number) {
     return JSON.stringify({
-      expiredAt: Number(Date.now()) + (!expire ? 2592e8 : expire),
-      value: this.isEncrypted ? enc.Encrypt(JSON.stringify(e), enc.k(window.kk)) : e,
+      expiredAt: Number(Date.now()) + (expire ? expire : DEFAULT_EXPIRE),
+      value: this.isEncrypted ? enc.Encrypt(JSON.stringify(e), enc.k(window.kk!)) : e,
     });
   }
 
@@ -56,7 +58,7 @@ class CLocalStorage {
       try {
         return this.readFromLocalStorage(key);
       } catch (v) {
-        this.readFromMemory(key);
+        return this.readFromMemory(key);
       }
     } catch (exception) {
       return null;
@@ -65,12 +67,12 @@ class CLocalStorage {
 
   set(key: string, e: any, expire?: number | null | undefined) {
     // eslint-disable-next-line no-undefined
-    if (null === expire || undefined === expire) expire = 2592e8;
+    if (null === expire || undefined === expire) expire = DEFAULT_EXPIRE;
     try {
       try {
         return this.setInLocalStorage(key, e, expire);
       } catch (v) {
-        this.setInMemory(key, e, expire / 1e3);
+        return this.setInMemory(key, e, expire);
       }
     } catch (exception) {
       console.log(exception);
@@ -79,15 +81,18 @@ class CLocalStorage {
   }
 
   readFromLocalStorage(key: string): any {
-    let value = window.localStorage.getItem(key);
-    if (value === null) value = '';
-    return this.readF(key, value);
+    const value = window.localStorage.getItem(key) || '';
+    const result = this.readF(key, value);
+    if (value && result === '') window.localStorage.removeItem(key);
+    return result;
   }
 
   readFromMemory(key: string): any {
     if (window.esl) {
       const value = hasOwn(window.esl, key) ? window.esl[key] : '';
-      return this.readF(key, value);
+      const result = this.readF(key, value);
+      if (value && result === '') delete window.esl[key];
+      return result;
     } else {
       return '';
     }
@@ -107,12 +112,12 @@ class CLocalStorage {
   }
 
   keys(): (string | null)[] | null {
-    if (window.localStorage) {
+    try {
       const keys: (string | null)[] = [];
       for (let i = 0; i < window.localStorage.length; i += 1) keys.push(window.localStorage.key(i));
       return keys;
-    } else {
-      return null;
+    } catch {
+      return window.esl ? Object.keys(window.esl) : null;
     }
   }
 
@@ -148,7 +153,12 @@ class CLocalStorage {
 
   remove(key: string | null): void {
     if (typeof key === 'string') {
-      window.localStorage.removeItem(key);
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // localStorage may be unavailable in privacy-restricted environments.
+      }
+      if (window.esl) delete window.esl[key];
     }
   }
 }

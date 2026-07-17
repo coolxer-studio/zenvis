@@ -37,16 +37,11 @@ function sanitizeLinkTarget(value: string): string | undefined {
 export function resolveRetrievalLink(
   template: string | undefined,
   row: Record<string, unknown>,
-  visibleFields: Iterable<string>,
 ): string | undefined {
   if (typeof template !== 'string' || !template.trim()) return undefined;
-  const visibleFieldSet = new Set(visibleFields);
   let invalidPlaceholder = false;
   const resolvedTemplate = template.replace(PLACEHOLDER_PATTERN, (_match, attribute: string) => {
-    if (
-      !visibleFieldSet.has(attribute)
-      || !Object.prototype.hasOwnProperty.call(row, attribute)
-    ) {
+    if (!Object.prototype.hasOwnProperty.call(row, attribute)) {
       invalidPlaceholder = true;
       return '';
     }

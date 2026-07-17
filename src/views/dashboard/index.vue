@@ -102,7 +102,8 @@ const selectDashboardFromRoute = () => {
       (targetName && item.name === targetName)
     );
   });
-  currentDashboard.value = matched || dashboardListData.value[0];
+  const defaultDashboard = dashboardListData.value.find(item => item.isDefault);
+  currentDashboard.value = matched || defaultDashboard || dashboardListData.value[0];
 };
 
 const setDashboard = item => {

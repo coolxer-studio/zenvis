@@ -22,5 +22,6 @@ export type Dashboard = {
   url: string;
   configIndex: string;
   htmlPath: string;
+  isDefault: boolean;
   updateTime: string;
 }

@@ -65,6 +65,7 @@ export class SystemService {
       url: (item as any).url || '',
       configIndex: (item as any).config_index || '',
       htmlPath: (item as any).html_path || '',
+      isDefault: Boolean((item as any).is_default),
       updateTime: (item as any).update_time || '',
     }))
   }

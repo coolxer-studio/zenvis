@@ -194,7 +194,7 @@ function getSelect(value: string[]) {
 }
 
 function resolveLink(column: RetrievalTableColumn, row: Record<string, unknown>) {
-  return resolveRetrievalLink(column.linkTemplate, row, props.state.selectedKeyCol);
+  return resolveRetrievalLink(column.linkTemplate, row);
 }
 
 function openLink(column: RetrievalTableColumn, row: Record<string, unknown>) {

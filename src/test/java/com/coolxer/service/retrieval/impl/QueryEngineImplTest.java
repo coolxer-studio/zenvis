@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -162,6 +163,52 @@ class QueryEngineImplTest {
         assertThat(sql.getValue()).contains(
                 "toDateTime64(:startTime, 3, 'Asia/Shanghai')",
                 "toDateTime64(:endTime, 3, 'Asia/Shanghai')");
+    }
+
+    @Test
+    void countAnyOfUsesOneOrPredicateAndBindsTheExactValue() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of(BigDecimal.valueOf(4)));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+
+        BigDecimal result = queryEngine.countAnyOf(
+                "zenvis.traffic",
+                List.of("src_ip", "dest_ip", "src_ip"),
+                "10.0.0.1' OR 1=1 --");
+
+        assertThat(result).isEqualByComparingTo(BigDecimal.valueOf(4));
+        verify(entityManager).createNativeQuery(
+                "select count(*) from zenvis.traffic where src_ip = :value or dest_ip = :value");
+        verify(query).setParameter("value", "10.0.0.1' OR 1=1 --");
+    }
+
+    @Test
+    void countAnyOfRejectsUnsafeTableAndFieldIdentifiers() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+
+        assertThatThrownBy(() -> queryEngine.countAnyOf(
+                "traffic; drop table traffic", List.of("src_ip"), "192.0.2.1"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("表名不合法");
+        assertThatThrownBy(() -> queryEngine.countAnyOf(
+                "traffic", List.of("src_ip or 1=1"), "192.0.2.1"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("字段名不合法");
+    }
+
+    @Test
+    void countAnyOfRejectsMissingFieldsAndBlankValue() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+
+        assertThatThrownBy(() -> queryEngine.countAnyOf("traffic", List.of(), "192.0.2.1"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("统计字段不能为空");
+        assertThatThrownBy(() -> queryEngine.countAnyOf("traffic", List.of("src_ip"), " "))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("统计值不能为空");
     }
 
     @Test

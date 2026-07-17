@@ -137,6 +137,29 @@ public class QueryEngineImpl implements QueryEngine {
         return queryCount(tableName, whereClause);
     }
 
+    @Override
+    @Transactional
+    public BigDecimal countAnyOf(String tableName, List<String> fields, String value) {
+        if (CollectionUtils.isEmpty(fields)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "统计字段不能为空");
+        }
+        if (StringUtils.isBlank(value)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "统计值不能为空");
+        }
+        List<String> safeFields = fields.stream()
+                .map(field -> requireIdentifier(field, "字段名"))
+                .distinct()
+                .toList();
+        String countSql = "select count(*) from " + requireIdentifier(tableName, "表名") + " where "
+                + safeFields.stream()
+                .map(field -> field + " = :value")
+                .collect(Collectors.joining(" or "));
+        Query query = entityManager.createNativeQuery(countSql);
+        query.setParameter("value", value);
+        List<BigDecimal> result = query.getResultList();
+        return result.isEmpty() ? BigDecimal.ZERO : result.get(0);
+    }
+
     @Transactional
     public BigDecimal countToday(String tableName, Map<String, Object> searchMap) {
         String whereClause = " where 1=1";

@@ -111,4 +111,13 @@ public interface EntityCoreService {
     Map<String, Object> trend(List<String> entities);
 
     Map<String, Object> statistics(List<String> entities, String field);
+
+    /**
+     * 按 IP 统计多个实体中源、目的 IP 字段匹配的数据量。
+     *
+     * @param entities 实体名称列表
+     * @param ip       待统计的 IP
+     * @return 跨实体统计结果
+     */
+    Map<String, Object> ipStatistics(List<String> entities, String ip);
 }

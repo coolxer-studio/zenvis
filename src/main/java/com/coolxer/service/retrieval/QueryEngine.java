@@ -23,6 +23,16 @@ public interface QueryEngine {
 
     public BigDecimal count(String tableName, Map<String, Object> searchMap);
 
+    /**
+     * 统计任意一个指定字段精确匹配给定值的数据量。
+     *
+     * @param tableName 表名
+     * @param fields    参与 OR 匹配的字段列表
+     * @param value     精确匹配值
+     * @return 匹配的数据量
+     */
+    BigDecimal countAnyOf(String tableName, List<String> fields, String value);
+
     public BigDecimal countToday(String tableName, Map<String, Object> searchMap);
 
     Map<String, Object> countByDateOfWeek(String tableName, String timeField);

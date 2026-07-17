@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class EntityCoreServiceImpl implements EntityCoreService {
 
+    private static final List<String> IP_FIELD_NAMES = List.of("src_ip", "dst_ip", "dest_ip");
+
     @Autowired
     private MetaDataService metaDataService;
 
@@ -306,6 +308,68 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             }
         }
         return statisticsData;
+    }
+
+    @Override
+    public Map<String, Object> ipStatistics(List<String> entities, String ip) {
+        String normalizedIp = ip == null ? null : ip.trim();
+        if (normalizedIp == null || normalizedIp.isEmpty()) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "IP不能为空");
+        }
+        LinkedHashSet<String> uniqueEntities = entities == null ? new LinkedHashSet<>() : entities.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(entity -> !entity.isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (uniqueEntities.isEmpty()) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "实体列表不能为空");
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        List<String> xaxisData = new ArrayList<>();
+        List<Long> seriesData = new ArrayList<>();
+        long total = 0L;
+        int matchedEntityCount = 0;
+        for (String entityName : uniqueEntities) {
+            DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
+            if (dataEntity == null) {
+                continue;
+            }
+            Map<String, DataAttribute> attributesByName = metaDataService.getAllDataAttributeByEntity(dataEntity)
+                    .stream()
+                    .collect(Collectors.toMap(DataAttribute::getName, Function.identity(), (first, second) -> first));
+            List<String> logicalFields = IP_FIELD_NAMES.stream()
+                    .filter(attributesByName::containsKey)
+                    .toList();
+            List<String> columns = logicalFields.stream()
+                    .map(field -> attributesByName.get(field).getColumnName())
+                    .toList();
+            long entityTotal = columns.isEmpty()
+                    ? 0L : queryEngine.countAnyOf(dataEntity.getTableName(), columns, normalizedIp).longValue();
+            if (entityTotal > 0) {
+                matchedEntityCount++;
+            }
+            total += entityTotal;
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("entity", dataEntity.getName());
+            row.put("label", dataEntity.getLabel());
+            row.put("fields", logicalFields);
+            row.put("total", entityTotal);
+            rows.add(row);
+            xaxisData.add(dataEntity.getLabel());
+            seriesData.add(entityTotal);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ip", normalizedIp);
+        result.put("total", total);
+        result.put("entity_count", rows.size());
+        result.put("matched_entity_count", matchedEntityCount);
+        result.put("rows", rows);
+        result.put("xaxis_data", xaxisData);
+        result.put("series_data", seriesData);
+        return result;
     }
 
     private Map<String, String> getColumnValueMap(String entityName, Map<String, Object> mapDto) {

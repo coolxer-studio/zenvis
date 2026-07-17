@@ -198,8 +198,10 @@ import { useRouter } from 'vue-router'
 import { generateUUID } from '@/utils/util-common'
 import {getCurrentFormattedDate} from '@/utils/util-time'
 import { copyTextToClipboard } from '@/utils/clipboard';
-import { withBaseUrl } from '@/utils/url';
 import ChatMessageRenderer from './chat-message-renderer.vue';
+import { useChatAttachments } from '../composables/use-chat-attachments';
+import { useChatSession } from '../composables/use-chat-session';
+import { useMcpApproval } from '../composables/use-mcp-approval';
 import {
   DATA_ACCESS_RECORD_EVENT,
   DATA_ANALYSIS_RECORD_EVENT,
@@ -223,7 +225,7 @@ import type {
   ReportExtraDataChangedEventDetail,
   ReportQuickActionEventDetail,
 } from '../events';
-import type { AnalysisRecord, ChatAttachment, ChatMessage, ChatMessagePart, ChatSession, McpApprovalData, McpApprovalDecision, PolicyRecord } from '@/types/type-dih';
+import type { AnalysisRecord, ChatMessage, ChatMessagePart, ChatSession, McpApprovalData, PolicyRecord } from '@/types/type-dih';
 
 const router = useRouter();
 
@@ -300,11 +302,37 @@ type InfoStepAnswer = {
   source: 'suggestion' | 'custom';
 };
 
-const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
-const MAX_FILES_PER_PICK = 10;
-const UPLOAD_CONCURRENCY = 3;
-
 const props = defineProps<Props>()
+
+const {
+  pendingAttachments,
+  isUploadingAttachment,
+  attachmentFileId,
+  attachmentFileName,
+  formatFileSize,
+  isImageAttachment,
+  attachmentPreviewUrl,
+  openAttachmentPreview,
+  removePendingAttachment,
+  uploadFile,
+} = useChatAttachments();
+
+const {
+  messages,
+  showSuggestionBtn,
+  chatSessionTitle,
+  chatSessionId,
+  chatSessionRecordId,
+  chatSessionType,
+  chatSessionExtraData,
+  ensureChatSessionRecordId,
+  refreshChatSessionExtraData,
+} = useChatSession({
+  props,
+  router,
+  processMessageFormat: message => processMessageFormat(message),
+  scrollToBottom,
+});
 
 // 添加深度思考状态
 const isDeepThinking = ref(false)
@@ -317,8 +345,6 @@ interface SelectData {
 
 // 输入消息
 const inputMessage = ref('')
-const pendingAttachments = ref<ChatAttachment[]>([])
-const isUploadingAttachment = ref(false)
 const isStreamingResponse = ref(false)
 const currentChatAbortController = ref<AbortController | null>(null)
 const currentStreamingMessageIndex = ref<number | null>(null)
@@ -414,16 +440,6 @@ const completedTasks = ref(0)
 // 总任务数
 const totalTasks = ref(3)
 
-
-// 消息列表
-const messages = ref<ChatMessage[]>([
-  {
-    sender: 'ai',
-    content: '嘿！我是你的人工智能助手。有什么问题尽管问我吧！',
-    time: getCurrentFormattedDate()
-  }
-])
-const chatSessionExtraData = ref('');
 
 const asObject = (value: unknown): Record<string, unknown> => {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -536,21 +552,6 @@ const buildChartLibraryRecord = (part: ChatMessagePart): DataAccessRecord => {
     source: 'session',
     config: metadata.amisConfig || metadata.config || {},
   };
-};
-
-const ensureChatSessionRecordId = async () => {
-  if (chatSessionRecordId.value) {
-    return chatSessionRecordId.value;
-  }
-  if (!chatSessionId.value) {
-    return '';
-  }
-  const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
-  chatSessionRecordId.value = data.id || '';
-  if (data.extraData && !chatSessionExtraData.value) {
-    chatSessionExtraData.value = data.extraData;
-  }
-  return chatSessionRecordId.value;
 };
 
 const addChartRecordToExtraData = (record: DataAccessRecord) => {
@@ -732,12 +733,6 @@ watch(chatSessionExtraData, () => {
   publishReportRecords();
 });
 
-const showSuggestionBtn = ref(true);
-const chatSessionTitle = ref('新的会话');
-const chatSessionId = ref('');
-const chatSessionRecordId = ref('');
-const chatSessionType = ref('');
-
 /**
  * 健壮的 JSON 解析工具方法
  * 支持处理包含转义字符、双重序列化等情况的 JSON 数据
@@ -849,45 +844,6 @@ const createThinkingPart = (status: 'running' | 'completed' = 'running'): ChatMe
 
 const hasThinkTag = (content: string) => content.includes('<think>');
 
-const attachmentFileId = (attachment: ChatAttachment) => {
-  return attachment.file_id || attachment.fileId || attachment.file_name || attachment.fileName || 'attachment';
-};
-
-const attachmentFileName = (attachment: ChatAttachment) => {
-  return attachment.file_name || attachment.fileName || '未命名文件';
-};
-
-const formatFileSize = (size?: number) => {
-  if (!size || size <= 0) return '';
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-};
-
-const isImageAttachment = (attachment: ChatAttachment) => {
-  const contentType = attachment.content_type || attachment.contentType || '';
-  const fileName = attachmentFileName(attachment).toLowerCase();
-  return attachment.kind === 'image'
-    || ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'].includes(contentType.toLowerCase())
-    || /\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName);
-};
-
-const attachmentPreviewUrl = (attachment: ChatAttachment) => {
-  const url = attachment.file_url || attachment.fileUrl || '';
-  return url ? withBaseUrl(url) : '';
-};
-
-const openAttachmentPreview = (attachment: ChatAttachment) => {
-  const url = attachmentPreviewUrl(attachment);
-  if (url) {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-};
-
-const removePendingAttachment = (index: number) => {
-  pendingAttachments.value.splice(index, 1);
-};
-
 onUnmounted(() => {
   isUserStoppingChat.value = true;
   void rejectPendingMcpApprovals(currentStreamingMessageIndex.value, '聊天页面已关闭');
@@ -906,41 +862,16 @@ const createDeepThinkingStreamingParts = (content: string): ChatMessagePart[] =>
   return parts;
 };
 
-const mcpApprovalPart = (data: McpApprovalData): ChatMessagePart => ({
-  id: data.requestId,
-  type: 'mcp-approval',
-  title: `MCP 工具审批：${data.toolName || data.toolKey || '未知工具'}`,
-  content: data.description || '该工具需要你的明确许可后才能执行。',
-  status: String(data.status || 'pending').toLowerCase(),
-  metadata: {
-    ...data,
-    deciding: false,
-    decisionInFlight: '',
-  },
+const {
+  isMcpApprovalPart,
+  upsertMcpApprovalPart,
+  mergeFinalApprovalParts,
+  handleMcpApprovalDecision,
+  rejectPendingMcpApprovals,
+} = useMcpApproval({
+  messages,
+  createMarkdownParts,
 });
-
-const isMcpApprovalPart = (part: ChatMessagePart) => part.type === 'mcp-approval';
-
-const upsertMcpApprovalPart = (message: ChatMessage, data: McpApprovalData, accumulatedContent: string) => {
-  if (!data.requestId) return;
-  const nextPart = mcpApprovalPart(data);
-  const parts = message.parts ? [...message.parts] : (accumulatedContent ? createMarkdownParts(accumulatedContent) : []);
-  const index = parts.findIndex(part => isMcpApprovalPart(part) && part.id === data.requestId);
-  if (index >= 0) {
-    parts[index] = {
-      ...parts[index],
-      ...nextPart,
-      metadata: {
-        ...parts[index].metadata,
-        ...nextPart.metadata,
-      },
-    };
-  } else {
-    parts.push(nextPart);
-  }
-  message.parts = parts;
-  message.loading = false;
-};
 
 const appendStreamingDelta = (message: ChatMessage, delta: string, accumulatedContent: string) => {
   const containsApproval = message.parts?.some(isMcpApprovalPart) === true;
@@ -959,69 +890,6 @@ const appendStreamingDelta = (message: ChatMessage, delta: string, accumulatedCo
     parts.push({ id: generateUUID(), type: 'markdown', content: delta });
   }
   message.parts = parts;
-};
-
-const mergeFinalApprovalParts = (liveParts: ChatMessagePart[] | undefined, finalParts: ChatMessagePart[] | undefined) => {
-  if (!liveParts?.some(isMcpApprovalPart)) return finalParts;
-  const liveApprovalById = new Map(
-    liveParts.filter(isMcpApprovalPart).map(part => [part.id, part]),
-  );
-  const finalApprovalById = new Map(
-    (finalParts || []).filter(isMcpApprovalPart).map(part => [part.id, part]),
-  );
-  if (finalApprovalById.size > 0) {
-    return (finalParts || []).map(part => {
-      if (!isMcpApprovalPart(part)) return part;
-      const livePart = liveApprovalById.get(part.id);
-      if (!livePart) return part;
-      return {
-        ...livePart,
-        ...part,
-        metadata: {
-          ...livePart.metadata,
-          ...part.metadata,
-        },
-      };
-    });
-  }
-  const finalContentParts = (finalParts || []).filter(part => !isMcpApprovalPart(part));
-  const liveContentParts = liveParts.filter(part => !isMcpApprovalPart(part));
-  const finalIsPlainContent = finalContentParts.every(part => part.type === 'markdown' || part.type === 'thinking');
-  if (!finalIsPlainContent) {
-    return [...liveParts.filter(isMcpApprovalPart).map(part => finalApprovalById.get(part.id) || part), ...finalContentParts];
-  }
-  return liveParts.map(part => isMcpApprovalPart(part) ? (finalApprovalById.get(part.id) || part) : part)
-    .concat(finalContentParts.length && !liveContentParts.length ? finalContentParts : []);
-};
-
-const handleMcpApprovalDecision = async (
-  message: ChatMessage,
-  payload: { part: ChatMessagePart; decision: McpApprovalDecision },
-) => {
-  const requestId = payload.part.id || String(payload.part.metadata?.requestId || '');
-  if (!requestId || payload.part.status !== 'pending' || payload.part.metadata?.deciding === true) return;
-  payload.part.metadata = {
-    ...payload.part.metadata,
-    deciding: true,
-    decisionInFlight: payload.decision,
-  };
-  try {
-    const approval = await DihService.decideMcpApproval(requestId, { decision: payload.decision });
-    upsertMcpApprovalPart(message, approval, message.content || '');
-  } catch (error) {
-    payload.part.metadata = { ...payload.part.metadata, deciding: false, decisionInFlight: '' };
-    ElMessage.error(error instanceof Error ? error.message : '审批操作失败，请稍后重试');
-  }
-};
-
-const rejectPendingMcpApprovals = async (messageIndex: number | null, comment: string) => {
-  if (messageIndex === null || !messages.value[messageIndex]) return;
-  const pendingParts = (messages.value[messageIndex].parts || [])
-    .filter(part => isMcpApprovalPart(part) && part.status === 'pending' && part.id);
-  await Promise.allSettled(pendingParts.map(async part => {
-    const approval = await DihService.decideMcpApproval(part.id!, { decision: 'rejected', comment });
-    upsertMcpApprovalPart(messages.value[messageIndex], approval, messages.value[messageIndex].content || '');
-  }));
 };
 
 const getChartContent = (message: ChatMessage) => {
@@ -1075,110 +943,9 @@ const processMessageFormat = (message: ChatMessage) => {
   }
 };
 
-const refreshChatSessionExtraData = async () => {
-  if (!chatSessionId.value) {
-    chatSessionExtraData.value = '';
-    return;
-  }
-  try {
-    const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
-    chatSessionRecordId.value = data.id || chatSessionRecordId.value;
-    chatSessionExtraData.value = data.extraData || '';
-  } catch (error) {
-    console.error('刷新会话附加数据失败:', error);
-  }
-};
-
-const getChatSession = async () => {
-  // 优先使用 props 传入的参数（悬浮窗模式），否则从路由获取
-  if (props.chatSessionType) {
-    chatSessionType.value = props.chatSessionType;
-  } else {
-    const currentSessionType = router.currentRoute.value.query.type;
-    chatSessionType.value = currentSessionType ? currentSessionType.toString() : 'ask';
-  }
-  
-  // 优先使用 props 传入的 chatSessionId（悬浮窗模式）
-  if (props.chatSessionId) {
-    chatSessionId.value = props.chatSessionId;
-  } else {
-    const currentChatSessionId = router.currentRoute.value.query.chatSessionId;
-    if(currentChatSessionId){
-      chatSessionId.value = currentChatSessionId.toString();
-    }else{
-      // 参数没有传递chattSessionId
-      chatSessionId.value = generateUUID();
-      router.push({
-      name: 'service-dih',
-      query: {
-        type: chatSessionType.value,
-        chatSessionId: chatSessionId.value,
-        createSession: 1
-      }
-    });
-    }
-  }
-  
-  // 获取聊天会话数据
-  if (chatSessionId.value) {
-    try {
-      const data = await DihService.getChatSession(chatSessionId.value,{type:chatSessionType.value});
-      chatSessionRecordId.value = data.id || '';
-      messages.value = data.messageList;
-      chatSessionExtraData.value = data.extraData || '';
-      
-      // 延迟处理消息格式，确保右侧组件已经完全挂载
-      setTimeout(() => {
-        messages.value.forEach(msg => {
-          processMessageFormat(msg);
-        });
-        scrollToBottom();
-      }, 500);
-
-      chatSessionTitle.value = data.title || '新的会话';
-      scrollToBottom();
-    } catch (error) {
-      console.error("获取聊天会话数据失败:", error);
-      messages.value = [{
-        sender: 'ai',
-        content: '嘿！我是你的人工智能助手。有什么问题尽管问我吧！',
-        time: getCurrentFormattedDate()
-      }];
-      chatSessionExtraData.value = '';
-      chatSessionRecordId.value = '';
-      chatSessionTitle.value = '新的会话';
-    }
-  } else {
-    messages.value = [{
-        sender: 'ai',
-        content: '嘿！我是你的人工智能助手。有什么问题尽管问我吧！',
-        time: getCurrentFormattedDate()
-      }];
-    chatSessionExtraData.value = '';
-    chatSessionRecordId.value = '';
-    chatSessionTitle.value = '新的会话';
-  }
-
-  showSuggestionBtn.value = messages.value.length <= 1;
-  scrollToBottom();
-};
-
-
-
 onMounted(() => {
-  getChatSession();
-  // 获取模型列表
-  fetchModelList();
+  void fetchModelList();
 });
-
-// 监听路由参数chatSessionId的变化
-watch(
-  () => router.currentRoute.value.query.chatSessionId,
-  (newChatSessionId, oldChatSessionId) => {
-    // 当chatSessionId发生变化时，重新获取聊天会话
-    getChatSession();
-  }
-);
 
 const fetchModelList = async () => {
   try {
@@ -1756,71 +1523,6 @@ const modelSelectData = ref<SelectData>({
   periodOptions: ['qianwen-max', 'deepseek-R1', 'deepseek-V3'],
   period: 'qianwen-max',
 })
-
-// 上传文件
-const validateFilesBeforeUpload = (files: File[]) => {
-  const selectedFiles = files.slice(0, MAX_FILES_PER_PICK);
-  if (files.length > MAX_FILES_PER_PICK) {
-    ElMessage.warning(`单次最多选择 ${MAX_FILES_PER_PICK} 个附件，已自动忽略多余文件`);
-  }
-  const validFiles = selectedFiles.filter(file => file.size <= MAX_UPLOAD_BYTES);
-  const oversizedFiles = selectedFiles.filter(file => file.size > MAX_UPLOAD_BYTES);
-  if (oversizedFiles.length) {
-    ElMessage.error(`已忽略 ${oversizedFiles.length} 个超过 30MB 的附件`);
-  }
-  return validFiles;
-};
-
-const uploadFilesWithConcurrency = async (files: File[]) => {
-  const attachments: ChatAttachment[] = [];
-  for (let index = 0; index < files.length; index += UPLOAD_CONCURRENCY) {
-    const batch = files.slice(index, index + UPLOAD_CONCURRENCY);
-    const batchAttachments = await Promise.all(batch.map(file => DihService.uploadFile(file)));
-    attachments.push(...batchAttachments);
-  }
-  return attachments;
-};
-
-const uploadFile = () => {
-  if (isUploadingAttachment.value) {
-    return;
-  }
-  // 创建文件输入元素
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.multiple = true;
-  fileInput.style.display = 'none';
-  fileInput.onchange = async (event) => {
-    const target = event.target as HTMLInputElement;
-    if (target.files && target.files.length > 0) {
-      const files = validateFilesBeforeUpload(Array.from(target.files));
-      if (!files.length) {
-        if (fileInput.parentNode) {
-          document.body.removeChild(fileInput);
-        }
-        return;
-      }
-      isUploadingAttachment.value = true;
-      try {
-        const attachments = await uploadFilesWithConcurrency(files);
-        pendingAttachments.value.push(...attachments);
-        ElMessage.success(files.length > 1 ? `已添加 ${files.length} 个附件` : `已添加附件「${files[0].name}」`);
-      } catch (err) {
-        console.error('文件上传失败', err);
-        ElMessage.error('文件上传失败，请重试');
-      } finally {
-        isUploadingAttachment.value = false;
-        if (fileInput.parentNode) {
-          document.body.removeChild(fileInput);
-        }
-      }
-    } else if (fileInput.parentNode) {
-      document.body.removeChild(fileInput);
-    }
-  };
-  document.body.appendChild(fileInput);
-  fileInput.click();
-}
 
 // 选择建议
 const selectSuggestion = (index: number) => {

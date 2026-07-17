@@ -210,7 +210,7 @@ class MetaDataServiceImplTest {
     }
 
     @Test
-    void injectsBuiltInInsertTimeForEveryEntity() throws Exception {
+    void injectsBuiltInRecordIdAndInsertTimeForEveryEntity() throws Exception {
         Path metadata = tempDir.resolve("meta.json");
         Files.writeString(metadata, """
                 {
@@ -234,17 +234,33 @@ class MetaDataServiceImplTest {
         ReflectionTestUtils.setField(service, "customWebConfig", config);
 
         MetaData loaded = service.loadMetaData();
+        DataAttribute recordId = service.getDataAttributeByName(
+                "asset", MetaDataConstants.RECORD_ID_ATTRIBUTE);
         DataAttribute insertTime = service.getDataAttributeByName(
                 "asset", MetaDataConstants.INSERT_TIME_ATTRIBUTE);
 
-        assertThat(loaded.getAttribute()).hasSize(2);
+        assertThat(loaded.getAttribute()).hasSize(3);
+        assertThat(recordId).isNotNull();
+        assertThat(recordId.getLabel()).isEqualTo("记录ID");
+        assertThat(recordId.getDescription()).isEqualTo("记录唯一ID");
+        assertThat(recordId.getColumnName()).isEqualTo(MetaDataConstants.RECORD_ID_COLUMN);
+        assertThat(recordId.getColumnType()).isEqualTo("Nullable(UUID)");
+        assertThat(recordId.getOperators()).containsExactly(
+                "equal", "notequal", "in", "isnull", "isnotnull");
+        assertThat(recordId.isDisplaySelected()).isFalse();
+        assertThat(recordId.isMustCandidate()).isFalse();
+        assertThat(recordId.isCopyable()).isTrue();
+        assertThat(service.getAllDataAttributeByEntity(service.getDataEntityByName("asset")))
+                .first()
+                .extracting(DataAttribute::getName)
+                .isEqualTo(MetaDataConstants.RECORD_ID_ATTRIBUTE);
         assertThat(insertTime).isNotNull();
         assertThat(insertTime.getLabel()).isEqualTo("创建时间");
         assertThat(insertTime.getDescription()).isEqualTo("创建时间");
         assertThat(insertTime.getColumnName()).isEqualTo(MetaDataConstants.INSERT_TIME_COLUMN);
         assertThat(insertTime.getColumnType()).isEqualTo("DateTime64(3)");
         assertThat(insertTime.getRetrievalType()).isEqualTo("date");
-        assertThat(insertTime.isDisplaySelected()).isTrue();
+        assertThat(insertTime.isDisplaySelected()).isFalse();
         assertThat(insertTime.isMustCandidate()).isFalse();
         assertThat(insertTime.getOperators()).contains(
                 "greatthan", "lessthan", "greatequalthan", "lessequalthan");
@@ -288,6 +304,90 @@ class MetaDataServiceImplTest {
     }
 
     @Test
+    void compatibleConfiguredRecordIdIsReplacedAndBusinessIdRemainsOrdinary() throws Exception {
+        Files.writeString(tempDir.resolve("meta.json"), """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [
+                    {"id": 10, "entity": "asset", "name": "id", "column_name": "id", "column_type": "String"},
+                    {"id": 11, "entity": "asset", "name": "zenvis_id", "column_name": "zenvis_id", "column_type": "String"}
+                  ]
+                }
+                """);
+        MetaDataServiceImpl service = metadataService(tempDir);
+
+        MetaData loaded = service.loadMetaData();
+
+        assertThat(loaded).isNotNull();
+        assertThat(service.getDataAttributeByName("asset", "id").getColumnType()).isEqualTo("String");
+        assertThat(service.getDataAttributeByName("asset", MetaDataConstants.RECORD_ID_ATTRIBUTE))
+                .isNotNull()
+                .extracting(DataAttribute::getColumnType)
+                .isEqualTo(MetaDataConstants.RECORD_ID_COLUMN_TYPE);
+        assertThat(loaded.getAttribute()).extracting(DataAttribute::getName)
+                .containsExactlyInAnyOrder("id", MetaDataConstants.RECORD_ID_ATTRIBUTE,
+                        MetaDataConstants.INSERT_TIME_ATTRIBUTE);
+    }
+
+    @Test
+    void repeatedMetadataLoadDoesNotDuplicateBuiltInAttributes() throws Exception {
+        Files.writeString(tempDir.resolve("meta.json"), """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "name", "column_name": "name", "column_type": "String"}]
+                }
+                """);
+        MetaDataServiceImpl service = metadataService(tempDir);
+
+        service.loadMetaData();
+        MetaData reloaded = service.loadMetaData();
+
+        assertThat(reloaded.getAttribute()).extracting(DataAttribute::getName)
+                .containsExactlyInAnyOrder("name", MetaDataConstants.RECORD_ID_ATTRIBUTE,
+                        MetaDataConstants.INSERT_TIME_ATTRIBUTE);
+    }
+
+    @Test
+    void reservedRecordIdCollisionKeepsPreviousSnapshot() throws Exception {
+        Files.writeString(tempDir.resolve("meta.json"), """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "name", "column_name": "name", "column_type": "String"}]
+                }
+                """);
+        MetaDataServiceImpl service = metadataService(tempDir);
+        MetaData first = service.loadMetaData();
+
+        Files.writeString(tempDir.resolve("meta.json"), """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "zenvis_id", "column_name": "business_id", "column_type": "UUID"}]
+                }
+                """);
+
+        MetaData retained = service.loadMetaData();
+
+        assertThat(retained).isSameAs(first);
+        assertThat(service.getDataAttributeByName("asset", MetaDataConstants.RECORD_ID_ATTRIBUTE))
+                .isNotNull()
+                .extracting(DataAttribute::getColumnName)
+                .isEqualTo(MetaDataConstants.RECORD_ID_COLUMN);
+
+        Files.writeString(tempDir.resolve("meta.json"), """
+                {
+                  "entity": [{"id": 1, "name": "asset", "table_name": "asset_table"}],
+                  "attribute": [{"id": 10, "entity": "asset", "name": "business_id", "column_name": "zenvis_id", "column_type": "UUID"}]
+                }
+                """);
+
+        assertThat(service.loadMetaData()).isSameAs(first);
+        assertThat(service.getDataAttributeByName("asset", MetaDataConstants.RECORD_ID_ATTRIBUTE))
+                .isNotNull()
+                .extracting(DataAttribute::getColumnName)
+                .isEqualTo(MetaDataConstants.RECORD_ID_COLUMN);
+    }
+
+    @Test
     void serializesDataAttributeVoAutoCompleteAsSnakeCase() {
         DataAttributeVo dataAttributeVo = new DataAttributeVo();
         dataAttributeVo.setName("device_name");
@@ -319,7 +419,7 @@ class MetaDataServiceImplTest {
         assertThat(first).isNotNull();
         assertThat(service.getDataEntityById(1).getName()).isEqualTo("asset");
         assertThat(service.getDataAttributeById(10).getName()).isEqualTo("ip");
-        assertThat(service.getAllDataAttribute()).hasSize(2);
+        assertThat(service.getAllDataAttribute()).hasSize(3);
 
         Files.writeString(metadata, "{ invalid json }");
         MetaData retained = service.loadMetaData();

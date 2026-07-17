@@ -17,10 +17,6 @@
 zenvis-backend/
 ├── src/main/java/com/coolxer/
 │   ├── controller/          # REST接口
-│   │   ├── business/       # 业务接口
-│   │   │   ├── asset/      # 资产管理
-│   │   │   ├── operation/ # 运营事件
-│   │   │   └── risk/       # 风险管理
 │   │   ├── dih/           # AI对话
 │   │   ├── dashboard/     # 仪表盘
 │   │   └── system/         # 系统管理
@@ -129,12 +125,12 @@ java -jar target/zenvis-backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev
 
 ```java
 @RestController
-@RequestMapping("/api/v1/asset")
-public class AssetHostController {
+@RequestMapping("/api/v1/example")
+public class ExampleController {
 
     @PostMapping("/list")
     public Result<?> list(@RequestBody QueryDTO query) {
-        return Result.success(assetService.list(query));
+        return Result.success(exampleService.list(query));
     }
 }
 ```
@@ -145,13 +141,13 @@ public class AssetHostController {
 
 ```java
 // 接口
-public interface AssetService {
+public interface ExampleService {
     Result<?> list(QueryDTO query);
 }
 
 // 实现
 @Service
-public class AssetServiceImpl implements AssetService {
+public class ExampleServiceImpl implements ExampleService {
     @Override
     public Result<?> list(QueryDTO query) {
         // 实现
@@ -164,8 +160,8 @@ public class AssetServiceImpl implements AssetService {
 ```java
 // MySQL 实体
 @Entity
-@Table(name = "asset_host")
-public class AssetHost {
+@Table(name = "analysis_record")
+public class AnalysisRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -180,59 +176,27 @@ public class Event {
 }
 ```
 
-## 分层开发
+## 扩展边界
 
-### 新增业务模块
+具体业务能力不应在 `zenvis-backend` 中新增 Controller、Service、Entity 或
+Repository。后端核心只维护认证、系统管理、检索、看板、插件生命周期和 AI 等框架能力。
+需要新增业务接口、数据表或页面时，应创建独立插件并遵循
+[插件开发指南](plugin-development.md)。
 
-1. **Controller 层**
+## 数据库结构变更
 
-```java
-@RestController
-@RequestMapping("/api/v1/business/{module}")
-public class BusinessController {
-    @Autowired
-    private BusinessService businessService;
-}
+核心 JPA 表当前由 Hibernate `ddl-auto=update` 维护。插件自己的 MySQL 表不得加入
+核心 Entity 扫描，而应在插件发布目录的 `03_api/migrations/mysql/` 中提供版本化 SQL：
+
+```text
+plugin-custom/
+└── 03_api/
+    └── migrations/mysql/
+        └── V001__init_schema.sql
 ```
 
-2. **Service 层**
-
-```java
-public interface BusinessService {
-    Result<?> query(QueryDTO dto);
-}
-
-@Service
-public class BusinessServiceImpl implements BusinessService {
-    @Override
-    public Result<?> query(QueryDTO dto) {
-        // 业务逻辑
-    }
-}
-```
-
-3. **DAO 层**
-
-```java
-// MySQL
-public interface BusinessRepository extends JpaRepository<BusinessEntity, Long> {
-}
-
-// ClickHouse
-public interface EventRepository extends ClickHouseRepository<EventEntity> {
-}
-```
-
-## 数据库迁移
-
-使用 Flyway 管理数据库迁移：
-
-```bash
-# 创建迁移文件
-touch src/main/resources/db/migration/V1__init_schema.sql
-
-# Flyway 会自动在应用启动时执行
-```
+平台安装或升级插件时执行尚未应用的迁移并记录 SHA-256；已执行的迁移文件禁止修改。
+完整规则见[插件开发指南](plugin-development.md#5-添加版本化-mysql-迁移)。
 
 ## 热部署
 

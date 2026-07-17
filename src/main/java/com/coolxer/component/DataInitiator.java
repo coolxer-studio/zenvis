@@ -84,30 +84,62 @@ public class DataInitiator {
      * 初始化默认看板
      */
     private void initDefaultDashboard() {
-        if (dashboardRepository.findByCode("system-board").isPresent()) {
+        Dashboard systemDashboard = dashboardRepository.findByCode("system-board").orElse(null);
+        if (systemDashboard == null) {
+            Dashboard legacyDashboard = dashboardRepository.findByCode("msg-board").orElse(null);
+            if (legacyDashboard != null) {
+                legacyDashboard.setName("系统状态总览");
+                legacyDashboard.setCode("system-board");
+                dashboardRepository.save(legacyDashboard);
+                systemDashboard = legacyDashboard;
+                log.info("已将内置看板编码从 msg-board 迁移为 system-board");
+            } else {
+                List<Dashboard> existingDashboards = dashboardRepository.findAll();
+                systemDashboard = new Dashboard()
+                        .setName("系统状态总览")
+                        .setCode("system-board")
+                        .setType(DashboardType.BUILT)
+                        .setUrl("");
+                if (CollectionUtils.isEmpty(existingDashboards)) {
+                    systemDashboard.setIsDefault(true);
+                    ArrayList<Dashboard> dashboards = new ArrayList<>();
+                    dashboards.add(systemDashboard);
+                    dashboards.add(new Dashboard()
+                            .setName("外链接视图-测试")
+                            .setCode("link-test-baidu")
+                            .setType(DashboardType.LINK)
+                            .setUrl("https://www.baidu.com"));
+                    dashboardRepository.saveAll(dashboards);
+                    return;
+                }
+                dashboardRepository.save(systemDashboard);
+            }
+        }
+        normalizeDefaultDashboard(systemDashboard);
+    }
+
+    private void normalizeDefaultDashboard(Dashboard systemDashboard) {
+        List<Dashboard> dashboards = new ArrayList<>(dashboardRepository.findAll());
+        if (dashboards.stream().noneMatch(item -> "system-board".equals(item.getCode()))) {
+            dashboards.add(systemDashboard);
+        }
+        List<Dashboard> defaults = dashboards.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getIsDefault()))
+                .toList();
+        if (defaults.size() == 1) {
             return;
         }
-        Dashboard legacyDashboard = dashboardRepository.findByCode("msg-board").orElse(null);
-        if (legacyDashboard != null) {
-            legacyDashboard.setName("系统状态总览");
-            legacyDashboard.setCode("system-board");
-            dashboardRepository.save(legacyDashboard);
-            log.info("已将内置看板编码从 msg-board 迁移为 system-board");
-            return;
+        Dashboard retained = dashboards.stream()
+                .filter(item -> "system-board".equals(item.getCode()))
+                .findFirst()
+                .orElse(systemDashboard);
+        dashboards.forEach(item -> item.setIsDefault(item == retained));
+        dashboardRepository.saveAll(dashboards);
+        if (defaults.isEmpty()) {
+            log.info("已将系统状态总览设置为默认看板");
+        } else {
+            log.warn("检测到多个默认看板，已保留系统状态总览为唯一默认看板");
         }
-        if (CollectionUtils.isEmpty(dashboardRepository.findAll())) {
-            // 需要初始化
-            ArrayList<Dashboard> dashboardArrayList = new ArrayList<>();
-            dashboardArrayList.add(new Dashboard().setName("系统状态总览").setCode("system-board").setType(DashboardType.BUILT).setUrl(""));
-            dashboardArrayList.add(new Dashboard().setName("外链接视图-测试").setCode("link-test-baidu").setType(DashboardType.LINK).setUrl("https://www.baidu.com"));
-            dashboardRepository.saveAll(dashboardArrayList);
-            return;
-        }
-        dashboardRepository.save(new Dashboard()
-                .setName("系统状态总览")
-                .setCode("system-board")
-                .setType(DashboardType.BUILT)
-                .setUrl(""));
     }
 
     /**

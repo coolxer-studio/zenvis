@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,9 +76,7 @@ public class EntityCoreController extends BaseController {
     @PostMapping({"/{ids}/bulk_update"})
     public ResponseWrap<?> bulkUpdate(@PathVariable("entity") String entity, @PathVariable("ids") String[] ids, @RequestBody Map<String, Object> mapDto) {
         try {
-            for (String id : ids) {
-                entityCoreService.update(entity, id, mapDto);
-            }
+            entityCoreService.updateALL(entity, Arrays.asList(ids), mapDto);
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }

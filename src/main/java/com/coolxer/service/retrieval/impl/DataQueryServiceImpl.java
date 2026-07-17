@@ -2,6 +2,8 @@ package com.coolxer.service.retrieval.impl;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
+import com.coolxer.model.retrieval.meta.DataAttribute;
+import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.model.retrieval.query.ColumnCriteria;
 import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
 import com.coolxer.model.retrieval.query.DataQuery;
@@ -15,6 +17,7 @@ import com.coolxer.service.retrieval.DataQueryService;
 import com.coolxer.service.retrieval.QueryEngine;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -76,9 +79,7 @@ public class DataQueryServiceImpl implements DataQueryService {
             if (table == null || table.getEntity() == null || CollectionUtils.isEmpty(table.getAttributeList())) {
                 throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "展示字段不能为空");
             }
-            List<DisplayColumn> displayColumnList = table.getAttributeList().stream()
-                    .map(attribute -> new DisplayColumn().fromDisplayColumn(attribute))
-                    .toList();
+            List<DisplayColumn> displayColumnList = buildDisplayColumns(table.getAttributeList());
             displayColumnNameMap.put(table.getEntity().getTableName(), displayColumnList);
         });
         if (Objects.nonNull(retrievalRule.getCriteriaExpression())) {
@@ -110,6 +111,26 @@ public class DataQueryServiceImpl implements DataQueryService {
             });
         }
         return dataQueryList;
+    }
+
+    private List<DisplayColumn> buildDisplayColumns(List<DataAttribute> attributes) {
+        List<DisplayColumn> columns = attributes.stream()
+                .map(attribute -> new DisplayColumn().fromDisplayColumn(attribute))
+                .collect(Collectors.toCollection(ArrayList::new));
+        boolean recordIdSelected = attributes.stream()
+                .anyMatch(attribute -> MetaDataConstants.RECORD_ID_ATTRIBUTE.equals(attribute.getName()));
+        boolean recordIdRequiredByLink = attributes.stream()
+                .map(DataAttribute::getLinkTemplate)
+                .filter(StringUtils::isNotBlank)
+                .anyMatch(template -> template.contains("{" + MetaDataConstants.RECORD_ID_ATTRIBUTE + "}"));
+        if (recordIdRequiredByLink && !recordIdSelected) {
+            DisplayColumn recordIdColumn = new DisplayColumn();
+            recordIdColumn.setColumnName(MetaDataConstants.RECORD_ID_COLUMN);
+            recordIdColumn.setColumnType(MetaDataConstants.RECORD_ID_COLUMN_TYPE);
+            recordIdColumn.setDisplayName(MetaDataConstants.RECORD_ID_ATTRIBUTE);
+            columns.add(recordIdColumn);
+        }
+        return columns;
     }
 
     private List<DataQuery> generateExpressionDataQueryList(RetrievalRule retrievalRule, Map<String, List<DisplayColumn>> displayColumnNameMap) {

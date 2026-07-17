@@ -8,6 +8,7 @@ import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
@@ -19,7 +20,6 @@ import java.net.URLClassLoader;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class Registrar {
@@ -31,8 +31,6 @@ public class Registrar {
     @Qualifier("extendJarHandlerMapping")
     private RequestMappingHandlerMapping extendJarHandlerMapping;
 
-    private final Map<String, Object> pluginControllers = new ConcurrentHashMap<>();
-
     public void register(ExtendJar desc, URLClassLoader cl) throws Exception {
         // 1) 扫描类
         List<Class<?>> classes = new ClassGraph()
@@ -43,37 +41,31 @@ public class Registrar {
                 .getAllClasses()
                 .filter(classInfo ->
                         classInfo.hasAnnotation(RestController.class) ||
-                                classInfo.hasAnnotation(Service.class)
+                                classInfo.hasAnnotation(Service.class) ||
+                                classInfo.hasAnnotation(Repository.class) ||
+                                classInfo.hasAnnotation(Component.class)
                 )
                 .loadClasses(true);
 
-        // 对classes进行排序
-        classes.sort((c1, c2) -> {
-            int p1 = priority(c1);
-            int p2 = priority(c2);
-            return Integer.compare(p1, p2);   // 越小越靠前
-        });
+        classes.sort((left, right) -> left.getName().compareTo(right.getName()));
 
+        // 先注册全部 BeanDefinition，确保构造器依赖不受 ClassGraph 扫描顺序影响。
         for (Class<?> clazz : classes) {
             String beanName = desc.beanNameBuild(clazz.getName());
-            // 2) 创建并注入 Bean
             GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
             beanDefinition.setBeanClass(clazz);
             beanDefinition.setAutowireMode(GenericBeanDefinition.AUTOWIRE_BY_TYPE);
             ((BeanDefinitionRegistry) ctx.getBeanFactory()).registerBeanDefinition(beanName, beanDefinition);
-            Object bean = ctx.getBean(beanName);   // 或者 ctx.getBean(clazz);
-            // 3) 注册 Controller Mapping
+        }
+
+        // 再实例化 Controller；Spring 会按需创建其 Service、Repository 等依赖。
+        for (Class<?> clazz : classes) {
             if (clazz.isAnnotationPresent(RestController.class)) {
-                pluginControllers.put(beanName, bean);
+                String beanName = desc.beanNameBuild(clazz.getName());
+                Object bean = ctx.getBean(beanName);
                 registerHandlerMethods(bean, desc);
             }
         }
-    }
-
-    private static int priority(Class<?> clazz) {
-        if (clazz.isAnnotationPresent(Service.class)) return 0;
-        if (clazz.isAnnotationPresent(RestController.class)) return 1;
-        return 2; // 其他类
     }
 
     private void registerHandlerMethods(Object controller, ExtendJar extendJar) {

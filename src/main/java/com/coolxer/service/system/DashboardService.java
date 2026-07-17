@@ -36,6 +36,14 @@ public interface DashboardService {
     Boolean update(Long id, DashboardDto dashboardDto);
 
     /**
+     * 批量修改看板
+     *
+     * @param ids          看板id列表
+     * @param dashboardDto 用户传输实体
+     */
+    Boolean bulkUpdate(List<Long> ids, DashboardDto dashboardDto);
+
+    /**
      * 删除看板
      *
      * @param id 看板id

@@ -102,13 +102,15 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     @Transactional
-    public Map<String, Object> findById(String tableName, String id, List<DataAttribute> dataAttributes) {
+    public Map<String, Object> findById(String tableName, String keyColumn, String id,
+                                        List<DataAttribute> dataAttributes) {
         List<DisplayColumn> displayColumnList = dataAttributes.stream().map(attribute -> new DisplayColumn().fromDisplayColumn(attribute)).toList();
         List<String> selectColumnList = displayColumnList.stream().map(this::convertDisplayColumn).toList();
         List<String> columnList = displayColumnList.stream().map(DisplayColumn::getDisplayName).toList();
         String columnSelectSql = StringUtils.join(selectColumnList, ",");
 
-        String selectSql = "select " + columnSelectSql + " from " + requireIdentifier(tableName, "表名") + " where id = " + quote(id);
+        String selectSql = "select " + columnSelectSql + " from " + requireIdentifier(tableName, "表名")
+                + " where " + requireIdentifier(keyColumn, "字段名") + " = " + quote(id);
         Query query = entityManager.createNativeQuery(selectSql);
         // 执行查询
         List<Object[]> result = query.getResultList();

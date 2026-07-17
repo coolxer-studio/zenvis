@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.stream.Stream;
 
 /**
@@ -83,21 +84,23 @@ public class InitComponent implements CommandLineRunner {
         pluginService.findAll().stream().filter(plugin -> plugin.getStatus() == PluginStatusType.INSTALLED).forEach(pluginVo -> {
             Path apiPath = Paths.get(customWebConfig.getPluginPath(), pluginVo.getPackageName(), "03_api");
             try (Stream<Path> paths = Files.walk(apiPath)) {
-                paths.filter(Files::isRegularFile) // 过滤出文件
+                List<Path> apiJars = paths.filter(Files::isRegularFile) // 过滤出文件
                         .filter(path -> path.toString().endsWith(".jar")) // 过滤
-                        .forEach(jarPath -> {
-                            try {
-                                if (extendJarManager.load(pluginVo.getPackageName(), jarPath.toFile())) {
-                                    log.info("loaded");
-                                } else {
-                                    log.info("loaded(already)");
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        });
+                        .sorted()
+                        .toList();
+                if (apiJars.size() > 1) {
+                    log.error("插件 {} 包含多个 API Jar，跳过加载", pluginVo.getPackageName());
+                } else if (apiJars.size() == 1) {
+                    if (extendJarManager.load(pluginVo.getPackageName(), apiJars.get(0).toFile())) {
+                        log.info("插件 API 已加载: {}", pluginVo.getPackageName());
+                    } else {
+                        log.info("插件 API 已加载（无需重复）: {}", pluginVo.getPackageName());
+                    }
+                }
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("扫描插件 API 失败: {}", pluginVo.getPackageName(), e);
+            } catch (Exception e) {
+                log.error("加载插件 API 失败: {}", pluginVo.getPackageName(), e);
             }
         });
     }

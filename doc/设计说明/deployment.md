@@ -318,5 +318,5 @@ tar -czf open_config_backup_$(date +%Y%m%d).tar.gz open_config/
 ## 下一步
 
 - [开发指南](development.md)
-- [AI智能分析](ai-analysis.md)
+- [MCP Client 与业务 Agent 设计](../DIH/MCP-Client-Agent-Design.md)
 - [API参考](api-reference.md)

@@ -32,7 +32,7 @@
 
 ```json
 {
-  "id": "",
+  "event_id": "",
   "event_time": "",
   "event_type": "",
   "message": ""
@@ -43,8 +43,8 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 唯一标识字段 | 例如：id；没有则写“无” |
-| 排序字段 | 例如：id、event_time |
+| 业务唯一标识字段 | 例如：event_id；没有则写“无”。平台记录ID `zenvis_id` 由系统自动创建和赋值，不需要填写 |
+| 排序字段 | 例如：event_id、event_time；未指定时可使用平台创建时间 `zenvis_insert_time`，不要使用 `zenvis_id` |
 | 业务时间字段 | 例如：event_time、server_time；平台创建时间 `zenvis_insert_time` 由系统自动创建和赋值，不需要填写 |
 | 枚举字段 | 例如：event_type：登录=login、退出=logout |
 | 数组字段 | 例如：tags：Array(String) |

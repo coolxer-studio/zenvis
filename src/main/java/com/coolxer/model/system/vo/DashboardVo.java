@@ -59,6 +59,11 @@ public class DashboardVo implements Serializable {
     private String htmlPath;
 
     /**
+     * 是否为默认看板
+     */
+    private Boolean isDefault;
+
+    /**
      * 来源
      */
     private String source;
@@ -77,6 +82,7 @@ public class DashboardVo implements Serializable {
         this.url = dashboard.getUrl();
         this.configIndex = dashboard.getConfigIndex();
         this.htmlPath = dashboard.getHtmlPath();
+        this.isDefault = Boolean.TRUE.equals(dashboard.getIsDefault());
         this.source = dashboard.getSource();
         this.updateTime = dashboard.getUpdateTime();
     }

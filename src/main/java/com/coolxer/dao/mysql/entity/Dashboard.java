@@ -62,6 +62,12 @@ public class Dashboard extends BaseEntity {
     private String htmlPath;
 
     /**
+     * 是否为默认看板
+     */
+    @Column(name = "is_default", nullable = false, columnDefinition = "tinyint(1) default 0")
+    private Boolean isDefault = false;
+
+    /**
      * 来源，用于区分插件导入资源。
      */
     @Column
@@ -74,6 +80,9 @@ public class Dashboard extends BaseEntity {
         this.url = dashboardDto.getUrl();
         this.configIndex = dashboardDto.getConfigIndex();
         this.htmlPath = dashboardDto.getHtmlPath();
+        if (dashboardDto.getIsDefault() != null) {
+            this.isDefault = dashboardDto.getIsDefault();
+        }
         if (dashboardDto.getSource() != null) {
             this.source = dashboardDto.getSource();
         }

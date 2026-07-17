@@ -23,7 +23,7 @@ public interface EntityCoreService {
      * 删除
      *
      * @param entityName 实体名称
-     * @param id         ID
+     * @param id         平台记录ID（zenvis_id UUID）
      * @return 是否删除成功
      */
     boolean delete(String entityName, String id);
@@ -32,7 +32,7 @@ public interface EntityCoreService {
      * 批量删除
      *
      * @param entityName 实体名称
-     * @param ids        ID列表
+     * @param ids        平台记录ID列表（zenvis_id UUID）
      * @return 是否删除成功
      */
     boolean deleteALL(String entityName, List<String> ids);
@@ -41,17 +41,27 @@ public interface EntityCoreService {
      * 更新信息
      *
      * @param entityName 实体名称
-     * @param id         ID
+     * @param id         平台记录ID（zenvis_id UUID）
      * @param mapDto     通用DTO
      * @return 是否更新成功
      */
     boolean update(String entityName, String id, Map<String, Object> mapDto);
 
     /**
+     * 批量更新信息。执行任何更新前会先校验全部平台记录ID。
+     *
+     * @param entityName 实体名称
+     * @param ids        平台记录ID列表（zenvis_id UUID）
+     * @param mapDto     通用DTO
+     * @return 是否更新成功
+     */
+    boolean updateALL(String entityName, List<String> ids, Map<String, Object> mapDto);
+
+    /**
      * 根据ID查询
      *
      * @param entityName 实体名称
-     * @param id         ID
+     * @param id         平台记录ID（zenvis_id UUID）
      * @return 详细信息
      */
     Map<String, Object> getOne(String entityName, String id);

@@ -448,6 +448,11 @@ class DataVisualizationDemoResponseServiceTest {
         }
 
         @Override
+        public Boolean bulkUpdate(List<Long> ids, DashboardDto dashboardDto) {
+            return false;
+        }
+
+        @Override
         public void delete(Long id) {
         }
 

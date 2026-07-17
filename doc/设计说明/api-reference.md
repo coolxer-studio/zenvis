@@ -43,7 +43,6 @@ http://localhost:11001/swagger-ui/index.html
 | :--- | :--- |
 | [AboutController](../api接口文档/AboutController.md) | 系统关于信息 |
 | [AnalysisTaskController](../api接口文档/AnalysisTaskController.md) | AI分析任务 |
-| [AssetRuleController](../api接口文档/AssetRuleController.md) | 资产规则 |
 | [BusinessServiceController](../api接口文档/BusinessServiceController.md) | 业务应用服务注册、事件与只读管理查询 |
 | [ChatController](../api接口文档/ChatController.md) | AI 对话、上传与预览 |
 | [ChatSessionController](../api接口文档/ChatSessionController.md) | AI 对话会话 |
@@ -56,16 +55,13 @@ http://localhost:11001/swagger-ui/index.html
 | [LoginController](../api接口文档/LoginController.md) | 登录认证 |
 | [McpController](../api接口文档/McpController.md) | MCP 服务管理 |
 | [MenuController](../api接口文档/MenuController.md) | 菜单管理 |
-| [OperationController](../api接口文档/OperationController.md) | 运营看板 |
 | [PluginController](../api接口文档/PluginController.md) | 插件管理 |
 | [PushTaskController](../api接口文档/PushTaskController.md) | 推送任务代理 |
 | [RetrievalController](../api接口文档/RetrievalController.md) | 数据检索 |
-| [RiskController](../api接口文档/RiskController.md) | 风险总览 |
 | [RoleController](../api接口文档/RoleController.md) | 角色管理 |
 | [SkillController](../api接口文档/SkillController.md) | Skill 管理 |
 | [UserController](../api接口文档/UserController.md) | 用户管理 |
 | [VectorStoreQueryController](../api接口文档/VectorStoreQueryController.md) | 插件文档 RAG 管理 |
-已从当前源码移除或暂未恢复的旧 Controller 文档已归档到 [legacy](../api接口文档/legacy)。
 
 ## 通用对接规则
 

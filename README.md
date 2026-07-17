@@ -94,8 +94,8 @@ ZenVis = **配置化数据存储 + 可视化引擎 + 检索分析 + 插件扩展
 
 | 场景       | 描述                 |
 | :------- | :----------------- |
-| 安全数据分析   | 资产风险评估、安全事件分析、漏洞管理 |
-| 运营数据分析   | 用户行为分析、性能监控、事件追踪   |
+| 事件数据分析   | 事件检索、关联分析、异常识别       |
+| 指标趋势分析   | 时序指标、性能监控、趋势追踪       |
 | IoT 数据处理 | 设备数据采集、实时监控、趋势分析   |
 | 日志分析     | 日志聚合、异常检测、合规审计     |
 | API 数据分析 | 接口调用统计、性能分析、错误追踪   |
@@ -130,7 +130,7 @@ ZenVis = **配置化数据存储 + 可视化引擎 + 检索分析 + 插件扩展
 | 数据库        | 用途                      |
 | :--------- | :---------------------- |
 | MySQL      | 存储业务数据（用户、角色、菜单、配置等）    |
-| ClickHouse | 存储时序数据（资产数据、风险事件、运营事件等） |
+| ClickHouse | 存储插件定义的时序数据、事件数据和分析指标 |
 | Redis      | 缓存和向量存储（会话管理、AI 向量检索）   |
 
 ***
@@ -303,10 +303,6 @@ zenvis-backend/
 │   ├── component/                    # Spring 组件
 │   ├── configuration/                # 配置类
 │   ├── controller/                   # REST API 控制器
-│   │   ├── business/                 # 业务模块
-│   │   │   ├── asset/                # 资产管理
-│   │   │   ├── operation/            # 运营事件
-│   │   │   └── risk/                 # 风险管理
 │   │   ├── dashboard/                # 仪表盘
 │   │   ├── dih/                      # 深度思考助手
 │   │   ├── policy/                   # 策略配置
@@ -351,47 +347,6 @@ zenvis-backend/
 | 推送任务  | `PushTaskController`  | 定时推送任务管理    |
 | 仪表盘配置 | `DashboardController` | 仪表盘配置管理     |
 
-### 资产管理
-
-| 功能     | 控制器                      | 说明         |
-| :----- | :----------------------- | :--------- |
-| API 资产 | `AssetApiController`     | API 接口资产数据 |
-| 应用资产   | `AssetAppController`     | 应用程序资产数据   |
-| 文件资产   | `AssetFileController`    | 文件资产数据     |
-| 主机资产   | `AssetHostController`    | 主机设备资产数据   |
-| IoT 资产 | `AssetIotController`     | IoT 设备资产数据 |
-| 日志资产   | `AssetLogController`     | 日志资产数据     |
-| 移动资产   | `AssetMobileController`  | 移动设备资产数据   |
-| PC 资产  | `AssetPcController`      | PC 设备资产数据  |
-| 探针资产   | `AssetProbeController`   | 探针资产数据     |
-| 服务资产   | `AssetServiceController` | 服务资产数据     |
-| 资产规则   | `AssetRuleController`    | 资产规则配置     |
-
-### 风险管理
-
-| 功能   | 控制器                           | 说明     |
-| :--- | :---------------------------- | :----- |
-| 攻击风险 | `AttackRiskController`        | 攻击风险分析 |
-| 基线风险 | `BaselineRiskController`      | 基线风险评估 |
-| 数据风险 | `DataRiskController`          | 数据安全风险 |
-| 漏洞风险 | `VulnerabilityRiskController` | 漏洞风险管理 |
-| 弱风险  | `WeakRiskController`          | 弱口令风险  |
-| 风险事件 | `RiskEventController`         | 风险事件管理 |
-
-### 运营事件
-
-| 功能       | 控制器                          | 说明       |
-| :------- | :--------------------------- | :------- |
-| ANR 事件   | `AnrEventController`         | 应用无响应事件  |
-| API 调用事件 | `ApiCallEventController`     | API 调用统计 |
-| 点击事件     | `ClickEventController`       | 用户点击事件   |
-| 崩溃事件     | `CrashEventController`       | 应用崩溃事件   |
-| 页面事件     | `PageEventController`        | 页面访问事件   |
-| 性能事件     | `PerformanceEventController` | 性能监控事件   |
-| 启动事件     | `StartEventController`       | 应用启动事件   |
-| 网络事件     | `NetworkEventController`     | 网络请求事件   |
-| 位置事件     | `LocationEventController`    | 位置信息事件   |
-
 ### 深度思考助手 (DIH)
 
 | 功能        | 控制器                          | 说明               |
@@ -422,9 +377,7 @@ zenvis-backend/
 | 模块   | 基础路径                | 说明        |
 | :--- | :------------------ | :-------- |
 | 系统管理 | `/api/v1/system`    | 用户、角色、菜单等 |
-| 资产管理 | `/api/v1/asset`     | 各类资产数据    |
-| 风险管理 | `/api/v1/risk`      | 风险相关接口    |
-| 运营事件 | `/api/v1/operation` | 运营事件数据    |
+| 插件接口 | `/api/v1/plugin/{package_name}` | 已安装插件的动态业务接口 |
 | DIH  | `/api/v1/dih`       | AI 相关接口   |
 | 检索引擎 | `/api/v1/retrieval` | 数据检索接口    |
 

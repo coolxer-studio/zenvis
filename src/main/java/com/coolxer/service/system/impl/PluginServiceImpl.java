@@ -32,6 +32,7 @@ import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.rag.VectorStoreInitializerService;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.system.MenuService;
+import com.coolxer.service.system.PluginMigrationService;
 import com.coolxer.service.system.PluginService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.utils.*;
@@ -77,9 +78,9 @@ public class PluginServiceImpl implements PluginService {
     private static final String PLUGIN_MENU_DIR_NAME = "08_menu";
     private static final String DASHBOARD_LOW_CODE_DIR_NAME = "low-code";
     private static final String DASHBOARD_HTML_PAGE_DIR_NAME = "html-page";
-    private static final String HTML_PAGE_PUBLIC_PREFIX = "/html-page/";
     private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
     private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
+    private static final Pattern URI_SCHEME_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
     private static final int LOG_QUEUE_CAPACITY = 512;
     private static final long LOG_POLL_TIMEOUT_SECONDS = 2L;
 
@@ -109,6 +110,9 @@ public class PluginServiceImpl implements PluginService {
 
     @Autowired
     private ExtendJarManager extendJarManager;
+
+    @Autowired
+    private PluginMigrationService pluginMigrationService;
 
     @Autowired
     private VectorStoreInitializerService vectorStoreInitializerService;
@@ -349,8 +353,8 @@ public class PluginServiceImpl implements PluginService {
                 Path currentApiJarPath = requireChildPath(installedRoot.resolve("03_api"), installedRoot);
                 pluginPackTool.copyApiJar(currentApiJarPath);
                 // 2-5 构建UI配置
-                Path currentUIPath = requireChildPath(configRoot().resolve(plugin.getPackageName() + "_config"), configRoot());
-                pluginPackTool.copyUI(currentUIPath);
+                Path installedUIPath = requireChildPath(installedRoot.resolve("04_ui"), installedRoot);
+                exportPluginUi(plugin.getPackageName(), installedUIPath, pluginPackTool.getUiPath());
                 // 2-6 构建看板配置
                 exportPluginDashboards(plugin.getPackageName(), pluginPackTool);
                 // 2-7 构建MCP服务配置
@@ -463,25 +467,28 @@ public class PluginServiceImpl implements PluginService {
             compensationStack.add("删除push-task任务", () -> pushTaskService.deleteBySourceMark(packageName));
             createPluginPushTasks(id, packageName, pluginPackTool);
 
-            writeLog(id, "4 加载API包......");
+            writeLog(id, "4 执行插件MySQL迁移......");
+            pluginMigrationService.migrateMysql(packageName, pluginPackTool.listMysqlMigrationFiles());
+
+            writeLog(id, "5 加载API包......");
             compensationStack.add("卸载API包", () -> extendJarManager.unload(packageName));
             loadPluginApiJars(packageName, pluginPackTool);
 
-            writeLog(id, "5 拷贝UI配置......");
-            Path uiPath = copyPluginUi(packageName, pluginPackTool);
-            if (uiPath != null) {
-                compensationStack.add("删除UI配置", () -> deleteIfExists(uiPath));
+            writeLog(id, "6 拷贝UI配置......");
+            List<Path> uiPaths = copyPluginUi(packageName, pluginPackTool);
+            if (!uiPaths.isEmpty()) {
+                compensationStack.add("删除UI配置", () -> deletePluginUiPaths(uiPaths));
             }
 
-            writeLog(id, "6 存储数据看板......");
+            writeLog(id, "7 存储数据看板......");
             compensationStack.add("删除数据看板", () -> cleanupPluginDashboards(packageName));
             createPluginDashboards(id, packageName, pluginPackTool);
 
-            writeLog(id, "7 存储MCP服务配置......");
+            writeLog(id, "8 存储MCP服务配置......");
             compensationStack.add("删除MCP服务配置", () -> cleanupPluginMcpServers(packageName));
             createPluginMcpServers(id, packageName, pluginPackTool);
 
-            writeLog(id, "8 文档加载到RAG......");
+            writeLog(id, "9 文档加载到RAG......");
             try {
                 vectorStoreInitializerService.loadDocToRag(packageName.replaceAll("\\.", "_"), pluginPackTool.getDocPath());
             } catch (Exception e) {
@@ -490,7 +497,7 @@ public class PluginServiceImpl implements PluginService {
                 writeLog(id, "加载到RAG失败，跳过");
             }
 
-            writeLog(id, "9 加载插件Skill......");
+            writeLog(id, "10 加载插件Skill......");
             compensationStack.add("卸载插件Skill", () -> skillService.uninstallPluginSkills(packageName));
             try {
                 skillService.installPluginSkills(packageName, pluginPackTool.getSkillPath());
@@ -500,7 +507,7 @@ public class PluginServiceImpl implements PluginService {
                 writeLog(id, "加载插件Skill失败，跳过");
             }
 
-            writeLog(id, "10 存储菜单信息......");
+            writeLog(id, "11 存储菜单信息......");
             compensationStack.add("删除菜单按钮", () -> deletePluginMenus(packageName));
             createPluginMenus(packageName, pluginPackTool);
 
@@ -724,8 +731,14 @@ public class PluginServiceImpl implements PluginService {
     }
 
     private Path normalizeRelativePath(String path, String label) {
-        if (StringUtils.isBlank(path) || path.contains("\\") || path.contains("\0")) {
+        if (StringUtils.isBlank(path) || path.startsWith("/") || path.contains("\\") || path.contains("\0")
+                || path.contains("?") || path.contains("#") || URI_SCHEME_PATTERN.matcher(path).find()) {
             throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), label + "不合法: " + path);
+        }
+        for (String part : path.split("/", -1)) {
+            if (part.isBlank() || ".".equals(part) || "..".equals(part)) {
+                throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), label + "不合法: " + path);
+            }
         }
         Path normalizedPath = Paths.get(path).normalize();
         if (normalizedPath.isAbsolute() || normalizedPath.startsWith("..") || normalizedPath.toString().isBlank()) {
@@ -794,7 +807,8 @@ public class PluginServiceImpl implements PluginService {
         cleanupPluginMcpServers(packageName);
 
         writeLog(id, "清理UI配置......");
-        deleteIfExists(requireChildPath(configRoot().resolve(packageName + "_config"), configRoot()));
+        Path installedUiPath = requireChildPath(installedPluginRoot(plugin).resolve("04_ui"), installedPluginRoot(plugin));
+        cleanupPluginUi(packageName, installedUiPath);
 
         writeLog(id, "卸载API包......");
         extendJarManager.unload(packageName);
@@ -903,20 +917,159 @@ public class PluginServiceImpl implements PluginService {
     }
 
     private void loadPluginApiJars(String packageName, PluginPackTool pluginPackTool) throws Exception {
-        for (Path jarPath : pluginPackTool.listApiFiles()) {
-            extendJarManager.load(packageName, jarPath.toFile());
+        List<Path> apiFiles = pluginPackTool.listApiFiles();
+        if (apiFiles.size() > 1) {
+            throw new IllegalArgumentException("每个插件的 03_api 目录只能包含一个 Jar");
+        }
+        if (!apiFiles.isEmpty()) {
+            extendJarManager.load(packageName, apiFiles.get(0).toFile());
         }
     }
 
-    private Path copyPluginUi(String packageName, PluginPackTool pluginPackTool) throws IOException {
+    private List<Path> copyPluginUi(String packageName, PluginPackTool pluginPackTool) throws IOException {
         Path pluginUIPath = pluginPackTool.getUiPath();
-        if (!Files.exists(pluginUIPath)) {
-            return null;
+        return installPluginUi(packageName, pluginUIPath);
+    }
+
+    private List<Path> installPluginUi(String packageName, Path pluginUiPath) throws IOException {
+        PluginUiLayout layout = inspectPluginUi(packageName, pluginUiPath, true);
+        if (layout.isEmpty()) {
+            return Collections.emptyList();
         }
-        Path uiPath = requireChildPath(configRoot().resolve(packageName + "_config"), configRoot());
-        deleteIfExists(uiPath);
-        WalkFileUtil.copy(pluginUIPath, uiPath);
-        return uiPath;
+
+        List<Path> copiedPaths = new ArrayList<>();
+        try {
+            if (!layout.legacyFiles().isEmpty()) {
+                Path legacyTarget = uiConfigPath(packageName);
+                deleteIfExists(legacyTarget);
+                copiedPaths.add(legacyTarget);
+                Files.createDirectories(legacyTarget);
+                for (Path legacyFile : layout.legacyFiles()) {
+                    Path target = requireChildPath(legacyTarget.resolve(legacyFile.getFileName()), legacyTarget);
+                    WalkFileUtil.copy(legacyFile, target);
+                }
+            }
+            for (PluginUiBundle bundle : layout.bundles()) {
+                Path target = uiConfigPath(bundle.configIndex());
+                deleteIfExists(target);
+                copiedPaths.add(target);
+                WalkFileUtil.copy(bundle.sourcePath(), target);
+            }
+            return copiedPaths;
+        } catch (IOException | RuntimeException e) {
+            try {
+                deletePluginUiPaths(copiedPaths);
+            } catch (IOException cleanupError) {
+                e.addSuppressed(cleanupError);
+            }
+            throw e;
+        }
+    }
+
+    private void exportPluginUi(String packageName, Path installedUiPath, Path exportUiPath) throws IOException {
+        PluginUiLayout layout = inspectPluginUi(packageName, installedUiPath, false);
+        if (layout.isEmpty()) {
+            return;
+        }
+
+        if (!layout.legacyFiles().isEmpty()) {
+            Path legacySource = requireUiConfigDirectory(packageName);
+            WalkFileUtil.copy(legacySource, exportUiPath);
+        }
+        for (PluginUiBundle bundle : layout.bundles()) {
+            Path source = requireUiConfigDirectory(bundle.configIndex());
+            Path target = requireChildPath(exportUiPath.resolve(bundle.directoryName()), exportUiPath);
+            WalkFileUtil.copy(source, target);
+        }
+    }
+
+    private void cleanupPluginUi(String packageName, Path installedUiPath) throws IOException {
+        PluginUiLayout layout = inspectPluginUi(packageName, installedUiPath, false);
+        List<Path> uiPaths = new ArrayList<>();
+        uiPaths.add(uiConfigPath(packageName));
+        layout.bundles().stream()
+                .map(bundle -> uiConfigPath(bundle.configIndex()))
+                .forEach(uiPaths::add);
+        deletePluginUiPaths(uiPaths);
+    }
+
+    private PluginUiLayout inspectPluginUi(String packageName,
+                                           Path pluginUiPath,
+                                           boolean validateEntryFile) throws IOException {
+        validatePackageName(packageName);
+        if (!Files.exists(pluginUiPath)) {
+            return PluginUiLayout.empty();
+        }
+        if (!Files.isDirectory(pluginUiPath)) {
+            throw invalidPluginPackage("04_ui 必须是目录");
+        }
+
+        List<Path> legacyFiles = new ArrayList<>();
+        List<PluginUiBundle> bundles = new ArrayList<>();
+        try (Stream<Path> entries = Files.list(pluginUiPath)) {
+            for (Path entry : entries.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
+                String name = entry.getFileName().toString();
+                if (name.startsWith(".")) {
+                    continue;
+                }
+                if (Files.isRegularFile(entry)) {
+                    legacyFiles.add(entry);
+                    continue;
+                }
+                if (!Files.isDirectory(entry)) {
+                    throw invalidPluginPackage("04_ui 包含不支持的文件类型: " + name);
+                }
+                if (name.endsWith("_config")) {
+                    throw invalidPluginPackage("04_ui 子目录名不能包含 _config 后缀: " + name);
+                }
+                validateResourceName(name, "04_ui 子目录名");
+                String configIndex = packageName + "." + name;
+                validateResourceName(configIndex, "UI配置索引");
+                if (validateEntryFile && !hasLowCodeEntryFile(entry)) {
+                    throw invalidPluginPackage("04_ui 子目录缺少 site.json 或 index.json: " + name);
+                }
+                bundles.add(new PluginUiBundle(name, configIndex, entry));
+            }
+        }
+        return new PluginUiLayout(List.copyOf(legacyFiles), List.copyOf(bundles));
+    }
+
+    private boolean hasLowCodeEntryFile(Path bundlePath) {
+        return Files.isRegularFile(bundlePath.resolve("site.json"))
+                || Files.isRegularFile(bundlePath.resolve("index.json"));
+    }
+
+    private Path uiConfigPath(String configIndex) {
+        validateResourceName(configIndex, "UI配置索引");
+        return requireChildPath(configRoot().resolve(configIndex + "_config"), configRoot());
+    }
+
+    private Path requireUiConfigDirectory(String configIndex) {
+        Path path = uiConfigPath(configIndex);
+        if (!Files.exists(path) || !Files.isDirectory(path)) {
+            throw invalidPluginPackage("UI配置目录不存在: " + configIndex + "_config");
+        }
+        return path;
+    }
+
+    private void deletePluginUiPaths(Collection<Path> paths) throws IOException {
+        IOException failure = null;
+        List<Path> reversedPaths = new ArrayList<>(new LinkedHashSet<>(paths));
+        Collections.reverse(reversedPaths);
+        for (Path path : reversedPaths) {
+            try {
+                deleteIfExists(path);
+            } catch (IOException e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     private void createPluginMenus(String packageName, PluginPackTool pluginPackTool) {
@@ -979,6 +1132,7 @@ public class PluginServiceImpl implements PluginService {
         }
         validateResourceName(dashboardDto.getCode(), "看板编码");
         dashboardDto.setSource(packageName);
+        dashboardDto.setIsDefault(existingDashboard == null ? Boolean.FALSE : null);
         DashboardType type = dashboardDto.getType();
         if (type == DashboardType.LOW_CODE_PAGE) {
             String configIndex = dashboardDto.getConfigIndex();
@@ -1013,7 +1167,7 @@ public class PluginServiceImpl implements PluginService {
             Files.createDirectories(target.getParent());
             Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             copiedPaths.add(targetRoot);
-            dashboardDto.setHtmlPath(HTML_PAGE_PUBLIC_PREFIX + packageName + "/" + toUnixPath(relativeHtmlPath));
+            dashboardDto.setHtmlPath(packageName + "/" + toUnixPath(relativeHtmlPath));
         } else if (type == DashboardType.LINK && StringUtils.isBlank(dashboardDto.getUrl())) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
         }
@@ -1052,7 +1206,7 @@ public class PluginServiceImpl implements PluginService {
     }
 
     private Path exportHtmlPagePath(String packageName, String htmlPath) {
-        String expectedPrefix = HTML_PAGE_PUBLIC_PREFIX + packageName + "/";
+        String expectedPrefix = packageName + "/";
         if (!StringUtils.startsWith(htmlPath, expectedPrefix)) {
             throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "HTML看板路径不属于插件: " + htmlPath);
         }
@@ -1061,6 +1215,9 @@ public class PluginServiceImpl implements PluginService {
 
     private void cleanupPluginDashboards(String packageName) throws IOException {
         List<Dashboard> dashboards = dashboardRepository.findBySource(packageName);
+        if (dashboards.stream().anyMatch(item -> Boolean.TRUE.equals(item.getIsDefault()))) {
+            throw new ApiException(ResultCodeEnum.DASHBOARD_DEFAULT_DELETE_NOT_ALLOWED);
+        }
         for (Dashboard dashboard : dashboards) {
             if (dashboard.getType() == DashboardType.LOW_CODE_PAGE && StringUtils.isNotBlank(dashboard.getConfigIndex())) {
                 validateResourceName(dashboard.getConfigIndex(), "看板配置索引");
@@ -1259,6 +1416,19 @@ public class PluginServiceImpl implements PluginService {
     private record CompensationStep(String name, CompensationAction action) {
     }
 
+    private record PluginUiBundle(String directoryName, String configIndex, Path sourcePath) {
+    }
+
+    private record PluginUiLayout(List<Path> legacyFiles, List<PluginUiBundle> bundles) {
+        static PluginUiLayout empty() {
+            return new PluginUiLayout(Collections.emptyList(), Collections.emptyList());
+        }
+
+        boolean isEmpty() {
+            return legacyFiles.isEmpty() && bundles.isEmpty();
+        }
+    }
+
     @FunctionalInterface
     private interface CompensationAction {
         void run() throws Exception;
@@ -1391,14 +1561,6 @@ public class PluginServiceImpl implements PluginService {
             }
         }
 
-        public void copyUI(Path currentUIPath) {
-            try {
-                WalkFileUtil.copy(currentUIPath, uiPath);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
         public void copySkill(Path currentSkillPath) {
             try {
                 if (currentSkillPath != null && Files.exists(currentSkillPath)) {
@@ -1498,12 +1660,28 @@ public class PluginServiceImpl implements PluginService {
                 try (Stream<Path> paths = Files.walk(apiPath)) {
                     return paths.filter(Files::isRegularFile) // 过滤出文件
                             .filter(path -> path.toString().endsWith(".jar")) // 过滤
+                            .sorted()
                             .toList();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
             return Collections.emptyList();
+        }
+
+        public List<Path> listMysqlMigrationFiles() {
+            Path migrationPath = apiPath.resolve("migrations/mysql");
+            if (!Files.isDirectory(migrationPath)) {
+                return Collections.emptyList();
+            }
+            try (Stream<Path> paths = Files.walk(migrationPath)) {
+                return paths.filter(Files::isRegularFile)
+                        .filter(path -> path.toString().endsWith(".sql"))
+                        .sorted()
+                        .toList();
+            } catch (IOException e) {
+                throw new UncheckedIOException("读取插件 MySQL 迁移目录失败", e);
+            }
         }
 
         public String readMenuConfigFile() {

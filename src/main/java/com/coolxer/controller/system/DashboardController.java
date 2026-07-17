@@ -82,10 +82,10 @@ public class DashboardController extends BaseController {
     @PostMapping({"/{ids}/bulk-update"})
     public ResponseWrap<?> bulkUpdate(@PathVariable("ids") Long[] ids, @RequestBody DashboardDto dashboardDto) {
         try {
-            for (long id : ids) {
-                dashboardService.update(id, dashboardDto);
+            if (dashboardService.bulkUpdate(Arrays.asList(ids), dashboardDto)) {
+                return ResponseWrap.success("修改成功");
             }
-            return ResponseWrap.success("修改成功");
+            return ResponseWrap.fail();
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }

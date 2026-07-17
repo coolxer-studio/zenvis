@@ -49,6 +49,11 @@ public class DashboardDto implements Serializable {
     private String htmlPath;
 
     /**
+     * 是否为默认看板；更新时为空表示保留原值
+     */
+    private Boolean isDefault;
+
+    /**
      * 来源，用于区分插件导入资源
      */
     private String source;

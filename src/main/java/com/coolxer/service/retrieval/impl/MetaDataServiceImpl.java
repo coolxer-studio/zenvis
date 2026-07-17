@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -312,31 +313,63 @@ public class MetaDataServiceImpl implements MetaDataService {
             if (entity == null || StringUtils.isBlank(entity.getName())) {
                 continue;
             }
-            DataAttribute compatibleConfiguredAttribute = null;
-            for (DataAttribute attribute : new ArrayList<>(attributes)) {
-                if (attribute == null || !entity.getName().equals(attribute.getEntity())) {
-                    continue;
-                }
-                boolean reservedName = MetaDataConstants.INSERT_TIME_ATTRIBUTE.equals(attribute.getName());
-                boolean reservedColumn = MetaDataConstants.INSERT_TIME_COLUMN.equals(attribute.getColumnName());
-                if (!reservedName && !reservedColumn) {
-                    continue;
-                }
-                if (reservedName && reservedColumn) {
-                    compatibleConfiguredAttribute = attribute;
-                    continue;
-                }
-                throw invalid(sourceOf(attribute, sourceByObject, sourcePath),
-                        "字段名和列名" + MetaDataConstants.INSERT_TIME_ATTRIBUTE + "为平台保留字段");
-            }
-            if (compatibleConfiguredAttribute != null) {
-                attributes.remove(compatibleConfiguredAttribute);
-                log.warn("实体{}显式配置了平台内置创建时间字段，已使用系统定义替代", entity.getName());
-            }
+            replaceCompatibleBuiltInAttribute(attributes, entity, sourcePath, sourceByObject,
+                    MetaDataConstants.RECORD_ID_ATTRIBUTE, MetaDataConstants.RECORD_ID_COLUMN, "记录ID");
+            replaceCompatibleBuiltInAttribute(attributes, entity, sourcePath, sourceByObject,
+                    MetaDataConstants.INSERT_TIME_ATTRIBUTE, MetaDataConstants.INSERT_TIME_COLUMN, "创建时间");
+
+            DataAttribute recordId = builtInRecordId(entity.getName());
             DataAttribute insertTime = builtInInsertTime(entity.getName());
+            attributes.add(recordId);
             attributes.add(insertTime);
+            sourceByObject.put(recordId, sourceOf(entity, sourceByObject, sourcePath));
             sourceByObject.put(insertTime, sourceOf(entity, sourceByObject, sourcePath));
         }
+    }
+
+    private void replaceCompatibleBuiltInAttribute(List<DataAttribute> attributes,
+                                                    DataEntity entity,
+                                                    String sourcePath,
+                                                    Map<Object, String> sourceByObject,
+                                                    String reservedName,
+                                                    String reservedColumn,
+                                                    String label) {
+        DataAttribute compatibleConfiguredAttribute = null;
+        for (DataAttribute attribute : new ArrayList<>(attributes)) {
+            if (attribute == null || !entity.getName().equals(attribute.getEntity())) {
+                continue;
+            }
+            boolean usesReservedName = reservedName.equals(attribute.getName());
+            boolean usesReservedColumn = reservedColumn.equals(attribute.getColumnName());
+            if (!usesReservedName && !usesReservedColumn) {
+                continue;
+            }
+            if (usesReservedName && usesReservedColumn) {
+                compatibleConfiguredAttribute = attribute;
+                continue;
+            }
+            throw invalid(sourceOf(attribute, sourceByObject, sourcePath),
+                    "字段名和列名" + reservedName + "为平台保留字段");
+        }
+        if (compatibleConfiguredAttribute != null) {
+            attributes.remove(compatibleConfiguredAttribute);
+            log.warn("实体{}显式配置了平台内置{}字段，已使用系统定义替代", entity.getName(), label);
+        }
+    }
+
+    private DataAttribute builtInRecordId(String entityName) {
+        DataAttribute attribute = new DataAttribute();
+        attribute.setEntity(entityName);
+        attribute.setName(MetaDataConstants.RECORD_ID_ATTRIBUTE);
+        attribute.setLabel("记录ID");
+        attribute.setDescription("记录唯一ID");
+        attribute.setColumnName(MetaDataConstants.RECORD_ID_COLUMN);
+        attribute.setColumnType(MetaDataConstants.RECORD_ID_COLUMN_TYPE);
+        attribute.setOperators(List.of("equal", "notequal", "in", "isnull", "isnotnull"));
+        attribute.setDisplaySelected(false);
+        attribute.setMustCandidate(false);
+        attribute.setCopyable(true);
+        return attribute;
     }
 
     private DataAttribute builtInInsertTime(String entityName) {
@@ -349,7 +382,7 @@ public class MetaDataServiceImpl implements MetaDataService {
         attribute.setColumnType(MetaDataConstants.INSERT_TIME_COLUMN_TYPE);
         attribute.setRetrievalType("date");
         attribute.setOperators(List.of("greatthan", "lessthan", "greatequalthan", "lessequalthan"));
-        attribute.setDisplaySelected(true);
+        attribute.setDisplaySelected(false);
         attribute.setMustCandidate(false);
         return attribute;
     }
@@ -460,8 +493,11 @@ public class MetaDataServiceImpl implements MetaDataService {
         if (dataEntity == null || StringUtils.isBlank(dataEntity.getName())) {
             return Collections.emptyList();
         }
-        return List.copyOf(snapshotRef.get().attributesByEntity()
-                .getOrDefault(dataEntity.getName(), Collections.emptyMap()).values());
+        return snapshotRef.get().attributesByEntity()
+                .getOrDefault(dataEntity.getName(), Collections.emptyMap()).values().stream()
+                .sorted(Comparator.comparingInt(attribute ->
+                        MetaDataConstants.isRecordId(attribute) ? 0 : 1))
+                .toList();
     }
 
     @Override

@@ -18,10 +18,14 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class EntityCoreServiceImplTest {
+
+    private static final String RECORD_ID = "8e388586-24b2-4d4b-aecc-a33151326f4d";
+    private static final String OTHER_RECORD_ID = "53a29b77-9e5f-4c33-80cb-1b1a4c10940b";
 
     private EntityCoreServiceImpl service;
     private MetaDataService metaDataService;
@@ -45,9 +49,19 @@ class EntityCoreServiceImplTest {
                 MetaDataConstants.INSERT_TIME_ATTRIBUTE,
                 MetaDataConstants.INSERT_TIME_COLUMN,
                 MetaDataConstants.INSERT_TIME_COLUMN_TYPE);
+        DataAttribute recordId = attribute(
+                MetaDataConstants.RECORD_ID_ATTRIBUTE,
+                MetaDataConstants.RECORD_ID_COLUMN,
+                MetaDataConstants.RECORD_ID_COLUMN_TYPE);
+        DataAttribute businessId = attribute("id", "id", "String");
         when(metaDataService.getDataAttributeByName("asset", "name")).thenReturn(name);
+        when(metaDataService.getDataAttributeByName("asset", "id")).thenReturn(businessId);
+        when(metaDataService.getDataAttributeByName(
+                "asset", MetaDataConstants.RECORD_ID_ATTRIBUTE)).thenReturn(recordId);
         when(metaDataService.getDataAttributeByName(
                 "asset", MetaDataConstants.INSERT_TIME_ATTRIBUTE)).thenReturn(insertTime);
+        when(metaDataService.getAllDataAttributeByEntity(entity))
+                .thenReturn(List.of(name, businessId, recordId, insertTime));
     }
 
     @Test
@@ -63,6 +77,62 @@ class EntityCoreServiceImplTest {
                 MetaDataConstants.INSERT_TIME_ATTRIBUTE, "2026-07-15 09:00:00")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("系统自动维护");
+    }
+
+    @Test
+    void addRejectsManualRecordIdValue() {
+        assertThatThrownBy(() -> service.add("asset", Map.of(
+                MetaDataConstants.RECORD_ID_ATTRIBUTE, RECORD_ID)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("zenvis_id")
+                .hasMessageContaining("系统自动维护");
+    }
+
+    @Test
+    void crudUsesPlatformRecordIdAndKeepsBusinessIdAsOrdinaryData() {
+        service.getOne("asset", RECORD_ID);
+        service.update("asset", RECORD_ID, Map.of("id", "business-002"));
+        service.delete("asset", RECORD_ID);
+        service.deleteALL("asset", List.of(RECORD_ID, OTHER_RECORD_ID));
+
+        verify(queryEngine).findById(
+                "zenvis.asset", MetaDataConstants.RECORD_ID_COLUMN, RECORD_ID,
+                metaDataService.getAllDataAttributeByEntity(metaDataService.getDataEntityByName("asset")));
+        verify(queryEngine).update(
+                "zenvis.asset", Map.of("id", "'business-002'"),
+                MetaDataConstants.RECORD_ID_COLUMN, RECORD_ID);
+        verify(queryEngine).delete(
+                "zenvis.asset", MetaDataConstants.RECORD_ID_COLUMN, RECORD_ID);
+        verify(queryEngine).deleteIn(
+                "zenvis.asset", MetaDataConstants.RECORD_ID_COLUMN,
+                List.of(RECORD_ID, OTHER_RECORD_ID));
+    }
+
+    @Test
+    void crudRejectsNonCanonicalOrMissingPlatformRecordIds() {
+        assertThatThrownBy(() -> service.getOne("asset", "not-a-uuid"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("标准UUID格式");
+        assertThatThrownBy(() -> service.deleteALL("asset", List.of(RECORD_ID, "1-1-1-1-1")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("标准UUID格式");
+        assertThatThrownBy(() -> service.update("asset", " ", Map.of("name", "router")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("记录ID不能为空");
+    }
+
+    @Test
+    void bulkUpdateValidatesEveryRecordIdBeforeChangingAnyRow() {
+        assertThatThrownBy(() -> service.updateALL(
+                "asset", List.of(RECORD_ID, "not-a-uuid"), Map.of("name", "router")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("标准UUID格式");
+
+        verify(queryEngine, never()).update(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyMap(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test

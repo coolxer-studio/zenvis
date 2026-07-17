@@ -28,6 +28,33 @@ import static org.mockito.ArgumentMatchers.anyString;
 class QueryEngineImplTest {
 
     @Test
+    void findByIdUsesValidatedPlatformKeyColumn() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.singletonList(
+                new Object[]{"8e388586-24b2-4d4b-aecc-a33151326f4d"}));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        DataAttribute recordId = new DataAttribute();
+        recordId.setName("zenvis_id");
+        recordId.setColumnName("zenvis_id");
+        recordId.setColumnType("Nullable(UUID)");
+
+        Map<String, Object> result = queryEngine.findById(
+                "zenvis.asset", "zenvis_id", "8e388586-24b2-4d4b-aecc-a33151326f4d",
+                List.of(recordId));
+
+        assertThat(result).containsEntry("zenvis_id", "8e388586-24b2-4d4b-aecc-a33151326f4d");
+        verify(entityManager).createNativeQuery(
+                "select zenvis_id from zenvis.asset where zenvis_id = '8e388586-24b2-4d4b-aecc-a33151326f4d'");
+        assertThatThrownBy(() -> queryEngine.findById(
+                "zenvis.asset", "zenvis_id or 1=1", "value", List.of(recordId)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("字段名不合法");
+    }
+
+    @Test
     void buildCriteriaSqlEscapesStringValues() {
         QueryEngineImpl queryEngine = new QueryEngineImpl();
 

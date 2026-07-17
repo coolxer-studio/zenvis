@@ -69,7 +69,7 @@ ZenVis 是一个配置化数据分析应用框架，采用分层架构设计，�
 | 技术 | 用途 |
 | :--- | :--- |
 | MySQL 8.0 | 配置数据、用户管理、规则存储 |
-| ClickHouse | 时序数据、事件数据、资产风险数据 |
+| ClickHouse | 插件定义的时序数据、事件数据和分析实体 |
 | Redis 7.x | 缓存、会话、向量存储 |
 
 ### AI 能力
@@ -95,10 +95,6 @@ ZenVis 是一个配置化数据分析应用框架，采用分层架构设计，�
 
 ```
 com.coolxer.controller/
-├── business/
-│   ├── asset/        # 资产管理 (API/App/File/Host/IoT/...)
-│   ├── operation/    # 运营事件 (ANR/Crash/Network/Performance/...)
-│   └── risk/         # 风险管理 (Attack/Baseline/Data/Vulnerability/...)
 ├── dih/              # AI对话
 ├── retrieval/        # 数据检索
 ├── dashboard/        # 仪表盘
@@ -148,11 +144,9 @@ ZenVis 采用双数据源设计，MySQL 和 ClickHouse 分工明确：
 
 ### ClickHouse - 数据中心
 
-- 设备资产数据
-- 运营事件数据（ANR/Crash/性能等）
-- 风险评估数据
-- 用户行为数据
-- 时序指标数据
+- 插件定义的分析实体
+- 通用事件和时序指标
+- 元数据驱动的检索数据
 
 ## AI Agent 架构
 
@@ -167,8 +161,8 @@ ZenVis 采用可扩展的插件架构：
 │            Plugin System                │
 ├─────────────────────────────────────────┤
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
-│  │ Plugin1 │  │ Plugin2 │  │ Plugin3 │ │
-│  │ (asset) │  │ (audit) │  │ (custom)│ │
+│  │Plugin A │  │Plugin B │  │Plugin C │ │
+│  │(example)│  │(example)│  │(custom) │ │
 │  └────┬────┘  └────┬────┘  └────┬────┘ │
 │       │            │            │       │
 │  ┌────┴────────────┴────────────┴────┐ │
@@ -180,7 +174,8 @@ ZenVis 采用可扩展的插件架构：
 └─────────────────────────────────────────┘
 ```
 
-插件开发详见 [插件开发指南](plugin-development.md)
+插件开发详见[插件开发指南](plugin-development.md)。后端核心只提供动态加载、
+命名空间路由、通用数据源和迁移机制，不包含具体业务域实现。
 
 ## 配置驱动
 

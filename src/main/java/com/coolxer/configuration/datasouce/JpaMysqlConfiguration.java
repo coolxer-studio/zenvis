@@ -10,6 +10,7 @@ import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
@@ -48,6 +49,13 @@ public class JpaMysqlConfiguration {
         return DataSourceBuilder.create().build();
     }
 
+    /**
+     * 插件访问 MySQL 的稳定 JDBC 契约。
+     */
+    @Bean(name = "pluginMysqlJdbcTemplate")
+    public NamedParameterJdbcTemplate pluginMysqlJdbcTemplate() {
+        return new NamedParameterJdbcTemplate(mysqlDataSource());
+    }
 
     /**
      * 工厂Bean
@@ -73,7 +81,7 @@ public class JpaMysqlConfiguration {
         return hibernateProperties.determineHibernateProperties(properties, new HibernateSettings());
     }
 
-    @Bean
+    @Bean(name = {"mysqlTransactionManager", "pluginMysqlTransactionManager"})
     public JpaTransactionManager mysqlTransactionManager(EntityManagerFactoryBuilder builder) {
 
         JpaTransactionManager jpaTransactionManager = new JpaTransactionManager();

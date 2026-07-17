@@ -80,48 +80,64 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
             return;
         }
         // 根据MetaData 转化为sql
-        StringBuilder alterTableSql = new StringBuilder();
+        StringBuilder createTableSql = new StringBuilder();
         metaData.getEntity().stream().filter(
                 dataEntity -> dataEntity.getAutoCreate() != null &&
                         dataEntity.getAutoCreate().getEngine() != null &&
                         dataEntity.getAutoCreate().getOrderBy() != null
         ).forEach(dataEntity -> {
-            alterTableSql.append("CREATE TABLE IF NOT EXISTS ")
+            createTableSql.append("CREATE TABLE IF NOT EXISTS ")
                     .append(dataEntity.getTableName())
                     .append(" (");
             List<DataAttribute> attributeList = metaDataService.getAllDataAttributeByEntity(dataEntity);
-            attributeList.forEach(dataAttribute -> alterTableSql
+            attributeList.forEach(dataAttribute -> createTableSql
                     .append(columnDefinition(dataAttribute)).append(","));
-            alterTableSql.deleteCharAt(alterTableSql.length() - 1);
+            createTableSql.deleteCharAt(createTableSql.length() - 1);
             String orderBy = String.format(" ORDER BY ( %s )", String.join(",", dataEntity.getAutoCreate().getOrderBy()));
             String engine = String.format(" ENGINE = %s", dataEntity.getAutoCreate().getEngine());
             String partitionBy = StringUtils.isEmpty(dataEntity.getAutoCreate().getPartitionBy()) ? "" :
                     String.format(" PARTITION BY %s", dataEntity.getAutoCreate().getPartitionBy());
-            alterTableSql.append(")").append(engine).append(orderBy).append(partitionBy)
+            createTableSql.append(")").append(engine).append(orderBy).append(partitionBy)
                     .append(";");
         });
+
+        executeSql(createTableSql.toString());
+
         metaData.getEntity().stream()
                 .filter(this::isClickHouseEntity)
-                .forEach(dataEntity -> alterTableSql.append("ALTER TABLE ")
-                        .append(dataEntity.getTableName())
-                        .append(" ADD COLUMN IF NOT EXISTS ")
-                        .append(MetaDataConstants.INSERT_TIME_COLUMN)
-                        .append(" ")
-                        .append(MetaDataConstants.INSERT_TIME_COLUMN_TYPE)
-                        .append(" DEFAULT ")
-                        .append(MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION)
-                        .append(";"));
-
-        executeSql(alterTableSql.toString());
+                .forEach(dataEntity -> {
+                    executeSql("ALTER TABLE " + dataEntity.getTableName()
+                            + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.INSERT_TIME_COLUMN
+                            + " " + MetaDataConstants.INSERT_TIME_COLUMN_TYPE
+                            + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
+                    migrateRecordIdColumn(dataEntity);
+                });
         log.info("clickhouse scheme init successfully.");
     }
 
     private String columnDefinition(DataAttribute attribute) {
         String definition = attribute.getColumnName() + " " + attribute.getColumnType();
+        if (MetaDataConstants.isRecordId(attribute)) {
+            return definition + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION;
+        }
         if (MetaDataConstants.isInsertTime(attribute)) {
             return definition + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION;
         }
         return definition;
+    }
+
+    private void migrateRecordIdColumn(DataEntity entity) {
+        String tableName = entity.getTableName();
+        executeRequiredSql("ALTER TABLE " + tableName
+                + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.RECORD_ID_COLUMN
+                + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE + " DEFAULT NULL");
+        executeRequiredSql("ALTER TABLE " + tableName
+                + " MATERIALIZE COLUMN " + MetaDataConstants.RECORD_ID_COLUMN
+                + " SETTINGS mutations_sync = 1");
+        executeRequiredSql("ALTER TABLE " + tableName
+                + " MODIFY COLUMN " + MetaDataConstants.RECORD_ID_COLUMN
+                + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
+                + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION);
     }
 
     private boolean isClickHouseEntity(DataEntity entity) {
@@ -150,6 +166,15 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                     }
                 }
             }
+        }
+    }
+
+    private void executeRequiredSql(String sql) {
+        try {
+            entityManager.createNativeQuery(sql).getResultList();
+        } catch (Exception e) {
+            log.error("Required ClickHouse schema statement failed: {}", sql, e);
+            throw new IllegalStateException("ClickHouse记录ID字段迁移失败: " + sql, e);
         }
     }
 

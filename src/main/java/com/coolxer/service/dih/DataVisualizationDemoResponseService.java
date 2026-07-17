@@ -45,7 +45,7 @@ public class DataVisualizationDemoResponseService {
     private static final String HTML_PAGE_FILE = "user-event-page.html";
     private static final String HTML_DASHBOARD_FILE = "user-event-dashboard.html";
     private static final String HTML_PAGE_PATH = "/html-page/" + HTML_PAGE_FILE;
-    private static final String HTML_DASHBOARD_PATH = "/html-page/" + HTML_DASHBOARD_FILE;
+    private static final String HTML_DASHBOARD_PATH = HTML_DASHBOARD_FILE;
     private static final String ACTION_ADD_CHART_LIBRARY = "data_visualization.add_chart_library";
     private static final String ACTION_APPLY_CONFIG = "data_visualization.apply_config";
     private static final String SOURCE_PREFIX = "data-visualization-demo:user-event:";
@@ -148,7 +148,7 @@ public class DataVisualizationDemoResponseService {
                       "type": "form",
                       "api": "/zenvis/api/v1/entity/user-event/add",
                       "body": [
-                        {"name": "id", "type": "uuid"},
+                        {"name": "event_id", "type": "uuid"},
                         {"type": "input-text", "name": "procid", "label": "进程id", "required": true},
                         {"type": "input-text", "name": "user", "label": "用户", "required": true},
                         {"type": "select", "name": "event_type", "label": "事件类型", "source": "/zenvis/api/v1/entity/user-event/event_type/mapping", "required": true},
@@ -165,10 +165,10 @@ public class DataVisualizationDemoResponseService {
                 {
                   "type": "crud",
                   "api": "/zenvis/api/v1/entity/user-event/list",
-                  "quickSaveItemApi": "/zenvis/api/v1/entity/user-event/$id/update",
+                  "quickSaveItemApi": "/zenvis/api/v1/entity/user-event/$zenvis_id/update",
                   "autoGenerateFilter": true,
                   "columns": [
-                    {"type": "tpl", "name": "id", "label": "事件ID", "tpl": "${id|truncate:14}", "copyable": true},
+                    {"type": "tpl", "name": "event_id", "label": "事件ID", "tpl": "${event_id|truncate:14}", "copyable": true},
                     {"name": "procid", "label": "进程id", "searchable": true},
                     {"name": "user", "label": "用户", "searchable": true},
                     {
@@ -205,9 +205,9 @@ public class DataVisualizationDemoResponseService {
                             "title": "编辑用户事件",
                             "body": {
                               "type": "form",
-                              "api": "/zenvis/api/v1/entity/user-event/$id/update",
+                              "api": "/zenvis/api/v1/entity/user-event/$zenvis_id/update",
                               "body": [
-                                {"type": "static", "name": "id", "label": "事件ID"},
+                                {"type": "static", "name": "event_id", "label": "事件ID"},
                                 {"type": "input-text", "name": "procid", "label": "进程id", "required": true},
                                 {"type": "input-text", "name": "user", "label": "用户", "required": true},
                                 {"type": "select", "name": "event_type", "label": "事件类型", "source": "/zenvis/api/v1/entity/user-event/event_type/mapping"},
@@ -217,7 +217,7 @@ public class DataVisualizationDemoResponseService {
                             }
                           }
                         },
-                        {"type": "button", "icon": "fa fa-times text-danger", "actionType": "ajax", "confirmText": "确认删除该事件？", "api": "delete:/zenvis/api/v1/entity/user-event/$id"}
+                        {"type": "button", "icon": "fa fa-times text-danger", "actionType": "ajax", "confirmText": "确认删除该事件？", "api": "delete:/zenvis/api/v1/entity/user-event/$zenvis_id"}
                       ]
                     }
                   ]
@@ -394,18 +394,18 @@ public class DataVisualizationDemoResponseService {
                   const rows = data.rows || [];
                   document.getElementById('rows').innerHTML = rows.length ? rows.map(row => `
                     <tr>
-                      <td>${row.id || ''}</td>
+                      <td>${row.event_id || ''}</td>
                       <td>${row.user || ''}</td>
                       <td>${row.event_type || ''}</td>
                       <td>${row.reliability ?? ''}</td>
                       <td>${row.server_time || ''}</td>
-                      <td><button onclick="removeRow('${row.id}')">删除</button></td>
+                      <td><button onclick="removeRow('${row.zenvis_id}')">删除</button></td>
                     </tr>
                   `).join('') : '<tr><td colspan="6">暂无数据</td></tr>';
                 }
                 async function createDemo() {
                   const body = {
-                    id: crypto.randomUUID(),
+                    event_id: crypto.randomUUID(),
                     procid: 101,
                     user: 'demo-user',
                     event_type: 'login',
@@ -417,8 +417,8 @@ public class DataVisualizationDemoResponseService {
                   await request(`${apiBase}/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                   loadRows();
                 }
-                async function removeRow(id) {
-                  await fetch(`${apiBase}/${id}`, { method: 'DELETE' });
+                async function removeRow(zenvisId) {
+                  await fetch(`${apiBase}/${zenvisId}`, { method: 'DELETE' });
                   loadRows();
                 }
                 loadRows();
@@ -746,8 +746,8 @@ public class DataVisualizationDemoResponseService {
                       "required": false,
                       "description": "确认需要展示和编辑的字段。",
                       "suggestions": [
-                        {"label": "使用完整字段", "value": "展示 id、procid、user、event_type、reliability、detail、tags、server_time"},
-                        {"label": "使用核心字段", "value": "展示 id、user、event_type、reliability、server_time"}
+                        {"label": "使用完整字段", "value": "展示 event_id、procid、user、event_type、reliability、detail、tags、server_time，行操作使用 zenvis_id"},
+                        {"label": "使用核心字段", "value": "展示 event_id、user、event_type、reliability、server_time，行操作使用 zenvis_id"}
                       ],
                       "placeholder": "也可以补充字段裁剪或排序要求"
                     }

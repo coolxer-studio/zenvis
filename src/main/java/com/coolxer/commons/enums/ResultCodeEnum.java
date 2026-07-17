@@ -217,6 +217,14 @@ public enum ResultCodeEnum {
 
     DASHBOARD_IS_NOT_EXIST(182, "看板不存在"),
 
+    DASHBOARD_DEFAULT_REQUIRED(183, "系统必须保留一个默认看板，请先设置其他默认看板"),
+
+    DASHBOARD_DEFAULT_DELETE_NOT_ALLOWED(184, "默认看板不能删除，请先设置其他默认看板"),
+
+    DASHBOARD_MULTIPLE_DEFAULT_NOT_ALLOWED(185, "批量操作不能同时设置多个默认看板"),
+
+    DASHBOARD_HTML_PATH_INVALID(186, "HTML看板路径必须是相对文件路径"),
+
     ENTITY_IS_EMPTY(190, "无可用实体"),
 
     PLUGIN_IS_INSTALLED(201, "插件已经安装，当前操作不允许！"),

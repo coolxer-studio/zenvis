@@ -54,7 +54,8 @@ public class EntityCoreServiceImpl implements EntityCoreService {
     public boolean delete(String entityName, String id) {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
-            queryEngine.delete(dataEntity.getTableName(), "id", id);
+            queryEngine.delete(dataEntity.getTableName(), MetaDataConstants.RECORD_ID_COLUMN,
+                    requireRecordId(id));
             return true;
         }
         return false;
@@ -64,7 +65,8 @@ public class EntityCoreServiceImpl implements EntityCoreService {
     public boolean deleteALL(String entityName, List<String> ids) {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
-            queryEngine.deleteIn(dataEntity.getTableName(), "id", ids);
+            queryEngine.deleteIn(dataEntity.getTableName(), MetaDataConstants.RECORD_ID_COLUMN,
+                    requireRecordIds(ids));
             return true;
         }
         return false;
@@ -74,6 +76,7 @@ public class EntityCoreServiceImpl implements EntityCoreService {
     public boolean update(String entityName, String id, Map<String, Object> mapDto) {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
+            String recordId = requireRecordId(id);
             Map<String, String> columnValueMap = getColumnValueMap(entityName, mapDto);
             // 剔除orderBy的主键字段
             if (dataEntity.getAutoCreate() != null) {
@@ -81,8 +84,9 @@ public class EntityCoreServiceImpl implements EntityCoreService {
                     columnValueMap.remove(orderBy);
                 });
             }
-            // 剔除id
-            columnValueMap.remove("id");
+            // 平台内置字段不可更新；写入校验之外再做一次防御性过滤。
+            columnValueMap.remove(MetaDataConstants.RECORD_ID_COLUMN);
+            columnValueMap.remove(MetaDataConstants.INSERT_TIME_COLUMN);
             // json类型的字段暂不支持更新
             metaDataService.getAllDataAttributeByEntity(dataEntity).stream().forEach(
                     dataAttribute -> {
@@ -91,10 +95,23 @@ public class EntityCoreServiceImpl implements EntityCoreService {
                         }
                     }
             );
-            queryEngine.update(dataEntity.getTableName(), columnValueMap, "id", id);
+            queryEngine.update(dataEntity.getTableName(), columnValueMap,
+                    MetaDataConstants.RECORD_ID_COLUMN, recordId);
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean updateALL(String entityName, List<String> ids, Map<String, Object> mapDto) {
+        List<String> recordIds = requireRecordIds(ids);
+        if (metaDataService.getDataEntityByName(entityName) == null) {
+            return false;
+        }
+        for (String recordId : recordIds) {
+            update(entityName, recordId, mapDto);
+        }
+        return true;
     }
 
     @Override
@@ -102,7 +119,9 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         DataEntity dataEntity = metaDataService.getDataEntityByName(entityName);
         if (dataEntity != null) {
             List<DataAttribute> dataAttributes = metaDataService.getAllDataAttributeByEntity(dataEntity);
-            Map<String, Object> result = queryEngine.findById(dataEntity.getTableName(), id, dataAttributes);
+            Map<String, Object> result = queryEngine.findById(
+                    dataEntity.getTableName(), MetaDataConstants.RECORD_ID_COLUMN,
+                    requireRecordId(id), dataAttributes);
             return result;
         }
         return null;
@@ -381,9 +400,9 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             if (dataAttribute == null) {
                 throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "字段不存在: " + columnName);
             }
-            if (MetaDataConstants.isInsertTime(dataAttribute)) {
+            if (MetaDataConstants.isSystemMaintained(dataAttribute)) {
                 throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
-                        MetaDataConstants.INSERT_TIME_ATTRIBUTE + "由系统自动维护，不允许手工写入");
+                        dataAttribute.getName() + "由系统自动维护，不允许手工写入");
             }
             if (dataAttribute.isMustCandidate() && !dataAttribute.getMapping().containsValue(entry.getValue())) {
                 throw new ApiException(ResultCodeEnum.FIELD_NOT_CANDIDATE.getCode(), ResultCodeEnum.FIELD_NOT_CANDIDATE.getDescription());
@@ -406,6 +425,29 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             }
         });
         return columnValueMap;
+    }
+
+    private List<String> requireRecordIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "记录ID不能为空");
+        }
+        return ids.stream().map(this::requireRecordId).toList();
+    }
+
+    private String requireRecordId(String id) {
+        if (id == null || id.isBlank()) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "记录ID不能为空");
+        }
+        String normalized = id.trim();
+        try {
+            UUID uuid = UUID.fromString(normalized);
+            if (!uuid.toString().equalsIgnoreCase(normalized)) {
+                throw new IllegalArgumentException("非标准UUID格式");
+            }
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "记录ID必须为标准UUID格式");
+        }
+        return normalized;
     }
 
     private String escapeSqlValue(String value) {

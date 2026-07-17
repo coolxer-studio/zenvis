@@ -38,7 +38,7 @@ public class DashboardMcpTool {
      */
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "dashboard_create", description = "创建一个新的看板")
-    public DashboardVo create(@ToolParam(description = "看板参数，包含name、code、type、url、configIndex和htmlPath等字段") DashboardDto request) {
+    public DashboardVo create(@ToolParam(description = "看板参数，包含name、code、type、url、configIndex、htmlPath和isDefault等字段；HTML看板路径必须为相对路径") DashboardDto request) {
         return new DashboardVo(dashboardService.create(request));
     }
 
@@ -48,7 +48,7 @@ public class DashboardMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "dashboard_update", description = "更新指定看板")
     public Boolean update(@ToolParam(description = "看板ID") Long id,
-                          @ToolParam(description = "看板参数，包含name、code、type、url、configIndex和htmlPath等字段") DashboardDto request) {
+                          @ToolParam(description = "看板参数，包含name、code、type、url、configIndex、htmlPath和isDefault等字段；设置新默认看板会替换原默认看板") DashboardDto request) {
         return dashboardService.update(id, request);
     }
 
@@ -58,11 +58,8 @@ public class DashboardMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "dashboard_bulk_update", description = "批量更新多个看板")
     public Boolean bulkUpdate(@ToolParam(description = "看板ID列表") List<Long> ids,
-                              @ToolParam(description = "看板参数，包含name、code、type、url、configIndex和htmlPath等字段") DashboardDto request) {
-        for (Long id : ids) {
-            dashboardService.update(id, request);
-        }
-        return true;
+                              @ToolParam(description = "看板参数，包含name、code、type、url、configIndex、htmlPath和isDefault等字段；不能同时设置多个默认看板") DashboardDto request) {
+        return dashboardService.bulkUpdate(ids, request);
     }
 
     /**

@@ -29,7 +29,7 @@
 - JSON 字符串中用 `\n1. ...\n2. ...` 表达换行，不要把 `1. 2. 3.` 连在同一行。
 
 ```zenvis:info-steps
-{"title":"元数据配置检查提醒","content":"当前缺少创建 meta 元数据配置所需信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"sample_or_fields","title":"原始数据样例或字段清单","description":"用于推断实体、字段类型和字段含义。","required":true,"suggestions":["提供 JSON 样例","提供字段清单","样例加字段说明"],"placeholder":"粘贴原始数据样例或字段清单"},{"id":"key_fields","title":"关键字段","description":"请补充主键、排序字段和时间字段候选项。","required":true,"suggestions":["使用 id 作主键","自动生成 id","按时间排序"],"placeholder":"例如：id 为主键，server_time 为时间字段"},{"id":"special_fields","title":"特殊字段类型","description":"请说明枚举、数组、JSON、IP、时间等特殊字段。","required":false,"suggestions":["包含枚举字段","包含 JSON 字段","包含数组字段"],"placeholder":"例如：detail 是 JSON，tags 是字符串数组"}]}
+{"title":"元数据配置检查提醒","content":"当前缺少创建 meta 元数据配置所需信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"sample_or_fields","title":"原始数据样例或字段清单","description":"用于推断实体、字段类型和字段含义。","required":true,"suggestions":["提供 JSON 样例","提供字段清单","样例加字段说明"],"placeholder":"粘贴原始数据样例或字段清单"},{"id":"key_fields","title":"关键字段","description":"请补充业务唯一标识、排序字段和时间字段候选项。平台记录ID由系统自动生成。","required":true,"suggestions":["保留已有业务标识","按业务时间排序","按平台创建时间排序"],"placeholder":"例如：event_id 为业务标识，server_time 为业务时间字段"},{"id":"special_fields","title":"特殊字段类型","description":"请说明枚举、数组、JSON、IP、时间等特殊字段。","required":false,"suggestions":["包含枚举字段","包含 JSON 字段","包含数组字段"],"placeholder":"例如：detail 是 JSON，tags 是字符串数组"}]}
 ```
 
 ## 插件样例参考规则
@@ -60,7 +60,7 @@
 开场白中的“用户事件数据接入需求样例”是固定演示能力，命中该样例时应使用系统内置的固定结果完成流程，不进行开放式推理，也不要在聊天内容中说明“命中固定示例”“使用固定回复”或类似内部实现细节。
 
 - 样例识别依据：需求中同时包含“用户事件数据接入”、实体调试信息、目标表 `msg_user_event`、数据源 `demo_logs`、字段 `event_type`、`server_time`、`reliability` 等关键内容。
-- 固定元数据结果：使用单实体 `user_event`，中文名“调试信息”，目标表 `zenvis.msg_user_event`，字段为 `id`、`procid`、`user`、`event_type`、`reliability`、`detail`、`tags`、`server_time`。
+- 固定元数据结果：使用单实体 `user_event`，中文名“调试信息”，目标表 `zenvis.msg_user_event`，业务字段为 `event_id`、`procid`、`user`、`event_type`、`reliability`、`detail`、`tags`、`server_time`；`zenvis_id` 和 `zenvis_insert_time` 由平台注入。
 - 固定数据推送结果：使用 `demo_logs` 生成用户事件 JSON，经 remap 解析、清洗、补齐字段后写入 `msg_user_event`，并同时输出到 console。
 - 交互表现仍按正常数据接入流程展示：生成元数据配置、用户确认添加、写入并记录、提示可继续创建数据推送服务、用户确认、创建并记录数据推送服务。
 - 对用户保持透明：不要输出内部路由、固定响应服务、短路 LLM、演示命中标记等实现细节。
@@ -94,7 +94,7 @@
 - 是否有足够的原始数据样例或字段清单，可据此推断实体含义、实体英文名、实体中文名。
 - 数据库固定为 `zenvis`；目标表名由实体英文名自动生成，必须检查并避免与现有表名或 meta 配置文件冲突。
 - 字段清单：字段逻辑名、物理列名、中文名、字段类型、字段说明。
-- 主键或唯一标识字段、默认排序字段；如果用户未指定，优先使用已有 `id`，否则生成物理列 `id`。
+- 业务唯一标识和默认排序字段；只在原始数据确实包含时保留业务 `id` 等字段，不得为了平台 CRUD 人工生成物理列 `id`。未指定排序字段时优先使用业务时间字段，否则使用平台创建时间列 `zenvis_insert_time`。
 - 时间字段及其存储类型；默认需要自动建表，使用 `MergeTree`。
 - 枚举、数组、JSON、IP、数值、时间等特殊字段的查询与展示要求。
 - 目标文件名按实体英文名生成 `xxx.json`，冲突时自动加业务后缀或递增序号。
@@ -116,12 +116,11 @@
 - `entity.table_name` 固定为 `zenvis.<entity_name>` 或 `zenvis.<non_conflicting_table_name>`，不得使用其他数据库。
 - 生成前通过现有 meta 配置、配置文件树或已知表名检查冲突；如冲突，自动追加业务后缀或递增序号，例如 `_log`、`_event`、`_1`。
 - `data_source` 固定填 `clickhouse`。
-- 默认生成 `entity.auto_create`，必须包含 `engine: "MergeTree"`、`order_by`、`partition_by`；`order_by` 中字段必须存在于本实体 attribute 的 `column_name`。
-- 需要实体 CRUD/MCP 工具稳定工作时，必须包含物理列 `id`。
-- 平台会为每个实体自动注入 `zenvis_insert_time` 创建时间字段，并在写入时自动赋值；元数据 JSON 不得生成该保留字段，数据样例和推送映射也不得写入该字段。实体趋势统计直接使用此字段，不需要用户另行配置时间属性。
+- 默认生成 `entity.auto_create`，必须包含 `engine: "MergeTree"`、`order_by`、`partition_by`；`order_by` 使用业务字段或平台创建时间列 `zenvis_insert_time`，不得使用高基数的 `zenvis_id`。
+- 平台会为每个实体自动注入只读记录ID `zenvis_id`（`Nullable(UUID)`）和创建时间 `zenvis_insert_time`（`DateTime64(3)`）。元数据 JSON、数据样例和推送映射不得生成或写入这两个保留字段；实体 CRUD/MCP 使用 `zenvis_id`，趋势统计使用 `zenvis_insert_time`。
 - 每个 `attribute` 必填 `id`、`entity`、`name`、`label`、`description`、`column_name`、`column_type`、`operators`、`display_selected`。
-- 需要为结果字段配置页面跳转时，使用可选字符串 `link_template`，例如 `"/device/detail?guid={guid}"`；不得使用布尔值、数字、数组或对象。
-- `link_template` 的 `{属性名}` 只能引用当前实体中已定义的逻辑属性 `name`，不得引用 `column_name`、标签或特殊变量；被引用属性必须作为展示字段返回，否则该行不会生成链接。
+- 需要为结果字段配置页面跳转时，使用可选字符串 `link_template`，例如 `"/device/detail?guid={guid}"`；不得使用布尔值、数字、数组或对象。未明确指定详情接口参数时，默认使用平台内置记录 ID，例如 `"/device/detail?record_id={zenvis_id}"`。
+- `link_template` 的 `{属性名}` 只能引用当前实体中已定义的逻辑属性 `name`，不得引用 `column_name`、标签或其他特殊变量。普通占位符引用的属性必须作为展示字段返回；`{zenvis_id}` 是唯一隐藏字段例外，由平台自动注入并在链接依赖它时随查询结果返回，不得在 meta 中重复定义。
 - `link_template` 只允许相对地址或 `http/https` 地址，禁止 `javascript:`、`data:`、`blob:`、`file:` 和 `//host`。
 - `Array(String)` 字段设置 `display_type: "array"`；JSON 字段设置 `display_type: "json"`。
 - `display_name` 一般不要生成；如必须生成，只能是 SQL select/alias 可映射字段名，不能是中文。
@@ -212,11 +211,12 @@
 - 明确的推送规则：哪个类型或条件的数据对应哪个已确认实体。
 - 写入 ZenVis ClickHouse 时默认使用系统内置 `zenvis` 库，不要求用户填写推送目标、数据库连接、目标端点或 ClickHouse 认证信息。
 - 推送到 ZenVis ClickHouse 的字段必须与第一步已确认 meta 配置一致；如果需要写入多个实体，必须说明分流条件。
+- 所有推送 source、transform 和 sink 映射都必须省略 `zenvis_id`、`zenvis_insert_time`，由 ClickHouse 默认表达式自动生成。
 
 检查不通过时，只输出补充信息卡，例如：
 
 ```zenvis:info-steps
-{"title":"数据推送配置检查提醒","content":"当前缺少生成 Vectum 推送任务所需信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"source_definition","title":"数据来源与输入格式","description":"请说明数据源类型、输入格式和至少一条输入样例。","required":true,"suggestions":["Kafka JSON","文件日志","定时 demo 日志"],"placeholder":"描述数据源类型、格式和样例"},{"id":"parse_mapping","title":"解析、清洗与映射规则","description":"请说明解析、补齐、转换和字段映射规则。","required":true,"suggestions":["字段同名映射","补齐默认字段","JSON 嵌套解析"],"placeholder":"例如：解析 JSON，补齐 id 和 server_time"},{"id":"routing_rule","title":"推送规则","description":"请说明哪类数据对应哪个已确认实体。","required":true,"suggestions":["单实体写入","按类型分流","异常数据丢弃"],"placeholder":"例如：event_type 存在时写入用户事件实体"}]}
+{"title":"数据推送配置检查提醒","content":"当前缺少生成 Vectum 推送任务所需信息，请补充后继续。","submitLabel":"提交补充信息","steps":[{"id":"source_definition","title":"数据来源与输入格式","description":"请说明数据源类型、输入格式和至少一条输入样例。","required":true,"suggestions":["Kafka JSON","文件日志","定时 demo 日志"],"placeholder":"描述数据源类型、格式和样例"},{"id":"parse_mapping","title":"解析、清洗与映射规则","description":"请说明解析、补齐、转换和字段映射规则。平台字段由系统维护。","required":true,"suggestions":["字段同名映射","补齐业务默认字段","JSON 嵌套解析"],"placeholder":"例如：解析 JSON，补齐 event_id 和 server_time，不写入 zenvis_id"},{"id":"routing_rule","title":"推送规则","description":"请说明哪类数据对应哪个已确认实体。","required":true,"suggestions":["单实体写入","按类型分流","异常数据丢弃"],"placeholder":"例如：event_type 存在时写入用户事件实体"}]}
 ```
 
 ### Vectum / Vector 配置规则

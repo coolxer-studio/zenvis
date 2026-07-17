@@ -28,9 +28,15 @@ public class ExtendJarManager {
         } else {
             ExtendJarClassLoader classLoader = new ExtendJarClassLoader(jar.toURI().toURL(), this.getClass().getClassLoader());
             ExtendJar extendJar = new ExtendJar(pluginId, jar, SCAN_PACKAGE);
-            registrar.register(extendJar, classLoader);
-            extendJarEntryConcurrentHashMap.put(pluginId, new ExtendJarEntry(classLoader, extendJar));
-            return true;
+            try {
+                registrar.register(extendJar, classLoader);
+                extendJarEntryConcurrentHashMap.put(pluginId, new ExtendJarEntry(classLoader, extendJar));
+                return true;
+            } catch (Exception e) {
+                cleaner.cleanup(extendJar);
+                classLoader.close();
+                throw e;
+            }
         }
     }
 

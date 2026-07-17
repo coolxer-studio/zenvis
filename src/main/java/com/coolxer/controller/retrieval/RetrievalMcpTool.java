@@ -177,7 +177,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "entity_delete", description = "删除指定实体的记录")
     public Boolean entityDelete(@ToolParam(description = "实体名称") String entity,
-                                @ToolParam(description = "记录ID") String id) {
+                                @ToolParam(description = "平台记录ID（zenvis_id UUID）") String id) {
         entityCoreService.delete(entity, id);
         return true;
     }
@@ -188,7 +188,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "entity_bulk_delete", description = "批量删除指定实体的记录")
     public Boolean entityBulkDelete(@ToolParam(description = "实体名称") String entity,
-                                    @ToolParam(description = "记录ID列表") List<String> ids) {
+                                    @ToolParam(description = "平台记录ID列表（zenvis_id UUID）") List<String> ids) {
         entityCoreService.deleteALL(entity, ids);
         return true;
     }
@@ -199,7 +199,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "entity_update", description = "更新指定实体的记录")
     public Boolean entityUpdate(@ToolParam(description = "实体名称") String entity,
-                                @ToolParam(description = "记录ID") String id,
+                                @ToolParam(description = "平台记录ID（zenvis_id UUID）") String id,
                                 @ToolParam(description = "更新数据，Map形式") Map<String, Object> data) {
         return entityCoreService.update(entity, id, data);
     }
@@ -210,12 +210,9 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "entity_bulk_update", description = "批量更新指定实体的记录")
     public Boolean entityBulkUpdate(@ToolParam(description = "实体名称") String entity,
-                                    @ToolParam(description = "记录ID列表") String[] ids,
+                                    @ToolParam(description = "平台记录ID列表（zenvis_id UUID）") String[] ids,
                                     @ToolParam(description = "更新数据，Map形式") Map<String, Object> data) {
-        for (String id : ids) {
-            entityCoreService.update(entity, id, data);
-        }
-        return true;
+        return entityCoreService.updateALL(entity, ids == null ? null : java.util.Arrays.asList(ids), data);
     }
 
     /**
@@ -234,7 +231,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "entity_view", description = "获取指定实体的单条记录详情")
     public Map<String, Object> entityView(@ToolParam(description = "实体名称") String entity,
-                                           @ToolParam(description = "记录ID") String id) {
+                                           @ToolParam(description = "平台记录ID（zenvis_id UUID）") String id) {
         return entityCoreService.getOne(entity, id);
     }
 

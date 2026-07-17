@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,18 +40,50 @@ class DataInitiatorDashboardTest {
         verify(dashboardRepository).save(captor.capture());
         assertThat(captor.getValue().getCode()).isEqualTo("system-board");
         assertThat(captor.getValue().getName()).isEqualTo("系统状态总览");
+        assertThat(captor.getValue().getIsDefault()).isTrue();
     }
 
     @Test
     void keepsExistingSystemBoardUntouched() {
-        when(dashboardRepository.findByCode("system-board"))
-                .thenReturn(Optional.of(new Dashboard().setCode("system-board")));
+        Dashboard existing = new Dashboard().setCode("system-board").setIsDefault(true);
+        when(dashboardRepository.findByCode("system-board")).thenReturn(Optional.of(existing));
+        when(dashboardRepository.findAll()).thenReturn(List.of(existing));
         DataInitiator initiator = initiator();
 
         ReflectionTestUtils.invokeMethod(initiator, "initDefaultDashboard");
 
         verify(dashboardRepository, never()).save(org.mockito.ArgumentMatchers.any(Dashboard.class));
         verify(dashboardRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void assignsSystemBoardWhenNoDefaultExists() {
+        Dashboard system = new Dashboard().setCode("system-board").setIsDefault(false);
+        Dashboard other = new Dashboard().setCode("other").setIsDefault(false);
+        when(dashboardRepository.findByCode("system-board")).thenReturn(Optional.of(system));
+        when(dashboardRepository.findAll()).thenReturn(List.of(system, other));
+        DataInitiator initiator = initiator();
+
+        ReflectionTestUtils.invokeMethod(initiator, "initDefaultDashboard");
+
+        assertThat(system.getIsDefault()).isTrue();
+        assertThat(other.getIsDefault()).isFalse();
+        verify(dashboardRepository).saveAll(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void repairsMultipleDefaultsByKeepingSystemBoard() {
+        Dashboard system = new Dashboard().setCode("system-board").setIsDefault(true);
+        Dashboard other = new Dashboard().setCode("other").setIsDefault(true);
+        when(dashboardRepository.findByCode("system-board")).thenReturn(Optional.of(system));
+        when(dashboardRepository.findAll()).thenReturn(List.of(system, other));
+        DataInitiator initiator = initiator();
+
+        ReflectionTestUtils.invokeMethod(initiator, "initDefaultDashboard");
+
+        assertThat(system.getIsDefault()).isTrue();
+        assertThat(other.getIsDefault()).isFalse();
+        verify(dashboardRepository).saveAll(org.mockito.ArgumentMatchers.any());
     }
 
     private DataInitiator initiator() {

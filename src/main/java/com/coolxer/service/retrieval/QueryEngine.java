@@ -19,7 +19,8 @@ public interface QueryEngine {
 
     public void deleteIn(String tableName, String keyColumn, List<String> keyValueList);
 
-    public Map<String, Object> findById(String tableName, String id, List<DataAttribute> dataAttributes);
+    public Map<String, Object> findById(String tableName, String keyColumn, String id,
+                                        List<DataAttribute> dataAttributes);
 
     public BigDecimal count(String tableName, Map<String, Object> searchMap);
 

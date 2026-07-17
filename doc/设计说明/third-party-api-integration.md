@@ -13,7 +13,7 @@ ZenVis 后端以 `/api/v1` 为主要 REST API 前缀，围绕“配置化数据�
 | 业务应用服务 | `/api/v1/public/business-services/**`、`/api/v1/system/business-services/**` | 心跳/事件公开上报与受认证只读管理查询 |
 | 插件与配置 | `/api/v1/system/plugin/**`、`/api/v1/config/{type}/**` | 插件安装、文档、配置文件读写与应用 |
 | 数据检索 | `/api/v1/retrieval/**`、`/api/v1/entity/{entity}/**` | 元数据驱动检索、动态实体 CRUD、统计趋势 |
-| 看板与业务模块 | `/api/v1/dashboard/home/**`、`/api/v1/asset/rule/**`、`/api/v1/operation/**`、`/api/v1/risk/**` | 系统状态看板、资产规则、运营分析、风险总览 |
+| 看板与插件接口 | `/api/v1/dashboard/home/**`、`/api/v1/plugin/{package_name}/**` | 系统状态看板，以及按插件包名动态注册的接口 |
 | 数智中心 DIH | `/api/v1/dih/**` | AI 对话、会话、附件、Skill、MCP 客户端管理 |
 | MCP Server | `/sse`、`/mcp/message` | Spring AI MCP Server 端点，不属于普通 REST API |
 

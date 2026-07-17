@@ -2,8 +2,10 @@ package com.coolxer.dao.mysql.repository;
 
 import com.coolxer.dao.mysql.constant.MysqlFinalTableName;
 import com.coolxer.dao.mysql.entity.Dashboard;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,6 +28,10 @@ public interface DashboardRepository extends BaseRepository<Dashboard, Integer> 
     Optional<Dashboard> findByCode(String code);
 
     List<Dashboard> findBySource(String source);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT dashboard FROM Dashboard dashboard ORDER BY dashboard.id")
+    List<Dashboard> findAllForUpdate();
 
     /**
      * 分页查询

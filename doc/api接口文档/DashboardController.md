@@ -18,9 +18,10 @@
   "name": "数据分析看板",     // String - 看板名称（必填）
   "code": "system-board",     // String - 路由编码（仅内置看板 BUILT 必填）
   "type": "BUILT",            // DashboardType - 看板类型（必填）
-  "configIndex": "user-event-dashboard", // String - 低代码页面看板配置索引
-  "htmlPath": "/html-page/demo.html",    // String - HTML页面路径
-  "url": "https://example.com/report"    // String - 外链地址
+  "config_index": "user-event-dashboard", // String - 低代码页面看板配置索引
+  "html_path": "demo/dashboard.html",     // String - HTML页面相对路径
+  "is_default": false,                    // Boolean - 是否为默认看板
+  "url": "https://example.com/report"     // String - 外链地址
 }
 ```
 
@@ -31,17 +32,19 @@
 | name | String | 是 | 看板名称 |
 | type | DashboardType | 是 | 类型：`BUILT`、`LOW_CODE_PAGE`、`HTML_PAGE`、`LINK` |
 | code | String | 仅 `BUILT` 必填 | 内置看板路由编码，用于前端映射内置组件 |
-| configIndex | String | 仅 `LOW_CODE_PAGE` 必填 | AMIS低代码页面配置索引 |
-| htmlPath | String | 仅 `HTML_PAGE` 必填 | HTML页面路径 |
+| config_index | String | 仅 `LOW_CODE_PAGE` 必填 | AMIS低代码页面配置索引 |
+| html_path | String | 仅 `HTML_PAGE` 必填 | HTML页面相对路径，不允许 `/` 开头、URL、查询参数或 `..` |
+| is_default | Boolean | 否 | 是否为默认看板；更新时不传表示保留原值 |
 | url | String | 仅 `LINK` 必填 | 外链地址 |
 
 **类型校验规则**:
 
 - `BUILT`：必须填写 `code`，用于前端根据编码找到内置看板组件。
 - `LOW_CODE_PAGE`：必须填写 `configIndex`，不要求 `code`。
-- `HTML_PAGE`：必须填写 `htmlPath`，不要求 `code`。
+- `HTML_PAGE`：必须填写相对路径 `html_path`，页面实际从 `/zenvis/html-page/{html_path}` 加载，不要求 `code`。
 - `LINK`：必须填写 `url`，不要求 `code`。
 - 非内置看板的选中、高亮和打开逻辑推荐使用 `id`，不要依赖 `code`。
+- 系统始终保留一个默认看板；将其他看板设为默认会自动取消原默认项，当前默认项不能直接取消或删除。
 
 ### 2. DashboardVo (看板视图对象)
 
@@ -51,11 +54,12 @@
   "name": "数据分析看板",     // String - 看板名称
   "code": "system-board",     // String - 内置看板编码，非内置可为空
   "type": "BUILT",            // DashboardType - 看板类型
-  "typeDescription": "内置看板", // String - 类型描述
-  "configIndex": "",          // String - 低代码页面配置索引
-  "htmlPath": "",             // String - HTML页面路径
+  "type_description": "内置看板", // String - 类型描述
+  "config_index": "",         // String - 低代码页面配置索引
+  "html_path": "",            // String - HTML页面相对路径
+  "is_default": true,         // Boolean - 是否为默认看板
   "url": "",                  // String - 外链地址
-  "updateTime": "2024-01-01 12:00:00"  // String - 更新时间
+  "update_time": "2024-01-01 12:00:00"  // String - 更新时间
 }
 ```
 
@@ -119,7 +123,8 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/add \
   -d '{
     "name": "测试看板",
     "code": "system-board",
-    "type": "BUILT"
+    "type": "BUILT",
+    "is_default": true
   }'
 ```
 
@@ -425,14 +430,19 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/list
 |--------|------|---------|
 | 0 | 请求成功 | 操作成功完成 |
 | -1 | 未知错误 | 遇到未定义的异常情况 |
+| 183 | 系统必须保留一个默认看板 | 试图关闭当前唯一默认看板 |
+| 184 | 默认看板不能删除 | 单个或批量删除包含默认看板 |
+| 185 | 不能同时设置多个默认看板 | 批量将多个看板设为默认 |
+| 186 | HTML看板路径必须是相对文件路径 | HTML路径包含URL、绝对路径、查询参数或路径穿越 |
 
 ---
 
 ## 🔐 注意事项
 
 1. **认证授权**: 需要登录认证
-2. **看板类型**: 支持路由(ROUTE)和外链(LINK)两种类型
-3. **批量操作**: 批量删除/更新时，ID列表不能为空
-4. **重复接口**: `/list` 接口同时支持 GET（分页查询）和 POST（获取全部）两种方式
+2. **看板类型**: 支持 `BUILT`、`LOW_CODE_PAGE`、`HTML_PAGE` 和 `LINK`
+3. **默认看板**: 系统始终保留一个默认项；深链参数优先于默认项
+4. **批量操作**: 批量删除/更新时，ID列表不能为空，且不能同时设置多个默认项
+5. **重复接口**: `/list` 接口同时支持 GET（分页查询）和 POST（获取全部）两种方式
 
 ---

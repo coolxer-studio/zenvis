@@ -67,16 +67,6 @@ public class MysqlFinalTableName {
     public static final String T_SYS_USER_ROLE = TABLE_PREFIX + "sys_user_role";
 
     /**
-     * 资产规则表
-     */
-    public static final String T_SHARE_ASSET_RULE = TABLE_PREFIX + "asset_rule";
-
-    /**
-     * 运营看板表
-     */
-    public static final String T_SHARE_OPERATION_BOARD = TABLE_PREFIX + "operation_board";
-
-    /**
      * AI会话
      */
     public static final String T_AI_CHAT_SESSION = TABLE_PREFIX + "ai_chat_session";

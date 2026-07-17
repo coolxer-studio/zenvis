@@ -51,7 +51,7 @@ public class DataAccessDemoResponseService {
                   "auto_create": {
                     "engine": "MergeTree",
                     "order_by": [
-                      "id",
+                      "event_id",
                       "server_time"
                     ],
                     "partition_by": "toYYYYMM(server_time)"
@@ -62,10 +62,10 @@ public class DataAccessDemoResponseService {
                 {
                   "id": 1,
                   "entity": "user_event",
-                  "name": "id",
-                  "label": "事件id",
-                  "description": "测试事件唯一标识符",
-                  "column_name": "id",
+                  "name": "event_id",
+                  "label": "事件ID",
+                  "description": "业务侧事件唯一标识符",
+                  "column_name": "event_id",
                   "column_type": "String",
                   "operators": [
                     "equal",
@@ -251,7 +251,7 @@ public class DataAccessDemoResponseService {
               type = "remap"
               source = '''
                 . = parse_json!(string!(.message))
-                .id = uuid_v4()
+                .event_id = uuid_v4()
                 .user = encode_base64(random_bytes(16))
                 .procid = random_int(100, 110)
                 .reliability = random_float(0.0, 10.0)
@@ -452,15 +452,15 @@ public class DataAccessDemoResponseService {
                       "suggestions": [
                         {
                           "label": "使用完整用户事件字段",
-                          "value": "字段包括 id、procid、user、event_type、reliability、detail、tags、server_time"
+                          "value": "字段包括 event_id、procid、user、event_type、reliability、detail、tags、server_time；平台记录ID由 zenvis_id 自动维护"
                         },
                         {
                           "label": "保留核心字段",
-                          "value": "字段包括 id、user、event_type、detail、server_time"
+                          "value": "字段包括 event_id、user、event_type、detail、server_time；平台记录ID由 zenvis_id 自动维护"
                         },
                         {
                           "label": "完整字段并自动建表",
-                          "value": "字段包括 id、procid、user、event_type、reliability、detail、tags、server_time，并启用自动建表"
+                          "value": "字段包括 event_id、procid、user、event_type、reliability、detail、tags、server_time，并启用自动建表；平台记录ID由 zenvis_id 自动维护"
                         }
                       ],
                       "placeholder": "也可以补充字段名、类型和说明"
@@ -601,7 +601,7 @@ public class DataAccessDemoResponseService {
                 数据推送配置摘要：
                 - 服务名称：用户事件数据推送服务
                 - 数据源：demo_logs 定时生成用户事件 JSON
-                - 解析清洗：解析 JSON，补齐 id、user、procid、reliability、detail、server_time
+                - 解析清洗：解析 JSON，补齐业务字段 event_id、user、procid、reliability、detail、server_time；不写入平台字段 zenvis_id
                 - 推送规则：所有用户事件数据写入已确认实体 user_event
                 - 写入目标：ZenVis ClickHouse 表 zenvis.msg_user_event，同时输出到 console 便于调试
 

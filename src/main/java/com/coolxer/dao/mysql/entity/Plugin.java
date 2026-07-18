@@ -13,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
+import org.hibernate.annotations.Check;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.util.Date;
@@ -28,7 +29,19 @@ import java.util.Date;
 @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
 @Table(name = MysqlFinalTableName.T_SYS_PLUGIN)
+@Check(name = "t_sys_plugin_status_chk", constraints = Plugin.STATUS_CHECK_CONSTRAINT)
 public class Plugin extends BaseEntity {
+
+    static final String STATUS_CHECK_CONSTRAINT = """
+            status IN (
+                'UN_INSTALL',
+                'INSTALLING',
+                'INSTALLED',
+                'INSTALL_FAILED',
+                'UNINSTALLING',
+                'UNINSTALL_FAILED'
+            )
+            """;
 
     /**
      * 插件名
@@ -69,9 +82,9 @@ public class Plugin extends BaseEntity {
     /**
      * 状态
      */
-    @Column
+    @Column(name = "status", nullable = false, columnDefinition = "VARCHAR(32)")
     @Enumerated(EnumType.STRING)
-    private PluginStatusType status;
+    private PluginStatusType status = PluginStatusType.UN_INSTALL;
 
     /**
      * 插件包路径

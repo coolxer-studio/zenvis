@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
@@ -49,6 +50,7 @@ public class PushTashServiceImpl implements PushTaskService {
                 String headerName = headerNames.nextElement();
                 headers.set(headerName, request.getHeader(headerName));
             }
+            applyVectumAuthorization(headers);
 
             HttpEntity<byte[]> entity = new HttpEntity<>(request.getInputStream().readAllBytes(), headers);
 
@@ -72,12 +74,22 @@ public class PushTashServiceImpl implements PushTaskService {
 
     @Override
     public boolean createAndStart(PushTaskDto pushTaskDto) {
-        ResponseModel responseForCreate = restTemplate.postForObject(customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/add", pushTaskDto, ResponseModel.class);
-        if (responseForCreate.succeed()) {
+        ResponseModel responseForCreate = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/add",
+                HttpMethod.POST,
+                new HttpEntity<>(pushTaskDto, createVectumHeaders()),
+                ResponseModel.class
+        ).getBody();
+        if (responseForCreate != null && responseForCreate.succeed()) {
             PushTaskVo createdTask = JacksonConfig.OBJECT_MAPPER.convertValue(responseForCreate.getData(), PushTaskVo.class);
             if (Objects.nonNull(createdTask.getId())) {
-                ResponseModel responseForStart = restTemplate.postForObject(customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/" + createdTask.getId() + "/toggle", null, ResponseModel.class);
-                if (responseForStart.succeed()) {
+                ResponseModel responseForStart = restTemplate.exchange(
+                        customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/" + createdTask.getId() + "/toggle",
+                        HttpMethod.POST,
+                        new HttpEntity<>(createVectumHeaders()),
+                        ResponseModel.class
+                ).getBody();
+                if (responseForStart != null && responseForStart.succeed()) {
                     return true;
                 }
             }
@@ -87,7 +99,12 @@ public class PushTashServiceImpl implements PushTaskService {
 
     @Override
     public List<PushTaskVo> findAll() {
-        ResponseModel response = restTemplate.getForObject(customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/all", ResponseModel.class);
+        ResponseModel response = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/all",
+                HttpMethod.GET,
+                new HttpEntity<>(createVectumHeaders()),
+                ResponseModel.class
+        ).getBody();
         if (response != null && response.succeed()) {
             return JacksonConfig.OBJECT_MAPPER.convertValue(response.getData(),
                     JacksonConfig.OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, PushTaskVo.class));
@@ -111,15 +128,29 @@ public class PushTashServiceImpl implements PushTaskService {
             ResponseEntity<ResponseModel> response = restTemplate.exchange(
                     url,
                     HttpMethod.DELETE,
-                    null,
+                    new HttpEntity<>(createVectumHeaders()),
                     ResponseModel.class,
                     pushTaskVo.getId()
             );
-            if (!response.getBody().succeed()) {
+            if (response.getBody() == null || !response.getBody().succeed()) {
                 // TODO 删除失败处理
             }
         });
         return true;
+    }
+
+    private HttpHeaders createVectumHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        applyVectumAuthorization(headers);
+        return headers;
+    }
+
+    private void applyVectumAuthorization(HttpHeaders headers) {
+        headers.remove(HttpHeaders.AUTHORIZATION);
+        String bearerToken = customWebConfig.getDataServiceBearerToken();
+        if (StringUtils.hasText(bearerToken)) {
+            headers.setBearerAuth(bearerToken.trim());
+        }
     }
 
     @Override

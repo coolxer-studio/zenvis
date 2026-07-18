@@ -82,6 +82,13 @@ public class CustomWebConfig {
     @Value("${app.services.data.url}")
     private String dataServiceUrl;
 
+    /**
+     * 数据服务 Bearer Token
+     */
+    @ToString.Exclude
+    @Value("${app.services.data.bearer-token:}")
+    private String dataServiceBearerToken;
+
     @Value("${trend.data.size:12}")
     private int trendDateSize;
 

@@ -138,7 +138,7 @@
           </el-select>
           
           <!-- 新增深度思考按钮 -->
-          <el-tooltip content="深度思考" placement="top">
+          <el-tooltip v-if="chatSessionType === 'ask'" content="深度思考" placement="top">
             <el-button 
               class="action-btn" 
               :class="{ 'deep-thinking-active': isDeepThinking }"
@@ -282,6 +282,16 @@ const {
 
 // 添加深度思考状态
 const isDeepThinking = ref(false)
+
+watch(
+  chatSessionType,
+  sessionType => {
+    if (sessionType !== 'ask') {
+      isDeepThinking.value = false
+    }
+  },
+  { immediate: true },
+)
 
 // 定义选择框结构
 interface SelectData {

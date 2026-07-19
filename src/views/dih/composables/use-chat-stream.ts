@@ -202,7 +202,7 @@ export const useChatStream = ({
           type: chatSessionType.value,
           message: requestMessage,
           model: selectedModel.value,
-          deep_think: isDeepThinking.value,
+          deep_think: chatSessionType.value === 'ask' && isDeepThinking.value,
           chat_id: chatSessionId.value,
           attachments: messageAttachments,
         }, async event => {

@@ -2,6 +2,7 @@ package com.coolxer.service.dih.agent;
 
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.service.dih.AgentCapabilityUnavailableException;
 import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -34,25 +35,44 @@ public class PromptDrivenAgentRuntime {
                              List<ChatAttachment> attachments,
                              User user,
                              McpToolContext mcpToolContext) {
-        String systemPrompt = buildSystemPrompt(agentType, systemPromptTemplate, mcpToolContext);
-        if (mcpToolContext != null && mcpToolContext.hasTools()) {
-            return chatService.chatWithSystemPromptAndTools(
+        return chat(agentType, List.of(), systemPromptTemplate, chatId, model, prompt,
+                attachments, user, mcpToolContext);
+    }
+
+    public Flux<String> chat(String agentType,
+                             List<String> skillIds,
+                             PromptTemplate systemPromptTemplate,
+                             String chatId,
+                             String model,
+                             String prompt,
+                             List<ChatAttachment> attachments,
+                             User user,
+                             McpToolContext mcpToolContext) {
+        try {
+            String systemPrompt = buildSystemPrompt(agentType, skillIds, systemPromptTemplate, mcpToolContext);
+            return chatService.agentChat(
                     chatId,
                     model,
                     systemPrompt,
                     prompt,
                     attachments,
                     user,
-                    mcpToolContext.toolCallbackProvider(),
-                    mcpToolContext.invocationContext()
+                    mcpToolContext
             );
+        } catch (IllegalArgumentException e) {
+            return Flux.error(new AgentCapabilityUnavailableException(
+                    "智能体能力不可用：" + e.getMessage(),
+                    e
+            ));
         }
-        return chatService.chatWithSystemPrompt(chatId, model, systemPrompt, prompt, attachments, user);
     }
 
-    private String buildSystemPrompt(String agentType, PromptTemplate systemPromptTemplate, McpToolContext mcpToolContext) {
+    private String buildSystemPrompt(String agentType,
+                                     List<String> skillIds,
+                                     PromptTemplate systemPromptTemplate,
+                                     McpToolContext mcpToolContext) {
         String systemPrompt = systemPromptTemplate.getTemplate();
-        String skillPrompt = skillService.buildEnabledSkillPrompt(agentType);
+        String skillPrompt = skillService.buildAgentSkillPrompt(agentType, skillIds);
         if (StringUtils.hasText(skillPrompt)) {
             systemPrompt = systemPrompt + "\n\n【已加载 Skill】\n" + skillPrompt;
         }

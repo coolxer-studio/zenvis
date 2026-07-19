@@ -2,6 +2,7 @@ package com.coolxer.service.dih.agent;
 
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -30,6 +31,34 @@ public class DataAccessAgent {
 
     public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
                              McpToolContext mcpToolContext) {
-        return agentRuntime.chat(AGENT_TYPE, systemPromptTemplate, chatId, model, prompt, attachments, user, mcpToolContext);
+        return chat(
+                chatId,
+                model,
+                prompt,
+                attachments,
+                user,
+                List.of(BuiltinAgentSkillRegistry.findByAgentType(AGENT_TYPE).orElseThrow().skillId()),
+                mcpToolContext
+        );
+    }
+
+    public Flux<String> chat(String chatId,
+                             String model,
+                             String prompt,
+                             List<ChatAttachment> attachments,
+                             User user,
+                             List<String> skillIds,
+                             McpToolContext mcpToolContext) {
+        return agentRuntime.chat(
+                AGENT_TYPE,
+                skillIds,
+                systemPromptTemplate,
+                chatId,
+                model,
+                prompt,
+                attachments,
+                user,
+                mcpToolContext
+        );
     }
 }

@@ -126,7 +126,7 @@ public class ChatSessionController extends BaseController {
         }
     }
 
-    private static final String PROLOGUE_DEFAULT = "我是数智助手（X-Sage），可以解答系统相关运营问题，有什么问题尽管提问吧！";
+    private static final String PROLOGUE_DEFAULT = "我是数智助手，可以解答系统相关运营问题，有什么问题尽管提问吧！";
     private static final String PROLOGUE_AGENT_DATA_ACCESS = "我是数据接入智能体，只处理数据接入相关工作，主要包括两件事：元数据配置和数据推送服务。\n" +
             "默认会先完成元数据配置，配置成功生效后，再根据你的明确要求添加数据推送服务。\n" +
             "你可以先下载并填写 [数据接入需求模板](" + DATA_ACCESS_TEMPLATE_DOWNLOAD_URL + ")，填写完成后作为 `.md` 附件上传，我会读取文档内容帮助生成并生效配置。";

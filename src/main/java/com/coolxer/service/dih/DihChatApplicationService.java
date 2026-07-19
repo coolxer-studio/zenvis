@@ -58,8 +58,8 @@ public class DihChatApplicationService {
 
     public static final String RESPONSE_FORMAT_EVENTS = "events";
 
-    private static final String TYPE_ASK = "ask";
-    private static final String LEGACY_MCP_AGENT_TYPE = "agent_mcp";
+    private static final String LEGACY_MCP_AGENT_TYPE = "mcp_agent";
+    private static final String LEGACY_MCP_AGENT_TYPE_ALIAS = "agent_mcp";
     private static final String CHAT_ERROR_MESSAGE = "抱歉，回复失败，请稍后重试~";
     private final AIChatService chatService;
     private final AIBaseService baseService;
@@ -139,10 +139,24 @@ public class DihChatApplicationService {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
         String chatType = normalizeChatType(chatDto.getType());
+        Optional<DihChatExecutionPolicy> policyOptional = DihChatExecutionPolicy.resolve(chatType);
+        if (policyOptional.isEmpty()) {
+            return errorResponse(eventStream, "会话类型不支持。");
+        }
+        DihChatExecutionPolicy executionPolicy = policyOptional.get();
+        boolean effectiveDeepThink = executionPolicy.effectiveDeepThink(
+                BooleanUtils.isTrue(chatDto.getDeepThink())
+        );
+        if (executionPolicy.isAgent() && BooleanUtils.isTrue(chatDto.getDeepThink())) {
+            log.debug("忽略智能体深度思考参数: chatType={}, chatId={}", chatType, chatDto.getChatId());
+        }
 
-        if (chatType != null && chatType.startsWith("agent")
-                && (!skillService.isBuiltinAgentType(chatType) || !skillService.isBuiltinAgentEnabled(chatType))) {
-            return errorResponse(eventStream, "智能体已停用或不存在。");
+        if (executionPolicy.isAgent() && !skillService.isBuiltinAgentEnabled(chatType)) {
+            return errorResponse(
+                    eventStream,
+                    "智能体能力不可用：以下 Skill 不存在或未启用: "
+                            + String.join(", ", executionPolicy.skillIds())
+            );
         }
 
         String model = chatDto.getModel();
@@ -162,14 +176,15 @@ public class DihChatApplicationService {
                 null
         );
         if (analysisDemoResponse.isPresent()) {
-            ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+            ChatSession chatSession = appendUserMessage(
+                    chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
             return emitAndSaveTextResponse(
                     analysisDemoResponse.get(),
                     chatSession,
                     currentUser,
                     eventStream,
                     new AtomicReference<>(MessageType.TEXT),
-                    BooleanUtils.isTrue(chatDto.getDeepThink())
+                    effectiveDeepThink
             );
         }
         Optional<Flux<String>> reportDemoResponse = findReportDemoResponse(
@@ -180,14 +195,15 @@ public class DihChatApplicationService {
                 null
         );
         if (reportDemoResponse.isPresent()) {
-            ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+            ChatSession chatSession = appendUserMessage(
+                    chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
             return emitAndSaveTextResponse(
                     reportDemoResponse.get(),
                     chatSession,
                     currentUser,
                     eventStream,
                     new AtomicReference<>(MessageType.TEXT),
-                    BooleanUtils.isTrue(chatDto.getDeepThink())
+                    effectiveDeepThink
             );
         }
         Optional<Flux<String>> disposeDemoResponse = findDisposeDemoResponse(
@@ -198,14 +214,15 @@ public class DihChatApplicationService {
                 null
         );
         if (disposeDemoResponse.isPresent()) {
-            ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+            ChatSession chatSession = appendUserMessage(
+                    chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
             return emitAndSaveTextResponse(
                     disposeDemoResponse.get(),
                     chatSession,
                     currentUser,
                     eventStream,
                     new AtomicReference<>(MessageType.TEXT),
-                    BooleanUtils.isTrue(chatDto.getDeepThink())
+                    effectiveDeepThink
             );
         }
         if (!baseService.isModelSupported(model)) {
@@ -215,12 +232,12 @@ public class DihChatApplicationService {
         boolean hasImageAttachment = chatAttachmentService.hasImageAttachment(chatDto.getAttachments());
         model = baseService.resolveChatModel(
                 model,
-                BooleanUtils.isTrue(chatDto.getDeepThink()),
+                effectiveDeepThink,
                 hasImageAttachment
         );
-        McpToolContext mcpToolContext = hasImageAttachment
-                ? McpToolContext.empty()
-                : agentMcpToolService.resolve(chatType);
+        McpToolContext mcpToolContext = executionPolicy.toolsAllowed() && !hasImageAttachment
+                ? agentMcpToolService.resolve(chatType)
+                : McpToolContext.empty();
         McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
         String turnId = UUID.randomUUID().toString();
         if (mcpToolContext.hasTools()) {
@@ -241,7 +258,8 @@ public class DihChatApplicationService {
         }
 
         String prompt = chatAttachmentService.appendAttachmentContext(userMessage, chatDto.getAttachments(), currentUser);
-        ChatSession chatSession = appendUserMessage(chatDto, chatType, userMessage, currentUser);
+        ChatSession chatSession = appendUserMessage(
+                chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
 
         AtomicReference<MessageType> messageType = new AtomicReference<>(MessageType.TEXT);
 
@@ -256,6 +274,8 @@ public class DihChatApplicationService {
                 currentUser,
                 chatSession,
                 resolvedMcpToolContext,
+                executionPolicy,
+                effectiveDeepThink,
                 messageType
         ));
         if (mcpToolLogStream.enabled()) {
@@ -277,7 +297,7 @@ public class DihChatApplicationService {
                 currentUser,
                 eventStream,
                 messageType,
-                BooleanUtils.isTrue(chatDto.getDeepThink()),
+                effectiveDeepThink,
                 mcpToolLogStream
         );
     }
@@ -294,6 +314,8 @@ public class DihChatApplicationService {
                                       User currentUser,
                                       ChatSession chatSession,
                                       McpToolContext mcpToolContext,
+                                      DihChatExecutionPolicy executionPolicy,
+                                      boolean effectiveDeepThink,
                                       AtomicReference<MessageType> messageType) {
         if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
@@ -306,7 +328,15 @@ public class DihChatApplicationService {
             if (demoResponse.isPresent()) {
                 return demoResponse.get();
             }
-            return dataAccessAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
+            return dataAccessAgent.chat(
+                    chatId,
+                    model,
+                    prompt,
+                    chatDto.getAttachments(),
+                    currentUser,
+                    executionPolicy.skillIds(),
+                    mcpToolContext
+            );
         }
         if (AnalysisAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
@@ -320,7 +350,15 @@ public class DihChatApplicationService {
             if (demoResponse.isPresent()) {
                 return demoResponse.get();
             }
-            return analysisAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
+            return analysisAgent.chat(
+                    chatId,
+                    model,
+                    prompt,
+                    chatDto.getAttachments(),
+                    currentUser,
+                    executionPolicy.skillIds(),
+                    mcpToolContext
+            );
         }
         if (DisposeAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
@@ -334,7 +372,15 @@ public class DihChatApplicationService {
             if (demoResponse.isPresent()) {
                 return demoResponse.get();
             }
-            return disposeAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
+            return disposeAgent.chat(
+                    chatId,
+                    model,
+                    prompt,
+                    chatDto.getAttachments(),
+                    currentUser,
+                    executionPolicy.skillIds(),
+                    mcpToolContext
+            );
         }
         if (ReportAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
@@ -348,7 +394,15 @@ public class DihChatApplicationService {
             if (demoResponse.isPresent()) {
                 return demoResponse.get();
             }
-            return reportAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
+            return reportAgent.chat(
+                    chatId,
+                    model,
+                    prompt,
+                    chatDto.getAttachments(),
+                    currentUser,
+                    executionPolicy.skillIds(),
+                    mcpToolContext
+            );
         }
         if (DataVisualizationAgent.AGENT_TYPE.equals(chatType)) {
             messageType.set(MessageType.TEXT);
@@ -361,36 +415,31 @@ public class DihChatApplicationService {
             if (demoResponse.isPresent()) {
                 return demoResponse.get();
             }
-            return dataVisualizationAgent.chat(chatId, model, prompt, chatDto.getAttachments(), currentUser, mcpToolContext);
-        }
-        if (isPlaceholderBuiltinAgent(chatType)) {
-            messageType.set(MessageType.TEXT);
-            return Flux.just(skillService.getBuiltinAgentPlaceholder(chatType));
-        }
-        if (BooleanUtils.isTrue(chatDto.getDeepThink())) {
-            messageType.set(MessageType.TEXT);
-            return chatService.deepThinkingChat(
+            return dataVisualizationAgent.chat(
                     chatId,
                     model,
                     prompt,
                     chatDto.getAttachments(),
                     currentUser,
-                    mcpToolContext.toolCallbackProvider(),
-                    mcpToolContext.systemPrompt(),
-                    mcpToolContext.invocationContext()
+                    executionPolicy.skillIds(),
+                    mcpToolContext
             );
         }
-
+        if (isPlaceholderBuiltinAgent(chatType)) {
+            messageType.set(MessageType.TEXT);
+            return Flux.just(skillService.getBuiltinAgentPlaceholder(chatType));
+        }
         messageType.set(MessageType.TEXT);
-        return chatService.chat(
+        if (!executionPolicy.ragAllowed()) {
+            return Flux.error(new IllegalStateException("智能体类型没有对应的执行器。"));
+        }
+        return chatService.qaChat(
                 chatId,
                 model,
                 prompt,
                 chatDto.getAttachments(),
                 currentUser,
-                mcpToolContext.toolCallbackProvider(),
-                mcpToolContext.systemPrompt(),
-                mcpToolContext.invocationContext()
+                effectiveDeepThink
         );
     }
 
@@ -474,8 +523,9 @@ public class DihChatApplicationService {
                     }))
                     .onErrorResume(e -> {
                         log.error("聊天事件流返回失败: {}", e.getMessage(), e);
-                        persistErrorResponse(chatSession, currentUser);
-                        return Flux.just(toNdjson(ChatStreamEvent.error(CHAT_ERROR_MESSAGE)));
+                        String errorMessage = resolveChatErrorMessage(e);
+                        persistErrorResponse(chatSession, currentUser, errorMessage);
+                        return Flux.just(toNdjson(ChatStreamEvent.error(errorMessage)));
                     });
         }
 
@@ -483,17 +533,26 @@ public class DihChatApplicationService {
                 .doOnNext(modelResponse::append)
                 .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(),
                         messageType.get(), false, false, toolActivityStream.approvalParts()))
-                .doOnError(e -> persistErrorResponse(chatSession, currentUser));
+                .onErrorResume(e -> {
+                    log.error("聊天返回失败: {}", e.getMessage(), e);
+                    String errorMessage = resolveChatErrorMessage(e);
+                    persistErrorResponse(chatSession, currentUser, errorMessage);
+                    return Flux.just(errorMessage);
+                });
     }
 
-    private ChatSession appendUserMessage(ChatDto chatDto, String chatType, String userMessage, User currentUser) {
+    private ChatSession appendUserMessage(ChatDto chatDto,
+                                          String chatType,
+                                          String userMessage,
+                                          User currentUser,
+                                          boolean effectiveDeepThink) {
         ChatSessionDto chatSessionDto = new ChatSessionDto();
         chatSessionDto.setSessionId(chatDto.getChatId());
         if (chatSessionService.getChatSessionBySessionId(chatDto.getChatId(), currentUser) == null) {
             chatSessionDto.setTitle(chatTitleService.generateTitle(userMessage));
         }
         chatSessionDto.setType(chatType);
-        chatSessionDto.setDeepThink(chatDto.getDeepThink());
+        chatSessionDto.setDeepThink(effectiveDeepThink);
         chatSessionDto.setOnlineSearch(chatDto.getOnlineSearch());
         return chatSessionService.appendMessage(
                 chatDto.getChatId(),
@@ -503,17 +562,29 @@ public class DihChatApplicationService {
         );
     }
 
-    private void persistErrorResponse(ChatSession chatSession, User currentUser) {
+    private void persistErrorResponse(ChatSession chatSession, User currentUser, String errorMessage) {
         if (chatSession == null) {
             return;
         }
         try {
-            Message errorMessage = new Message("ai", CHAT_ERROR_MESSAGE, MessageType.TEXT);
-            errorMessage.setIsError(true);
-            chatSessionService.appendMessage(chatSession, errorMessage, currentUser);
+            Message message = new Message("ai", errorMessage, MessageType.TEXT);
+            message.setIsError(true);
+            chatSessionService.appendMessage(chatSession, message, currentUser);
         } catch (Exception e) {
             log.error("保存错误响应到会话失败: {}", e.getMessage(), e);
         }
+    }
+
+    private String resolveChatErrorMessage(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof AgentCapabilityUnavailableException
+                    && StringUtils.hasText(current.getMessage())) {
+                return current.getMessage();
+            }
+            current = current.getCause();
+        }
+        return CHAT_ERROR_MESSAGE;
     }
 
     private Flux<String> errorResponse(boolean eventStream, String message) {
@@ -541,8 +612,10 @@ public class DihChatApplicationService {
     }
 
     private String normalizeChatType(String type) {
-        if (!StringUtils.hasText(type) || LEGACY_MCP_AGENT_TYPE.equals(type)) {
-            return TYPE_ASK;
+        if (!StringUtils.hasText(type)
+                || LEGACY_MCP_AGENT_TYPE.equals(type)
+                || LEGACY_MCP_AGENT_TYPE_ALIAS.equals(type)) {
+            return DihChatExecutionPolicy.TYPE_ASK;
         }
         return type;
     }

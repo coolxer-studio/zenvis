@@ -193,6 +193,29 @@ public class SkillService {
     }
 
     /**
+     * 为 Agent 构建 Skill 提示词。显式 Skill 列表存在时只加载指定项；
+     * 未指定时兼容按 agentTypes 匹配的既有行为。
+     */
+    public String buildAgentSkillPrompt(String agentType, List<String> explicitSkillIds) {
+        List<String> normalizedSkillIds = explicitSkillIds == null
+                ? List.of()
+                : explicitSkillIds.stream()
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        if (normalizedSkillIds.isEmpty()) {
+            return buildEnabledSkillPrompt(agentType);
+        }
+        validateEnabledSkillIds(normalizedSkillIds);
+        Set<String> selectedIds = Set.copyOf(normalizedSkillIds);
+        List<SkillRecord> records = skillCache.values().stream()
+                .filter(record -> selectedIds.contains(record.getSkill().getId()))
+                .sorted(Comparator.comparing(record -> record.getSkill().getId()))
+                .toList();
+        return buildSkillPrompt(records);
+    }
+
+    /**
      * 将启用的 skill 与指定的强制 skill 汇总为 Agent 可注入的提示词片段。
      */
     public String buildRequiredSkillPrompt(String agentType, List<String> requiredSkillIds) {
@@ -252,12 +275,15 @@ public class SkillService {
     }
 
     private String buildSkillPrompt(String agentType, Set<String> requiredSkillIds) {
-        StringBuilder prompt = new StringBuilder();
         List<SkillRecord> records = skillCache.values().stream()
                 .filter(record -> shouldLoadSkill(record, agentType, requiredSkillIds))
                 .sorted(Comparator.comparing(record -> record.getSkill().getId()))
                 .toList();
+        return buildSkillPrompt(records);
+    }
 
+    private String buildSkillPrompt(List<SkillRecord> records) {
+        StringBuilder prompt = new StringBuilder();
         for (SkillRecord record : records) {
             try {
                 String content = readSkillContent(record.getEntryPath()).trim();

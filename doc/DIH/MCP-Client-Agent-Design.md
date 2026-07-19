@@ -330,7 +330,7 @@ Spring AI ChatClient.toolCallbacks(...)
 
 ### Scope 配置
 
-默认所有业务 Agent 都可以使用全部已连接 MCP 服务。可通过配置收窄范围：
+普通问答 `ask` 不解析 MCP scope，也不会注入任何本地或外部工具。默认所有业务 Agent 都可以使用全部已连接 MCP 服务，可通过配置收窄范围：
 
 ```properties
 app.ai.mcp.enabled=true
@@ -341,6 +341,7 @@ app.ai.mcp.approval.timeout-seconds=300
 ```
 
 scope 值为 `none/off/false/disabled` 时，该业务 Agent 不注入 MCP 工具。
+`app.ai.mcp.agent-scopes.ask` 不产生效果；旧 `mcp_agent` 请求会兼容转换为无工具的普通问答，同时保留对历史别名 `agent_mcp` 的兼容。
 
 ---
 

@@ -279,6 +279,8 @@ app.ai.analysis-task.max-suspended=20
 app.ai.analysis-task.dispatch-delay-ms=5000
 ```
 
+普通问答 `ask` 不使用 MCP 工具，`app.ai.mcp.agent-scopes.ask` 不产生效果；上述 scope 仅应用于业务 Agent。
+
 `max-suspended` 是允许同时挂起等待审批的任务容量；`dispatch-delay-ms` 是调度轮询间隔，不是任务执行超时。
 
 ## 10. 最小验收流程

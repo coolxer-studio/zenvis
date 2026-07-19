@@ -50,11 +50,11 @@ DihChatApplicationService.chat
         v
 按 type/deep_think/fixed response 选择执行分支
         |
-        |-- agent_data_access -> DataAccessAgent -> AIChatService.chatWithSystemPrompt
+        |-- agent_data_access -> DataAccessAgent -> AIChatService.agentChat
         |-- agent_data_visualization -> DataVisualizationAgent.chat
         |-- agent_report -> ReportAgent.chat 或 ReportDemoResponseService 内置模板
-        |-- deep_think=true   -> AIChatService.deepThinkingChat
-        |-- 默认 ask/普通聊天 -> AIChatService.chat
+        |-- ask + deep_think=true -> AIChatService.qaChat(..., true)
+        |-- 默认 ask/普通聊天 -> AIChatService.qaChat(..., false)
         |
         v
 Flux<String> 模型输出
@@ -118,25 +118,27 @@ Controller 会做几类前置检查：
 
 ### 普通聊天
 
-默认分支调用 `AIChatService.chat`。
+默认分支调用 `AIChatService.qaChat(..., deepThinking=false)`。普通问答不会解析 Skill，也不会调用 `AgentMcpToolService`。
 
 主要逻辑：
 
-1. 如果本轮有图片附件，并且配置了 `spring.ai.openai.base-url` 和 `spring.ai.openai.api-key`，走原生 OpenAI 兼容流式接口。
-2. 否则走 Spring AI `ChatClient`。
-3. `ChatClient` 默认注入问答系统提示词 `askSystemPromptTemplate`。
-4. 通过 `MessageChatMemoryAdvisor` 按 `chat_id` 注入多轮记忆。
-5. 如果 `app.ai.embedding.enabled=true`，额外挂 `QuestionAnswerAdvisor` 从 Redis vector store 做 RAG，topK 为 6。
-6. 返回 `Flux<String>` 增量文本。
+1. 通过 `RagContextService` 从公共 Redis vector store 检索 topK 6，并将结果格式化为不可执行的参考资料。
+2. 如果 embedding/Redis 不可用，记录降级原因并继续普通问答。
+3. 如果本轮有图片附件，并且配置了 `spring.ai.openai.base-url` 和 `spring.ai.openai.api-key`，走原生 OpenAI 兼容流式接口。
+4. 否则走 Spring AI `ChatClient`。
+5. 两条模型路径使用相同的问答系统提示词和 RAG 上下文。
+6. 通过 `MessageChatMemoryAdvisor` 或原生分支的手动记忆维护多轮会话。
+7. 返回 `Flux<String>` 增量文本。
 
 普通聊天使用 `AIChatService` 内部的 `MessageWindowChatMemory`，底层仓库为 MySQL JDBC chat memory。
 
 ### 深度思考
 
-`deep_think=true` 时调用 `AIChatService.deepThinkingChat`。
+`type=ask&deep_think=true` 时调用 `AIChatService.qaChat(..., deepThinking=true)`。它与普通问答一样使用 RAG，且不会获得 MCP 工具。
 
 当前有两种处理方式：
 
+- 模型调用前先完成 RAG 检索并把参考资料拼入系统提示词。
 - 如果模型是 Qwen3 系列，或本轮有图片附件，并且可以使用原生 OpenAI 流式接口，则走 `nativeOpenAiChat(..., deepThinking=true)`。
 - 否则走 Spring AI `ChatClient`，并追加 `deepThinkPromptTemplate`，要求模型输出 `<think>...</think>` 后再回答。
 
@@ -151,14 +153,14 @@ Controller 会做几类前置检查：
 它本身不实现复杂工具链，主要是：
 
 1. 使用 `agentDataAccessSystemPromptTemplate` 替换默认系统提示词。
-2. 通过 `SkillService.buildRequiredSkillPrompt` 加载 `data-access-agent` skill。
-3. 调用 `AIChatService.chatWithSystemPrompt` 复用普通聊天能力。
+2. 通过 `SkillService.buildAgentSkillPrompt` 严格加载显式绑定的 `data-access-agent` Skill。
+3. 调用 `AIChatService.agentChat`，按 Agent scope 注入允许的 MCP 工具。
 
-因此它仍支持普通聊天记忆、附件文本、图片原生流式、可选 RAG。
+因此它仍支持聊天记忆、附件文本和图片原生流式，但不会检索公共 RAG 文档。
 
 ### 统一 MCP 工具与内联审批
 
-MCP 不再作为独立 `agent_mcp` 入口。普通问答和业务 Agent 都通过 `AgentMcpToolService.resolve(type)` 按 scope 获取可见的本地和外部工具。
+MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpToolService.resolve(type)` 按 scope 获取可见的本地和外部工具；普通问答始终使用空工具上下文。旧 `mcp_agent` 请求兼容映射为无工具的 `ask`，并保留对历史别名 `agent_mcp` 的兼容。
 
 工具回调由 `McpApprovalService` 强制执行全局 `ALLOW / ASK / DENY` 策略，不依赖模型自觉遵守提示词。命中 `ASK` 时：
 
@@ -318,9 +320,9 @@ MCP 不再作为独立 `agent_mcp` 入口。普通问答和业务 Agent 都通�
 
 ### RAG 与向量召回
 
-普通聊天的 RAG 只在 `app.ai.embedding.enabled=true` 时启用，通过 `QuestionAnswerAdvisor` 查询 Redis vector store。
+普通问答和深度问答的 RAG 只在 `app.ai.embedding.enabled=true` 时启用，通过 `RagContextService` 查询 Redis vector store。检索失败采用 fail-open，不阻断模型问答。
 
-数据可视化 Agent 依赖 retrieval MCP 工具获取业务数据；普通聊天的 RAG 仍由 Redis vector store 支撑。
+全部业务 Agent 均不检索该公共文档索引。数据可视化等 Agent 依赖显式 Skill 和允许范围内的 retrieval/MCP 工具获取业务数据。
 
 ### JSON 字段命名
 
@@ -331,7 +333,7 @@ MCP 不再作为独立 `agent_mcp` 入口。普通问答和业务 Agent 都通�
 ## 需要注意的实现细节
 
 1. `ChatSession.messages` 和 Spring AI `ChatMemory` 是两套数据。界面历史和模型记忆可能不同步，排查“模型不记得上下文”时不要只看 `t_ai_chat_session.messages`。
-2. 普通 Spring AI 分支通过 `MessageChatMemoryAdvisor` 自动维护记忆；原生 OpenAI 图片/深度思考分支通过 `saveNativeChatMemory` 手动维护；业务 Agent 由 `PromptDrivenAgentRuntime` 维护对应记忆。
+2. 普通 Spring AI 分支通过 `MessageChatMemoryAdvisor` 自动维护记忆；原生 OpenAI 图片/深度思考分支通过 `saveNativeChatMemory` 手动维护；业务 Agent 由 `PromptDrivenAgentRuntime` 维护对应记忆，但不使用 RAG。
 3. `agent_data_visualization` 会调用只读 retrieval MCP 工具获取真实数据。慢查询或 LLM 慢响应会直接影响接口首包时间。
 4. `online_search` 目前只保存到会话字段，聊天主流程没有看到实际在线搜索逻辑。
 5. `response_format=events` 时，`done` 事件会保存并返回最终 AI 消息；如果流中途异常，当前只返回 `error` 事件，不会保存部分 AI 回复。

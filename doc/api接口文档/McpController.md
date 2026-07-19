@@ -447,11 +447,11 @@ curl "http://localhost:11001/api/v1/dih/mcp/agent/prompt?agentType=agent_data_ac
 
 ## 聊天中使用 MCP 工具
 
-MCP 工具作为通用工具能力注入聊天接口，不再需要单独的 `agent_mcp` 类型。
+MCP 工具作为业务 Agent 的工作流能力注入聊天接口，不再需要单独的 `mcp_agent` 类型。历史别名 `agent_mcp` 也按兼容请求处理。
 
 **接口地址**: `POST /api/v1/dih/chat`
 
-请求中的 `type` 可为普通问答 `ask`，也可为具体业务 Agent，如 `agent_data_access`、`agent_data_visualization`。后端会根据 `app.ai.mcp.agent-scopes.<type>` 控制可用 MCP 服务范围。
+请求中的 `type` 可为普通问答 `ask`，也可为具体业务 Agent，如 `agent_data_access`、`agent_data_visualization`。`ask` 始终不注入 MCP 或本地工具，`app.ai.mcp.agent-scopes.ask` 不产生效果；业务 Agent 根据 `app.ai.mcp.agent-scopes.<type>` 控制可用 MCP 服务范围。
 
 `ASK` 工具会在当前 AI 消息内插入审批卡片，支持“允许本次”“本会话始终允许”和“拒绝执行”。聊天会话授权不会覆盖全局 `DENY`，停止生成只取消本轮待审批请求。
 
@@ -478,6 +478,6 @@ curl -X POST "http://localhost:11001/api/v1/dih/chat" \
 3. MCP 服务只有在 `enabled=true` 且刷新连接成功后，工具才会进入 AI 可用工具列表。
 4. 工具测试接口使用原始 MCP 工具名；AI 对话中使用的是带服务前缀的规范化工具名。
 5. 当前实现主要面向 SSE MCP 服务，`base_url` 需要填写服务根地址，`sse_endpoint` 填写 SSE 路径。
-6. 可通过 `app.ai.mcp.agent-scopes.<agentType>=serverCode1,serverCode2` 限制某个业务 Agent 可使用的 MCP 服务；值为 `none` 时禁用该 Agent 的 MCP 工具。
+6. 可通过 `app.ai.mcp.agent-scopes.<agentType>=serverCode1,serverCode2` 限制某个业务 Agent 可使用的 MCP 服务；值为 `none` 时禁用该 Agent 的 MCP 工具。普通问答不读取该配置。
 7. MCP 审批队列只展示待处理项；历史和终态记录统一在调用审计查看。
 8. 更完整的操作和排障流程见 [MCP 审批与 AI分析任务快速上手](../DIH/MCP审批与AI分析任务快速上手.md)。

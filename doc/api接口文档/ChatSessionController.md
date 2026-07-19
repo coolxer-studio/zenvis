@@ -341,7 +341,7 @@ curl -X GET "http://localhost:8080/api/v1/dih/chat-session/chat-001/session?type
     "messages": [
       {
         "sender": "ai",
-        "content": "我是数智助手（X-Sage），可以解答系统相关运营问题，有什么问题尽管提问吧！",
+        "content": "我是数智助手，可以解答系统相关运营问题，有什么问题尽管提问吧！",
         "time": "2024-01-01 12:00:00"
       }
     ]

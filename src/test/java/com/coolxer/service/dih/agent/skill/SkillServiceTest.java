@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SkillServiceTest {
 
@@ -51,6 +52,73 @@ class SkillServiceTest {
         assertThat(service.getPageList(agentSearch).getRows())
                 .extracting("id")
                 .doesNotContain("custom-ask-skill");
+    }
+
+    @Test
+    void explicitAgentSkillsLoadOnlySelectedEnabledSkills() throws Exception {
+        writeSkill(
+                skillRoot.resolve("selected-skill"),
+                """
+                        {
+                          "id": "selected-skill",
+                          "name": "指定能力",
+                          "enabled": true,
+                          "agentTypes": ["agent_analysis"],
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "只应加载的提示词"
+        );
+        writeSkill(
+                skillRoot.resolve("matching-but-not-selected"),
+                """
+                        {
+                          "id": "matching-but-not-selected",
+                          "name": "同类型附加能力",
+                          "enabled": true,
+                          "agentTypes": ["agent_analysis"],
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "不应自动加载的提示词"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildAgentSkillPrompt("agent_analysis", List.of("selected-skill"));
+
+        assertThat(prompt)
+                .contains("只应加载的提示词")
+                .doesNotContain("不应自动加载的提示词");
+    }
+
+    @Test
+    void explicitAgentSkillsRejectMissingOrDisabledSkills() throws Exception {
+        writeSkill(
+                skillRoot.resolve("disabled-skill"),
+                """
+                        {
+                          "id": "disabled-skill",
+                          "name": "停用能力",
+                          "enabled": false,
+                          "agentTypes": ["agent_analysis"],
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "停用提示词"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        assertThatThrownBy(() -> service.buildAgentSkillPrompt(
+                "agent_analysis",
+                List.of("disabled-skill", "missing-skill")
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("disabled-skill")
+                .hasMessageContaining("missing-skill");
     }
 
     @Test

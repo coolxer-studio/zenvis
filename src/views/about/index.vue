@@ -249,7 +249,7 @@ const contactFields: EditableField[] = [
   { key: 'servicePhone', label: '客服电话' },
   { key: 'serviceEmail', label: '客服邮箱' },
   { key: 'technicalEmail', label: '技术支持' },
-  { key: 'integrateLink', label: '官网链接' },
+  { key: 'integrateLink', label: '接入指南链接' },
   { key: 'copyright', label: '版权信息' },
 ];
 

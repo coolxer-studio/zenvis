@@ -89,29 +89,57 @@ public class MetaDataServiceImpl implements MetaDataService {
         }
     }
 
+    @Override
+    public MetaData validateMetaDataFiles(List<Path> metaFiles) {
+        if (metaFiles == null || metaFiles.isEmpty()) {
+            throw new IllegalArgumentException("Meta 文件不能为空");
+        }
+        try {
+            List<Path> normalizedFiles = metaFiles.stream()
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .sorted()
+                    .toList();
+            LoadedMetadata loaded = readMetaDataFiles(normalizedFiles);
+            String source = normalizedFiles.toString();
+            supplementBuiltInAttributes(loaded.metaData(), source, loaded.sourceByObject());
+            normalizeLinkTemplates(loaded.metaData());
+            supplementOperators(loaded.metaData());
+            return buildSnapshot(loaded.metaData(), source, loaded.sourceByObject()).metaData();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("读取 Meta 文件失败", e);
+        }
+    }
+
     private LoadedMetadata readMetaData(String metadataPath) throws IOException {
-        MetaData merged = new MetaData();
-        Map<Object, String> sourceByObject = new IdentityHashMap<>();
         try (Stream<Path> paths = Files.walk(Paths.get(metadataPath))) {
             List<Path> jsonFiles = paths.filter(Files::isRegularFile)
                     .filter(path -> path.toString().endsWith(".json"))
                     .sorted()
                     .toList();
-            for (Path path : jsonFiles) {
-                String json = FileUtils.readFileToString(path.toFile(), StandardCharsets.UTF_8);
-                MetaData part;
-                try {
-                    part = JacksonUtil.toObject(json, MetaData.class);
-                } catch (RuntimeException ex) {
-                    throw new IllegalArgumentException("元数据文件解析失败: " + path, ex);
-                }
-                if (part == null) {
-                    throw new IllegalArgumentException("元数据文件内容为空: " + path);
-                }
-                appendWithSource(merged.getEntity(), part.getEntity(), path, sourceByObject);
-                appendWithSource(merged.getAttribute(), part.getAttribute(), path, sourceByObject);
-                appendWithSource(merged.getOperator(), part.getOperator(), path, sourceByObject);
+            return readMetaDataFiles(jsonFiles);
+        }
+    }
+
+    private LoadedMetadata readMetaDataFiles(List<Path> jsonFiles) throws IOException {
+        MetaData merged = new MetaData();
+        Map<Object, String> sourceByObject = new IdentityHashMap<>();
+        for (Path path : jsonFiles) {
+            if (!Files.isRegularFile(path) || !path.toString().endsWith(".json")) {
+                throw new IllegalArgumentException("Meta 文件不存在或不是 JSON: " + path);
             }
+            String json = FileUtils.readFileToString(path.toFile(), StandardCharsets.UTF_8);
+            MetaData part;
+            try {
+                part = JacksonUtil.toObject(json, MetaData.class);
+            } catch (RuntimeException ex) {
+                throw new IllegalArgumentException("元数据文件解析失败: " + path, ex);
+            }
+            if (part == null) {
+                throw new IllegalArgumentException("元数据文件内容为空: " + path);
+            }
+            appendWithSource(merged.getEntity(), part.getEntity(), path, sourceByObject);
+            appendWithSource(merged.getAttribute(), part.getAttribute(), path, sourceByObject);
+            appendWithSource(merged.getOperator(), part.getOperator(), path, sourceByObject);
         }
         return new LoadedMetadata(merged, sourceByObject);
     }

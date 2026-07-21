@@ -19,6 +19,9 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -48,6 +51,49 @@ public class PluginMigrationServiceImpl implements PluginMigrationService {
         List<Migration> ordered = parseMigrations(migrations);
         for (Migration migration : ordered) {
             applyMigration(packageName, migration);
+        }
+    }
+
+    @Override
+    public synchronized void validateMysql(String packageName, List<Path> migrations) {
+        ensureHistoryTable();
+        List<Migration> ordered = parseMigrations(migrations == null ? List.of() : migrations);
+        Map<String, Migration> candidates = new LinkedHashMap<>();
+        ordered.forEach(migration -> candidates.put(migration.version(), migration));
+        List<AppliedMigration> applied = jdbcTemplate.query(
+                "SELECT migration_version, description, checksum FROM " + HISTORY_TABLE
+                        + " WHERE package_name = ?",
+                (rs, rowNum) -> new AppliedMigration(
+                        rs.getString("migration_version"),
+                        rs.getString("description"),
+                        rs.getString("checksum")
+                ),
+                packageName
+        );
+        for (AppliedMigration history : applied) {
+            Migration candidate = candidates.get(history.version());
+            if (candidate == null) {
+                throw new IllegalStateException("候选插件缺少已执行迁移: " + packageName + " V" + history.version());
+            }
+            if (!Objects.equals(history.checksum(), candidate.checksum())) {
+                throw new IllegalStateException("插件迁移校验和不一致: " + packageName + " V" + history.version());
+            }
+            if (!Objects.equals(history.description(), candidate.description())) {
+                throw new IllegalStateException("插件迁移文件名与历史不一致: " + packageName + " V" + history.version());
+            }
+        }
+        String latestApplied = applied.stream()
+                .map(AppliedMigration::version)
+                .max(this::compareVersion)
+                .orElse(null);
+        if (latestApplied != null) {
+            for (Migration migration : ordered) {
+                boolean alreadyApplied = applied.stream()
+                        .anyMatch(history -> history.version().equals(migration.version()));
+                if (!alreadyApplied && compareVersion(migration.version(), latestApplied) <= 0) {
+                    throw new IllegalStateException("新增迁移版本必须高于已执行版本: V" + migration.version());
+                }
+            }
         }
     }
 
@@ -150,5 +196,8 @@ public class PluginMigrationServiceImpl implements PluginMigrationService {
     }
 
     private record Migration(String version, String description, String checksum, Path path) {
+    }
+
+    private record AppliedMigration(String version, String description, String checksum) {
     }
 }

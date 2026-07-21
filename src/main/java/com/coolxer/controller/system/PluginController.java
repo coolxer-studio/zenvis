@@ -8,6 +8,7 @@ import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.base.vo.SingleValueVo;
 import com.coolxer.model.system.dto.PluginDto;
 import com.coolxer.model.system.dto.PluginSearchDto;
+import com.coolxer.model.system.dto.PluginUpgradeDto;
 import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.service.system.PluginService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -89,30 +90,6 @@ public class PluginController extends BaseController {
         try {
             pluginService.deleteByIds(ids);
             return ResponseWrap.success("删除成功");
-        } catch (Exception e) {
-            return ResponseWrap.fail(e);
-        }
-    }
-
-    @PostMapping({"/{id}/update"})
-    public ResponseWrap<?> update(@PathVariable("id") Long id, @RequestBody PluginDto pluginDto) {
-        try {
-            if (pluginService.update(id, pluginDto)) {
-                return ResponseWrap.success("修改成功");
-            } else
-                return ResponseWrap.fail();
-        } catch (Exception e) {
-            return ResponseWrap.fail(e);
-        }
-    }
-
-    @PostMapping({"/{ids}/bulk-update"})
-    public ResponseWrap<?> bulkUpdate(@PathVariable("ids") Long[] ids, @RequestBody PluginDto pluginDto) {
-        try {
-            for (long id : ids) {
-                pluginService.update(id, pluginDto);
-            }
-            return ResponseWrap.success("修改成功");
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -213,6 +190,25 @@ public class PluginController extends BaseController {
     public ResponseWrap<PluginVo> install(@PathVariable("id") Long id) {
         try {
             return ResponseWrap.success(pluginService.install(id));
+        } catch (Exception e) {
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping({"/{id}/upgrade"})
+    public ResponseWrap<PluginVo> upgrade(@PathVariable("id") Long id,
+                                          @RequestBody PluginUpgradeDto upgradeDto) {
+        try {
+            return ResponseWrap.success(pluginService.upgrade(id, upgradeDto));
+        } catch (Exception e) {
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping({"/{id}/upgrade/recover"})
+    public ResponseWrap<PluginVo> recoverUpgrade(@PathVariable("id") Long id) {
+        try {
+            return ResponseWrap.success(pluginService.recoverUpgrade(id));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }

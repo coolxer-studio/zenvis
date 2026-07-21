@@ -69,6 +69,21 @@ public class PluginVo implements Serializable {
     private String pluginPath;
 
     /**
+     * 升级候选包路径。
+     */
+    private String pendingUpgradePath;
+
+    /**
+     * 升级候选版本。
+     */
+    private String pendingUpgradeVersion;
+
+    /**
+     * 升级操作标识。
+     */
+    private String upgradeOperationId;
+
+    /**
      * 最近一次插件操作摘要
      */
     private String operationMessage;
@@ -104,6 +119,9 @@ public class PluginVo implements Serializable {
         this.status = plugin.getStatus();
         this.statusDescription = plugin.getStatus() == null ? "" : plugin.getStatus().getDescription();
         this.pluginPath = plugin.getPluginPath();
+        this.pendingUpgradePath = plugin.getPendingUpgradePath();
+        this.pendingUpgradeVersion = plugin.getPendingUpgradeVersion();
+        this.upgradeOperationId = plugin.getUpgradeOperationId();
         this.operationMessage = plugin.getOperationMessage();
         this.operationError = plugin.getOperationError();
         this.operationStartedAt = plugin.getOperationStartedAt();

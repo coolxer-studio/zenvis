@@ -115,4 +115,46 @@ class ClickhouseSchemeServiceImplTest {
         verify(entityManager, never()).createNativeQuery(
                 org.mockito.ArgumentMatchers.contains("MODIFY COLUMN zenvis_id"));
     }
+
+    @Test
+    void additiveUpgradeCreatesAndAddsButNeverDrops() {
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+        ClickhouseSchemeServiceImpl service = new ClickhouseSchemeServiceImpl();
+        ReflectionTestUtils.setField(service, "entityManager", entityManager);
+
+        DataEntity entity = new DataEntity();
+        entity.setName("event");
+        entity.setTableName("zenvis.event");
+        entity.setDataSource("clickhouse");
+        DataEntity.DbCreate autoCreate = entity.new DbCreate();
+        autoCreate.setEngine("MergeTree()");
+        autoCreate.setOrderBy(List.of("event_id"));
+        autoCreate.setPartitionBy("toYYYYMM(zenvis_insert_time)");
+        entity.setAutoCreate(autoCreate);
+
+        DataAttribute eventId = new DataAttribute();
+        eventId.setEntity("event");
+        eventId.setName("event_id");
+        eventId.setColumnName("event_id");
+        eventId.setColumnType("String");
+        DataAttribute severity = new DataAttribute();
+        severity.setEntity("event");
+        severity.setName("severity");
+        severity.setColumnName("severity");
+        severity.setColumnType("UInt8");
+        MetaData metaData = new MetaData();
+        metaData.setEntity(List.of(entity));
+        metaData.setAttribute(List.of(eventId, severity));
+
+        service.applyAdditiveScheme(metaData);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager, org.mockito.Mockito.atLeastOnce()).createNativeQuery(sql.capture());
+        assertThat(sql.getAllValues()).anyMatch(statement -> statement.startsWith("CREATE TABLE IF NOT EXISTS"));
+        assertThat(sql.getAllValues()).anyMatch(statement -> statement.contains("ADD COLUMN IF NOT EXISTS severity UInt8"));
+        assertThat(sql.getAllValues()).noneMatch(statement -> statement.toUpperCase().contains("DROP TABLE"));
+    }
 }

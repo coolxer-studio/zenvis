@@ -32,14 +32,16 @@ import java.util.Date;
 @Check(name = "t_sys_plugin_status_chk", constraints = Plugin.STATUS_CHECK_CONSTRAINT)
 public class Plugin extends BaseEntity {
 
-    static final String STATUS_CHECK_CONSTRAINT = """
+    public static final String STATUS_CHECK_CONSTRAINT = """
             status IN (
                 'UN_INSTALL',
                 'INSTALLING',
                 'INSTALLED',
                 'INSTALL_FAILED',
                 'UNINSTALLING',
-                'UNINSTALL_FAILED'
+                'UNINSTALL_FAILED',
+                'UPGRADING',
+                'UPGRADE_FAILED'
             )
             """;
 
@@ -91,6 +93,24 @@ public class Plugin extends BaseEntity {
      */
     @Column(name = "plugin_path")
     private String pluginPath;
+
+    /**
+     * 升级候选包路径。升级提交成功前不会覆盖当前插件包路径。
+     */
+    @Column(name = "pending_upgrade_path")
+    private String pendingUpgradePath;
+
+    /**
+     * 已通过预检、等待提交的候选版本。
+     */
+    @Column(name = "pending_upgrade_version", length = 128)
+    private String pendingUpgradeVersion;
+
+    /**
+     * 持久化升级快照对应的操作标识。
+     */
+    @Column(name = "upgrade_operation_id", length = 64)
+    private String upgradeOperationId;
 
     /**
      * 最近一次插件操作摘要

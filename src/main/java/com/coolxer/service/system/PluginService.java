@@ -5,6 +5,7 @@ import com.coolxer.model.base.vo.FileTreeNodeVo;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.system.dto.PluginDto;
 import com.coolxer.model.system.dto.PluginSearchDto;
+import com.coolxer.model.system.dto.PluginUpgradeDto;
 import com.coolxer.model.system.vo.PluginVo;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,14 +30,6 @@ public interface PluginService {
      * @param pluginDto 传输实体
      */
     Plugin create(PluginDto pluginDto);
-
-    /**
-     * 修改插件
-     *
-     * @param id        插件id
-     * @param pluginDto 用户传输实体
-     */
-    Boolean update(Long id, PluginDto pluginDto);
 
     /**
      * 删除插件
@@ -105,6 +98,21 @@ public interface PluginService {
      * @return
      */
     PluginVo install(Long id);
+
+    /**
+     * 预检并异步升级已安装插件。
+     */
+    PluginVo upgrade(Long id, PluginUpgradeDto upgradeDto);
+
+    /**
+     * 恢复升级失败后保留的旧版本快照。
+     */
+    PluginVo recoverUpgrade(Long id);
+
+    /**
+     * 应用启动时恢复未完成的升级操作。
+     */
+    void recoverInterruptedUpgrades();
 
     /**
      * 获取插件readme

@@ -13,7 +13,9 @@ public enum PluginStatusType {
     INSTALLED("已加载"),
     INSTALL_FAILED("安装失败"),
     UNINSTALLING("卸载中"),
-    UNINSTALL_FAILED("卸载失败");
+    UNINSTALL_FAILED("卸载失败"),
+    UPGRADING("升级中"),
+    UPGRADE_FAILED("升级失败");
 
     PluginStatusType(String description) {
         this.description = description;
@@ -22,7 +24,7 @@ public enum PluginStatusType {
     private final String description;
 
     public boolean isInProgress() {
-        return this == INSTALLING || this == UNINSTALLING;
+        return this == INSTALLING || this == UNINSTALLING || this == UPGRADING;
     }
 
     public boolean canInstall() {
@@ -30,6 +32,10 @@ public enum PluginStatusType {
     }
 
     public boolean canUninstall() {
-        return this == INSTALLED || this == INSTALL_FAILED || this == UNINSTALL_FAILED;
+        return this == INSTALLED || this == INSTALL_FAILED || this == UNINSTALL_FAILED || this == UPGRADE_FAILED;
+    }
+
+    public boolean canUpgrade() {
+        return this == INSTALLED;
     }
 }

@@ -71,4 +71,45 @@ class PluginMigrationServiceImplTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("版本重复");
     }
+
+    @Test
+    void validatesCompleteAppliedHistoryWithoutExecutingNewMigration() throws Exception {
+        Path first = tempDir.resolve("V001__create_demo.sql");
+        Path second = tempDir.resolve("V002__add_name.sql");
+        Files.writeString(first, "CREATE TABLE plugin_demo (id INT PRIMARY KEY);");
+        Files.writeString(second, "ALTER TABLE plugin_demo ADD COLUMN name VARCHAR(32);");
+        service.migrateMysql("com.coolxer.plugin.demo", List.of(first));
+
+        service.validateMysql("com.coolxer.plugin.demo", List.of(first, second));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_sys_plugin_migration", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsCandidateThatOmitsAppliedMigration() throws Exception {
+        Path first = tempDir.resolve("V001__create_demo.sql");
+        Files.writeString(first, "CREATE TABLE plugin_demo (id INT PRIMARY KEY);");
+        service.migrateMysql("com.coolxer.plugin.demo", List.of(first));
+
+        assertThatThrownBy(() -> service.validateMysql("com.coolxer.plugin.demo", List.of()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("缺少已执行迁移");
+    }
+
+    @Test
+    void rejectsLateMigrationBelowLatestAppliedVersion() throws Exception {
+        Path first = tempDir.resolve("V001__create_demo.sql");
+        Path third = tempDir.resolve("V003__add_name.sql");
+        Path second = tempDir.resolve("V002__late.sql");
+        Files.writeString(first, "CREATE TABLE plugin_demo (id INT PRIMARY KEY);");
+        Files.writeString(third, "ALTER TABLE plugin_demo ADD COLUMN name VARCHAR(32);");
+        Files.writeString(second, "ALTER TABLE plugin_demo ADD COLUMN late_name VARCHAR(32);");
+        service.migrateMysql("com.coolxer.plugin.demo", List.of(first, third));
+
+        assertThatThrownBy(() -> service.validateMysql(
+                "com.coolxer.plugin.demo", List.of(first, second, third)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("必须高于已执行版本");
+    }
 }

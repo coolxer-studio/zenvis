@@ -19,7 +19,9 @@ import org.springframework.stereotype.Service;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 
 /**
  * 系统数据初始化
@@ -115,6 +117,76 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
         log.info("clickhouse scheme init successfully.");
     }
 
+    @Override
+    public void applyAdditiveScheme(MetaData metaData) {
+        if (metaData == null || CollectionUtils.isEmpty(metaData.getEntity())) {
+            return;
+        }
+        Map<String, List<DataAttribute>> attributesByEntity = metaData.getAttribute().stream()
+                .filter(attribute -> attribute != null && StringUtils.isNotBlank(attribute.getEntity()))
+                .collect(Collectors.groupingBy(DataAttribute::getEntity));
+        for (DataEntity entity : metaData.getEntity()) {
+            if (!isClickHouseEntity(entity) || entity.getAutoCreate() == null) {
+                continue;
+            }
+            List<DataAttribute> attributes = attributesByEntity.getOrDefault(entity.getName(), List.of());
+            if (attributes.isEmpty()) {
+                throw new IllegalArgumentException("ClickHouse 实体没有字段: " + entity.getName());
+            }
+            validateSafeSqlFragment(entity.getTableName(), "表名");
+            validateSafeSqlFragment(entity.getAutoCreate().getEngine(), "引擎");
+            validateSafeSqlFragment(entity.getAutoCreate().getPartitionBy(), "分区键");
+            entity.getAutoCreate().getOrderBy().forEach(value -> validateSafeSqlFragment(value, "排序键"));
+            attributes.forEach(attribute -> {
+                validateSafeSqlFragment(attribute.getColumnName(), "列名");
+                validateSafeSqlFragment(attribute.getColumnType(), "字段类型");
+            });
+
+            String columns = attributes.stream()
+                    .map(this::columnDefinition)
+                    .collect(Collectors.joining(","));
+            if (attributes.stream().noneMatch(MetaDataConstants::isRecordId)) {
+                columns += "," + MetaDataConstants.RECORD_ID_COLUMN + " "
+                        + MetaDataConstants.RECORD_ID_COLUMN_TYPE + " DEFAULT "
+                        + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION;
+            }
+            if (attributes.stream().noneMatch(MetaDataConstants::isInsertTime)) {
+                columns += "," + MetaDataConstants.INSERT_TIME_COLUMN + " "
+                        + MetaDataConstants.INSERT_TIME_COLUMN_TYPE + " DEFAULT "
+                        + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION;
+            }
+            String partition = StringUtils.isBlank(entity.getAutoCreate().getPartitionBy())
+                    ? ""
+                    : " PARTITION BY " + entity.getAutoCreate().getPartitionBy();
+            executeRequiredSql("CREATE TABLE IF NOT EXISTS " + entity.getTableName()
+                    + " (" + columns + ") ENGINE = " + entity.getAutoCreate().getEngine()
+                    + " ORDER BY (" + String.join(",", entity.getAutoCreate().getOrderBy()) + ")"
+                    + partition);
+
+            for (DataAttribute attribute : attributes) {
+                executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                        + " ADD COLUMN IF NOT EXISTS " + columnDefinition(attribute));
+            }
+            executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                    + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.INSERT_TIME_COLUMN
+                    + " " + MetaDataConstants.INSERT_TIME_COLUMN_TYPE
+                    + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
+            executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                    + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.RECORD_ID_COLUMN
+                    + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
+                    + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION);
+        }
+        log.info("ClickHouse additive schema upgrade completed");
+    }
+
+    private void validateSafeSqlFragment(String value, String field) {
+        if (StringUtils.isBlank(value) || value.indexOf(';') >= 0 || value.contains("--")
+                || value.contains("/*") || value.contains("*/") || value.indexOf('\0') >= 0
+                || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
+            throw new IllegalArgumentException("ClickHouse " + field + "不合法: " + value);
+        }
+    }
+
     private String columnDefinition(DataAttribute attribute) {
         String definition = attribute.getColumnName() + " " + attribute.getColumnType();
         if (MetaDataConstants.isRecordId(attribute)) {
@@ -129,15 +201,18 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
     private void migrateRecordIdColumn(DataEntity entity) {
         String tableName = entity.getTableName();
         executeRequiredSql("ALTER TABLE " + tableName
-                + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.RECORD_ID_COLUMN
-                + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE + " DEFAULT NULL");
+                        + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.RECORD_ID_COLUMN
+                        + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE + " DEFAULT NULL",
+                "ClickHouse记录ID字段迁移失败");
         executeRequiredSql("ALTER TABLE " + tableName
-                + " MATERIALIZE COLUMN " + MetaDataConstants.RECORD_ID_COLUMN
-                + " SETTINGS mutations_sync = 1");
+                        + " MATERIALIZE COLUMN " + MetaDataConstants.RECORD_ID_COLUMN
+                        + " SETTINGS mutations_sync = 1",
+                "ClickHouse记录ID字段迁移失败");
         executeRequiredSql("ALTER TABLE " + tableName
-                + " MODIFY COLUMN " + MetaDataConstants.RECORD_ID_COLUMN
-                + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
-                + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION);
+                        + " MODIFY COLUMN " + MetaDataConstants.RECORD_ID_COLUMN
+                        + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
+                        + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION,
+                "ClickHouse记录ID字段迁移失败");
     }
 
     private boolean isClickHouseEntity(DataEntity entity) {
@@ -170,11 +245,15 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
     }
 
     private void executeRequiredSql(String sql) {
+        executeRequiredSql(sql, "ClickHouse结构变更失败");
+    }
+
+    private void executeRequiredSql(String sql, String errorPrefix) {
         try {
             entityManager.createNativeQuery(sql).getResultList();
         } catch (Exception e) {
             log.error("Required ClickHouse schema statement failed: {}", sql, e);
-            throw new IllegalStateException("ClickHouse记录ID字段迁移失败: " + sql, e);
+            throw new IllegalStateException(errorPrefix + ": " + sql, e);
         }
     }
 

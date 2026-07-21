@@ -98,6 +98,42 @@ public class PushTashServiceImpl implements PushTaskService {
     }
 
     @Override
+    public boolean update(Integer id, PushTaskDto pushTaskDto) {
+        ResponseModel response = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/{id}",
+                HttpMethod.PUT,
+                new HttpEntity<>(pushTaskDto, createVectumHeaders()),
+                ResponseModel.class,
+                id
+        ).getBody();
+        return response != null && response.succeed();
+    }
+
+    @Override
+    public boolean toggle(Integer id) {
+        ResponseModel response = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/{id}/toggle",
+                HttpMethod.POST,
+                new HttpEntity<>(createVectumHeaders()),
+                ResponseModel.class,
+                id
+        ).getBody();
+        return response != null && response.succeed();
+    }
+
+    @Override
+    public boolean delete(Integer id) {
+        ResponseModel response = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/{id}",
+                HttpMethod.DELETE,
+                new HttpEntity<>(createVectumHeaders()),
+                ResponseModel.class,
+                id
+        ).getBody();
+        return response != null && response.succeed();
+    }
+
+    @Override
     public List<PushTaskVo> findAll() {
         ResponseModel response = restTemplate.exchange(
                 customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/all",
@@ -123,20 +159,11 @@ public class PushTashServiceImpl implements PushTaskService {
     @Override
     public boolean deleteBySourceMark(String sourceMark) {
         List<PushTaskVo> pushTaskList = findBySourceMark(sourceMark);
-        pushTaskList.forEach(pushTaskVo -> {
-            String url = customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/{id}";
-            ResponseEntity<ResponseModel> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.DELETE,
-                    new HttpEntity<>(createVectumHeaders()),
-                    ResponseModel.class,
-                    pushTaskVo.getId()
-            );
-            if (response.getBody() == null || !response.getBody().succeed()) {
-                // TODO 删除失败处理
-            }
-        });
-        return true;
+        boolean succeeded = true;
+        for (PushTaskVo pushTask : pushTaskList) {
+            succeeded = delete(pushTask.getId()) && succeeded;
+        }
+        return succeeded;
     }
 
     private HttpHeaders createVectumHeaders() {

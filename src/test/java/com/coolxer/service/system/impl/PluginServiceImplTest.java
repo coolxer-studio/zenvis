@@ -5,6 +5,16 @@ import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.dao.mysql.entity.Dashboard;
 import com.coolxer.model.system.dto.DashboardDto;
+import com.coolxer.model.retrieval.meta.DataAttribute;
+import com.coolxer.model.retrieval.meta.DataEntity;
+import com.coolxer.model.retrieval.meta.MetaData;
+import com.coolxer.dao.mysql.entity.Plugin;
+import com.coolxer.dao.mysql.repository.DashboardRepository;
+import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
+import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.system.MenuService;
+import com.coolxer.service.system.PushTaskService;
+import com.coolxer.model.system.vo.PluginVo;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
@@ -23,6 +33,9 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PluginServiceImplTest {
 
@@ -322,6 +335,115 @@ class PluginServiceImplTest {
         assertThat(second).doesNotExist();
     }
 
+    @Test
+    void additiveMetaUpgradeAllowsNewFieldsAndEntities() {
+        PluginServiceImpl service = newService();
+        MetaData current = metaData(entity(1, "event", "zenvis.event"),
+                attribute(1, "event", "event_id", "event_id", "String"));
+        MetaData candidate = metaData(
+                List.of(entity(1, "event", "zenvis.event"), entity(2, "asset", "zenvis.asset")),
+                List.of(
+                        attribute(1, "event", "event_id", "event_id", "String"),
+                        attribute(2, "event", "severity", "severity", "UInt8"),
+                        attribute(3, "asset", "asset_id", "asset_id", "String")
+                ));
+
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateAdditiveMetaChange", current, candidate)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void additiveMetaUpgradeRejectsDeletionRenameAndTypeChanges() {
+        PluginServiceImpl service = newService();
+        MetaData current = metaData(entity(1, "event", "zenvis.event"),
+                attribute(1, "event", "event_id", "event_id", "String"));
+        MetaData deleted = metaData(new ArrayList<>(), new ArrayList<>());
+        MetaData renamedTable = metaData(entity(1, "event", "zenvis.event_v2"),
+                attribute(1, "event", "event_id", "event_id", "String"));
+        MetaData changedType = metaData(entity(1, "event", "zenvis.event"),
+                attribute(1, "event", "event_id", "event_id", "UInt64"));
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateAdditiveMetaChange", current, deleted))
+                .isInstanceOf(ApiException.class).hasMessageContaining("删除或重命名实体");
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateAdditiveMetaChange", current, renamedTable))
+                .isInstanceOf(ApiException.class).hasMessageContaining("表名");
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateAdditiveMetaChange", current, changedType))
+                .isInstanceOf(ApiException.class).hasMessageContaining("字段类型");
+    }
+
+    @Test
+    void upgradeSnapshotIsPersistedAndReadableAfterRestart() throws Exception {
+        PluginServiceImpl service = newService();
+        MenuService menuService = mock(MenuService.class);
+        DashboardRepository dashboardRepository = mock(DashboardRepository.class);
+        McpServerConfigRepository mcpRepository = mock(McpServerConfigRepository.class);
+        PushTaskService pushTaskService = mock(PushTaskService.class);
+        SkillService skillService = mock(SkillService.class);
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+        ReflectionTestUtils.setField(service, "dashboardRepository", dashboardRepository);
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", mcpRepository);
+        ReflectionTestUtils.setField(service, "pushTaskService", pushTaskService);
+        ReflectionTestUtils.setField(service, "skillService", skillService);
+
+        String packageName = "com.acme.snapshot";
+        Plugin plugin = new Plugin();
+        plugin.setId(7);
+        plugin.setName("Snapshot");
+        plugin.setPackageName(packageName);
+        plugin.setVersion("1.0.0");
+        plugin.setPluginPath(pluginRoot.resolve("snapshot.tar.gz").toString());
+        plugin.setUpgradeOperationId("operation-1");
+        Path installed = pluginRoot.resolve(packageName);
+        Files.createDirectories(installed);
+        Files.writeString(installed.resolve("index.json"), "{}");
+        when(menuService.findBySource(packageName)).thenReturn(List.of());
+        when(dashboardRepository.findBySource(packageName)).thenReturn(List.of());
+        when(mcpRepository.findBySource(packageName)).thenReturn(List.of());
+        when(pushTaskService.findBySourceMark(packageName)).thenReturn(List.of());
+        when(skillService.getInstalledPluginSkillPath(packageName))
+                .thenReturn(pluginRoot.resolve("no-installed-skill"));
+
+        ReflectionTestUtils.invokeMethod(service, "createUpgradeSnapshot", plugin, "operation-1");
+
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(service, "readUpgradeSnapshot", plugin))
+                .doesNotThrowAnyException();
+        assertThat(pluginRoot.resolve("upgrade/7/operation-1/snapshot/snapshot.json")).isRegularFile();
+        assertThat(pluginRoot.resolve("upgrade/7/operation-1/snapshot/installed/index.json")).exists();
+    }
+
+    @Test
+    void upgradeIdentityRequiresSamePackageAndStrictlyHigherSemVer() {
+        PluginServiceImpl service = newService();
+        Plugin current = new Plugin();
+        current.setPackageName("com.acme.demo");
+        current.setVersion("1.2.3");
+
+        PluginVo higher = new PluginVo();
+        higher.setPackageName("com.acme.demo");
+        higher.setVersion("1.2.4");
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateUpgradeIdentity", current, higher)).doesNotThrowAnyException();
+
+        for (String invalidVersion : List.of("1.2.3", "1.2.2", "v2", "1.02.4")) {
+            PluginVo candidate = new PluginVo();
+            candidate.setPackageName("com.acme.demo");
+            candidate.setVersion(invalidVersion);
+            assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                    service, "validateUpgradeIdentity", current, candidate))
+                    .isInstanceOf(ApiException.class);
+        }
+
+        PluginVo wrongPackage = new PluginVo();
+        wrongPackage.setPackageName("com.acme.other");
+        wrongPackage.setVersion("2.0.0");
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateUpgradeIdentity", current, wrongPackage))
+                .isInstanceOf(ApiException.class).hasMessageContaining("包名");
+    }
+
     private PluginServiceImpl newService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "pluginPath", pluginRoot.toString());
@@ -339,6 +461,45 @@ class PluginServiceImplTest {
         dto.setType(DashboardType.LINK);
         dto.setUrl("https://example.com/dashboard");
         return dto;
+    }
+
+    private MetaData metaData(DataEntity entity, DataAttribute attribute) {
+        return metaData(List.of(entity), List.of(attribute));
+    }
+
+    private MetaData metaData(List<DataEntity> entities, List<DataAttribute> attributes) {
+        MetaData metaData = new MetaData();
+        metaData.setEntity(new ArrayList<>(entities));
+        metaData.setAttribute(new ArrayList<>(attributes));
+        return metaData;
+    }
+
+    private DataEntity entity(int id, String name, String tableName) {
+        DataEntity entity = new DataEntity();
+        entity.setId(id);
+        entity.setName(name);
+        entity.setTableName(tableName);
+        entity.setDataSource("clickhouse");
+        DataEntity.DbCreate autoCreate = entity.new DbCreate();
+        autoCreate.setEngine("MergeTree()");
+        autoCreate.setOrderBy(List.of(name + "_id"));
+        autoCreate.setPartitionBy("toYYYYMM(zenvis_insert_time)");
+        entity.setAutoCreate(autoCreate);
+        return entity;
+    }
+
+    private DataAttribute attribute(int id,
+                                    String entity,
+                                    String name,
+                                    String columnName,
+                                    String columnType) {
+        DataAttribute attribute = new DataAttribute();
+        attribute.setId(id);
+        attribute.setEntity(entity);
+        attribute.setName(name);
+        attribute.setColumnName(columnName);
+        attribute.setColumnType(columnType);
+        return attribute;
     }
 
     private MockMultipartFile packageFile(String filename, byte[] bytes) {

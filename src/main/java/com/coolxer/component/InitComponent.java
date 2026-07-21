@@ -52,6 +52,9 @@ public class InitComponent implements CommandLineRunner {
     @Autowired
     private ExtendJarManager extendJarManager;
 
+    @Autowired
+    private PluginSchemaInitializer pluginSchemaInitializer;
+
     @Override
     public void run(String... args) throws Exception {
         // 输出关键信息
@@ -62,6 +65,7 @@ public class InitComponent implements CommandLineRunner {
 
 
         dataInitiator.initData();
+        pluginSchemaInitializer.ensureUpgradeSchema();
         // mysql初始化，固定/init/mysql-init.sql，仅首次启动执行
         Path mysqlInitFlag = Paths.get(customWebConfig.getSystemConfigPath(), "init", ".mysql-init.flag");
         if (!Files.exists(mysqlInitFlag)) {
@@ -75,6 +79,9 @@ public class InitComponent implements CommandLineRunner {
             Files.createFile(clickhouseInitFlag);
         }
         
+        // 在全局 Meta 和插件 API 加载前恢复中断的升级。
+        pluginService.recoverInterruptedUpgrades();
+
         // 初始化加载meta
         MetaData metaData = metaDataService.loadMetaData();
         // 初始化Clickhouse表

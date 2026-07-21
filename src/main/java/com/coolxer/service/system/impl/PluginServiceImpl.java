@@ -6,14 +6,18 @@ import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.enums.DashboardType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
+import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.configuration.extend.ExtendJarManager;
 import com.coolxer.dao.mysql.entity.Dashboard;
 import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.dao.mysql.entity.Menu;
 import com.coolxer.dao.mysql.entity.Plugin;
+import com.coolxer.dao.mysql.entity.RolePermission;
 import com.coolxer.dao.mysql.repository.DashboardRepository;
+import com.coolxer.dao.mysql.repository.MenuRepository;
 import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.dao.mysql.repository.PluginRepository;
+import com.coolxer.dao.mysql.repository.RolePermissionRepository;
 import com.coolxer.model.dih.dto.McpServerDto;
 import com.coolxer.model.base.vo.FileTreeNodeVo;
 import com.coolxer.model.base.vo.PageRowsVo;
@@ -22,6 +26,7 @@ import com.coolxer.model.system.dto.DashboardDto;
 import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.system.dto.PluginDto;
 import com.coolxer.model.system.dto.PluginSearchDto;
+import com.coolxer.model.system.dto.PluginUpgradeDto;
 import com.coolxer.model.system.dto.PushTaskDto;
 import com.coolxer.model.system.vo.MenuVo;
 import com.coolxer.model.system.vo.PluginVo;
@@ -53,6 +58,7 @@ import java.io.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -63,6 +69,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 /**
@@ -78,6 +85,8 @@ public class PluginServiceImpl implements PluginService {
     private static final String PLUGIN_MENU_DIR_NAME = "08_menu";
     private static final String DASHBOARD_LOW_CODE_DIR_NAME = "low-code";
     private static final String DASHBOARD_HTML_PAGE_DIR_NAME = "html-page";
+    private static final String PLUGIN_UPGRADE_DIR_NAME = "upgrade";
+    private static final String UPGRADE_SNAPSHOT_FILE_NAME = "snapshot.json";
     private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
     private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
     private static final Pattern URI_SCHEME_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
@@ -86,6 +95,12 @@ public class PluginServiceImpl implements PluginService {
 
     @Autowired
     private PluginRepository pluginRepository;
+
+    @Autowired
+    private MenuRepository menuRepository;
+
+    @Autowired
+    private RolePermissionRepository rolePermissionRepository;
 
     @Autowired
     private DashboardRepository dashboardRepository;
@@ -165,42 +180,13 @@ public class PluginServiceImpl implements PluginService {
     }
 
     @Override
-    public Boolean update(Long id, PluginDto pluginDto) {
-        checkCreateOrUpdate(pluginDto);
-        try {
-            Optional<Plugin> optionalPlugin = pluginRepository.findById(id);
-            if (optionalPlugin.isPresent()) {
-                Plugin plugin = optionalPlugin.get();
-                String oldPackageName = plugin.getPackageName();
-                PluginStatusType status = normalizeStatus(plugin.getStatus());
-                if (status == PluginStatusType.INSTALLED || status.isInProgress()) {
-                    throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
-                }
-                plugin.updateFromDto(pluginDto);
-                if (!Objects.equals(oldPackageName, pluginDto.getPackageName()) && isPackageExist(pluginDto.getPackageName())) {
-                    throw new ApiException(ResultCodeEnum.PLUGIN_IS_EXIST);
-                } else {
-                    pluginRepository.save(plugin);
-                }
-                return true;
-            }
-            return false;
-        } catch (ApiException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("更新对象失败, id: {}", id, e);
-            return false;
-        }
-    }
-
-    @Override
     public void delete(Long id) {
         Plugin plugin = pluginRepository.findById(id).orElse(null);
         if (plugin == null) {
             return;
         }
         PluginStatusType status = normalizeStatus(plugin.getStatus());
-        if (status == PluginStatusType.INSTALLED || status.isInProgress()) {
+        if (status == PluginStatusType.INSTALLED || status == PluginStatusType.UPGRADE_FAILED || status.isInProgress()) {
             // 已经加载的不支持删除
             throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
         }
@@ -430,6 +416,1189 @@ public class PluginServiceImpl implements PluginService {
         return new PluginVo(saved);
     }
 
+    @Override
+    public synchronized PluginVo upgrade(Long id, PluginUpgradeDto upgradeDto) {
+        Plugin plugin = getPluginOrThrow(id);
+        PluginStatusType status = normalizeStatus(plugin.getStatus());
+        if (status.isInProgress()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_OPERATION_RUNNING);
+        }
+        if (!status.canUpgrade()) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_IS_UNINSTALL.getCode(), "只有已安装插件可以升级");
+        }
+        if (upgradeDto == null || StringUtils.isBlank(upgradeDto.getPluginPath())) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+        }
+
+        validatePackageName(plugin.getPackageName());
+        Path candidateArchive = safePluginPackagePath(upgradeDto.getPluginPath());
+        String operationId = UUID.randomUUID().toString();
+        Path operationRoot = upgradeOperationRoot(id, operationId);
+        try {
+            Files.createDirectories(operationRoot);
+            Path candidateRoot = requireChildPath(operationRoot.resolve("candidate"), operationRoot);
+            TarGzUtil.validateTarGz(candidateArchive);
+            TarGzUtil.decompressTarGz(candidateArchive, candidateRoot);
+            UpgradeCandidate candidate = preflightUpgrade(plugin, candidateRoot);
+            createUpgradeSnapshot(plugin, operationId);
+
+            resetLogs(id);
+            plugin.setPendingUpgradePath(candidateArchive.toString());
+            plugin.setPendingUpgradeVersion(candidate.descriptor().getVersion());
+            plugin.setUpgradeOperationId(operationId);
+            updateOperationState(plugin, PluginStatusType.UPGRADING,
+                    "升级预检完成，等待进入维护窗口", null, true);
+            Plugin saved = pluginRepository.save(plugin);
+            try {
+                pluginOperationExecutor.submit(() -> executeUpgrade(id));
+            } catch (RuntimeException submitError) {
+                plugin.setPendingUpgradePath(null);
+                plugin.setPendingUpgradeVersion(null);
+                plugin.setUpgradeOperationId(null);
+                updateOperationState(plugin, PluginStatusType.INSTALLED,
+                        "升级任务提交失败", submitError.getMessage(), false);
+                pluginRepository.save(plugin);
+                deleteIfExists(operationRoot);
+                throw submitError;
+            }
+            return new PluginVo(saved);
+        } catch (ApiException e) {
+            cleanupFailedPreparation(operationRoot);
+            throw e;
+        } catch (Exception e) {
+            cleanupFailedPreparation(operationRoot);
+            throw invalidPluginPackage(StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()));
+        }
+    }
+
+    @Override
+    public synchronized PluginVo recoverUpgrade(Long id) {
+        Plugin plugin = getPluginOrThrow(id);
+        if (normalizeStatus(plugin.getStatus()) != PluginStatusType.UPGRADE_FAILED) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "只有升级失败的插件可以恢复旧版本");
+        }
+        requireUpgradeSnapshot(plugin);
+        resetLogs(id);
+        updateOperationState(plugin, PluginStatusType.UPGRADING, "开始恢复旧版本", plugin.getOperationError(), true);
+        Plugin saved = pluginRepository.save(plugin);
+        try {
+            pluginOperationExecutor.submit(() -> executeUpgradeRecovery(id, "手动恢复旧版本"));
+        } catch (RuntimeException e) {
+            finishOperation(id, PluginStatusType.UPGRADE_FAILED, "恢复任务提交失败", e.getMessage());
+            throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "插件恢复任务提交失败");
+        }
+        return new PluginVo(saved);
+    }
+
+    @Override
+    public void recoverInterruptedUpgrades() {
+        pluginRepository.findAll().stream()
+                .filter(plugin -> normalizeStatus(plugin.getStatus()) == PluginStatusType.UPGRADING)
+                .forEach(plugin -> {
+                    log.warn("检测到未完成的插件升级，开始恢复: id={}, package={}, operation={}",
+                            plugin.getId(), plugin.getPackageName(), plugin.getUpgradeOperationId());
+                    resetLogs(plugin.getId().longValue());
+                    executeUpgradeRecovery(plugin.getId().longValue(), "应用重启时自动恢复未完成升级");
+                });
+    }
+
+    private void cleanupFailedPreparation(Path operationRoot) {
+        try {
+            deleteIfExists(operationRoot);
+        } catch (IOException cleanupError) {
+            log.warn("清理升级预检目录失败: {}", operationRoot, cleanupError);
+        }
+    }
+
+    private UpgradeCandidate preflightUpgrade(Plugin plugin, Path candidateRoot) throws IOException {
+        PluginPackTool candidatePack = new PluginPackTool().buildFromDirectory(candidateRoot).init();
+        if (!Files.isRegularFile(candidatePack.getIndexJsonPath())) {
+            throw invalidPluginPackage("候选插件缺少根目录 index.json");
+        }
+        validateAllJsonFiles(candidateRoot);
+        PluginVo descriptor = JacksonUtil.toObject(Files.readString(candidatePack.getIndexJsonPath()), PluginVo.class);
+        if (descriptor == null || StringUtils.isAnyBlank(descriptor.getName(), descriptor.getPackageName(), descriptor.getVersion())) {
+            throw invalidPluginPackage("候选插件 index.json 缺少名称、包名或版本");
+        }
+        validatePackageName(descriptor.getPackageName());
+        validateUpgradeIdentity(plugin, descriptor);
+        if (StringUtils.isNotBlank(descriptor.getIcon()) && !ImageDataUriUtil.isDataUrl(descriptor.getIcon())) {
+            Path iconPath = requireChildPath(candidateRoot.resolve(normalizeRelativePath(descriptor.getIcon(), "插件图标路径")), candidateRoot);
+            if (!Files.isRegularFile(iconPath)) {
+                throw invalidPluginPackage("候选插件图标文件不存在");
+            }
+            descriptor.setIcon(ImageDataUriUtil.toDataUri(
+                    descriptor.getIcon(), Base64.getEncoder().encodeToString(Files.readAllBytes(iconPath))));
+        }
+
+        List<Path> apiJars = candidatePack.listApiFiles();
+        if (apiJars.size() > 1) {
+            throw invalidPluginPackage("每个插件的 03_api 目录只能包含一个 Jar");
+        }
+        validateApiJar(apiJars);
+        inspectPluginUi(plugin.getPackageName(), candidatePack.getUiPath(), true);
+        validatePushTaskCandidate(candidatePack);
+        validateDashboardCandidate(plugin.getPackageName(), candidatePack);
+        validateMcpCandidate(plugin.getPackageName(), candidatePack);
+        validateMenuCandidate(plugin.getPackageName(), candidatePack);
+
+        List<Path> candidateMetaFiles = candidatePack.listMetaFiles();
+        Set<String> metaFileNames = new HashSet<>();
+        for (Path metaFile : candidateMetaFiles) {
+            if (!metaFileNames.add(metaFile.getFileName().toString())) {
+                throw invalidPluginPackage("01_meta 中存在同名 Meta 文件: " + metaFile.getFileName());
+            }
+        }
+        List<Path> currentMetaFiles = listInstalledMetaFiles(plugin.getPackageName());
+        MetaData currentPluginMeta = readRawMetaData(currentMetaFiles);
+        MetaData candidatePluginMeta = readRawMetaData(candidateMetaFiles);
+        validateMetaSqlSafety(candidatePluginMeta);
+        validateAdditiveMetaChange(currentPluginMeta, candidatePluginMeta);
+        validateCandidateMetaAgainstGlobal(plugin.getPackageName(), candidateMetaFiles, candidatePluginMeta);
+        pluginMigrationService.validateMysql(plugin.getPackageName(), candidatePack.listMysqlMigrationFiles());
+        return new UpgradeCandidate(descriptor, candidatePack, candidatePluginMeta);
+    }
+
+    private void validateUpgradeIdentity(Plugin plugin, PluginVo descriptor) {
+        if (!Objects.equals(plugin.getPackageName(), descriptor.getPackageName())) {
+            throw invalidPluginPackage("升级包名必须与当前插件一致: " + plugin.getPackageName());
+        }
+        SemanticVersion currentVersion;
+        SemanticVersion candidateVersion;
+        try {
+            currentVersion = SemanticVersion.parse(plugin.getVersion());
+            candidateVersion = SemanticVersion.parse(descriptor.getVersion());
+        } catch (IllegalArgumentException e) {
+            throw invalidPluginPackage(e.getMessage());
+        }
+        if (candidateVersion.compareTo(currentVersion) <= 0) {
+            throw invalidPluginPackage("升级版本必须严格高于当前版本 " + plugin.getVersion());
+        }
+    }
+
+    private void validateApiJar(List<Path> apiJars) {
+        if (apiJars.isEmpty()) {
+            return;
+        }
+        try (JarFile jarFile = new JarFile(apiJars.get(0).toFile())) {
+            boolean containsClass = jarFile.stream()
+                    .anyMatch(entry -> !entry.isDirectory() && entry.getName().endsWith(".class"));
+            if (!containsClass) {
+                throw invalidPluginPackage("03_api Jar 中未发现 class 文件");
+            }
+        } catch (IOException e) {
+            throw invalidPluginPackage("03_api Jar 无法读取: " + e.getMessage());
+        }
+    }
+
+    private void validateAllJsonFiles(Path root) throws IOException {
+        try (Stream<Path> paths = Files.walk(root)) {
+            for (Path path : paths.filter(Files::isRegularFile)
+                    .filter(file -> file.getFileName().toString().endsWith(".json"))
+                    .toList()) {
+                try {
+                    JacksonConfig.OBJECT_MAPPER.readTree(path.toFile());
+                } catch (Exception e) {
+                    throw invalidPluginPackage("JSON 配置解析失败: " + root.relativize(path));
+                }
+            }
+        }
+    }
+
+    private List<PushTaskDto> readPushTaskDefinitions(PluginPackTool pluginPackTool) {
+        List<PushTaskDto> definitions = JacksonUtil.toList(pluginPackTool.readPushTaskConfigFile(),
+                new TypeReference<List<PushTaskDto>>() { });
+        for (PushTaskDto definition : definitions) {
+            if (definition == null || StringUtils.isBlank(definition.getName())) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+            }
+            String configRef = StringUtils.defaultString(definition.getConfig());
+            if (StringUtils.endsWithAny(configRef, ".toml", ".yaml", ".yml", ".json")) {
+                Path relative = normalizeRelativePath(configRef, "推送任务配置路径");
+                Path configFile = requireChildPath(pluginPackTool.getPushTaskPath().resolve(relative),
+                        pluginPackTool.getPushTaskPath());
+                if (!Files.isRegularFile(configFile)) {
+                    throw invalidPluginPackage("推送任务配置文件不存在: " + configRef);
+                }
+                try {
+                    definition.setConfig(Files.readString(configFile));
+                } catch (IOException e) {
+                    throw invalidPluginPackage("读取推送任务配置失败: " + configRef);
+                }
+            }
+        }
+        return definitions;
+    }
+
+    private void validatePushTaskCandidate(PluginPackTool pluginPackTool) {
+        Set<String> names = new HashSet<>();
+        for (PushTaskDto definition : readPushTaskDefinitions(pluginPackTool)) {
+            if (!names.add(definition.getName())) {
+                throw invalidPluginPackage("推送任务名称重复: " + definition.getName());
+            }
+        }
+    }
+
+    private List<DashboardDto> readDashboardDefinitions(PluginPackTool pluginPackTool) {
+        return JacksonUtil.toList(pluginPackTool.readDashboardConfigFile(),
+                new TypeReference<List<DashboardDto>>() { });
+    }
+
+    private void validateDashboardCandidate(String packageName, PluginPackTool pluginPackTool) {
+        Set<String> codes = new HashSet<>();
+        Set<String> lowCodeIndexes = new HashSet<>();
+        List<DashboardDto> definitions = readDashboardDefinitions(pluginPackTool);
+        for (DashboardDto definition : definitions) {
+            if (definition == null || StringUtils.isAnyBlank(definition.getName(), definition.getCode())
+                    || definition.getType() == null) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+            }
+            validateResourceName(definition.getCode(), "看板编码");
+            if (!codes.add(definition.getCode())) {
+                throw invalidPluginPackage("看板编码重复: " + definition.getCode());
+            }
+            Dashboard existing = dashboardRepository.findByCode(definition.getCode()).orElse(null);
+            if (existing != null && !Objects.equals(packageName, existing.getSource())) {
+                throw invalidPluginPackage("看板编码已被其他来源占用: " + definition.getCode());
+            }
+            if (definition.getType() == DashboardType.LOW_CODE_PAGE) {
+                validateResourceName(definition.getConfigIndex(), "看板配置索引");
+                if (!lowCodeIndexes.add(definition.getConfigIndex())) {
+                    throw invalidPluginPackage("看板低代码配置索引重复: " + definition.getConfigIndex());
+                }
+                Path source = requireChildPath(pluginPackTool.getDashboardLowCodePath()
+                        .resolve(definition.getConfigIndex() + "_config"), pluginPackTool.getDashboardLowCodePath());
+                if (!Files.isDirectory(source)) {
+                    throw invalidPluginPackage("看板低代码配置不存在: " + definition.getConfigIndex());
+                }
+            } else if (definition.getType() == DashboardType.HTML_PAGE) {
+                Path relative = normalizeRelativePath(definition.getHtmlPath(), "HTML看板路径");
+                Path source = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relative),
+                        pluginPackTool.getDashboardHtmlPath());
+                if (!Files.isRegularFile(source)) {
+                    throw invalidPluginPackage("HTML看板文件不存在: " + definition.getHtmlPath());
+                }
+            } else if (definition.getType() == DashboardType.LINK && StringUtils.isBlank(definition.getUrl())) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+            }
+        }
+        for (Dashboard dashboard : dashboardRepository.findBySource(packageName)) {
+            if (Boolean.TRUE.equals(dashboard.getIsDefault()) && !codes.contains(dashboard.getCode())) {
+                throw new ApiException(ResultCodeEnum.DASHBOARD_DEFAULT_DELETE_NOT_ALLOWED.getCode(),
+                        "升级包不能删除当前默认看板: " + dashboard.getCode());
+            }
+        }
+    }
+
+    private List<McpServerDto> readMcpDefinitions(PluginPackTool pluginPackTool) {
+        return JacksonUtil.toList(pluginPackTool.readMcpConfigFile(),
+                new TypeReference<List<McpServerDto>>() { });
+    }
+
+    private void validateMcpCandidate(String packageName, PluginPackTool pluginPackTool) {
+        Set<String> codes = new HashSet<>();
+        for (McpServerDto definition : readMcpDefinitions(pluginPackTool)) {
+            if (definition == null || StringUtils.isAnyBlank(definition.getCode(), definition.getName(), definition.getBaseUrl())) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+            }
+            definition.setCode(normalizeMcpCode(definition.getCode()));
+            if (!codes.add(definition.getCode())) {
+                throw invalidPluginPackage("MCP服务标识重复: " + definition.getCode());
+            }
+            McpServerConfig existing = mcpServerConfigRepository.findByCode(definition.getCode()).orElse(null);
+            if (existing != null && !Objects.equals(packageName, existing.getSource())) {
+                throw invalidPluginPackage("MCP服务标识已被其他来源占用: " + definition.getCode());
+            }
+        }
+    }
+
+    private List<MenuDto> readMenuDefinitions(PluginPackTool pluginPackTool) {
+        return JacksonUtil.toList(pluginPackTool.readMenuConfigFile(),
+                new TypeReference<List<MenuDto>>() { });
+    }
+
+    private void validateMenuCandidate(String packageName, PluginPackTool pluginPackTool) {
+        Map<String, Long> liveKeys = new HashMap<>();
+        for (Menu menu : menuService.findBySource(packageName)) {
+            String key = menuMatchKey(menu.getType(), menu.getParams(), menu.getRoute(), menu.getName());
+            if (liveKeys.putIfAbsent(key, menu.getId().longValue()) != null) {
+                throw invalidPluginPackage("现有菜单无法唯一匹配: " + key);
+            }
+        }
+        Set<String> candidateKeys = new HashSet<>();
+        for (MenuDto definition : readMenuDefinitions(pluginPackTool)) {
+            if (definition == null || StringUtils.isBlank(definition.getName()) || definition.getType() == null) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+            }
+            String route = definition.getType() == com.coolxer.commons.enums.MenuType.BUILT_APP
+                    ? definition.getRoute() : definition.getType().getRoute();
+            String key = menuMatchKey(definition.getType(), definition.getParams(), route, definition.getName());
+            if (!candidateKeys.add(key)) {
+                throw invalidPluginPackage("升级包菜单无法唯一匹配: " + key);
+            }
+        }
+    }
+
+    private String menuMatchKey(Object type, String params, String route, String name) {
+        if (StringUtils.isNotBlank(params)) {
+            return String.valueOf(type) + "|params|" + params;
+        }
+        return String.valueOf(type) + "|route|" + StringUtils.defaultString(route)
+                + "|name|" + StringUtils.defaultString(name);
+    }
+
+    private List<Path> listInstalledMetaFiles(String packageName) throws IOException {
+        Path metaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
+        if (!Files.isDirectory(metaRoot)) {
+            return Collections.emptyList();
+        }
+        try (Stream<Path> paths = Files.walk(metaRoot)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith(packageName + "_"))
+                    .sorted()
+                    .toList();
+        }
+    }
+
+    private MetaData readRawMetaData(List<Path> files) throws IOException {
+        MetaData merged = new MetaData();
+        for (Path file : files) {
+            MetaData part = JacksonUtil.toObject(Files.readString(file), MetaData.class);
+            if (part == null) {
+                throw invalidPluginPackage("Meta 文件为空: " + file.getFileName());
+            }
+            merged.merge(part);
+        }
+        return merged;
+    }
+
+    private void validateCandidateMetaAgainstGlobal(String packageName,
+                                                    List<Path> candidateMetaFiles,
+                                                    MetaData candidateMeta) throws IOException {
+        Path metaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
+        List<Path> globalFiles = new ArrayList<>();
+        if (Files.isDirectory(metaRoot)) {
+            try (Stream<Path> paths = Files.walk(metaRoot)) {
+                globalFiles.addAll(paths.filter(Files::isRegularFile)
+                        .filter(path -> path.toString().endsWith(".json"))
+                        .filter(path -> !path.getFileName().toString().startsWith(packageName + "_"))
+                        .toList());
+            }
+        }
+        MetaData otherMeta = readRawMetaData(globalFiles);
+        Set<String> otherTables = otherMeta.getEntity().stream()
+                .map(item -> item == null ? null : item.getTableName())
+                .filter(StringUtils::isNotBlank)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> candidateTables = new HashSet<>();
+        for (com.coolxer.model.retrieval.meta.DataEntity entity : candidateMeta.getEntity()) {
+            if (!candidateTables.add(entity.getTableName())) {
+                throw invalidPluginPackage("候选 Meta 重复使用 ClickHouse表: " + entity.getTableName());
+            }
+            if (otherTables.contains(entity.getTableName())) {
+                throw invalidPluginPackage("ClickHouse表已被其他 Meta 占用: " + entity.getTableName());
+            }
+        }
+        globalFiles.addAll(candidateMetaFiles);
+        metaDataService.validateMetaDataFiles(globalFiles);
+    }
+
+    private void validateMetaSqlSafety(MetaData metaData) {
+        for (com.coolxer.model.retrieval.meta.DataEntity entity : metaData.getEntity()) {
+            rejectUnsafeSqlFragment(entity.getTableName(), "表名");
+            if (entity.getAutoCreate() == null) {
+                continue;
+            }
+            if (StringUtils.isBlank(entity.getAutoCreate().getEngine())
+                    || entity.getAutoCreate().getOrderBy() == null
+                    || entity.getAutoCreate().getOrderBy().isEmpty()) {
+                throw invalidPluginPackage("auto_create 缺少引擎或排序键: " + entity.getName());
+            }
+            rejectUnsafeSqlFragment(entity.getAutoCreate().getEngine(), "引擎");
+            if (StringUtils.isNotBlank(entity.getAutoCreate().getPartitionBy())) {
+                rejectUnsafeSqlFragment(entity.getAutoCreate().getPartitionBy(), "分区键");
+            }
+            entity.getAutoCreate().getOrderBy().forEach(value -> rejectUnsafeSqlFragment(value, "排序键"));
+        }
+        for (com.coolxer.model.retrieval.meta.DataAttribute attribute : metaData.getAttribute()) {
+            rejectUnsafeSqlFragment(attribute.getColumnName(), "列名");
+            rejectUnsafeSqlFragment(attribute.getColumnType(), "字段类型");
+        }
+    }
+
+    private void rejectUnsafeSqlFragment(String value, String label) {
+        if (StringUtils.isBlank(value) || value.indexOf(';') >= 0 || value.contains("--")
+                || value.contains("/*") || value.contains("*/") || value.indexOf('\0') >= 0
+                || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
+            throw invalidPluginPackage("Meta " + label + "不合法: " + value);
+        }
+    }
+
+    private void validateAdditiveMetaChange(MetaData current, MetaData candidate) {
+        Map<String, com.coolxer.model.retrieval.meta.DataEntity> nextEntities = candidate.getEntity().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.coolxer.model.retrieval.meta.DataEntity::getName, item -> item,
+                        (left, right) -> { throw invalidPluginPackage("候选 Meta 实体重复: " + left.getName()); },
+                        LinkedHashMap::new));
+        for (com.coolxer.model.retrieval.meta.DataEntity oldEntity : current.getEntity()) {
+            com.coolxer.model.retrieval.meta.DataEntity nextEntity = nextEntities.get(oldEntity.getName());
+            if (nextEntity == null) {
+                throw invalidPluginPackage("升级不允许删除或重命名实体: " + oldEntity.getName());
+            }
+            requireUnchanged("实体ID", oldEntity.getId(), nextEntity.getId(), oldEntity.getName());
+            requireUnchanged("表名", oldEntity.getTableName(), nextEntity.getTableName(), oldEntity.getName());
+            requireUnchanged("数据源", oldEntity.getDataSource(), nextEntity.getDataSource(), oldEntity.getName());
+            requireUnchanged("引擎", autoCreateValue(oldEntity, "engine"), autoCreateValue(nextEntity, "engine"), oldEntity.getName());
+            requireUnchanged("排序键", autoCreateValue(oldEntity, "order"), autoCreateValue(nextEntity, "order"), oldEntity.getName());
+            requireUnchanged("分区键", autoCreateValue(oldEntity, "partition"), autoCreateValue(nextEntity, "partition"), oldEntity.getName());
+        }
+
+        Map<String, com.coolxer.model.retrieval.meta.DataAttribute> nextAttributes = candidate.getAttribute().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        item -> item.getEntity() + "." + item.getName(), item -> item,
+                        (left, right) -> { throw invalidPluginPackage("候选 Meta 字段重复: " + left.getEntity() + "." + left.getName()); },
+                        LinkedHashMap::new));
+        for (com.coolxer.model.retrieval.meta.DataAttribute oldAttribute : current.getAttribute()) {
+            String key = oldAttribute.getEntity() + "." + oldAttribute.getName();
+            com.coolxer.model.retrieval.meta.DataAttribute nextAttribute = nextAttributes.get(key);
+            if (nextAttribute == null) {
+                throw invalidPluginPackage("升级不允许删除或重命名字段: " + key);
+            }
+            requireUnchanged("字段ID", oldAttribute.getId(), nextAttribute.getId(), key);
+            requireUnchanged("列名", oldAttribute.getColumnName(), nextAttribute.getColumnName(), key);
+            requireUnchanged("字段类型", oldAttribute.getColumnType(), nextAttribute.getColumnType(), key);
+        }
+        Map<String, Set<String>> physicalColumns = new HashMap<>();
+        for (com.coolxer.model.retrieval.meta.DataAttribute attribute : candidate.getAttribute()) {
+            if (!physicalColumns.computeIfAbsent(attribute.getEntity(), ignored -> new HashSet<>())
+                    .add(attribute.getColumnName())) {
+                throw invalidPluginPackage("实体存在重复物理列: " + attribute.getEntity() + "." + attribute.getColumnName());
+            }
+        }
+    }
+
+    private Object autoCreateValue(com.coolxer.model.retrieval.meta.DataEntity entity, String field) {
+        if (entity.getAutoCreate() == null) {
+            return null;
+        }
+        return switch (field) {
+            case "engine" -> entity.getAutoCreate().getEngine();
+            case "order" -> entity.getAutoCreate().getOrderBy();
+            case "partition" -> entity.getAutoCreate().getPartitionBy();
+            default -> null;
+        };
+    }
+
+    private void requireUnchanged(String field, Object oldValue, Object newValue, String resource) {
+        if (!Objects.equals(oldValue, newValue)) {
+            throw invalidPluginPackage("升级不允许修改" + field + ": " + resource);
+        }
+    }
+
+    private Path upgradeOperationRoot(Long pluginId, String operationId) {
+        validateResourceName(operationId, "升级操作标识");
+        Path upgradeRoot = requireChildPath(pluginRoot().resolve(PLUGIN_UPGRADE_DIR_NAME), pluginRoot());
+        return requireChildPath(upgradeRoot.resolve(String.valueOf(pluginId)).resolve(operationId), upgradeRoot);
+    }
+
+    private Path requireUpgradeSnapshot(Plugin plugin) {
+        if (StringUtils.isBlank(plugin.getUpgradeOperationId())) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "插件没有可恢复的升级快照");
+        }
+        Path snapshotRoot = upgradeOperationRoot(plugin.getId().longValue(), plugin.getUpgradeOperationId())
+                .resolve("snapshot");
+        if (!Files.isRegularFile(snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME))
+                || !Files.isDirectory(snapshotRoot.resolve("installed"))) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "插件升级快照不完整");
+        }
+        return snapshotRoot;
+    }
+
+    private void createUpgradeSnapshot(Plugin plugin, String operationId) throws IOException {
+        Path operationRoot = upgradeOperationRoot(plugin.getId().longValue(), operationId);
+        Path snapshotRoot = requireChildPath(operationRoot.resolve("snapshot"), operationRoot);
+        deleteIfExists(snapshotRoot);
+        Files.createDirectories(snapshotRoot);
+
+        Path installedRoot = installedPluginRoot(plugin);
+        if (!Files.isDirectory(installedRoot)) {
+            throw new IOException("当前插件安装目录不存在: " + installedRoot);
+        }
+        WalkFileUtil.copy(installedRoot, snapshotRoot.resolve("installed"));
+
+        Path snapshotMeta = snapshotRoot.resolve("meta");
+        Files.createDirectories(snapshotMeta);
+        for (Path metaFile : listInstalledMetaFiles(plugin.getPackageName())) {
+            WalkFileUtil.copy(metaFile, snapshotMeta.resolve(metaFile.getFileName()));
+        }
+
+        Set<Path> configPaths = new LinkedHashSet<>();
+        PluginUiLayout oldUi = inspectPluginUi(plugin.getPackageName(), installedRoot.resolve("04_ui"), false);
+        if (!oldUi.legacyFiles().isEmpty()) {
+            configPaths.add(uiConfigPath(plugin.getPackageName()));
+        }
+        oldUi.bundles().forEach(bundle -> configPaths.add(uiConfigPath(bundle.configIndex())));
+        for (Dashboard dashboard : dashboardRepository.findBySource(plugin.getPackageName())) {
+            if (dashboard.getType() == DashboardType.LOW_CODE_PAGE && StringUtils.isNotBlank(dashboard.getConfigIndex())) {
+                configPaths.add(uiConfigPath(dashboard.getConfigIndex()));
+            }
+        }
+        Path snapshotConfig = snapshotRoot.resolve("config");
+        Files.createDirectories(snapshotConfig);
+        for (Path configPath : configPaths) {
+            if (Files.exists(configPath)) {
+                WalkFileUtil.copy(configPath, snapshotConfig.resolve(configPath.getFileName()));
+            }
+        }
+
+        Path currentHtml = requireChildPath(htmlPageRoot().resolve(plugin.getPackageName()), htmlPageRoot());
+        if (Files.exists(currentHtml)) {
+            WalkFileUtil.copy(currentHtml, snapshotRoot.resolve("html"));
+        }
+        Path installedSkill = skillService.getInstalledPluginSkillPath(plugin.getPackageName());
+        if (Files.exists(installedSkill)) {
+            WalkFileUtil.copy(installedSkill, snapshotRoot.resolve("skill"));
+        }
+
+        List<Menu> menus = menuService.findBySource(plugin.getPackageName());
+        List<RolePermission> permissions = menus.stream()
+                .flatMap(menu -> rolePermissionRepository.findByPermissionId(menu.getId()).stream())
+                .toList();
+        UpgradeSnapshot snapshot = new UpgradeSnapshot(
+                operationId,
+                new PluginState(plugin.getName(), plugin.getIcon(), plugin.getPackageName(), plugin.getVersion(),
+                        plugin.getDescription(), plugin.getAuthor(), plugin.getPluginPath()),
+                new ArrayList<>(menus),
+                new ArrayList<>(permissions),
+                new ArrayList<>(dashboardRepository.findBySource(plugin.getPackageName())),
+                new ArrayList<>(mcpServerConfigRepository.findBySource(plugin.getPackageName())),
+                new ArrayList<>(pushTaskService.findBySourceMark(plugin.getPackageName()))
+        );
+        JacksonConfig.OBJECT_MAPPER.writerWithDefaultPrettyPrinter()
+                .writeValue(snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME).toFile(), snapshot);
+    }
+
+    private UpgradeSnapshot readUpgradeSnapshot(Plugin plugin) {
+        Path snapshotRoot = requireUpgradeSnapshot(plugin);
+        try {
+            return JacksonConfig.OBJECT_MAPPER.readValue(
+                    snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME).toFile(), UpgradeSnapshot.class);
+        } catch (IOException e) {
+            throw new IllegalStateException("读取插件升级快照失败", e);
+        }
+    }
+
+    private void executeUpgrade(Long id) {
+        String upgradeError = null;
+        try {
+            Plugin plugin = getPluginOrThrow(id);
+            Path operationRoot = upgradeOperationRoot(id, plugin.getUpgradeOperationId());
+            Path candidateRoot = requireChildPath(operationRoot.resolve("candidate"), operationRoot);
+            UpgradeCandidate candidate = preflightUpgrade(plugin, candidateRoot);
+            UpgradeSnapshot snapshot = readUpgradeSnapshot(plugin);
+            List<String> warnings = new ArrayList<>();
+
+            writeLog(id, "1 暂停插件推送任务并卸载旧API......");
+            pauseRunningPushTasks(snapshot.pushTasks());
+            extendJarManager.unload(plugin.getPackageName());
+
+            writeLog(id, "2 执行尚未执行的MySQL迁移......");
+            pluginMigrationService.migrateMysql(plugin.getPackageName(),
+                    candidate.pluginPackTool().listMysqlMigrationFiles());
+
+            writeLog(id, "3 应用ClickHouse新增表和字段......");
+            clickhouseSchemeService.applyAdditiveScheme(candidate.pluginMeta());
+
+            writeLog(id, "4 原子切换插件目录和Meta......");
+            switchInstalledPluginDirectory(plugin, candidateRoot, operationRoot);
+            PluginPackTool activePack = new PluginPackTool().buildFromDirectory(installedPluginRoot(plugin)).init();
+            replacePluginMeta(plugin.getPackageName(), activePack.listMetaFiles(), candidate.pluginMeta());
+
+            writeLog(id, "5 加载新API和UI......");
+            loadPluginApiJars(plugin.getPackageName(), activePack);
+            replacePluginUi(plugin.getPackageName(), snapshot, activePack);
+
+            writeLog(id, "6 更新数据看板......");
+            reconcilePluginDashboards(id, plugin.getPackageName(), activePack);
+
+            writeLog(id, "7 更新MCP服务配置......");
+            reconcilePluginMcpServers(plugin.getPackageName(), snapshot, activePack);
+
+            writeLog(id, "8 更新插件Skill和RAG......");
+            updatePluginSkillAndRag(id, plugin.getPackageName(), snapshot, activePack, warnings);
+
+            writeLog(id, "9 原位更新菜单并保留角色授权......");
+            reconcilePluginMenus(plugin.getPackageName(), activePack);
+
+            writeLog(id, "10 更新推送任务并恢复启停状态......");
+            Set<Integer> obsoleteTaskIds = reconcilePluginPushTasks(plugin.getPackageName(), snapshot, activePack);
+
+            String oldPluginPath = snapshot.plugin().pluginPath();
+            PluginVo descriptor = candidate.descriptor();
+            plugin = getPluginOrThrow(id);
+            plugin.setName(descriptor.getName());
+            plugin.setIcon(descriptor.getIcon());
+            plugin.setVersion(descriptor.getVersion());
+            plugin.setDescription(descriptor.getDescription());
+            plugin.setAuthor(descriptor.getAuthor());
+            plugin.setPluginPath(plugin.getPendingUpgradePath());
+            clearUpgradePending(plugin);
+            String message = warnings.isEmpty() ? "升级完成" : "升级完成（" + String.join("，", warnings) + "）";
+            updateOperationState(plugin, PluginStatusType.INSTALLED, message, null, false);
+            pluginRepository.save(plugin);
+            List<String> cleanupWarnings = new ArrayList<>();
+            for (Integer obsoleteTaskId : obsoleteTaskIds) {
+                try {
+                    if (!pushTaskService.delete(obsoleteTaskId)) {
+                        cleanupWarnings.add("旧推送任务清理失败(ID=" + obsoleteTaskId + ")");
+                    }
+                } catch (Exception cleanupError) {
+                    log.warn("清理旧推送任务失败: pluginId={}, taskId={}", id, obsoleteTaskId, cleanupError);
+                    cleanupWarnings.add("旧推送任务清理失败(ID=" + obsoleteTaskId + ")");
+                }
+            }
+            if (!cleanupWarnings.isEmpty()) {
+                plugin.setOperationMessage(message + "（" + String.join("，", cleanupWarnings) + "）");
+                try {
+                    pluginRepository.save(plugin);
+                } catch (Exception messageError) {
+                    log.warn("保存插件升级清理警告失败: id={}", id, messageError);
+                }
+            }
+            cleanupSuccessfulUpgrade(operationRoot, oldPluginPath, plugin.getPluginPath());
+            writeLog(id, "完成......");
+        } catch (Exception e) {
+            upgradeError = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
+            log.error("插件升级失败: id={}", id, e);
+            writeLog(id, "升级失败，开始恢复旧版本......");
+            try {
+                Plugin plugin = getPluginOrThrow(id);
+                UpgradeSnapshot snapshot = readUpgradeSnapshot(plugin);
+                restoreUpgradeSnapshot(plugin, snapshot);
+                plugin = getPluginOrThrow(id);
+                applyPluginState(plugin, snapshot.plugin());
+                String pendingPath = plugin.getPendingUpgradePath();
+                clearUpgradePending(plugin);
+                updateOperationState(plugin, PluginStatusType.INSTALLED,
+                        "升级失败，已恢复旧版本", upgradeError, false);
+                pluginRepository.save(plugin);
+                cleanupRecoveredUpgrade(id, snapshot.operationId(), pendingPath, snapshot.plugin().pluginPath());
+                writeLog(id, "失败......" + upgradeError + "（已恢复旧版本）");
+            } catch (Exception recoveryError) {
+                log.error("插件升级自动恢复失败: id={}", id, recoveryError);
+                String recoveryMessage = StringUtils.defaultIfBlank(recoveryError.getMessage(),
+                        recoveryError.getClass().getSimpleName());
+                finishOperation(id, PluginStatusType.UPGRADE_FAILED,
+                        "升级失败且自动恢复未完成", upgradeError + "；恢复失败：" + recoveryMessage);
+                writeLog(id, "失败......" + upgradeError + "；恢复失败：" + recoveryMessage);
+            }
+        }
+    }
+
+    private void executeUpgradeRecovery(Long id, String reason) {
+        try {
+            Plugin plugin = getPluginOrThrow(id);
+            UpgradeSnapshot snapshot = readUpgradeSnapshot(plugin);
+            String pendingPath = plugin.getPendingUpgradePath();
+            restoreUpgradeSnapshot(plugin, snapshot);
+            plugin = getPluginOrThrow(id);
+            applyPluginState(plugin, snapshot.plugin());
+            clearUpgradePending(plugin);
+            updateOperationState(plugin, PluginStatusType.INSTALLED,
+                    reason + "完成", null, false);
+            pluginRepository.save(plugin);
+            cleanupRecoveredUpgrade(id, snapshot.operationId(), pendingPath, snapshot.plugin().pluginPath());
+            writeLog(id, "完成......");
+        } catch (Exception e) {
+            String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
+            log.error("恢复插件旧版本失败: id={}", id, e);
+            finishOperation(id, PluginStatusType.UPGRADE_FAILED, "恢复旧版本失败", error);
+            writeLog(id, "失败......" + error);
+        }
+    }
+
+    private void pauseRunningPushTasks(List<PushTaskVo> tasks) {
+        for (PushTaskVo task : tasks) {
+            if (isRunningPushTask(task) && !pushTaskService.toggle(task.getId())) {
+                throw new IllegalStateException("暂停推送任务失败: " + task.getName());
+            }
+        }
+    }
+
+    private boolean isRunningPushTask(PushTaskVo task) {
+        return task != null && StringUtils.startsWithIgnoreCase(StringUtils.trimToEmpty(task.getStatus()), "running");
+    }
+
+    private void switchInstalledPluginDirectory(Plugin plugin, Path candidateRoot, Path operationRoot) throws IOException {
+        Path installedRoot = installedPluginRoot(plugin);
+        Path retiredRoot = requireChildPath(operationRoot.resolve("retired"), operationRoot);
+        deleteIfExists(retiredRoot);
+        moveAtomically(installedRoot, retiredRoot);
+        try {
+            moveAtomically(candidateRoot, installedRoot);
+        } catch (IOException e) {
+            moveAtomically(retiredRoot, installedRoot);
+            throw e;
+        }
+    }
+
+    private void moveAtomically(Path source, Path target) throws IOException {
+        Files.createDirectories(target.getParent());
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target);
+        }
+    }
+
+    private void replacePluginMeta(String packageName, List<Path> newMetaFiles, MetaData expectedMeta) throws IOException {
+        deletePluginMetaFilesOnly(packageName);
+        copyPluginMetaFiles(packageName, newMetaFiles);
+        MetaData loaded = metaDataService.loadMetaData();
+        if (loaded == null) {
+            throw new IllegalStateException("切换插件 Meta 后加载失败");
+        }
+        for (com.coolxer.model.retrieval.meta.DataEntity entity : expectedMeta.getEntity()) {
+            com.coolxer.model.retrieval.meta.DataEntity active = metaDataService.getDataEntityByName(entity.getName());
+            if (active == null || !Objects.equals(entity.getTableName(), active.getTableName())) {
+                throw new IllegalStateException("插件 Meta 未生效: " + entity.getName());
+            }
+        }
+    }
+
+    private void deletePluginMetaFilesOnly(String packageName) throws IOException {
+        for (Path path : listInstalledMetaFiles(packageName)) {
+            deleteIfExists(path);
+        }
+    }
+
+    private void cleanupSuccessfulUpgrade(Path operationRoot, String oldPluginPath, String newPluginPath) {
+        try {
+            if (StringUtils.isNotBlank(oldPluginPath) && !Objects.equals(oldPluginPath, newPluginPath)) {
+                Path oldArchive = safePluginPath(oldPluginPath);
+                if (Files.isRegularFile(oldArchive)) {
+                    deleteIfExists(oldArchive);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("清理插件旧归档失败: {}", oldPluginPath, e);
+        }
+        try {
+            deleteIfExists(operationRoot);
+        } catch (Exception e) {
+            log.warn("清理插件升级临时文件失败: {}", operationRoot, e);
+        }
+    }
+
+    private void cleanupRecoveredUpgrade(Long pluginId,
+                                         String operationId,
+                                         String pendingPath,
+                                         String restoredPluginPath) {
+        try {
+            if (StringUtils.isNotBlank(pendingPath) && !Objects.equals(pendingPath, restoredPluginPath)) {
+                Path archive = safePluginPath(pendingPath);
+                if (Files.isRegularFile(archive)) {
+                    deleteIfExists(archive);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("清理已恢复的升级候选包失败: pluginId={}", pluginId, e);
+        }
+        try {
+            deleteIfExists(upgradeOperationRoot(pluginId, operationId));
+        } catch (Exception e) {
+            log.warn("清理已恢复的插件升级快照失败: pluginId={}", pluginId, e);
+        }
+    }
+
+    private void clearUpgradePending(Plugin plugin) {
+        plugin.setPendingUpgradePath(null);
+        plugin.setPendingUpgradeVersion(null);
+        plugin.setUpgradeOperationId(null);
+    }
+
+    private void applyPluginState(Plugin plugin, PluginState state) {
+        plugin.setName(state.name());
+        plugin.setIcon(state.icon());
+        plugin.setPackageName(state.packageName());
+        plugin.setVersion(state.version());
+        plugin.setDescription(state.description());
+        plugin.setAuthor(state.author());
+        plugin.setPluginPath(state.pluginPath());
+    }
+
+    private Path snapshotRoot(String packageName, UpgradeSnapshot snapshot) {
+        Plugin plugin = pluginRepository.findByPackageName(packageName)
+                .orElseThrow(() -> new IllegalStateException("插件不存在: " + packageName));
+        return upgradeOperationRoot(plugin.getId().longValue(), snapshot.operationId()).resolve("snapshot");
+    }
+
+    private void replacePluginUi(String packageName,
+                                 UpgradeSnapshot snapshot,
+                                 PluginPackTool activePack) throws IOException {
+        Path oldInstalledUi = snapshotRoot(packageName, snapshot).resolve("installed/04_ui");
+        cleanupPluginUi(packageName, oldInstalledUi);
+        installPluginUi(packageName, activePack.getUiPath());
+    }
+
+    private void reconcilePluginDashboards(Long id,
+                                           String packageName,
+                                           PluginPackTool pluginPackTool) throws IOException {
+        List<DashboardDto> definitions = readDashboardDefinitions(pluginPackTool);
+        Set<String> nextCodes = definitions.stream().map(DashboardDto::getCode)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Dashboard> current = new ArrayList<>(dashboardRepository.findBySource(packageName));
+        for (Dashboard dashboard : current) {
+            if (dashboard.getType() == DashboardType.LOW_CODE_PAGE
+                    && StringUtils.isNotBlank(dashboard.getConfigIndex())) {
+                deleteIfExists(uiConfigPath(dashboard.getConfigIndex()));
+            }
+        }
+        deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+
+        List<Path> copiedPaths = new ArrayList<>();
+        for (DashboardDto definition : definitions) {
+            Dashboard existing = dashboardRepository.findByCode(definition.getCode()).orElse(null);
+            DashboardDto normalized = normalizePluginDashboard(
+                    packageName, definition, pluginPackTool, copiedPaths, existing);
+            Dashboard dashboard = existing == null ? new Dashboard() : existing;
+            dashboard.updateFromDto(normalized);
+            dashboard.setSource(packageName);
+            dashboardRepository.save(dashboard);
+        }
+        for (Dashboard dashboard : current) {
+            if (!nextCodes.contains(dashboard.getCode())) {
+                dashboardRepository.deleteById(dashboard.getId());
+            }
+        }
+        if (definitions.isEmpty()) {
+            writeLog(id, "未发现数据看板配置，已移除旧版非默认看板");
+        }
+    }
+
+    private void reconcilePluginMcpServers(String packageName,
+                                           UpgradeSnapshot snapshot,
+                                           PluginPackTool newPack) {
+        PluginPackTool oldPack = new PluginPackTool()
+                .buildFromDirectory(snapshotRoot(packageName, snapshot).resolve("installed")).init();
+        Map<String, McpServerDto> oldDefaults = readMcpDefinitions(oldPack).stream()
+                .peek(item -> item.setCode(normalizeMcpCode(item.getCode())))
+                .collect(java.util.stream.Collectors.toMap(McpServerDto::getCode, item -> item));
+        List<McpServerDto> newDefinitions = readMcpDefinitions(newPack);
+        Set<String> nextCodes = new HashSet<>();
+        for (McpServerDto next : newDefinitions) {
+            next.setCode(normalizeMcpCode(next.getCode()));
+            next.setSource(packageName);
+            nextCodes.add(next.getCode());
+            McpServerConfig live = mcpServerConfigRepository.findByCode(next.getCode()).orElse(null);
+            if (live == null) {
+                mcpClientService.create(next);
+                continue;
+            }
+            McpServerDto oldDefault = oldDefaults.get(next.getCode());
+            next.setEnabled(preserveRuntimeValue(oldDefault == null ? null : oldDefault.getEnabled(),
+                    live.getEnabled(), next.getEnabled(), oldDefault == null));
+            next.setBaseUrl(preserveRuntimeValue(oldDefault == null ? null : oldDefault.getBaseUrl(),
+                    live.getBaseUrl(), next.getBaseUrl(), oldDefault == null));
+            next.setSseEndpoint(preserveRuntimeValue(oldDefault == null ? null : oldDefault.getSseEndpoint(),
+                    live.getSseEndpoint(), next.getSseEndpoint(), oldDefault == null));
+            next.setHeaders(preserveRuntimeValue(oldDefault == null ? null : oldDefault.getHeaders(),
+                    live.getHeaders(), next.getHeaders(), oldDefault == null));
+            next.setRequestTimeoutSeconds(preserveRuntimeValue(
+                    oldDefault == null ? null : oldDefault.getRequestTimeoutSeconds(),
+                    live.getRequestTimeoutSeconds(), next.getRequestTimeoutSeconds(), oldDefault == null));
+            next.setConnectTimeoutSeconds(preserveRuntimeValue(
+                    oldDefault == null ? null : oldDefault.getConnectTimeoutSeconds(),
+                    live.getConnectTimeoutSeconds(), next.getConnectTimeoutSeconds(), oldDefault == null));
+            if (!mcpClientService.update(live.getId(), next)) {
+                throw new IllegalStateException("更新MCP服务失败: " + next.getCode());
+            }
+        }
+        for (McpServerConfig existing : new ArrayList<>(mcpServerConfigRepository.findBySource(packageName))) {
+            if (!nextCodes.contains(existing.getCode())) {
+                mcpClientService.delete(existing.getId());
+            }
+        }
+    }
+
+    private <T> T preserveRuntimeValue(T oldDefault, T liveValue, T newDefault, boolean unknownOldDefault) {
+        if (unknownOldDefault || !Objects.equals(oldDefault, liveValue)) {
+            return liveValue;
+        }
+        return newDefault;
+    }
+
+    private void updatePluginSkillAndRag(Long id,
+                                         String packageName,
+                                         UpgradeSnapshot snapshot,
+                                         PluginPackTool activePack,
+                                         List<String> warnings) {
+        Path oldInstalled = snapshotRoot(packageName, snapshot).resolve("installed");
+        try {
+            vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
+            vectorStoreInitializerService.loadDocToRag(
+                    packageName.replaceAll("\\.", "_"), activePack.getDocPath());
+        } catch (Exception e) {
+            log.warn("升级插件RAG失败，恢复旧文档: package={}", packageName, e);
+            warnings.add("RAG更新失败，已尝试恢复旧文档");
+            try {
+                vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
+                vectorStoreInitializerService.loadDocToRag(
+                        packageName.replaceAll("\\.", "_"), oldInstalled.resolve("00_doc"));
+            } catch (Exception restoreError) {
+                log.warn("恢复旧RAG文档失败: package={}", packageName, restoreError);
+                writeLog(id, "恢复旧RAG文档失败，请人工检查");
+            }
+        }
+
+        try {
+            skillService.installPluginSkills(packageName, activePack.getSkillPath());
+        } catch (Exception e) {
+            log.warn("升级插件Skill失败，恢复旧Skill: package={}", packageName, e);
+            warnings.add("Skill更新失败，已恢复旧版本");
+            Path snapshotSkill = snapshotRoot(packageName, snapshot).resolve("skill");
+            Path oldSkill = Files.isDirectory(snapshotSkill) ? snapshotSkill : oldInstalled.resolve(PLUGIN_SKILL_DIR_NAME);
+            skillService.installPluginSkills(packageName, oldSkill);
+        }
+    }
+
+    private void reconcilePluginMenus(String packageName, PluginPackTool pluginPackTool) {
+        Map<String, Menu> currentByKey = menuService.findBySource(packageName).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        menu -> menuMatchKey(menu.getType(), menu.getParams(), menu.getRoute(), menu.getName()),
+                        menu -> menu));
+        Set<Integer> retainedIds = new HashSet<>();
+        for (MenuDto definition : readMenuDefinitions(pluginPackTool)) {
+            definition.setLevel(MenuLevel.LEVEL_1);
+            definition.setParentId(0);
+            definition.setSource(packageName);
+            String route = definition.getType() == com.coolxer.commons.enums.MenuType.BUILT_APP
+                    ? definition.getRoute() : definition.getType().getRoute();
+            String key = menuMatchKey(definition.getType(), definition.getParams(), route, definition.getName());
+            Menu existing = currentByKey.get(key);
+            if (existing == null) {
+                Menu created = menuService.create(definition);
+                retainedIds.add(created.getId());
+            } else {
+                definition.setRoute(route);
+                existing.updateFromDto(definition);
+                menuRepository.save(existing);
+                retainedIds.add(existing.getId());
+            }
+        }
+        for (Menu menu : new ArrayList<>(menuService.findBySource(packageName))) {
+            if (!retainedIds.contains(menu.getId())) {
+                rolePermissionRepository.deleteAll(rolePermissionRepository.findByPermissionId(menu.getId()));
+                menuRepository.deleteById(menu.getId());
+            }
+        }
+    }
+
+    private Set<Integer> reconcilePluginPushTasks(String packageName,
+                                                  UpgradeSnapshot snapshot,
+                                                  PluginPackTool pluginPackTool) {
+        Map<String, PushTaskVo> oldByName = snapshot.pushTasks().stream()
+                .collect(java.util.stream.Collectors.toMap(PushTaskVo::getName, item -> item));
+        Map<String, PushTaskVo> liveByName = pushTaskService.findBySourceMark(packageName).stream()
+                .collect(java.util.stream.Collectors.toMap(PushTaskVo::getName, item -> item));
+        Set<String> nextNames = new HashSet<>();
+        for (PushTaskDto definition : readPushTaskDefinitions(pluginPackTool)) {
+            definition.setSource("SYSTEM");
+            definition.setMark(packageName);
+            nextNames.add(definition.getName());
+            PushTaskVo existing = liveByName.get(definition.getName());
+            if (existing == null) {
+                if (!pushTaskService.createAndStart(definition)) {
+                    throw new IllegalStateException("创建推送任务失败: " + definition.getName());
+                }
+                continue;
+            }
+            if (!pushTaskService.update(existing.getId(), definition)) {
+                throw new IllegalStateException("更新推送任务失败: " + definition.getName());
+            }
+            PushTaskVo old = oldByName.get(definition.getName());
+            if (old != null && isRunningPushTask(old) && !pushTaskService.toggle(existing.getId())) {
+                throw new IllegalStateException("恢复推送任务运行状态失败: " + definition.getName());
+            }
+        }
+        return snapshot.pushTasks().stream()
+                .filter(task -> !nextNames.contains(task.getName()))
+                .map(PushTaskVo::getId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private void restoreUpgradeSnapshot(Plugin plugin, UpgradeSnapshot snapshot) throws Exception {
+        String packageName = plugin.getPackageName();
+        Path snapshotRoot = snapshotRoot(packageName, snapshot);
+        Path installedRoot = installedPluginRoot(plugin);
+
+        writeLog(plugin.getId().longValue(), "恢复旧API、目录和Meta......");
+        extendJarManager.unload(packageName);
+        removeCurrentPluginConfigFiles(packageName, installedRoot);
+
+        Path restoreTemp = requireChildPath(installedRoot.getParent()
+                .resolve(packageName + ".restore-" + snapshot.operationId()), pluginRoot());
+        deleteIfExists(restoreTemp);
+        WalkFileUtil.copy(snapshotRoot.resolve("installed"), restoreTemp);
+        deleteIfExists(installedRoot);
+        moveAtomically(restoreTemp, installedRoot);
+
+        deletePluginMetaFilesOnly(packageName);
+        Path liveMetaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
+        Files.createDirectories(liveMetaRoot);
+        Path snapshotMeta = snapshotRoot.resolve("meta");
+        if (Files.isDirectory(snapshotMeta)) {
+            try (Stream<Path> paths = Files.list(snapshotMeta)) {
+                for (Path source : paths.filter(Files::isRegularFile).toList()) {
+                    WalkFileUtil.copy(source, liveMetaRoot.resolve(source.getFileName()));
+                }
+            }
+        }
+        if (metaDataService.loadMetaData() == null) {
+            throw new IllegalStateException("恢复旧Meta失败");
+        }
+
+        restoreConfigDirectories(snapshotRoot);
+        restoreDashboards(packageName, snapshot.dashboards());
+        restoreMenus(packageName, snapshot.menus(), snapshot.rolePermissions());
+        restoreMcpServers(packageName, snapshot.mcpServers());
+        restorePushTasks(packageName, snapshot.pushTasks());
+
+        writeLog(plugin.getId().longValue(), "恢复旧Skill和RAG......");
+        Path snapshotSkill = snapshotRoot.resolve("skill");
+        Path oldSkill = Files.isDirectory(snapshotSkill) ? snapshotSkill : installedRoot.resolve(PLUGIN_SKILL_DIR_NAME);
+        try {
+            skillService.installPluginSkills(packageName, oldSkill);
+        } catch (Exception skillError) {
+            log.warn("恢复旧Skill失败: package={}", packageName, skillError);
+            writeLog(plugin.getId().longValue(), "恢复旧Skill失败，请人工检查");
+        }
+        try {
+            vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
+            vectorStoreInitializerService.loadDocToRag(
+                    packageName.replaceAll("\\.", "_"), installedRoot.resolve("00_doc"));
+        } catch (Exception ragError) {
+            log.warn("恢复旧RAG文档失败: package={}", packageName, ragError);
+            writeLog(plugin.getId().longValue(), "恢复旧RAG文档失败，请人工检查");
+        }
+
+        loadPluginApiJars(packageName, new PluginPackTool().buildFromDirectory(installedRoot).init());
+    }
+
+    private void removeCurrentPluginConfigFiles(String packageName, Path installedRoot) throws IOException {
+        if (Files.isDirectory(installedRoot.resolve("04_ui"))) {
+            cleanupPluginUi(packageName, installedRoot.resolve("04_ui"));
+        }
+        for (Dashboard dashboard : dashboardRepository.findBySource(packageName)) {
+            if (dashboard.getType() == DashboardType.LOW_CODE_PAGE
+                    && StringUtils.isNotBlank(dashboard.getConfigIndex())) {
+                deleteIfExists(uiConfigPath(dashboard.getConfigIndex()));
+            }
+        }
+        deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+    }
+
+    private void restoreConfigDirectories(Path snapshotRoot) throws IOException {
+        Path snapshotConfig = snapshotRoot.resolve("config");
+        if (Files.isDirectory(snapshotConfig)) {
+            try (Stream<Path> paths = Files.list(snapshotConfig)) {
+                for (Path source : paths.filter(Files::isDirectory).toList()) {
+                    Path target = requireChildPath(configRoot().resolve(source.getFileName()), configRoot());
+                    deleteIfExists(target);
+                    WalkFileUtil.copy(source, target);
+                }
+            }
+        }
+        Path snapshotHtml = snapshotRoot.resolve("html");
+        if (Files.exists(snapshotHtml)) {
+            String packageName = readPackageNameFromSnapshotRoot(snapshotRoot);
+            Path target = requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot());
+            deleteIfExists(target);
+            WalkFileUtil.copy(snapshotHtml, target);
+        }
+    }
+
+    private String readPackageNameFromSnapshotRoot(Path snapshotRoot) throws IOException {
+        UpgradeSnapshot snapshot = JacksonConfig.OBJECT_MAPPER.readValue(
+                snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME).toFile(), UpgradeSnapshot.class);
+        return snapshot.plugin().packageName();
+    }
+
+    private void restoreDashboards(String packageName, List<Dashboard> dashboards) {
+        for (Dashboard current : new ArrayList<>(dashboardRepository.findBySource(packageName))) {
+            dashboardRepository.deleteById(current.getId());
+        }
+        dashboardRepository.saveAll(dashboards);
+    }
+
+    private void restoreMenus(String packageName,
+                              List<Menu> menus,
+                              List<RolePermission> permissions) {
+        List<Menu> current = new ArrayList<>(menuService.findBySource(packageName));
+        for (Menu menu : current) {
+            rolePermissionRepository.deleteAll(rolePermissionRepository.findByPermissionId(menu.getId()));
+            menuRepository.deleteById(menu.getId());
+        }
+        menuRepository.saveAll(menus);
+        for (RolePermission permission : permissions) {
+            RolePermission existing = rolePermissionRepository.findByRoleIdAndPermissionId(
+                    permission.getRoleId(), permission.getPermissionId());
+            if (existing == null) {
+                rolePermissionRepository.save(permission);
+            }
+        }
+    }
+
+    private void restoreMcpServers(String packageName, List<McpServerConfig> servers) {
+        for (McpServerConfig current : new ArrayList<>(mcpServerConfigRepository.findBySource(packageName))) {
+            mcpClientService.delete(current.getId());
+        }
+        mcpServerConfigRepository.saveAll(servers);
+        mcpClientService.refreshAll();
+    }
+
+    private void restorePushTasks(String packageName, List<PushTaskVo> snapshotTasks) {
+        Map<String, PushTaskVo> expected = snapshotTasks.stream()
+                .collect(java.util.stream.Collectors.toMap(PushTaskVo::getName, item -> item));
+        Map<String, PushTaskVo> current = pushTaskService.findBySourceMark(packageName).stream()
+                .collect(java.util.stream.Collectors.toMap(PushTaskVo::getName, item -> item));
+        for (PushTaskVo oldTask : snapshotTasks) {
+            PushTaskVo live = current.get(oldTask.getName());
+            PushTaskDto dto = new PushTaskDto();
+            dto.setName(oldTask.getName());
+            dto.setDescription(oldTask.getDescription());
+            dto.setConfig(oldTask.getConfig());
+            dto.setSource("SYSTEM");
+            dto.setMark(packageName);
+            if (live == null) {
+                if (!pushTaskService.createAndStart(dto)) {
+                    throw new IllegalStateException("恢复推送任务失败: " + oldTask.getName());
+                }
+                PushTaskVo recreated = pushTaskService.findBySourceMark(packageName).stream()
+                        .filter(item -> Objects.equals(oldTask.getName(), item.getName()))
+                        .findFirst().orElseThrow();
+                if (!isRunningPushTask(oldTask) && !pushTaskService.toggle(recreated.getId())) {
+                    throw new IllegalStateException("恢复推送任务停止状态失败: " + oldTask.getName());
+                }
+                continue;
+            }
+            if (isRunningPushTask(live) && !pushTaskService.toggle(live.getId())) {
+                throw new IllegalStateException("暂停待恢复推送任务失败: " + oldTask.getName());
+            }
+            if (!pushTaskService.update(live.getId(), dto)) {
+                throw new IllegalStateException("恢复推送任务定义失败: " + oldTask.getName());
+            }
+            if (isRunningPushTask(oldTask) && !pushTaskService.toggle(live.getId())) {
+                throw new IllegalStateException("恢复推送任务运行状态失败: " + oldTask.getName());
+            }
+        }
+        for (PushTaskVo live : current.values()) {
+            if (!expected.containsKey(live.getName()) && !pushTaskService.delete(live.getId())) {
+                throw new IllegalStateException("删除升级新增推送任务失败: " + live.getName());
+            }
+        }
+    }
+
     private void executeInstall(Long id) {
         CompensationStack compensationStack = new CompensationStack(id);
         List<String> warnings = new ArrayList<>();
@@ -527,8 +1696,30 @@ public class PluginServiceImpl implements PluginService {
     private void executeUninstall(Long id) {
         try {
             Plugin plugin = getPluginOrThrow(id);
+            String upgradeOperationId = plugin.getUpgradeOperationId();
+            String pendingUpgradePath = plugin.getPendingUpgradePath();
             writeLog(id, "插件检查......");
             cleanupPluginCoreResources(id, plugin, true);
+            if (StringUtils.isNotBlank(pendingUpgradePath)) {
+                try {
+                    Path pendingArchive = safePluginPath(pendingUpgradePath);
+                    if (Files.isRegularFile(pendingArchive)) {
+                        deleteIfExists(pendingArchive);
+                    }
+                } catch (Exception cleanupError) {
+                    log.warn("卸载时清理升级候选包失败: id={}", id, cleanupError);
+                }
+            }
+            if (StringUtils.isNotBlank(upgradeOperationId)) {
+                try {
+                    deleteIfExists(upgradeOperationRoot(id, upgradeOperationId));
+                } catch (Exception cleanupError) {
+                    log.warn("卸载时清理升级快照失败: id={}", id, cleanupError);
+                }
+            }
+            plugin = getPluginOrThrow(id);
+            clearUpgradePending(plugin);
+            pluginRepository.save(plugin);
             finishOperation(id, PluginStatusType.UN_INSTALL, "卸载完成", null);
             writeLog(id, "完成......");
         } catch (Exception e) {
@@ -1429,6 +2620,29 @@ public class PluginServiceImpl implements PluginService {
         }
     }
 
+    private record UpgradeCandidate(PluginVo descriptor,
+                                    PluginPackTool pluginPackTool,
+                                    MetaData pluginMeta) {
+    }
+
+    private record PluginState(String name,
+                               String icon,
+                               String packageName,
+                               String version,
+                               String description,
+                               String author,
+                               String pluginPath) {
+    }
+
+    private record UpgradeSnapshot(String operationId,
+                                   PluginState plugin,
+                                   List<Menu> menus,
+                                   List<RolePermission> rolePermissions,
+                                   List<Dashboard> dashboards,
+                                   List<McpServerConfig> mcpServers,
+                                   List<PushTaskVo> pushTasks) {
+    }
+
     @FunctionalInterface
     private interface CompensationAction {
         void run() throws Exception;
@@ -1461,6 +2675,11 @@ public class PluginServiceImpl implements PluginService {
         public PluginPackTool buildInstaller(String workspaceDir, String packageName, String pluginTarGzFile) {
             this.pluginFilePath = Paths.get(workspaceDir, packageName);
             this.pluginTarGzPath = Paths.get(pluginTarGzFile);
+            return this;
+        }
+
+        public PluginPackTool buildFromDirectory(Path directory) {
+            this.pluginFilePath = directory.toAbsolutePath().normalize();
             return this;
         }
 
@@ -1625,6 +2844,9 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public List<Path> listMetaFiles() {
+            if (!Files.isDirectory(metaPath)) {
+                return Collections.emptyList();
+            }
             try {
                 try (Stream<Path> paths = Files.walk(metaPath)) {
                     return paths.filter(Files::isRegularFile) // 过滤出文件
@@ -1638,12 +2860,7 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public String readPushTaskConfigFile() {
-            try {
-                return Files.readString(pushTaskPath.resolve("config.json"));
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return null;
+            return readOptionalConfigFile(pushTaskPath.resolve("config.json"));
         }
 
         public String readPushTaskConfigFile(String fileName) {
@@ -1656,6 +2873,9 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public List<Path> listApiFiles() {
+            if (!Files.isDirectory(apiPath)) {
+                return Collections.emptyList();
+            }
             try {
                 try (Stream<Path> paths = Files.walk(apiPath)) {
                     return paths.filter(Files::isRegularFile) // 过滤出文件

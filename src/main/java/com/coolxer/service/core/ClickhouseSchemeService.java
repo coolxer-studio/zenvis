@@ -19,6 +19,11 @@ public interface ClickhouseSchemeService {
     public void loadSchemeFromMetaData(MetaData metaData);
 
     /**
+     * 仅创建缺失表和字段。任一语句失败时抛出异常，且绝不删除或修改既有字段。
+     */
+    void applyAdditiveScheme(MetaData metaData);
+
+    /**
      * 删除表
      *
      * @param tableName

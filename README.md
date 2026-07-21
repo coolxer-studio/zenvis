@@ -4,6 +4,8 @@
 
 **ZenVis** 是一个基于配置实现的数据存储、可视化及业务扩展的框架平台，实现在通用的数据分析框架之上构建业务应用。提供智能分析能力，全方位满足数据处理、展示、扩展与深度分析需求。
 
+> ZenVis 跨模块的产品、架构、部署、使用和 API 文档统一维护在[根文档中心](../doc/README.md)。本 README 保留前端模块的独立说明。
+
 ---
 
 ## 项目简介
@@ -15,17 +17,15 @@ ZenVis Frontend 是基于 Vue 3 + TypeScript + Vite 构建的ZenVis的前端项�
 
 | 分类 | 技术 | 版本 |
 | :--- | :--- | :--- |
-| 框架 | Vue | ^3.2.25 |
-| 语言 | TypeScript | ^5.4.5 |
-| 构建工具 | Vite | ^7.1.2 |
-| 状态管理 | Pinia | ^2.1.7 |
-| 路由 | Vue Router | ^4.0.3 |
-| UI 框架 | Element Plus | ^2.14.0 |
-| 图表库 | ECharts | ^5.4.1 |
+| 框架 | Vue | ^3.5.39 |
+| 语言 | TypeScript | ^6.0.3 |
+| 构建工具 | Vite | ^8.1.0 |
+| 状态管理 | Pinia | ^3.0.4 |
+| 路由 | Vue Router | ^5.1.0 |
+| UI 框架 | Element Plus | ^2.14.2 |
+| 图表库 | ECharts | ^5.6.0 |
 | 富文本编辑器 | WangEditor | ^5.1.23 |
-| 地图库 | Leaflet | ^1.9.3 |
 | 编辑器 | Monaco Editor | ^0.52.2 |
-| 国际化 | Vue I18n | ^9.2.0-beta.35 |
 
 ## 项目结构
 
@@ -67,7 +67,7 @@ src/
 
 ### 环境要求
 
-- **Node.js**: >= 16.15.0
+- **Node.js**: ^20.19.0 或 >= 22.12.0
 - **Yarn**: 推荐使用 Yarn 作为包管理器
 
 ### 安装依赖
@@ -103,7 +103,7 @@ yarn build:pro
 docker build -t zenvis-frontend:latest .
 
 # 运行容器
-docker run -d -p 11001:11001 zenvis-frontend:latest
+docker run -d -p 11000:11000 zenvis-frontend:latest
 ```
 
 #### 使用构建脚本

@@ -128,6 +128,7 @@ PUSH_IMAGE=true ./build.sh
 | `yarn build:dev-tsc` | TypeScript 检查 + 构建开发版本 |
 | `yarn build:pro` | 构建生产版本 |
 | `yarn build:pro-tsc` | TypeScript 检查 + 构建生产版本 |
+| `yarn lint` | ESLint 检查并修复 `src` 下的 Vue/TypeScript 文件 |
 | `yarn preview` | 预览构建结果 |
 | `yarn test` | TypeScript 类型检查 |
 
@@ -137,7 +138,7 @@ PUSH_IMAGE=true ./build.sh
 
 | 变量名 | 说明 |
 | :--- | :--- |
-| `VITE_BASE_URL` | API 基础路径 |
+| `VITE_BASE_URL` | 浏览器侧统一代理前缀；当前为 `/zenvis` |
 | `VITE_BASE_API` | API 目标地址 |
 
 ### 环境配置文件
@@ -161,6 +162,7 @@ PUSH_IMAGE=true ./build.sh
 ### Vite 配置要点
 
 - **开发服务器端口**: 8090
+- **开发代理**: `/zenvis` 转发至 `VITE_BASE_API`，并在转发前去掉该前缀
 - **构建输出目录**: `dist/`
 - **资源目录**: `static/`
 - **代码压缩**: Terser

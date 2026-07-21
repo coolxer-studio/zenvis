@@ -20,8 +20,8 @@
 | 字段名 | 类型 | 必填 | 含义 | 示例 |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | Integer | 否 | ID（备用） | 1 |
-| `originalFileName` | String | 否 | 原文件名（更新操作才用） | "old_config.json" |
-| `fileName` | String | 是 | 文件名（带路径） | "config/app.json" |
+| `original_file_name` | String | 否 | 原文件名（更新操作才用） | "old_config.json" |
+| `file_name` | String | 是 | 文件名（带路径） | "config/app.json" |
 | `text` | String | 是 | 文件内容 | "{\"key\": \"value\"}" |
 | `commitMsg` | String | 否 | 提交信息 | "更新配置" |
 
@@ -32,12 +32,12 @@
 | 字段名 | 类型 | 含义 | 示例 |
 | :--- | :--- | :--- | :--- |
 | `id` | Long | 文件ID | 1 |
-| `parentId` | Long | 父文件夹ID | 0 |
-| `fileName` | String | 文件名(文件夹名) | "app.json" |
+| `parent_id` | Long | 父文件夹ID | 0 |
+| `file_name` | String | 文件名(文件夹名) | "app.json" |
 | `size` | Long | 文件大小 | 1024 |
 | `path` | String | 文件路径 | "config/app.json" |
 | `depth` | Integer | 文件级数 | 2 |
-| `isDir` | Boolean | 是否是文件夹 | false |
+| `is_dir` | Boolean | 是否是文件夹 | false |
 | `modifiable` | Boolean | 是否可修改 | true |
 | `nodes` | List\<ConfigVo\> | 文件夹下的文件列表 | [] |
 
@@ -81,22 +81,22 @@
     "data": [
         {
             "id": 1,
-            "parentId": 0,
-            "fileName": "config",
+            "parent_id": 0,
+            "file_name": "config",
             "size": 0,
             "path": "config",
             "depth": 1,
-            "isDir": true,
+            "is_dir": true,
             "modifiable": false,
             "nodes": [
                 {
                     "id": 2,
-                    "parentId": 1,
-                    "fileName": "app.json",
+                    "parent_id": 1,
+                    "file_name": "app.json",
                     "size": 1024,
                     "path": "config/app.json",
                     "depth": 2,
-                    "isDir": false,
+                    "is_dir": false,
                     "modifiable": true,
                     "nodes": []
                 }
@@ -110,7 +110,7 @@
 
 ### 5.2 获取文件schema
 
-- **路径**: `GET /api/v1/config/{type}/schema?file_name={fileName}`
+- **路径**: `GET /api/v1/config/{type}/schema?file_name={file_name}`
 - **功能**: 获取配置文件的schema定义
 
 **路径参数**
@@ -142,7 +142,7 @@
 
 ### 5.3 读取文件内容
 
-- **路径**: `GET /api/v1/config/{type}/read?file_name={fileName}`
+- **路径**: `GET /api/v1/config/{type}/read?file_name={file_name}`
 - **功能**: 读取配置文件内容
 
 **路径参数**
@@ -181,7 +181,7 @@
 
 ### 5.4 获取配置（不包装）
 
-- **路径**: `GET /api/v1/config/{type}/get?file_name={fileName}`
+- **路径**: `GET /api/v1/config/{type}/get?file_name={file_name}`
 - **功能**: 获取配置文件内容，返回原始内容不包含包装数据
 
 **路径参数**
@@ -231,7 +231,7 @@
 
 ```json
 {
-    "fileName": "config/app.json",
+    "file_name": "config/app.json",
     "text": "{\"key\": \"new_value\"}"
 }
 ```
@@ -273,7 +273,7 @@
 
 ```json
 {
-    "fileName": "config/app.json",
+    "file_name": "config/app.json",
     "text": "{\"key\": \"new_value\"}"
 }
 ```
@@ -305,7 +305,7 @@
 
 ```json
 {
-    "fileName": "config/new_file.json",
+    "file_name": "config/new_file.json",
     "text": "{\"key\": \"value\"}"
 }
 ```
@@ -347,8 +347,8 @@
 
 ```json
 {
-    "originalFileName": "config/old_name.json",
-    "fileName": "config/new_name.json"
+    "original_file_name": "config/old_name.json",
+    "file_name": "config/new_name.json"
 }
 ```
 
@@ -379,7 +379,7 @@
 
 ```json
 {
-    "fileName": "config/app.json"
+    "file_name": "config/app.json"
 }
 ```
 

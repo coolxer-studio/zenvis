@@ -12,18 +12,17 @@
 
 ## 快速启动（推荐）
 
-### 1. 克隆项目
+### 1. 进入项目
 
 ```bash
-git clone https://github.com/your-repo/zenvis-backend.git
-cd zenvis-backend
+cd zenvis/zenvis-backend
 ```
 
 ### 2. 一键启动
 
 ```bash
 cd deploy
-docker-compose up -d
+docker compose up -d
 ```
 
 ### 3. 验证服务
@@ -36,12 +35,9 @@ docker-compose up -d
 | API服务 | http://localhost:11001 | 后端接口 |
 | Swagger文档 | http://localhost:11001/swagger-ui/index.html | API在线文档 |
 
-## 默认账号
+## 初始化账号
 
-登录 Web 前端：
-
-- **用户名**: admin
-- **密码**: admin
+初始化账号和密码由当前部署配置决定。首次登录后应立即修改初始化密码；生产文档和脚本中不要固定真实凭据。
 
 ## 快速体验 AI 智能分析
 
@@ -88,7 +84,7 @@ zenvis-backend/
 │   ├── docker-compose.yml
 │   ├── config/          # 服务配置
 │   └── data/           # 数据持久化目录
-├── doc/                 # 项目文档
+├── doc/                 # 仅保留模块 README 与 banner；整体文档位于 ../doc
 ├── src/                 # 源代码
 └── pom.xml
 ```

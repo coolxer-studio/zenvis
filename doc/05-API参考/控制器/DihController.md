@@ -1,4 +1,6 @@
-# DihController 数智中心接口文档
+# DIH 基础接口文档（由 ChatController 实现）
+
+> 兼容说明：旧资料以 `DihController` 命名，本文件为保留完整迁移关系继续沿用原文件名。当前代码中不存在独立 `DihController`；`suggest`、`model/list` 和 `health` 均由 `ChatController` 在同一 `/api/v1/dih` 路径下实现。新增或排障时应以 `ChatController` 和 Swagger 为准。
 
 **基础信息**
 - **模块名称**: 数智中心
@@ -16,7 +18,7 @@
 ```json
 {
   "content": "",              // String - 上下文内容
-  "currentLine": ""           // String - 当前行内容
+  "current_line": ""           // String - 当前行内容
 }
 ```
 
@@ -56,11 +58,11 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:8080/api/v1/dih/suggest \
+curl -X POST http://localhost:11001/api/v1/dih/suggest \
   -H "Content-Type: application/json" \
   -d '{
     "content": "上下文内容...",
-    "currentLine": "当前行内容"
+    "current_line": "当前行内容"
   }'
 ```
 
@@ -92,7 +94,7 @@ curl -X POST http://localhost:8080/api/v1/dih/suggest \
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/dih/model/list
+curl -X GET http://localhost:11001/api/v1/dih/model/list
 ```
 
 **成功响应**:
@@ -125,7 +127,7 @@ curl -X GET http://localhost:8080/api/v1/dih/model/list
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/dih/health
+curl -X GET http://localhost:11001/api/v1/dih/health
 ```
 
 **成功响应**:

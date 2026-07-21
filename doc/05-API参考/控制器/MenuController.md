@@ -19,9 +19,9 @@
   "type": "MENU",            // MenuType - 类型（必填，枚举值：MENU/BUTTON/CATEGORY）
   "route": "/system/user",   // String - 路由（可选）
   "params": "{}",            // String - 参数（可选）
-  "createRootPath": false,   // Boolean - 是否创建根目录（策略配置类型菜单有效）
-  "parentId": 0,             // Integer - 父级ID（可选，0表示顶级）
-  "orderNumber": 1,          // Integer - 目录顺序（可选）
+  "create_root_path": false,   // Boolean - 是否创建根目录（策略配置类型菜单有效）
+  "parent_id": 0,             // Integer - 父级ID（可选，0表示顶级）
+  "order_number": 1,          // Integer - 目录顺序（可选）
   "level": "FIRST",          // MenuLevel - 目录级别（可选，枚举值：FIRST/SECOND/THIRD）
   "superscript": "NEW",      // String - 角标文字（可选）
   "children": [],            // List<MenuDto> - 子级菜单（可选）
@@ -37,9 +37,9 @@
 | type | MenuType | 是 | 类型（MENU/BUTTON/CATEGORY） |
 | route | String | 否 | 路由路径 |
 | params | String | 否 | 参数，不同类型参数值不同 |
-| createRootPath | Boolean | 否 | 是否创建根目录（策略配置类型菜单有效） |
-| parentId | Integer | 否 | 父级ID，0表示顶级 |
-| orderNumber | Integer | 否 | 目录顺序 |
+| create_root_path | Boolean | 否 | 是否创建根目录（策略配置类型菜单有效） |
+| parent_id | Integer | 否 | 父级ID，0表示顶级 |
+| order_number | Integer | 否 | 目录顺序 |
 | level | MenuLevel | 否 | 目录级别（FIRST/SECOND/THIRD） |
 | superscript | String | 否 | 角标文字 |
 | children | List\<MenuDto\> | 否 | 子级菜单列表 |
@@ -52,15 +52,15 @@
   "id": 1,                    // Integer - 菜单ID
   "name": "用户管理",         // String - 菜单名称
   "type": "MENU",            // MenuType - 类型
-  "typeDescription": "菜单", // String - 类型描述
+  "type_description": "菜单", // String - 类型描述
   "route": "/system/user",   // String - 路由
   "params": "{}",            // String - 参数
-  "parentId": 0,             // Integer - 父级ID
-  "orderNumber": 1,          // Integer - 目录顺序
+  "parent_id": 0,             // Integer - 父级ID
+  "order_number": 1,          // Integer - 目录顺序
   "level": "FIRST",          // MenuLevel - 目录级别
   "superscript": "NEW",      // String - 角标文字
-  "isEditable": true,        // Boolean - 是否可编辑
-  "updateTime": "2024-01-01 12:00:00", // String - 更新时间
+  "is_editable": true,        // Boolean - 是否可编辑
+  "update_time": "2024-01-01 12:00:00", // String - 更新时间
   "children": [],            // List<MenuVo> - 子级菜单
   "source": "SYSTEM"         // String - 来源
 }
@@ -73,11 +73,13 @@
   "name": "用户",            // String - 菜单名称（可选）
   "route": "/system",       // String - 路由（可选）
   "page": 1,                 // Integer - 页码（继承自SortPageDto）
-  "size": 10,                // Integer - 每页大小（继承自SortPageDto）
-  "sort": "updateTime",      // String - 排序字段（继承自SortPageDto）
-  "order": "desc"            // String - 排序方式（继承自SortPageDto）
+  "per_page": 10,            // Integer - 每页大小（继承自SortPageDto）
+  "order_by": "update_time", // String - 排序字段（继承自SortPageDto）
+  "order_dir": "desc"       // String - 排序方向（继承自SortPageDto）
 }
 ```
+
+该接口列表为 GET Bean 绑定：分页可使用 `per_page`，排序 query 参数当前使用 `orderBy`、`orderDir`。
 
 ### 4. MenuOrderRowDto (菜单排序传输对象)
 
@@ -132,14 +134,14 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/menu/add \
+curl -X POST http://localhost:11001/api/v1/system/menu/add \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试菜单",
     "type": "MENU",
     "route": "/test/menu",
-    "parentId": 0,
-    "orderNumber": 1,
+    "parent_id": 0,
+    "order_number": 1,
     "level": "FIRST"
   }'
 ```
@@ -168,7 +170,7 @@ curl -X POST http://localhost:11002/api/v1/system/menu/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/menu/1
+curl -X DELETE http://localhost:11001/api/v1/system/menu/1
 ```
 
 **成功响应**:
@@ -195,7 +197,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/menu/1
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/menu/bulk/1,2,3
+curl -X DELETE http://localhost:11001/api/v1/system/menu/bulk/1,2,3
 ```
 
 **成功响应**:
@@ -226,7 +228,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/menu/bulk/1,2,3
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/menu/1/update \
+curl -X POST http://localhost:11001/api/v1/system/menu/1/update \
   -H "Content-Type: application/json" \
   -d '{
     "name": "更新后的菜单名称",
@@ -257,7 +259,7 @@ curl -X POST http://localhost:11002/api/v1/system/menu/1/update \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/menu/update-order \
+curl -X POST http://localhost:11001/api/v1/system/menu/update-order \
   -H "Content-Type: application/json" \
   -d '{
     "ids": "1,2,3",
@@ -293,10 +295,10 @@ curl -X POST http://localhost:11002/api/v1/system/menu/update-order \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/menu/1,2,3/bulk-update \
+curl -X POST http://localhost:11001/api/v1/system/menu/1,2,3/bulk-update \
   -H "Content-Type: application/json" \
   -d '{
-    "parentId": 1
+    "parent_id": 1
   }'
 ```
 
@@ -323,13 +325,13 @@ curl -X POST http://localhost:11002/api/v1/system/menu/1,2,3/bulk-update \
 | name | String | 否 | 菜单名称（模糊查询） |
 | route | String | 否 | 路由（模糊查询） |
 | page | Integer | 否 | 页码，默认1 |
-| size | Integer | 否 | 每页大小，默认10 |
-| sort | String | 否 | 排序字段 |
-| order | String | 否 | 排序方式 |
+| per_page | Integer | 否 | 每页数量，默认 10 |
+| orderBy | String | 否 | 排序字段 |
+| orderDir | String | 否 | 排序方向（`asc` 或 `desc`） |
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:11002/api/v1/system/menu/list?name=用户&page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/system/menu/list?name=用户&page=1&per_page=10"
 ```
 
 **成功响应**:
@@ -339,20 +341,18 @@ curl -X GET "http://localhost:11002/api/v1/system/menu/list?name=用户&page=1&s
   "msg": "success",
   "data": {
     "total": 50,
-    "page": 1,
-    "size": 10,
     "rows": [
       {
         "id": 1,
         "name": "用户管理",
         "type": "MENU",
-        "typeDescription": "菜单",
+        "type_description": "菜单",
         "route": "/system/user",
-        "parentId": 0,
-        "orderNumber": 1,
+        "parent_id": 0,
+        "order_number": 1,
         "level": "FIRST",
-        "isEditable": true,
-        "updateTime": "2024-01-01 12:00:00"
+        "is_editable": true,
+        "update_time": "2024-01-01 12:00:00"
       }
     ]
   }
@@ -374,7 +374,7 @@ curl -X GET "http://localhost:11002/api/v1/system/menu/list?name=用户&page=1&s
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/menu/1/view
+curl -X GET http://localhost:11001/api/v1/system/menu/1/view
 ```
 
 **成功响应**:
@@ -386,13 +386,13 @@ curl -X GET http://localhost:11002/api/v1/system/menu/1/view
     "id": 1,
     "name": "用户管理",
     "type": "MENU",
-    "typeDescription": "菜单",
+    "type_description": "菜单",
     "route": "/system/user",
-    "parentId": 0,
-    "orderNumber": 1,
+    "parent_id": 0,
+    "order_number": 1,
     "level": "FIRST",
-    "isEditable": true,
-    "updateTime": "2024-01-01 12:00:00"
+    "is_editable": true,
+    "update_time": "2024-01-01 12:00:00"
   }
 }
 ```
@@ -409,7 +409,7 @@ curl -X GET http://localhost:11002/api/v1/system/menu/1/view
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/menu/parent-menu/list
+curl -X GET http://localhost:11001/api/v1/system/menu/parent-menu/list
 ```
 
 **成功响应**:
@@ -444,7 +444,7 @@ curl -X GET http://localhost:11002/api/v1/system/menu/parent-menu/list
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/menu/type/list
+curl -X GET http://localhost:11001/api/v1/system/menu/type/list
 ```
 
 **成功响应**:
@@ -483,7 +483,7 @@ curl -X GET http://localhost:11002/api/v1/system/menu/type/list
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/menu/level/list
+curl -X GET http://localhost:11001/api/v1/system/menu/level/list
 ```
 
 **成功响应**:

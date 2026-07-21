@@ -18,7 +18,7 @@
   "email": "user@example.com",// String - 登录邮箱（必填）
   "name": "用户名",           // String - 用户名（必填）
   "password": "******",       // String - 密码（创建时必填）
-  "roleId": 1                // Integer - 角色ID（必填）
+  "role_id": 1                // Integer - 角色ID（必填）
 }
 ```
 
@@ -29,7 +29,7 @@
 | email | String | 是 | 登录邮箱 |
 | name | String | 是 | 用户名 |
 | password | String | 是 | 密码，创建时必填 |
-| roleId | Integer | 是 | 角色ID |
+| role_id | Integer | 是 | 角色ID |
 
 ### 2. UserVo (用户视图对象)
 
@@ -38,14 +38,14 @@
   "id": 1,                    // Integer - 用户ID
   "email": "user@example.com",// String - 登录邮箱
   "name": "用户名",           // String - 用户名
-  "roleId": 1,               // Integer - 角色ID
-  "roleName": "管理员",       // String - 角色名称
-  "isSuperAdmin": false,     // Boolean - 是否超级管理员内置账号
-  "updateTime": "2024-01-01 12:00:00"  // String - 更新时间
+  "role_id": 1,               // Integer - 角色ID
+  "role_name": "管理员",       // String - 角色名称
+  "is_super_admin": false,     // Boolean - 是否超级管理员内置账号
+  "update_time": "2024-01-01 12:00:00"  // String - 更新时间
 }
 ```
 
-`isSuperAdmin` 用于前端识别系统内置超级管理员账号。默认超级管理员账号为 `super@admin.com`，名称为 `超级管理员`，仅超级管理员本人可在用户管理接口中看到。
+`is_super_admin` 用于前端识别系统内置超级管理员账号。默认超级管理员账号为 `super@admin.com`，名称为 `超级管理员`，仅超级管理员本人可在用户管理接口中看到。
 
 ### 3. UserSearchDto (用户搜索传输对象)
 
@@ -54,18 +54,20 @@
   "name": "用户名",           // String - 用户名（可选）
   "email": "user@example.com",// String - 登录邮箱（可选）
   "page": 1,                 // Integer - 页码（继承自SortPageDto）
-  "size": 10,                // Integer - 每页大小（继承自SortPageDto）
-  "sort": "updateTime",      // String - 排序字段（继承自SortPageDto）
-  "order": "desc"            // String - 排序方式（继承自SortPageDto）
+  "per_page": 10,            // Integer - 每页大小（继承自SortPageDto）
+  "order_by": "update_time", // String - 排序字段（继承自SortPageDto）
+  "order_dir": "desc"       // String - 排序方向（继承自SortPageDto）
 }
 ```
+
+该接口列表为 GET Bean 绑定：分页可使用 `per_page`，排序 query 参数当前使用 `orderBy`、`orderDir`。
 
 ### 4. PasswordChangeDto (密码修改传输对象)
 
 ```json
 {
   "password": "newPassword", // String - 新密码（必填）
-  "oldPassword": "oldPassword" // String - 旧密码（必填）
+  "old_password": "old_password" // String - 旧密码（必填）
 }
 ```
 
@@ -111,13 +113,13 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/user/add \
+curl -X POST http://localhost:11001/api/v1/system/user/add \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
     "name": "测试用户",
     "password": "123456",
-    "roleId": 1
+    "role_id": 1
   }'
 ```
 
@@ -147,7 +149,7 @@ curl -X POST http://localhost:11002/api/v1/system/user/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/user/1
+curl -X DELETE http://localhost:11001/api/v1/system/user/1
 ```
 
 **成功响应**:
@@ -180,11 +182,11 @@ curl -X DELETE http://localhost:11002/api/v1/system/user/1
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/user/1/update \
+curl -X POST http://localhost:11001/api/v1/system/user/1/update \
   -H "Content-Type: application/json" \
   -d '{
     "name": "更新后的用户名",
-    "roleId": 2
+    "role_id": 2
   }'
 ```
 
@@ -216,10 +218,10 @@ curl -X POST http://localhost:11002/api/v1/system/user/1/update \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/user/1,2,3/bulk-update \
+curl -X POST http://localhost:11001/api/v1/system/user/1,2,3/bulk-update \
   -H "Content-Type: application/json" \
   -d '{
-    "roleId": 2
+    "role_id": 2
   }'
 ```
 
@@ -248,13 +250,13 @@ curl -X POST http://localhost:11002/api/v1/system/user/1,2,3/bulk-update \
 | name | String | 否 | 用户名（模糊查询） |
 | email | String | 否 | 登录邮箱（模糊查询） |
 | page | Integer | 否 | 页码，默认1 |
-| size | Integer | 否 | 每页大小，默认10 |
-| sort | String | 否 | 排序字段 |
-| order | String | 否 | 排序方式 |
+| per_page | Integer | 否 | 每页数量，默认 10 |
+| orderBy | String | 否 | 排序字段 |
+| orderDir | String | 否 | 排序方向（`asc` 或 `desc`） |
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:11002/api/v1/system/user/list?name=测试&page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/system/user/list?name=测试&page=1&per_page=10"
 ```
 
 **成功响应**:
@@ -264,17 +266,15 @@ curl -X GET "http://localhost:11002/api/v1/system/user/list?name=测试&page=1&s
   "msg": "success",
   "data": {
     "total": 100,
-    "page": 1,
-    "size": 10,
     "rows": [
       {
         "id": 1,
         "email": "user@example.com",
         "name": "测试用户",
-        "roleId": 1,
-        "roleName": "管理员",
-        "isSuperAdmin": false,
-        "updateTime": "2024-01-01 12:00:00"
+        "role_id": 1,
+        "role_name": "管理员",
+        "is_super_admin": false,
+        "update_time": "2024-01-01 12:00:00"
       }
     ]
   }
@@ -298,7 +298,7 @@ curl -X GET "http://localhost:11002/api/v1/system/user/list?name=测试&page=1&s
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/user/1/view
+curl -X GET http://localhost:11001/api/v1/system/user/1/view
 ```
 
 **成功响应**:
@@ -310,10 +310,10 @@ curl -X GET http://localhost:11002/api/v1/system/user/1/view
     "id": 1,
     "email": "user@example.com",
     "name": "测试用户",
-    "roleId": 1,
-    "roleName": "管理员",
-    "isSuperAdmin": false,
-    "updateTime": "2024-01-01 12:00:00"
+    "role_id": 1,
+    "role_name": "管理员",
+    "is_super_admin": false,
+    "update_time": "2024-01-01 12:00:00"
   }
 }
 ```
@@ -334,11 +334,11 @@ curl -X GET http://localhost:11002/api/v1/system/user/1/view
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/user/update-password \
+curl -X POST http://localhost:11001/api/v1/system/user/update-password \
   -H "Content-Type: application/json" \
   -d '{
     "password": "newPassword123",
-    "oldPassword": "oldPassword123"
+    "old_password": "old_password123"
   }'
 ```
 

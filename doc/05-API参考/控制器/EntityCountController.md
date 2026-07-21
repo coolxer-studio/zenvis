@@ -28,9 +28,10 @@
 | 序号 | HTTP方法 | 接口路径 | 接口名称 | 功能描述 |
 |:---:|:-------:|---------|---------|---------|
 | 1 | GET | `/api/v1/entity/count` | 实体数量统计 | 获取多个实体的数量统计 |
-| 2 | GET | `/api/v1/entity/trend` | 实体趋势统计 | 获取多个实体的趋势数据 |
-| 3 | GET | `/api/v1/entity/statistics` | 实体字段统计 | 获取实体指定字段的统计信息 |
-| 4 | GET | `/api/v1/entity/ip-statistics` | 跨实体 IP 统计 | 获取指定 IP 在多个实体中的数据量统计 |
+| 2 | GET | `/api/v1/entity/count-increase` | 实体当日增量统计 | 同时获取总量和当日增量 |
+| 3 | GET | `/api/v1/entity/trend` | 实体趋势统计 | 获取多个实体的趋势数据 |
+| 4 | GET | `/api/v1/entity/statistics` | 实体字段统计 | 获取实体指定字段的统计信息 |
+| 5 | GET | `/api/v1/entity/ip-statistics` | 跨实体 IP 统计 | 获取指定 IP 在多个实体中的数据量统计 |
 
 ---
 
@@ -49,7 +50,7 @@
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/entity/count?entities=asset_host,asset_pc,asset_mobile"
+curl -X GET "http://localhost:11001/api/v1/entity/count?entities=asset_host,asset_pc,asset_mobile"
 ```
 
 **成功响应**:
@@ -67,7 +68,40 @@ curl -X GET "http://localhost:8080/api/v1/entity/count?entities=asset_host,asset
 
 ---
 
-### 2️⃣ 实体趋势统计
+### 2️⃣ 实体当日增量统计
+
+**接口地址**: `GET /api/v1/entity/count-increase`
+
+**功能描述**: 同时返回各实体累计数量和当日新增数量。
+
+**查询参数**: 与 `/count` 相同，`entities` 为必填实体名称列表。
+
+```bash
+curl -X GET "http://localhost:11001/api/v1/entity/count-increase?entities=asset_host,asset_pc"
+```
+
+```json
+{
+  "status": 0,
+  "msg": "success",
+  "data": {
+    "count": {
+      "asset_host": 100,
+      "asset_pc": 200
+    },
+    "countToday": {
+      "asset_host": 5,
+      "asset_pc": 8
+    }
+  }
+}
+```
+
+`countToday` 是 Controller 写入 `Map` 的显式键，不经过 DTO 的 `snake_case` 属性转换，调用方应按该驼峰键读取。
+
+---
+
+### 3️⃣ 实体趋势统计
 
 **接口地址**: `GET /api/v1/entity/trend`
 
@@ -80,7 +114,7 @@ curl -X GET "http://localhost:8080/api/v1/entity/count?entities=asset_host,asset
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/entity/trend?entities=asset_host,asset_pc"
+curl -X GET "http://localhost:11001/api/v1/entity/trend?entities=asset_host,asset_pc"
 ```
 
 **成功响应**:
@@ -103,7 +137,7 @@ curl -X GET "http://localhost:8080/api/v1/entity/trend?entities=asset_host,asset
 
 ---
 
-### 3️⃣ 实体字段统计
+### 4️⃣ 实体字段统计
 
 **接口地址**: `GET /api/v1/entity/statistics`
 
@@ -117,7 +151,7 @@ curl -X GET "http://localhost:8080/api/v1/entity/trend?entities=asset_host,asset
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/entity/statistics?entities=asset_host&field=status"
+curl -X GET "http://localhost:11001/api/v1/entity/statistics?entities=asset_host&field=status"
 ```
 
 **成功响应**:
@@ -136,7 +170,7 @@ curl -X GET "http://localhost:8080/api/v1/entity/statistics?entities=asset_host&
 
 ---
 
-### 4️⃣ 跨实体 IP 统计
+### 5️⃣ 跨实体 IP 统计
 
 **接口地址**: `GET /api/v1/entity/ip-statistics`
 
@@ -152,7 +186,7 @@ curl -X GET "http://localhost:8080/api/v1/entity/statistics?entities=asset_host&
 **请求示例**:
 
 ```bash
-curl -G "http://localhost:8080/api/v1/entity/ip-statistics" \
+curl -G "http://localhost:11001/api/v1/entity/ip-statistics" \
   --data-urlencode "entities=traffic_event" \
   --data-urlencode "entities=domain_event" \
   --data-urlencode "ip=192.0.2.1"
@@ -161,7 +195,7 @@ curl -G "http://localhost:8080/api/v1/entity/ip-statistics" \
 也可以使用逗号分隔实体：
 
 ```bash
-curl -G "http://localhost:8080/api/v1/entity/ip-statistics" \
+curl -G "http://localhost:11001/api/v1/entity/ip-statistics" \
   --data-urlencode "entities=traffic_event,domain_event" \
   --data-urlencode "ip=192.0.2.1"
 ```

@@ -15,11 +15,11 @@
 
 ```json
 {
-  "sessionId": "chat-001",    // String - 会话ID
+  "session_id": "chat-001",    // String - 会话ID
   "title": "新建会话",         // String - 会话标题
   "type": "ask",              // String - 会话类型
-  "deepThink": false,         // Boolean - 是否深度思考模式
-  "onlineSearch": false,      // Boolean - 是否在线搜索
+  "deep_think": false,         // Boolean - 是否深度思考模式
+  "online_search": false,      // Boolean - 是否在线搜索
   "messages": "[]"            // String - 消息列表(JSON字符串)
 }
 ```
@@ -29,22 +29,26 @@
 ```json
 {
   "page": 1,                  // Integer - 当前页码
-  "size": 10,                 // Integer - 每页条数
+  "per_page": 10,             // Integer - 每页条数
+  "order_by": "update_time", // String - JSON body 排序字段
+  "order_dir": "desc",       // String - JSON body 排序方向
   "title": "",                // String - 会话标题（搜索关键词）
   "type": ""                  // String - 会话类型（筛选条件）
 }
 ```
+
+会话列表为 GET Bean 绑定：分页可使用 `per_page`，排序 query 参数当前使用 `orderBy`、`orderDir`。
 
 ### 3. ChatSessionVo (会话视图对象)
 
 ```json
 {
   "id": 1,                    // Long - 会话ID
-  "sessionId": "chat-001",    // String - 会话唯一标识
+  "session_id": "chat-001",    // String - 会话唯一标识
   "title": "新建会话",         // String - 会话标题
   "type": "ask",              // String - 会话类型
   "messages": [],             // List<Message> - 消息列表
-  "updateTime": "2024-01-01 12:00:00" // String - 更新时间
+  "update_time": "2024-01-01 12:00:00" // String - 更新时间
 }
 ```
 
@@ -71,7 +75,7 @@
 | 5 | GET | `/api/v1/dih/chat-session/list/pin` | 获取置顶会话列表 | 获取用户置顶的会话列表 |
 | 6 | GET | `/api/v1/dih/chat-session/list` | 获取会话列表 | 分页获取会话列表 |
 | 7 | GET | `/api/v1/dih/chat-session/{id}/view` | 获取会话详情 | 根据ID获取会话详细信息 |
-| 8 | GET | `/api/v1/dih/chat-session/{sessionId}/session` | 获取会话信息 | 根据sessionId获取会话信息 |
+| 8 | GET | `/api/v1/dih/chat-session/{sessionId}/session` | 获取会话信息 | 根据路径变量 `sessionId` 获取会话信息 |
 
 ---
 
@@ -89,10 +93,10 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:8080/api/v1/dih/chat-session/add \
+curl -X POST http://localhost:11001/api/v1/dih/chat-session/add \
   -H "Content-Type: application/json" \
   -d '{
-    "sessionId": "chat-001",
+    "session_id": "chat-001",
     "title": "新建会话",
     "type": "ask",
     "messages": "[]"
@@ -132,7 +136,7 @@ curl -X POST http://localhost:8080/api/v1/dih/chat-session/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/dih/chat-session/1
+curl -X DELETE http://localhost:11001/api/v1/dih/chat-session/1
 ```
 
 **成功响应**:
@@ -159,7 +163,7 @@ curl -X DELETE http://localhost:8080/api/v1/dih/chat-session/1
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/dih/chat-session/bulk/1,2,3
+curl -X DELETE http://localhost:11001/api/v1/dih/chat-session/bulk/1,2,3
 ```
 
 **成功响应**:
@@ -190,7 +194,7 @@ curl -X DELETE http://localhost:8080/api/v1/dih/chat-session/bulk/1,2,3
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:8080/api/v1/dih/chat-session/1/update \
+curl -X POST http://localhost:11001/api/v1/dih/chat-session/1/update \
   -H "Content-Type: application/json" \
   -d '{
     "title": "更新后的会话标题"
@@ -216,7 +220,7 @@ curl -X POST http://localhost:8080/api/v1/dih/chat-session/1/update \
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/dih/chat-session/list/pin
+curl -X GET http://localhost:11001/api/v1/dih/chat-session/list/pin
 ```
 
 **成功响应**:
@@ -240,13 +244,15 @@ curl -X GET http://localhost:8080/api/v1/dih/chat-session/list/pin
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
 | page | Integer | 否 | 页码（默认1） |
-| size | Integer | 否 | 每页条数（默认10） |
+| per_page | Integer | 否 | 每页数量，默认 10 |
+| orderBy | String | 否 | 排序字段 |
+| orderDir | String | 否 | 排序方向（`asc` 或 `desc`） |
 | title | String | 否 | 会话标题（搜索关键词） |
 | type | String | 否 | 会话类型（筛选条件） |
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/dih/chat-session/list?page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/dih/chat-session/list?page=1&per_page=10"
 ```
 
 **成功响应**:
@@ -255,8 +261,6 @@ curl -X GET "http://localhost:8080/api/v1/dih/chat-session/list?page=1&size=10"
   "status": 0,
   "msg": "success",
   "data": {
-    "page": 1,
-    "size": 10,
     "total": 100,
     "rows": []
   }
@@ -278,7 +282,7 @@ curl -X GET "http://localhost:8080/api/v1/dih/chat-session/list?page=1&size=10"
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/dih/chat-session/1/view
+curl -X GET http://localhost:11001/api/v1/dih/chat-session/1/view
 ```
 
 **成功响应**:
@@ -288,11 +292,11 @@ curl -X GET http://localhost:8080/api/v1/dih/chat-session/1/view
   "msg": "success",
   "data": {
     "id": 1,
-    "sessionId": "chat-001",
+    "session_id": "chat-001",
     "title": "新建会话",
     "type": "ask",
     "messages": [],
-    "updateTime": "2024-01-01 12:00:00"
+    "update_time": "2024-01-01 12:00:00"
   }
 }
 ```
@@ -312,12 +316,12 @@ curl -X GET http://localhost:8080/api/v1/dih/chat-session/1/view
 
 **接口地址**: `GET /api/v1/dih/chat-session/{sessionId}/session`
 
-**功能描述**: 根据sessionId获取会话信息，如果会话不存在则返回默认问候语
+**功能描述**: 根据session_id获取会话信息，如果会话不存在则返回默认问候语
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
-| sessionId | String | 是 | 会话唯一标识 |
+| session_id | String | 是 | 会话唯一标识 |
 
 **查询参数**:
 | 参数名 | 类型 | 必填 | 说明 |
@@ -326,7 +330,7 @@ curl -X GET http://localhost:8080/api/v1/dih/chat-session/1/view
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/dih/chat-session/chat-001/session?type=ask"
+curl -X GET "http://localhost:11001/api/v1/dih/chat-session/chat-001/session?type=ask"
 ```
 
 **成功响应**:
@@ -335,7 +339,7 @@ curl -X GET "http://localhost:8080/api/v1/dih/chat-session/chat-001/session?type
   "status": 0,
   "msg": "success",
   "data": {
-    "sessionId": "chat-001",
+    "session_id": "chat-001",
     "title": "新建会话",
     "type": "ask",
     "messages": [

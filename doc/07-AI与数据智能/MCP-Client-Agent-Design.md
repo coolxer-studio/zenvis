@@ -9,7 +9,7 @@ ZenVis 已经通过 Spring AI MCP Server 对外提供本系统工具能力。本
 - 支持在 MySQL 中管理多个 MCP 服务配置。
 - 支持服务启停、刷新连接、查看工具、测试调用工具。
 - 支持通过 AMIS 低代码页面完成配置管理。
-- 支持普通问答和各业务 Agent 按需使用已连接 MCP 工具。
+- 支持业务 Agent 按需使用允许范围内的本地或外部 MCP 工具；普通问答保持无工具边界。
 - 支持通过配置控制每个业务 Agent 可使用的 MCP 服务范围。
 - 为本地工具和外部 MCP 工具提供统一的 `ALLOW / ASK / DENY` 审批策略、调用审计与并发安全状态机。
 - DIH Chat 在原 AI 消息内展示审批卡片，审批完成后继续当前模型工具循环。
@@ -39,7 +39,7 @@ McpClientServiceImpl
             - 按业务 Agent 类型解析 MCP scope
             - 构造 MCP 工具提示词
             - 构造 ToolCallbackProvider
-            - 注入普通问答 / DataAccessAgent / DataVisualizationAgent / AnalysisTask
+            - 注入业务 Agent / AnalysisTask（普通问答不注入）
                     │
                     ▼
               Spring AI ChatClient toolCallbacks(...)
@@ -281,7 +281,7 @@ params = mcp
 
 ## 六、AI 调用链路设计
 
-MCP 不再作为独立聊天 Agent。它是通用工具能力层，由普通问答和业务 Agent 按 scope 注入。
+MCP 不再作为独立聊天 Agent。它是业务 Agent 和后台分析任务的通用工具能力层；普通问答 `ask` 不解析 scope，也不注入工具。
 
 核心文件：
 
@@ -302,7 +302,7 @@ ChatController
   → AgentMcpToolService.resolve(type)
         │
         ▼
-业务 Agent / AIChatService / AgentLlmService
+业务 Agent / AgentLlmService
   → 注入 MCP system prompt
   → 注入 ToolCallbackProvider
         │

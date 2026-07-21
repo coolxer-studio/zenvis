@@ -94,6 +94,10 @@ businessServiceReporter.reportEvent(
 | `trace_id` | 链路追踪 ID |
 | `data` | 扩展 JSON 数据 |
 
+服务端校验上限：`event_type` 64 字符、`title` 255 字符、`message` 4000 字符、`trace_id` 128 字符；心跳 `metadata` 的 UTF-8 JSON 不超过 16KiB，事件 `data` 不超过 64KiB。严重级别仅支持 `INFO`、`WARN`、`ERROR`、`CRITICAL`。
+
+`event_id` 用于幂等重试：同一服务实例重复上报同一 ID 返回已有记录；如果该 ID 已属于另一 `service_code + instance_id`，服务端返回业务冲突状态 409。
+
 事件通过容量受限的单线程队列异步发送。队列满、ZenVis 网络失败或业务响应失败不会阻塞宿主业务请求，但会记录警告并丢弃无法提交的事件。重要事件如果要求可靠交付，应由业务系统额外持久化并实现重试/补偿。
 
 ## 直接调用 REST API
@@ -180,6 +184,7 @@ Content-Type: application/json
 - 心跳失败不会让宿主应用退出；
 - 事件队列满时丢弃新事件并记录日志；
 - `instance_id` 不稳定会造成一个实例被展示为多个历史实例；
+- 事件队列只提供进程内异步缓冲，不是持久消息队列；可靠事件需由宿主应用自行持久化和补偿；
 - 应用关闭钩子不是绝对可靠，服务端仍应依赖离线阈值判断异常退出。
 
 ## 接入检查

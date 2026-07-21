@@ -16,11 +16,12 @@ zenvis/
 ├── zenvis-backend/                           # Spring Boot 平台服务
 ├── zenvis-frontend/                          # Vue 管理控制台
 ├── zenvis-plugin/                            # 插件源码与打包工具
+├── zenvis-plugin-community/                  # 社区与客户场景插件集合
 ├── zenvis-business-service-spring-boot-starter/
 └── agent-skills/                             # Agent Skill
 ```
 
-三个主要模块拥有独立 Git 工作树。提交前应分别检查根仓库和受影响子仓库，避免把其他工作树的未提交内容混入变更。
+后端、前端、内置插件及部分社区插件目录拥有独立 Git 工作树。提交前应从实际 `.git` 边界分别检查根仓库和受影响子仓库，避免把其他工作树的未提交内容混入变更。
 
 ## 技术栈基线
 
@@ -179,7 +180,7 @@ rule/detail → 原子应用 config/Meta/issues
 - 只读工具和写入工具使用不同策略；
 - 参数、结果与错误在审计前脱敏和截断；
 - 流式响应的审批、完成和错误事件必须保持协议兼容；
-- 数据可视化 Agent 不直接访问数据库，也不增加写工具。
+- 数据可视化 Agent 不直接访问数据库、不生成任意 SQL、不加载外部 MCP；变更其本地工具白名单时必须区分查询工具与受控配置/看板/菜单写工具，并为写操作保留 `ASK/HIGH` 审批。
 
 详细设计见 [AI 与数据智能](../07-AI与数据智能/README.md)。
 

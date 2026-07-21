@@ -43,12 +43,12 @@ http://localhost:11001/swagger-ui/index.html
 | :--- | :--- |
 | [AboutController](控制器/AboutController.md) | 系统关于信息 |
 | [AnalysisTaskController](控制器/AnalysisTaskController.md) | AI分析任务 |
-| [BusinessServiceController](控制器/BusinessServiceController.md) | 业务应用服务注册、事件与只读管理查询 |
-| [ChatController](控制器/ChatController.md) | AI 对话、上传与预览 |
+| [BusinessServiceController](控制器/BusinessServiceController.md) | 业务应用服务文档；当前公开上报由 `BusinessServicePublicController` 实现，管理查询由 `BusinessServiceController` 实现 |
+| [ChatController](控制器/ChatController.md) | AI 对话、DIH 基础接口、上传与预览 |
 | [ChatSessionController](控制器/ChatSessionController.md) | AI 对话会话 |
 | [ConfigController](控制器/ConfigController.md) | 配置文件管理 |
 | [DashboardController](控制器/DashboardController.md) | 看板管理 |
-| [DihController](控制器/DihController.md) | DIH 能力 |
+| [DIH 基础接口兼容文档](控制器/DihController.md) | 旧 `DihController` 文档名保留；当前接口由 `ChatController` 实现 |
 | [EntityCoreController](控制器/EntityCoreController.md) | 动态实体数据 |
 | [EntityCountController](控制器/EntityCountController.md) | 实体统计 |
 | [HomeBoardController](控制器/HomeBoardController.md) | 首页看板 |
@@ -109,16 +109,18 @@ http://localhost:11001/swagger-ui/index.html
 `per_page` 是推荐 wire 字段；后端同时兼容历史驼峰字段 `perPage`，GET query/form 和 JSON body 两种传参方式都可识别。
 但 Controller 上显式声明了 `@RequestParam("perPage")`、`sourceType` 等名称的接口，以接口专题文档和 Swagger 中的查询参数名为准。JSON 请求与响应字段仍使用 `snake_case`。
 
-标准分页响应优先使用：
+`SortPageDto` 当前只为 `per_page` 增加了 GET Bean 绑定兼容方法，未为排序字段增加同类方法。因此 JSON body 使用 `order_by` / `order_dir`，直接绑定搜索 DTO 的 GET query 当前应使用 `orderBy` / `orderDir`；历史字段 `sort` / `order` 不属于当前 DTO。
+
+当前 `PageRowsVo` 标准分页响应为：
 
 ```json
 {
   "rows": [],
-  "total": 100,
-  "page": 1,
-  "per_page": 10
+  "total": 100
 }
 ```
+
+页码与每页数量属于请求参数，不由 `PageRowsVo` 回显；若某个业务响应额外返回分页字段，以其专题文档和 Swagger 模型为准。
 
 Retrieval 列表接口使用 `{ "total": 100, "datalist": [] }`；`POST /retrieval/do` 还会返回查询上下文 `token`。其 `page/size` 是请求字段，不会原样放入响应。
 

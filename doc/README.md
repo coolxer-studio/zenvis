@@ -28,6 +28,7 @@ doc/
 ├── 06-插件开发与集成/
 ├── 07-AI与数据智能/              # DIH、MCP、RAG、会话与报表
 ├── 08-业务服务接入/
+├── 旧文档迁移映射.md              # 后端、前端旧资料逐项去向
 └── assets/                       # banner 与 83 张产品截图
 ```
 
@@ -53,6 +54,8 @@ doc/
 3. [AI 与数据智能](07-AI与数据智能/README.md)：DIH、会话、MCP、AI 分析任务、报表与 Redis Search。
 4. [业务服务接入](08-业务服务接入/README.md)：Spring Boot Starter、心跳和事件上报。
 
+完整的逐文件前后对应关系见[旧文档迁移映射](旧文档迁移映射.md)。
+
 ## 原项目内容融合清单
 
 | 原资料 | 统一目录 | 保留内容 |
@@ -70,6 +73,8 @@ doc/
 | DIH、MCP、报表和 Redis Search | [`07-AI与数据智能`](07-AI与数据智能/) | 4 份 DIH 专项文档 |
 | AI 会话设计 | [`07-AI与数据智能`](07-AI与数据智能/) | 会话数据结构与实现说明 |
 | Starter README | [原位保留](../zenvis-business-service-spring-boot-starter/README.md) | Starter 最小使用契约；平台接入说明已纳入主题文档 |
+| 社区插件资料 | [原位保留](../zenvis-plugin-community/) | 作为只读专项资料，由统一插件主题建立入口，不复制或改写 `plugin-*` 内容 |
+| 插件创建 Skill | [原位保留](../agent-skills/create-zenvis-plugin/SKILL.md) | 作为代码、Meta、Vector、UI 与文档一致性工作流的维护入口 |
 
 两个子项目原有的 `doc/banner.jpg` 内容完全相同，统一复用 [`assets/banner.jpg`](assets/banner.jpg)。除这一相同资源去重外，原项目中的文档、示例和图片均在上述主题目录中有对应内容。
 
@@ -86,4 +91,6 @@ doc/
 - [后端](../zenvis-backend/README.md)
 - [前端](../zenvis-frontend/README.md)
 - [插件仓库](../zenvis-plugin/README.md)
+- [社区插件集合](../zenvis-plugin-community/)
 - [业务服务 Starter](../zenvis-business-service-spring-boot-starter/README.md)
+- [插件创建 Skill](../agent-skills/create-zenvis-plugin/SKILL.md)

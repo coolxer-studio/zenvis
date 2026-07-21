@@ -29,6 +29,8 @@ plugin-name/
 
 平台安装时按能力类型处理这些目录，并记录来源，支持查看日志、升级、导出和卸载。
 
+插件上传大小受后端 multipart 配置限制，当前上限为 300MB。归档仍应保持最小化，不把 `api-src`、构建目录、样本数据或旧归档带入发布包。
+
 ## 插件索引
 
 `index.json` 定义基础身份：
@@ -214,14 +216,19 @@ powershell -ExecutionPolicy Bypass -File build.ps1 plugin-name
 
 以下目录是各插件的权威专项说明，保持在插件包内：
 
-- [资产管理](../../zenvis-plugin/plugin-asset/README.md)
-- [探针集成](../../zenvis-plugin/plugin-integrated/README.md)
-- [僵木蠕流量检测](../../zenvis-plugin/plugin-jmr/README.md)
-- [Lubinsun 智能任务](../../zenvis-plugin/plugin-lubinsun/README.md)
-- [运营分析](../../zenvis-plugin/plugin-operation/README.md)
-- [数据采集](../../zenvis-plugin/plugin-probe/README.md)
-- [风险监控](../../zenvis-plugin/plugin-risk/README.md)
-- [STA 数据](../../zenvis-plugin/plugin-sta/README.md)
-- [用户事件](../../zenvis-plugin/plugin-user-event/README.md)
+| 仓库 | 插件 | 包名 | 当前版本 | 专项资料 |
+| --- | --- | --- | --- | --- |
+| 内置 | 资产管理 | `com.coolxer.plugin.asset` | 1.1.0 | [README](../../zenvis-plugin/plugin-asset/README.md) |
+| 内置 | 探针集成 | `com.coolxer.plugin.integrated` | 1.0.0 | [README](../../zenvis-plugin/plugin-integrated/README.md) |
+| 内置 | 运营分析 | `com.coolxer.plugin.operation` | 1.1.0 | [README](../../zenvis-plugin/plugin-operation/README.md) |
+| 内置 | 数据采集 | `com.coolxer.plugin.probe` | 1.0.0 | [README](../../zenvis-plugin/plugin-probe/README.md) |
+| 内置 | 风险监控 | `com.coolxer.plugin.risk` | 1.1.0 | [README](../../zenvis-plugin/plugin-risk/README.md) |
+| 内置 | STA 数据 | `com.coolxer.plugin.sta` | 2.1.0 | [README](../../zenvis-plugin/plugin-sta/README.md) |
+| 内置 | 用户事件 | `com.coolxer.plugin.user.event` | 1.0.0 | [README](../../zenvis-plugin/plugin-user-event/README.md) |
+| 社区 | 僵木蠕流量检测 | `com.coolxer.plugin.jmr` | 2.7.2 | [仓库说明](../../zenvis-plugin-community/zenvis-plugin-jmr/README.md) / [插件 README](../../zenvis-plugin-community/zenvis-plugin-jmr/plugin-jmr/README.md) |
+| 社区 | Lubinsun 智能任务 | `com.coolxer.plugin.lubinsun` | 2.0.0 | [README](../../zenvis-plugin-community/zenvis-plugin-xiangtanhospital/plugin-lubinsun/README.md) |
+| 社区 | 安全设备数据 | `com.coolxer.plugin.security.device.data` | 1.0.0 | [README](../../zenvis-plugin-community/zenvis-plugin-xiangtanhospital/plugin-security-device-data/README.md) |
+
+社区集合的构建、依赖和部署顺序见[僵木蠕仓库说明](../../zenvis-plugin-community/zenvis-plugin-jmr/README.md)与[湘潭医院仓库说明](../../zenvis-plugin-community/zenvis-plugin-xiangtanhospital/README.md)。插件开发自动化工作流见 [`create-zenvis-plugin` Skill](../../agent-skills/create-zenvis-plugin/SKILL.md)；该 Skill 要求从当前后端、前端契约重新核对 Meta、Vector、UI、看板和文档，不能以旧样例代替代码事实。
 
 具体数据字典、字段兼容和生成工具位于相应 `00_doc/`，不由整体文档替代。

@@ -60,7 +60,9 @@ Meta 描述实体、属性和操作符。后端根据逻辑字段构建查询，
 
 ### 插件生命周期
 
-插件安装器按目录顺序处理文档、Meta、推送任务、动态 API、UI、看板、MCP、Skill 与菜单。动态 API 使用独立类加载和 Spring Bean 注册；MySQL 迁移具有版本和 SHA-256 校验。卸载负责移除安装项，但保留业务表与迁移历史。
+插件安装器按目录顺序处理文档、Meta、推送任务、动态 API、UI、看板、MCP、Skill 与菜单。动态 API 使用独立类加载和 Spring Bean 注册；MySQL 迁移具有版本和 SHA-256 校验。升级使用持久化快照、只向前 MySQL 迁移和 ClickHouse 新增式结构变更保留业务数据；卸载会删除插件关联的 ClickHouse 表和数据，但保留 MySQL 迁移历史。
+
+`zenvis-plugin` 保存平台内置插件，`zenvis-plugin-community` 保存社区与客户场景插件，二者使用同一安装契约。`agent-skills/create-zenvis-plugin` 是研发侧创建和校验工作流，不属于运行时插件，也不会被后端安装器扫描。
 
 ### DIH 与 AI
 
@@ -68,7 +70,7 @@ DIH 应用服务统一编排消息保存、附件、模型选择、RAG、业务 
 
 - 普通问答可使用公共 RAG，不加载 Skill 和 MCP 工具；
 - 业务 Agent 加载显式 Skill，并获得 scope 允许的工具；
-- 数据可视化 Agent 只使用只读 Retrieval MCP 工具；
+- 数据可视化 Agent 不接入外部 MCP，也不执行任意 SQL 或实体写入；当前本地白名单除 Retrieval/实体查询外，还包含配置、看板和菜单的受控创建/应用工具，写入类工具默认进入审批；
 - 工具调用经过策略、审批、授权和审计状态机。
 
 ### 业务应用服务
@@ -119,6 +121,7 @@ Meta 的业务属性集合、转换输出字段和 ClickHouse Sink 字段必须�
 - MCP Server SSE 和消息端点使用独立 MCP Bearer Token。
 - 高级检索只接受受限表达式，不接受任意 SQL、子查询或注释拼接。
 - 插件链接只允许相对地址或 `http/https`，前端进一步检查 iframe 来源。
+- 插件上传请求当前最大 300MB；发布包仍应排除源码、构建产物、历史归档和非必要样本。
 - MCP 工具按 `ALLOW / ASK / DENY` 执行，拒绝、超时和取消均进入审计状态。
 - 凭据通过环境变量注入，不应写入文档、前端静态资源或插件包。
 

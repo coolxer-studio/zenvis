@@ -16,7 +16,7 @@
 {
   "id": 1,                    // Integer - 角色ID（更新时使用，创建时不传）
   "name": "管理员",           // String - 角色名称（必填）
-  "menuIds": "1,2,3"          // String - 菜单权限列表，逗号分隔（可选）
+  "menu_ids": "1,2,3"          // String - 菜单权限列表，逗号分隔（可选）
 }
 ```
 
@@ -25,7 +25,7 @@
 |-----|------|-----|------|
 | id | Integer | 否 | 角色ID，更新时需传入 |
 | name | String | 是 | 角色名称 |
-| menuIds | String | 否 | 菜单权限列表，逗号分隔 |
+| menu_ids | String | 否 | 菜单权限列表，逗号分隔 |
 
 ### 2. RoleVo (角色视图对象)
 
@@ -33,15 +33,15 @@
 {
   "id": 1,                    // Integer - 角色ID
   "name": "管理员",           // String - 角色名称
-  "roleId": 1,               // Integer - 角色ID（冗余字段）
-  "isSuperAdmin": false,     // Boolean - 是否超级管理员内置角色
-  "updateTime": "2024-01-01 12:00:00", // String - 更新时间
-  "menuIds": [1, 2, 3],      // List<Integer> - 菜单权限ID列表
-  "menuNames": ["用户管理", "角色管理", "菜单管理"]  // List<String> - 菜单权限名称列表
+  "role_id": 1,               // Integer - 角色ID（冗余字段）
+  "is_super_admin": false,     // Boolean - 是否超级管理员内置角色
+  "update_time": "2024-01-01 12:00:00", // String - 更新时间
+  "menu_ids": [1, 2, 3],      // List<Integer> - 菜单权限ID列表
+  "menu_names": ["用户管理", "角色管理", "菜单管理"]  // List<String> - 菜单权限名称列表
 }
 ```
 
-`isSuperAdmin` 用于前端识别系统内置超级管理员角色。超级管理员角色由系统初始化生成，默认拥有全部菜单权限，新增菜单会自动同步授权。
+`is_super_admin` 用于前端识别系统内置超级管理员角色。超级管理员角色由系统初始化生成，默认拥有全部菜单权限，新增菜单会自动同步授权。
 
 ### 3. RoleSearchDto (角色搜索传输对象)
 
@@ -49,11 +49,13 @@
 {
   "name": "管理员",           // String - 角色名称（可选）
   "page": 1,                 // Integer - 页码（继承自SortPageDto）
-  "size": 10,                // Integer - 每页大小（继承自SortPageDto）
-  "sort": "updateTime",      // String - 排序字段（继承自SortPageDto）
-  "order": "desc"            // String - 排序方式（继承自SortPageDto）
+  "per_page": 10,            // Integer - 每页大小（继承自SortPageDto）
+  "order_by": "update_time", // String - 排序字段（继承自SortPageDto）
+  "order_dir": "desc"       // String - 排序方向（继承自SortPageDto）
 }
 ```
+
+该接口列表为 GET Bean 绑定：分页可使用 `per_page`，排序 query 参数当前使用 `orderBy`、`orderDir`。
 
 ### 4. ResponseWrap (统一响应格式)
 
@@ -97,11 +99,11 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/role/add \
+curl -X POST http://localhost:11001/api/v1/system/role/add \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试角色",
-    "menuIds": "1,2,3"
+    "menu_ids": "1,2,3"
   }'
 ```
 
@@ -131,7 +133,7 @@ curl -X POST http://localhost:11002/api/v1/system/role/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/role/1
+curl -X DELETE http://localhost:11001/api/v1/system/role/1
 ```
 
 **成功响应**:
@@ -160,7 +162,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/role/1
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/role/bulk/1,2,3
+curl -X DELETE http://localhost:11001/api/v1/system/role/bulk/1,2,3
 ```
 
 **成功响应**:
@@ -193,11 +195,11 @@ curl -X DELETE http://localhost:11002/api/v1/system/role/bulk/1,2,3
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/role/1/update \
+curl -X POST http://localhost:11001/api/v1/system/role/1/update \
   -H "Content-Type: application/json" \
   -d '{
     "name": "更新后的角色名称",
-    "menuIds": "1,2,3,4"
+    "menu_ids": "1,2,3,4"
   }'
 ```
 
@@ -231,7 +233,7 @@ curl -X POST http://localhost:11002/api/v1/system/role/1/update \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/role/1,2,3/bulk-update \
+curl -X POST http://localhost:11001/api/v1/system/role/1,2,3/bulk-update \
   -H "Content-Type: application/json" \
   -d '{
     "name": "批量更新角色"
@@ -262,13 +264,13 @@ curl -X POST http://localhost:11002/api/v1/system/role/1,2,3/bulk-update \
 |-------|------|-----|------|
 | name | String | 否 | 角色名称（模糊查询） |
 | page | Integer | 否 | 页码，默认1 |
-| size | Integer | 否 | 每页大小，默认10 |
-| sort | String | 否 | 排序字段 |
-| order | String | 否 | 排序方式 |
+| per_page | Integer | 否 | 每页数量，默认 10 |
+| orderBy | String | 否 | 排序字段 |
+| orderDir | String | 否 | 排序方向（`asc` 或 `desc`） |
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:11002/api/v1/system/role/list?name=管理员&page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/system/role/list?name=管理员&page=1&per_page=10"
 ```
 
 **成功响应**:
@@ -278,17 +280,15 @@ curl -X GET "http://localhost:11002/api/v1/system/role/list?name=管理员&page=
   "msg": "success",
   "data": {
     "total": 10,
-    "page": 1,
-    "size": 10,
     "rows": [
       {
         "id": 1,
         "name": "管理员",
-        "roleId": 1,
-        "isSuperAdmin": false,
-        "updateTime": "2024-01-01 12:00:00",
-        "menuIds": [1, 2, 3],
-        "menuNames": ["用户管理", "角色管理", "菜单管理"]
+        "role_id": 1,
+        "is_super_admin": false,
+        "update_time": "2024-01-01 12:00:00",
+        "menu_ids": [1, 2, 3],
+        "menu_names": ["用户管理", "角色管理", "菜单管理"]
       }
     ]
   }
@@ -312,7 +312,7 @@ curl -X GET "http://localhost:11002/api/v1/system/role/list?name=管理员&page=
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/role/1/view
+curl -X GET http://localhost:11001/api/v1/system/role/1/view
 ```
 
 **成功响应**:
@@ -323,11 +323,11 @@ curl -X GET http://localhost:11002/api/v1/system/role/1/view
   "data": {
     "id": 1,
     "name": "管理员",
-    "roleId": 1,
-    "isSuperAdmin": false,
-    "updateTime": "2024-01-01 12:00:00",
-    "menuIds": [1, 2, 3],
-    "menuNames": ["用户管理", "角色管理", "菜单管理"]
+    "role_id": 1,
+    "is_super_admin": false,
+    "update_time": "2024-01-01 12:00:00",
+    "menu_ids": [1, 2, 3],
+    "menu_names": ["用户管理", "角色管理", "菜单管理"]
   }
 }
 ```
@@ -346,7 +346,7 @@ curl -X GET http://localhost:11002/api/v1/system/role/1/view
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/role/type/list
+curl -X GET http://localhost:11001/api/v1/system/role/type/list
 ```
 
 **成功响应**:
@@ -381,7 +381,7 @@ curl -X GET http://localhost:11002/api/v1/system/role/type/list
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/role/permission/tree
+curl -X GET http://localhost:11001/api/v1/system/role/permission/tree
 ```
 
 **成功响应**:
@@ -424,7 +424,7 @@ curl -X GET http://localhost:11002/api/v1/system/role/permission/tree
 ## 🔐 注意事项
 
 1. **认证授权**: 需要登录认证
-2. **权限管理**: 角色关联菜单权限，通过menuIds字段配置
+2. **权限管理**: 角色关联菜单权限，通过menu_ids字段配置
 3. **批量操作**: 批量删除/更新时，ID列表不能为空
 4. **内置角色保护**: 超级管理员角色由系统初始化生成，仅超级管理员可见，不允许编辑或删除
 5. **菜单权限同步**: 超级管理员角色默认拥有全部菜单权限，新建菜单后系统会自动补齐授权

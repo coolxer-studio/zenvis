@@ -91,7 +91,7 @@
   "name": "query_user",
   "approval_request_id": null,
   "arguments": {
-    "userId": "10001"
+    "user_id": "10001"
   }
 }
 ```
@@ -332,7 +332,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/mcp/tools/call" \
     "server_id": 1,
     "name": "query_user",
     "arguments": {
-      "userId": "10001"
+      "user_id": "10001"
     }
   }'
 ```
@@ -345,7 +345,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/mcp/tools/call" \
   "name": "query_user",
   "approval_request_id": "a1bd28ef-91ce-45b8-b501-d13a1b29c3dc",
   "arguments": {
-    "userId": "10001"
+    "user_id": "10001"
   }
 }
 ```

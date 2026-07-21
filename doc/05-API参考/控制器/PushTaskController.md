@@ -1,5 +1,7 @@
 # PushTask 推送任务接口文档
 
+> 当前 `PushTaskController` 仅通过 `/**` 将请求代理给 `PushTaskService`，不是由 ZenVis 后端直接实现下列任务 CRUD。接口是否可用、字段和状态含义取决于所连接的推送任务服务；联调时应同时核对该服务版本。
+
 **基础信息**
 - **模块名称**: 推送任务
 - **基础路径**: `/api/v1/system/push-task`
@@ -42,7 +44,7 @@
   "config": "{}",             // String - 配置内容
   "status": "created",        // String - 任务状态(created/running/error/stopped)
   "pid": 12345,               // Integer - 进程ID（运行时为实际PID，停止时为0）
-  "updateTime": "2024-01-01 12:00:00"  // String - 更新时间
+  "update_time": "2024-01-01 12:00:00"  // String - 更新时间
 }
 ```
 
@@ -54,15 +56,15 @@
 | error | 任务错误，无法运行 |
 | stopped | 任务已停止 |
 
-### 3. PushTaskSearchDto (推送任务搜索传输对象)
+### 3. 下游推送任务搜索模型（历史契约，非 ZenVis DTO）
 
 ```json
 {
   "name": "推送",             // String - 任务名称（可选）
-  "page": 1,                 // Integer - 页码（继承自SortPageDto）
-  "size": 10,                // Integer - 每页大小（继承自SortPageDto）
-  "sort": "updateTime",      // String - 排序字段（继承自SortPageDto）
-  "order": "desc"            // String - 排序方式（继承自SortPageDto）
+  "page": 1,                 // Integer - 页码
+  "size": 10,                // Integer - 每页大小
+  "sort": "updateTime",      // String - 排序字段
+  "order": "desc"            // String - 排序方式
 }
 ```
 
@@ -108,7 +110,7 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/push-task/add \
+curl -X POST http://localhost:11001/api/v1/system/push-task/add \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试推送任务",
@@ -142,7 +144,7 @@ curl -X POST http://localhost:11002/api/v1/system/push-task/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/push-task/1
+curl -X DELETE http://localhost:11001/api/v1/system/push-task/1
 ```
 
 **成功响应**:
@@ -169,7 +171,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/push-task/1
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/push-task/bulk/1,2,3
+curl -X DELETE http://localhost:11001/api/v1/system/push-task/bulk/1,2,3
 ```
 
 **成功响应**:
@@ -200,7 +202,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/push-task/bulk/1,2,3
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/push-task/1/update \
+curl -X POST http://localhost:11001/api/v1/system/push-task/1/update \
   -H "Content-Type: application/json" \
   -d '{
     "name": "更新后的任务名称",
@@ -236,7 +238,7 @@ curl -X POST http://localhost:11002/api/v1/system/push-task/1/update \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/push-task/1,2,3/bulk-update \
+curl -X POST http://localhost:11001/api/v1/system/push-task/1,2,3/bulk-update \
   -H "Content-Type: application/json" \
   -d '{
     "description": "批量更新的描述"
@@ -271,7 +273,7 @@ curl -X POST http://localhost:11002/api/v1/system/push-task/1,2,3/bulk-update \
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:11002/api/v1/system/push-task/list?name=测试&page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/system/push-task/list?name=测试&page=1&size=10"
 ```
 
 **成功响应**:
@@ -292,7 +294,7 @@ curl -X GET "http://localhost:11002/api/v1/system/push-task/list?name=测试&pag
         "config": "{\"target\":\"http://example.com/webhook\",\"method\":\"POST\"}",
         "status": "running",
         "pid": 12345,
-        "updateTime": "2024-01-01 12:00:00"
+        "update_time": "2024-01-01 12:00:00"
       }
     ]
   }
@@ -314,7 +316,7 @@ curl -X GET "http://localhost:11002/api/v1/system/push-task/list?name=测试&pag
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/push-task/1/view
+curl -X GET http://localhost:11001/api/v1/system/push-task/1/view
 ```
 
 **成功响应**:
@@ -330,7 +332,7 @@ curl -X GET http://localhost:11002/api/v1/system/push-task/1/view
     "config": "{\"target\":\"http://example.com/webhook\",\"method\":\"POST\"}",
     "status": "running",
     "pid": 12345,
-    "updateTime": "2024-01-01 12:00:00"
+    "update_time": "2024-01-01 12:00:00"
   }
 }
 ```
@@ -352,7 +354,7 @@ curl -X GET http://localhost:11002/api/v1/system/push-task/1/view
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/push-task/1/toggle
+curl -X POST http://localhost:11001/api/v1/system/push-task/1/toggle
 ```
 
 **成功响应**:
@@ -384,7 +386,7 @@ curl -X POST http://localhost:11002/api/v1/system/push-task/1/toggle
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:11002/api/v1/system/push-task/1/log?log_type=console"
+curl -X GET "http://localhost:11001/api/v1/system/push-task/1/log?log_type=console"
 ```
 
 **成功响应**: 返回纯文本日志内容

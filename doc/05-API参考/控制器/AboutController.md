@@ -14,14 +14,14 @@
 
 ```json
 {
-  "systemTitle": "系统标题",       // String - 系统标题（必填）
-  "productName": "产品名称",       // String - 产品名称（必填）
-  "productVersion": "1.0.0",      // String - 产品版本（必填）
-  "productIntroduction": "产品介绍", // String - 产品介绍（可选）
-  "servicePhone": "400-123-4567", // String - 服务电话（可选）
-  "serviceEmail": "service@example.com", // String - 服务邮箱（可选）
-  "technicalEmail": "tech@example.com",  // String - 技术支持邮箱（可选）
-  "integrateLink": "https://example.com/integrate", // String - 集成链接（可选）
+  "system_title": "系统标题",       // String - 系统标题（必填）
+  "product_name": "产品名称",       // String - 产品名称（必填）
+  "product_version": "1.0.0",      // String - 产品版本（必填）
+  "product_introduction": "产品介绍", // String - 产品介绍（可选）
+  "service_phone": "400-123-4567", // String - 服务电话（可选）
+  "service_email": "service@example.com", // String - 服务邮箱（可选）
+  "technical_email": "tech@example.com",  // String - 技术支持邮箱（可选）
+  "integrate_link": "https://example.com/integrate", // String - 接入指南链接（可选）
   "copyright": "2024 Example Inc." // String - 版权信息（可选）
 }
 ```
@@ -29,31 +29,31 @@
 **字段说明**:
 | 字段 | 类型 | 必填 | 说明 |
 |-----|------|-----|------|
-| systemTitle | String | 是 | 系统标题 |
-| productName | String | 是 | 产品名称 |
-| productVersion | String | 是 | 产品版本 |
-| productIntroduction | String | 否 | 产品介绍 |
-| servicePhone | String | 否 | 服务电话 |
-| serviceEmail | String | 否 | 服务邮箱 |
-| technicalEmail | String | 否 | 技术支持邮箱 |
-| integrateLink | String | 否 | 集成链接 |
+| system_title | String | 是 | 系统标题 |
+| product_name | String | 是 | 产品名称 |
+| product_version | String | 是 | 产品版本 |
+| product_introduction | String | 否 | 产品介绍 |
+| service_phone | String | 否 | 服务电话 |
+| service_email | String | 否 | 服务邮箱 |
+| technical_email | String | 否 | 技术支持邮箱 |
+| integrate_link | String | 否 | 接入指南链接；Java/前端内部属性名为 `integrateLink` |
 | copyright | String | 否 | 版权信息 |
 
 ### 2. SystemInfoVo (系统信息视图对象)
 
 ```json
 {
-  "systemTitle": "系统标题",       // String - 系统标题
-  "systemIcon": "/uploads/icon.png", // String - 系统图标路径
-  "systemLogo": "/uploads/logo.png", // String - 系统Logo路径
-  "systemBanner": "/uploads/banner.png", // String - 系统Banner路径
-  "productName": "产品名称",       // String - 产品名称
-  "productVersion": "1.0.0",      // String - 产品版本
-  "productIntroduction": "产品介绍", // String - 产品介绍
-  "servicePhone": "400-123-4567", // String - 服务电话
-  "serviceEmail": "service@example.com", // String - 服务邮箱
-  "technicalEmail": "tech@example.com",  // String - 技术支持邮箱
-  "integrateLink": "https://example.com/integrate", // String - 集成链接
+  "system_title": "系统标题",       // String - 系统标题
+  "system_icon": "/uploads/icon.png", // String - 系统图标路径
+  "system_logo": "/uploads/logo.png", // String - 系统Logo路径
+  "system_banner": "/uploads/banner.png", // String - 系统Banner路径
+  "product_name": "产品名称",       // String - 产品名称
+  "product_version": "1.0.0",      // String - 产品版本
+  "product_introduction": "产品介绍", // String - 产品介绍
+  "service_phone": "400-123-4567", // String - 服务电话
+  "service_email": "service@example.com", // String - 服务邮箱
+  "technical_email": "tech@example.com",  // String - 技术支持邮箱
+  "integrate_link": "https://example.com/integrate", // String - 接入指南链接
   "copyright": "2024 Example Inc." // String - 版权信息
 }
 ```
@@ -94,7 +94,7 @@
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/about/info
+curl -X GET http://localhost:11001/api/v1/system/about/info
 ```
 
 **成功响应**:
@@ -103,17 +103,17 @@ curl -X GET http://localhost:11002/api/v1/system/about/info
   "status": 0,
   "msg": "success",
   "data": {
-    "systemTitle": "ZenVis系统",
-    "systemIcon": "/uploads/icon.png",
-    "systemLogo": "/uploads/logo.png",
-    "systemBanner": "/uploads/banner.png",
-    "productName": "ZenVis",
-    "productVersion": "1.0.0",
-    "productIntroduction": "一站式数据分析平台",
-    "servicePhone": "400-123-4567",
-    "serviceEmail": "service@example.com",
-    "technicalEmail": "tech@example.com",
-    "integrateLink": "https://example.com/integrate",
+    "system_title": "ZenVis系统",
+    "system_icon": "/uploads/icon.png",
+    "system_logo": "/uploads/logo.png",
+    "system_banner": "/uploads/banner.png",
+    "product_name": "ZenVis",
+    "product_version": "1.0.0",
+    "product_introduction": "一站式数据分析平台",
+    "service_phone": "400-123-4567",
+    "service_email": "service@example.com",
+    "technical_email": "tech@example.com",
+    "integrate_link": "https://example.com/integrate",
     "copyright": "2024 ZenVis Inc."
   }
 }
@@ -133,17 +133,17 @@ curl -X GET http://localhost:11002/api/v1/system/about/info
 
 **请求示例**:
 ```bash
-curl -X PUT http://localhost:11002/api/v1/system/about/info/update \
+curl -X PUT http://localhost:11001/api/v1/system/about/info/update \
   -H "Content-Type: application/json" \
   -d '{
-    "systemTitle": "更新后的系统标题",
-    "productName": "ZenVis",
-    "productVersion": "2.0.0",
-    "productIntroduction": "更新后的产品介绍",
-    "servicePhone": "400-999-8888",
-    "serviceEmail": "support@example.com",
-    "technicalEmail": "tech@example.com",
-    "integrateLink": "https://example.com/new-integrate",
+    "system_title": "更新后的系统标题",
+    "product_name": "ZenVis",
+    "product_version": "2.0.0",
+    "product_introduction": "更新后的产品介绍",
+    "service_phone": "400-999-8888",
+    "service_email": "support@example.com",
+    "technical_email": "tech@example.com",
+    "integrate_link": "https://example.com/new-integrate",
     "copyright": "2024 ZenVis Inc."
   }'
 ```
@@ -174,7 +174,7 @@ curl -X PUT http://localhost:11002/api/v1/system/about/info/update \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/about/icon/upload \
+curl -X POST http://localhost:11001/api/v1/system/about/icon/upload \
   -F "file=@icon.png"
 ```
 
@@ -204,7 +204,7 @@ curl -X POST http://localhost:11002/api/v1/system/about/icon/upload \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/about/logo/upload \
+curl -X POST http://localhost:11001/api/v1/system/about/logo/upload \
   -F "file=@logo.png"
 ```
 
@@ -234,7 +234,7 @@ curl -X POST http://localhost:11002/api/v1/system/about/logo/upload \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/about/banner/upload \
+curl -X POST http://localhost:11001/api/v1/system/about/banner/upload \
   -F "file=@banner.png"
 ```
 

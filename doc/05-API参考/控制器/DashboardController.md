@@ -70,11 +70,13 @@
   "name": "数据",             // String - 看板名称（可选）
   "url": "/dashboard",       // String - URL地址（可选）
   "page": 1,                 // Integer - 页码（继承自SortPageDto）
-  "size": 10,                // Integer - 每页大小（继承自SortPageDto）
-  "sort": "updateTime",      // String - 排序字段（继承自SortPageDto）
-  "order": "desc"            // String - 排序方式（继承自SortPageDto）
+  "per_page": 10,            // Integer - 每页大小（继承自SortPageDto）
+  "order_by": "update_time", // String - 排序字段（继承自SortPageDto）
+  "order_dir": "desc"       // String - 排序方向（继承自SortPageDto）
 }
 ```
+
+上例是 JSON body 命名；`GET /list` 的排序 query 参数当前使用 `orderBy`、`orderDir`，`POST /list` JSON 使用 `order_by`、`order_dir`。
 
 ### 4. ResponseWrap (统一响应格式)
 
@@ -118,7 +120,7 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/dashboard/add \
+curl -X POST http://localhost:11001/api/v1/system/dashboard/add \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试看板",
@@ -152,7 +154,7 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/dashboard/1
+curl -X DELETE http://localhost:11001/api/v1/system/dashboard/1
 ```
 
 **成功响应**:
@@ -179,7 +181,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/dashboard/1
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:11002/api/v1/system/dashboard/bulk/1,2,3
+curl -X DELETE http://localhost:11001/api/v1/system/dashboard/bulk/1,2,3
 ```
 
 **成功响应**:
@@ -210,7 +212,7 @@ curl -X DELETE http://localhost:11002/api/v1/system/dashboard/bulk/1,2,3
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/dashboard/1/update \
+curl -X POST http://localhost:11001/api/v1/system/dashboard/1/update \
   -H "Content-Type: application/json" \
   -d '{
     "name": "更新后的看板名称",
@@ -246,7 +248,7 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/1/update \
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/dashboard/1,2,3/bulk-update \
+curl -X POST http://localhost:11001/api/v1/system/dashboard/1,2,3/bulk-update \
   -H "Content-Type: application/json" \
   -d '{
     "type": "ROUTE"
@@ -276,13 +278,13 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/1,2,3/bulk-update \
 | name | String | 否 | 看板名称（模糊查询） |
 | url | String | 否 | URL地址（模糊查询） |
 | page | Integer | 否 | 页码，默认1 |
-| size | Integer | 否 | 每页大小，默认10 |
-| sort | String | 否 | 排序字段 |
-| order | String | 否 | 排序方式 |
+| per_page | Integer | 否 | 每页数量，默认 10 |
+| orderBy | String | 否 | 排序字段 |
+| orderDir | String | 否 | 排序方向（`asc` 或 `desc`） |
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:11002/api/v1/system/dashboard/list?name=数据&page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/system/dashboard/list?name=数据&page=1&per_page=10"
 ```
 
 **成功响应**:
@@ -292,17 +294,15 @@ curl -X GET "http://localhost:11002/api/v1/system/dashboard/list?name=数据&pag
   "msg": "success",
   "data": {
     "total": 20,
-    "page": 1,
-    "size": 10,
     "rows": [
       {
         "id": 1,
         "name": "数据分析看板",
         "code": "dashboard_001",
         "type": "ROUTE",
-        "typeDescription": "路由",
+        "type_description": "路由",
         "url": "/dashboard/data",
-        "updateTime": "2024-01-01 12:00:00"
+        "update_time": "2024-01-01 12:00:00"
       }
     ]
   }
@@ -324,7 +324,7 @@ curl -X GET "http://localhost:11002/api/v1/system/dashboard/list?name=数据&pag
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/dashboard/1/view
+curl -X GET http://localhost:11001/api/v1/system/dashboard/1/view
 ```
 
 **成功响应**:
@@ -337,9 +337,9 @@ curl -X GET http://localhost:11002/api/v1/system/dashboard/1/view
     "name": "数据分析看板",
     "code": "dashboard_001",
     "type": "ROUTE",
-    "typeDescription": "路由",
+    "type_description": "路由",
     "url": "/dashboard/data",
-    "updateTime": "2024-01-01 12:00:00"
+    "update_time": "2024-01-01 12:00:00"
   }
 }
 ```
@@ -356,7 +356,7 @@ curl -X GET http://localhost:11002/api/v1/system/dashboard/1/view
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:11002/api/v1/system/dashboard/type/list
+curl -X GET http://localhost:11001/api/v1/system/dashboard/type/list
 ```
 
 **成功响应**:
@@ -391,7 +391,7 @@ curl -X GET http://localhost:11002/api/v1/system/dashboard/type/list
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:11002/api/v1/system/dashboard/list
+curl -X POST http://localhost:11001/api/v1/system/dashboard/list
 ```
 
 **成功响应**:
@@ -405,18 +405,18 @@ curl -X POST http://localhost:11002/api/v1/system/dashboard/list
       "name": "数据分析看板",
       "code": "dashboard_001",
       "type": "ROUTE",
-      "typeDescription": "路由",
+      "type_description": "路由",
       "url": "/dashboard/data",
-      "updateTime": "2024-01-01 12:00:00"
+      "update_time": "2024-01-01 12:00:00"
     },
     {
       "id": 2,
       "name": "外部链接看板",
       "code": "dashboard_002",
       "type": "LINK",
-      "typeDescription": "外链",
+      "type_description": "外链",
       "url": "https://example.com/dashboard",
-      "updateTime": "2024-01-02 10:00:00"
+      "update_time": "2024-01-02 10:00:00"
     }
   ]
 }

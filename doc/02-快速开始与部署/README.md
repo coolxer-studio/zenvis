@@ -46,7 +46,8 @@ docker compose ps
 | Web | `http://localhost:11000` |
 | API | `http://localhost:11001` |
 | Swagger UI | `http://localhost:11001/swagger-ui/index.html` |
-| Actuator 健康检查 | `http://localhost:11001/actuator/health` |
+| 后端容器健康检查 | `http://localhost:11001/api/v1/system/about/info` |
+| Actuator 诊断 | `http://localhost:11001/actuator/health` |
 | Vectum | `http://localhost:11002` |
 
 部署前应复制并调整环境配置，至少设置数据库密码、普通 API Bearer Token、MCP Bearer Token、Vectum Token 和模型服务参数。不要沿用示例默认值部署到生产环境。
@@ -103,6 +104,7 @@ mvn spring-boot:run
 
 ```bash
 curl http://localhost:11001/actuator/health
+curl http://localhost:11001/api/v1/system/about/info
 ```
 
 ### 4. 启动前端

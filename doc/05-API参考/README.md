@@ -45,6 +45,8 @@ MCP Server 的 `/sse` 和 `/mcp/message` 使用独立的 `MCP_BEARER_TOKEN`，�
 
 `/api/v1/public/business-services/heartbeat` 和 `/events` 不需要 Session 或 Bearer Token。应仅在受控网络开放，并在外围网关增加来源、速率或签名保护。
 
+代码归属上，这两个公开接口由 `BusinessServicePublicController` 实现；`BusinessServiceController` 只实现 `/api/v1/system/business-services/**` 管理查询。旧文档将两者合并讲解，是为了保留一份完整接入契约。
+
 ## 统一响应
 
 除流式、文件和代理接口外，业务接口返回：
@@ -218,10 +220,12 @@ curl -X POST http://localhost:11001/api/v1/retrieval/do \
 | GET | `/{id}/doc/tree` | 查看文档树 |
 | GET | `/{id}/doc/view` | 查看文档内容 |
 | REQUEST | `/{id}/export` | 导出插件 |
-| GET | `/{id}/logs` | 安装日志 |
-| POST | `/{id}/install` | 安装/升级 |
+| GET | `/{id}/logs` | 安装、升级、恢复或卸载日志 |
+| POST | `/{id}/install` | 安装 |
+| POST | `/{id}/upgrade` | 使用已上传的更高版本包升级已安装插件 |
+| POST | `/{id}/upgrade/recover` | 从持久化快照恢复升级前旧版本 |
 | POST | `/{id}/uninstall` | 卸载 |
-| POST/DELETE | 更新、批量更新和删除路径 | 管理插件记录 |
+| DELETE | `/{id}`、`/bulk/{ids}` | 删除未安装插件记录 |
 
 已安装动态 API 自动增加：
 
@@ -236,6 +240,8 @@ curl -X POST http://localhost:11001/api/v1/retrieval/do \
 ## DIH Chat
 
 基础路径 `/api/v1/dih`：
+
+`chat`、`suggest`、模型列表、健康检查、附件和动作决策当前全部由 `ChatController` 实现；仓库中没有独立的 `DihController`。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |

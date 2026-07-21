@@ -37,11 +37,10 @@ zenvis-backend/
 
 ## 开发环境搭建
 
-### 1. 克隆代码
+### 1. 进入代码目录
 
 ```bash
-git clone https://github.com/your-repo/zenvis-backend.git
-cd zenvis-backend
+cd zenvis/zenvis-backend
 ```
 
 ### 2. 启动依赖服务
@@ -52,7 +51,7 @@ cd zenvis-backend
 cd deploy
 
 # 启动数据库服务（不包含后端）
-docker-compose -f docker-compose.yml up -d redis-service redis-stack-service mysql-service clickhouse-service
+docker compose -f docker-compose.yml up -d redis-service redis-stack-service mysql-service clickhouse-service
 ```
 
 ### 3. 配置 IDE
@@ -76,7 +75,7 @@ docker-compose -f docker-compose.yml up -d redis-service redis-stack-service mys
 复制并修改配置文件：
 
 ```bash
-cp deploy/config/zenvis-backend/application.properties src/main/resources/application-dev.properties
+cp deploy/config/zenvis-backend/config/application.properties src/main/resources/application-dev.properties
 ```
 
 修改数据库连接：

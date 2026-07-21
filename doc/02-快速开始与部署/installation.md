@@ -41,17 +41,20 @@ cd zenvis-backend/deploy
 deploy/
 ├── docker-compose.yml      # 主编排文件
 ├── config/
-│   ├── mysql/             # MySQL配置
+│   ├── mysql/             # MySQL 配置与初始化 SQL
 │   │   ├── my.cnf
-│   │   └── init.sql       # 初始化SQL
-│   ├── redis/             # Redis配置
+│   │   └── init.sql
+│   ├── redis/             # Redis 配置
 │   │   └── redis.conf
-│   └── zenvis-backend/    # 后端配置
-│       └── application.properties
+│   ├── redis-stack/       # Redis Stack 配置
+│   ├── zenvis-backend/config/application.properties
+│   └── zenvis-frontend/conf.d/default.conf
 ├── data/                  # 数据持久化目录
 │   ├── mysql/
 │   ├── redis/
-│   └── clickhouse/
+│   ├── clickhouse/
+│   ├── kafka/
+│   └── vectum/
 └── open_config/          # 开放配置
 ```
 
@@ -59,25 +62,27 @@ deploy/
 
 ```bash
 # 启动所有服务
-docker-compose up -d
+docker compose up -d
 
 # 查看服务状态
-docker-compose ps
+docker compose ps
 
 # 查看服务日志
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### 4. 服务端口
 
 | 服务 | 端口 | 说明 |
 | :--- | :--- | :--- |
+| kafka-service | 9094 | 宿主机 Kafka 入口；容器内使用 9092 |
 | redis | 6379 | Redis服务 |
 | redis-stack | 16379 | Redis向量存储 |
 | mysql | 3306 | MySQL数据库 |
-| clickhouse | 8123 | ClickHouse数据库 |
+| clickhouse | 8123、9000、9009 | ClickHouse HTTP、Native 与集群通信 |
 | zenvis-backend | 11001 | 后端API服务 |
-| nginx | 11000 | 前端Web服务 |
+| zenvis-frontend | 11000 | 前端 Web 与 `/zenvis` 反向代理 |
+| vectum-service | 11002 | 数据推送任务服务 |
 
 ## 手动部署
 
@@ -107,7 +112,7 @@ sudo apt install maven
 
 ### 2. 数据库部署
 
-#### MySQL 8.0
+#### MySQL
 
 ```bash
 # 使用Docker启动MySQL
@@ -116,7 +121,7 @@ docker run -d \
   -p 3306:3306 \
   -e MYSQL_ROOT_PASSWORD=zenvis \
   -v /data/zenvis/mysql:/var/lib/mysql \
-  mysql:8.0
+  mysql:8.4
 ```
 
 初始化数据库：
@@ -181,7 +186,7 @@ mvn clean package -DskipTests -Dproguard.skip=true
 
 ### 4. 配置后端
 
-编辑 `deploy/config/zenvis-backend/application.properties`：
+编辑 `deploy/config/zenvis-backend/config/application.properties`。以下仅展示配置项形式，凭据应通过环境变量或密钥管理系统注入：
 
 ```properties
 # 数据库配置
@@ -229,7 +234,10 @@ sudo ufw allow 8123/tcp   # ClickHouse
 
 ```bash
 curl http://localhost:11001/actuator/health
+curl http://localhost:11001/api/v1/system/about/info
 ```
+
+Compose 的后端容器实际使用系统信息接口判活；Actuator 端点用于诊断。
 
 ### 访问Swagger
 
@@ -241,14 +249,14 @@ curl http://localhost:11001/actuator/health
 
 检查日志：
 ```bash
-docker-compose logs zenvis-backend
+docker compose logs zenvis-backend
 ```
 
 ### 2. 数据库连接失败
 
 确认数据库服务已启动：
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 ### 3. 内存不足

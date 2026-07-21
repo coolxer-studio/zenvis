@@ -15,8 +15,10 @@ deploy/
 │   │   └── redis.conf         # Redis配置
 │   ├── redis-stack/
 │   │   └── redis-stack.conf   # Redis Stack配置
-│   └── zenvis-backend/
-│       └── application.properties  # 后端配置
+│   ├── zenvis-backend/config/
+│   │   └── application.properties  # 后端配置
+│   └── zenvis-frontend/conf.d/
+│       └── default.conf            # 前端 Nginx 配置
 ├── data/                       # 数据持久化
 ├── open_config/                # 开放配置
 │   ├── web_config/            # Web前端配置
@@ -30,35 +32,30 @@ deploy/
 
 ### 服务组件
 
-| 服务 | 镜像 | 端口 | 资源限制 |
+| 服务 | 当前 Compose 镜像版本 | 宿主端口 | 资源上限 |
 | :--- | :--- | :--- | :--- |
+| kafka-service | Kafka 4.2.0 | 9094 | 2CPU/4GB |
 | redis | redis:7 | 6379 | 2CPU/2GB |
 | redis-stack | redis-stack-server:7.2.0-v18 | 16379 | 2CPU/2GB |
-| mysql | mysql:8.0 | 3306 | 2CPU/4GB |
-| clickhouse | clickhouse-server | 8123 | 2CPU/4GB |
-| zenvis-backend | 自构建 | 11001 | 2CPU/4GB |
-| nginx | nginx:alpine | 11000 | 1CPU/512MB |
+| mysql | MySQL 8.4 | 3306 | 2CPU/4GB |
+| clickhouse | ClickHouse 25.9 | 8123、9000、9009 | 4CPU/8GB |
+| zenvis-backend | 当前 ZenVis 镜像 | 11001 | 4CPU/8GB |
+| zenvis-frontend | 当前 ZenVis 镜像 | 11000 | 1CPU/1GB |
+| vectum-service | 当前 Vectum 镜像 | 11002 | 2CPU/4GB |
 
 ### 环境变量
 
-创建 `.env` 文件：
+部署目录已有 `.env` 模板。至少按目标环境设置架构，并替换 Compose、后端配置和数据库初始化配置中的所有示例凭据：
 
 ```env
 # 架构
 ARCH=amd64  # 或 arm64
 
-# MySQL
-MYSQL_ROOT_PASSWORD=your_secure_password
-MYSQL_DATABASE=zenvis
-MYSQL_USER=zenvis
-MYSQL_PASSWORD=your_secure_password
-
-# Redis
-REDIS_PASSWORD=your_secure_password
-
 # 时区
 TZ=Asia/Shanghai
 ```
+
+当前 Compose 并非所有数据库配置都由 `.env` 自动接线，不能只修改一个文件。生产部署应把数据库、Redis、普通 API、MCP、Vectum 和模型凭据改为环境变量或密钥挂载，并确认容器端与应用端取值一致。
 
 ## 数据库配置
 
@@ -102,7 +99,7 @@ save 60 10000
 
 ## 后端配置
 
-文件：`config/zenvis-backend/application.properties`
+文件：`config/zenvis-backend/config/application.properties`
 
 ```properties
 # 应用配置
@@ -148,17 +145,17 @@ logging.file.max-size=100MB
 logging.file.max-history=30
 
 # 文件上传
-spring.servlet.multipart.max-file-size=10MB
-spring.servlet.multipart.max-request-size=10MB
+spring.servlet.multipart.max-file-size=300MB
+spring.servlet.multipart.max-request-size=300MB
 ```
 
 ## 前端 Nginx 配置
 
-文件：`deploy/zenvis-frontend/conf.d/default.conf`
+文件：`config/zenvis-frontend/conf.d/default.conf`
 
 ```nginx
 server {
-    listen 80;
+    listen 11000;
     server_name localhost;
 
     root /usr/share/nginx/html;
@@ -169,38 +166,17 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # API 代理
-    location /api/ {
-        proxy_pass http://zenvis-backend-service:11001/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    # Swagger 代理
-    location /swagger-ui/ {
-        proxy_pass http://zenvis-backend-service:11001/swagger-ui/;
-    }
-
-    # 静态资源缓存
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
+    # API 与后端静态资源代理
+    location /zenvis/ {
+        rewrite ^/zenvis(.*)$ $1 break;
+        proxy_pass http://zenvis-backend:11001;
     }
 }
 ```
 
 ## 前端 API 前缀约定
 
-当前前端环境变量 `VITE_BASE_URL` 统一配置为 `/`，表示前端和后端 API 按根路径部署。前端请求、低代码 AMIS iframe、HTML 看板和插件页面中的接口地址均应使用 `/api/...`，不要再使用旧的 `/zenvis/api/...` 前缀。
-
-开发环境下，Vite 只代理后端相关路径，避免把前端页面和静态资源也转发到后端：
-
-| 路径 | 用途 |
-| :--- | :--- |
-| `/api` | 后端 REST API |
-| `/system-files` | 系统图标、Logo、模板文件等后端静态资源 |
-| `/html-page` | HTML 页面看板静态资源 |
+当前前端环境变量 `VITE_BASE_URL=/zenvis`。浏览器请求 `/zenvis/api/...`、`/zenvis/system-files/...` 或 `/zenvis/html-page/...`；Vite 与生产 Nginx 统一去除 `/zenvis` 后转发到后端。Controller 的源码路径仍是 `/api/v1/...`。
 
 如果后续需要部署到子路径，应同步调整前端 `VITE_BASE_URL`、Vite/Nginx 代理规则、AMIS 页面 `baseUrl` 参数以及开放配置中的接口地址，避免出现普通页面可访问但低代码页面请求旧路径的问题。
 
@@ -209,12 +185,12 @@ server {
 ### JVM 调优
 
 ```bash
-java -jar zenvis-backend.jar \
-  -Xms2g \
+java -Xms2g \
   -Xmx4g \
   -XX:+UseG1GC \
   -XX:MaxGCPauseMillis=200 \
-  -Djava.security.egd=file:/dev/./urandom
+  -Djava.security.egd=file:/dev/./urandom \
+  -jar zenvis-backend.jar
 ```
 
 ### 数据库连接池
@@ -243,17 +219,16 @@ appendfsync everysec
 ### Actuator 端点
 
 ```properties
-management.endpoints.web.exposure.include=health,info,metrics,prometheus
+management.endpoints.web.exposure.include=health,info
 management.endpoint.health.show-details=always
-management.metrics.export.prometheus.enabled=true
 ```
 
 ### 健康检查
 
 ```yaml
-# docker-compose.yml
+# docker-compose.yml 中的实际后端检查
 healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:11001/actuator/health"]
+  test: ["CMD", "curl", "-f", "http://localhost:11001/api/v1/system/about/info"]
   interval: 30s
   timeout: 10s
   retries: 3
@@ -262,34 +237,26 @@ healthcheck:
 
 ## 安全配置
 
-### CORS 配置
+### 同源与跨域
 
-```properties
-# 允许的源
-cors.allowed-origins=http://localhost:11000,https://your-domain.com
-
-# 允许的方法
-cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
-
-# 允许的头
-cors.allowed-headers=*
-```
+仓库当前没有 `cors.allowed-*` 这一组应用配置。默认部署通过 `/zenvis` 反向代理保持同源；如必须跨域，应在受控网关或后端明确增加并验证 CORS 策略，不要仅写入未被代码读取的属性。
 
 ### API 认证
 
-ZenVis 使用 Token 认证，登录接口：
+浏览器使用 Session/Cookie 登录，登录接口为：
 
 ```bash
-POST /api/v1/login
+POST /api/v1/system/login/sign-in
 Content-Type: application/json
 
 {
-  "username": "admin",
-  "password": "admin"
+  "user_name": "user@example.com",
+  "password": "<RSA 加密后的密码>",
+  "auth_code": "<验证码>"
 }
 ```
 
-返回 Token 后，在后续请求中携带：
+第三方系统可另行配置普通 REST Bearer Token，在后续请求中携带：
 
 ```bash
 Authorization: Bearer <token>

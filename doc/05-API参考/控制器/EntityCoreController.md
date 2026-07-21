@@ -25,8 +25,6 @@
 
 ```json
 {
-  "page": 1,                  // Integer - 当前页码
-  "size": 10,                 // Integer - 每页条数
   "total": 100,               // Long - 总记录数
   "rows": []                  // List - 数据列表
 }
@@ -82,7 +80,7 @@
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:8080/api/v1/entity/asset_host/add \
+curl -X POST http://localhost:11001/api/v1/entity/asset_host/add \
   -H "Content-Type: application/json" \
   -d '{
     "hostName": "server-01",
@@ -115,7 +113,7 @@ curl -X POST http://localhost:8080/api/v1/entity/asset_host/add \
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d
+curl -X DELETE http://localhost:11001/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d
 ```
 
 **成功响应**:
@@ -143,7 +141,7 @@ curl -X DELETE http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b
 
 **请求示例**:
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/entity/asset_host/bulk/8e388586-24b2-4d4b-aecc-a33151326f4d,53a29b77-9e5f-4c33-80cb-1b1a4c10940b
+curl -X DELETE http://localhost:11001/api/v1/entity/asset_host/bulk/8e388586-24b2-4d4b-aecc-a33151326f4d,53a29b77-9e5f-4c33-80cb-1b1a4c10940b
 ```
 
 **成功响应**:
@@ -176,7 +174,7 @@ curl -X DELETE http://localhost:8080/api/v1/entity/asset_host/bulk/8e388586-24b2
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d/update \
+curl -X POST http://localhost:11001/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d/update \
   -H "Content-Type: application/json" \
   -d '{
     "hostName": "server-01-updated"
@@ -212,7 +210,7 @@ curl -X POST http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-a
 
 **请求示例**:
 ```bash
-curl -X POST http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d,53a29b77-9e5f-4c33-80cb-1b1a4c10940b/bulk_update \
+curl -X POST http://localhost:11001/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d,53a29b77-9e5f-4c33-80cb-1b1a4c10940b/bulk_update \
   -H "Content-Type: application/json" \
   -d '{
     "status": "active"
@@ -245,11 +243,13 @@ curl -X POST http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-a
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
 | page | Integer | 否 | 页码（默认1） |
-| size | Integer | 否 | 每页条数（默认10） |
+| per_page | Integer | 否 | 每页数量，默认 10；兼容 `perPage` |
+| orderBy / sort_by | String | 否 | 排序属性名 |
+| orderDir / order / sort_order | String | 否 | 排序方向 |
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/entity/asset_host/list?page=1&size=10"
+curl -X GET "http://localhost:11001/api/v1/entity/asset_host/list?page=1&per_page=10"
 ```
 
 **成功响应**:
@@ -258,8 +258,6 @@ curl -X GET "http://localhost:8080/api/v1/entity/asset_host/list?page=1&size=10"
   "status": 0,
   "msg": "success",
   "data": {
-    "page": 1,
-    "size": 10,
     "total": 100,
     "rows": []
   }
@@ -282,7 +280,7 @@ curl -X GET "http://localhost:8080/api/v1/entity/asset_host/list?page=1&size=10"
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d/view
+curl -X GET http://localhost:11001/api/v1/entity/asset_host/8e388586-24b2-4d4b-aecc-a33151326f4d/view
 ```
 
 **成功响应**:
@@ -323,7 +321,7 @@ curl -X GET http://localhost:8080/api/v1/entity/asset_host/8e388586-24b2-4d4b-ae
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/entity/asset_host/status/mapping
+curl -X GET http://localhost:11001/api/v1/entity/asset_host/status/mapping
 ```
 
 **成功响应**:
@@ -356,7 +354,7 @@ curl -X GET http://localhost:8080/api/v1/entity/asset_host/status/mapping
 
 **请求示例**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/entity/asset_host/manufacturer/list
+curl -X GET http://localhost:11001/api/v1/entity/asset_host/manufacturer/list
 ```
 
 **成功响应**:
@@ -394,7 +392,7 @@ curl -X GET http://localhost:8080/api/v1/entity/asset_host/manufacturer/list
 
 **请求示例**:
 ```bash
-curl -X GET "http://localhost:8080/api/v1/entity/asset_host/host_name/auto-complete?term=server"
+curl -X GET "http://localhost:11001/api/v1/entity/asset_host/host_name/auto-complete?term=server"
 ```
 
 **成功响应**:

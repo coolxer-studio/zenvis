@@ -14,7 +14,7 @@
 | 会话实体 | `src/main/java/com/coolxer/dao/mysql/entity/ChatSession.java` | 保存会话标题、类型、消息 JSON、置顶、深度思考等状态 |
 | 结构化消息解析 | `src/main/java/com/coolxer/service/dih/ChatMessagePartParser.java` | 将 AI 回复解析为 markdown、code、thinking、notice、confirm、chart 等片段 |
 | 附件服务 | `src/main/java/com/coolxer/service/dih/ChatAttachmentService.java` | 上传附件、读取文本附件、图片转 OpenAI image_url 输入 |
-| 数据可视化 Agent | `src/main/java/com/coolxer/service/dih/agent/DataVisualizationAgent.java` | 通过只读 retrieval MCP 工具完成可视化分析 |
+| 数据可视化 Agent | `src/main/java/com/coolxer/service/dih/agent/DataVisualizationAgent.java` | 通过查询工具和受控配置、看板、菜单工具完成可视化分析与落地 |
 | 报表制作 Agent | `src/main/java/com/coolxer/service/dih/agent/ReportAgent.java` | 生成和改写报表正文，输出可同步到右侧编辑器的结构化报表文档 |
 | 报表示例服务 | `src/main/java/com/coolxer/service/dih/ReportDemoResponseService.java` | 为报表演示示例提供内置模板，命中后不请求后台模型 |
 | MCP 工具注入 | `src/main/java/com/coolxer/service/dih/mcp/AgentMcpToolService.java` | 按 Agent scope 注入本地和外部工具及工具提示词 |
@@ -174,7 +174,7 @@ MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpT
 
 ### 数据可视化 Agent
 
-`type=agent_data_visualization` 时调用 `DataVisualizationAgent.chat`。这条链路由 `PromptDrivenAgentRuntime` 驱动，后端为数据可视化 Agent 注入只读 retrieval MCP 工具，返回文本或 Markdown 流式内容。
+`type=agent_data_visualization` 时调用 `DataVisualizationAgent.chat`。这条链路由 `PromptDrivenAgentRuntime` 驱动，后端按专用本地白名单注入工具，返回文本或 Markdown 流式内容。它不会加载外部 MCP。
 
 核心流程：
 
@@ -182,7 +182,7 @@ MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpT
 用户问题
   |
   v
-解析数据可视化 Agent 的 retrieval MCP 工具白名单
+解析数据可视化 Agent 的本地工具白名单
   |
   v
 拼接数据可视化 system prompt、Skill prompt 和工具说明
@@ -191,13 +191,13 @@ MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpT
 调用 Spring AI ChatClient 流式对话
   |
   v
-模型按需调用 retrieval 查询、统计、趋势或详情工具
+模型按需调用查询、统计、趋势、详情或受控配置落地工具
   |
   v
 输出普通文本/Markdown 分析，MessageType.TEXT
 ```
 
-数据可视化 Agent 不直接访问数据库、不生成查询语句、不执行写入类 MCP 工具。
+白名单包括 Retrieval/实体查询，以及 `policy_config_*`、`dashboard_*`、`menu_*` 中明确允许的读取、创建和应用操作；不包含实体更新、删除或任意外部 MCP。配置新增/应用、看板创建和菜单创建等写入动作通过 `@McpToolApproval(ASK, HIGH)` 进入审批。Agent 仍不直接访问数据库，也不生成任意 SQL。
 
 ### 报表制作 Agent
 
@@ -334,7 +334,7 @@ MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpT
 
 1. `ChatSession.messages` 和 Spring AI `ChatMemory` 是两套数据。界面历史和模型记忆可能不同步，排查“模型不记得上下文”时不要只看 `t_ai_chat_session.messages`。
 2. 普通 Spring AI 分支通过 `MessageChatMemoryAdvisor` 自动维护记忆；原生 OpenAI 图片/深度思考分支通过 `saveNativeChatMemory` 手动维护；业务 Agent 由 `PromptDrivenAgentRuntime` 维护对应记忆，但不使用 RAG。
-3. `agent_data_visualization` 会调用只读 retrieval MCP 工具获取真实数据。慢查询或 LLM 慢响应会直接影响接口首包时间。
+3. `agent_data_visualization` 会调用白名单内的查询或受控配置工具。慢查询、审批等待或 LLM 慢响应都会影响接口完成时间。
 4. `online_search` 目前只保存到会话字段，聊天主流程没有看到实际在线搜索逻辑。
 5. `response_format=events` 时，`done` 事件会保存并返回最终 AI 消息；如果流中途异常，当前只返回 `error` 事件，不会保存部分 AI 回复。
 6. 非 events 的纯文本模式会在 `doOnComplete` 保存 AI 回复，但不会返回最终 message id/parts；前端如果需要结构化渲染，应继续使用 events。

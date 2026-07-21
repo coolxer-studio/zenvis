@@ -4,6 +4,8 @@
 
 **ZenVis** 是一个基于配置实现的数据存储、可视化及业务扩展的框架平台，实现在通用的数据分析框架之上构建业务应用。提供智能分析能力，全方位满足数据处理、展示、扩展与深度分析需求。
 
+> ZenVis 跨模块的产品、架构、部署、使用和 API 文档统一维护在[根文档中心](../doc/README.md)。本 README 保留后端模块的独立说明。
+
 ***
 
 ## 项目简介
@@ -16,7 +18,7 @@ ZenVis Backend 是基于 Spring Boot构建的ZenVis的后端项目，提供仪�
 
 ```bash
 cd zenvis-backend/deploy
-docker-compose up -d
+docker compose up -d
 ```
 
 > 默认运行架构为amd64架构，如果需要运行在arm架构上需要修改.env文件：ARCH=arm64  
@@ -29,7 +31,8 @@ docker-compose up -d
 |:------------|:--------------------------------------------|
 | web前端服务     | `http://<ip>:11000`                         |
 | API 接口 服务   | `http://<ip>:11001`                         |
-| MCP 接口 服务   | `http://<ip>:11002/sse`                     |
+| MCP 接口服务    | `http://<ip>:11001/sse`                     |
+| Vectum 数据服务 | `http://<ip>:11002`                         |
 | Swagger 文档  | `http://<ip>:11001/swagger-ui/index.html`   |
 
 ***

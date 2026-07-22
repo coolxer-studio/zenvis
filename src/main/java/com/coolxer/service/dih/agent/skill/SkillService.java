@@ -237,8 +237,7 @@ public class SkillService {
      * Build a task prompt after strictly validating that every explicitly selected Skill still exists and is enabled.
      */
     public String buildTaskSkillPrompt(String agentType, List<String> selectedSkillIds) {
-        validateEnabledSkillIds(selectedSkillIds);
-        return buildRequiredSkillPrompt(agentType, selectedSkillIds);
+        return buildAgentSkillPrompt(agentType, selectedSkillIds);
     }
 
     /**

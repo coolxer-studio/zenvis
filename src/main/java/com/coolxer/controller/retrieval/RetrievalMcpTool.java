@@ -90,7 +90,7 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_entity", description = "获取数据实体列表，可按规则ID过滤")
-    public DataEntityResultVo listEntity(@ToolParam(description = "规则ID，可选") Integer ruleId) {
+    public DataEntityResultVo listEntity(@ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listEntity(ruleId, currentUserId());
     }
 
@@ -99,8 +99,8 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_attribute", description = "获取数据属性列表，可按实体或规则ID过滤")
-    public DataAttributeResultVo listAttribute(@ToolParam(description = "实体名称，可选") String entity,
-                                               @ToolParam(description = "规则ID，可选") Integer ruleId) {
+    public DataAttributeResultVo listAttribute(@ToolParam(description = "实体名称，可选", required = false) String entity,
+                                               @ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listAttribute(entity, ruleId, currentUserId());
     }
 
@@ -110,7 +110,7 @@ public class RetrievalMcpTool {
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_candidate", description = "获取指定属性的候选值列表")
     public DataListVo listCandidateValue(@ToolParam(description = "属性ID") Integer attributeId,
-                                          @ToolParam(description = "搜索文本，可选") String text) {
+                                          @ToolParam(description = "搜索文本，可选", required = false) String text) {
         return retrievalService.listCandidate(attributeId, text);
     }
 
@@ -119,7 +119,7 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_display_entity", description = "获取展示用的实体列表，可按规则ID过滤")
-    public DataEntityResultVo listDisplayEntity(@ToolParam(description = "规则ID，可选") Integer ruleId) {
+    public DataEntityResultVo listDisplayEntity(@ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listEntity(ruleId, currentUserId());
     }
 
@@ -128,8 +128,8 @@ public class RetrievalMcpTool {
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
     @Tool(name = "retrieval_list_display_attribute", description = "获取展示用的属性列表，可按实体或规则ID过滤")
-    public DataAttributeResultVo listDisplayAttribute(@ToolParam(description = "实体名称，可选") String entity,
-                                                      @ToolParam(description = "规则ID，可选") Integer ruleId) {
+    public DataAttributeResultVo listDisplayAttribute(@ToolParam(description = "实体名称，可选", required = false) String entity,
+                                                      @ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listAttributeForDisplay(entity, ruleId, currentUserId());
     }
 

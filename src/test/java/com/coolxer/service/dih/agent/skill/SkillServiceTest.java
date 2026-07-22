@@ -94,6 +94,48 @@ class SkillServiceTest {
     }
 
     @Test
+    void taskSelectionLoadsOnlySelectedSkillEvenWhenMatchingSkillExceedsPromptBudget() throws Exception {
+        writeSkill(
+                skillRoot.resolve("analysis-agent"),
+                """
+                        {
+                          "id": "analysis-agent",
+                          "name": "通用研判",
+                          "enabled": true,
+                          "agentTypes": ["agent_analysis"],
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "通用研判提示词".repeat(1000)
+        );
+        writeSkill(
+                skillRoot.resolve("jmr-continuous-threat-analysis"),
+                """
+                        {
+                          "id": "jmr-continuous-threat-analysis",
+                          "name": "僵木蠕持续安全研判",
+                          "enabled": true,
+                          "agentTypes": ["agent_analysis"],
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "JMR 事件编号直接检索提示词"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildTaskSkillPrompt(
+                "agent_analysis",
+                List.of("jmr-continuous-threat-analysis")
+        );
+
+        assertThat(prompt)
+                .contains("JMR 事件编号直接检索提示词")
+                .doesNotContain("通用研判提示词");
+    }
+
+    @Test
     void explicitAgentSkillsRejectMissingOrDisabledSkills() throws Exception {
         writeSkill(
                 skillRoot.resolve("disabled-skill"),

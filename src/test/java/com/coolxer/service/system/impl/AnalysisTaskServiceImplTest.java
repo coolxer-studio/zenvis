@@ -59,14 +59,16 @@ class AnalysisTaskServiceImplTest {
     void taskSkillSelectionOnlyAcceptsEnabledSkillsRegardlessOfAgentType() throws Exception {
         createSkill("enabled-any-agent", true, "agent_dispose", "已启用 Skill Prompt");
         createSkill("disabled-skill", false, "agent_analysis", "不应加载");
+        createSkill("matching-but-not-selected", true, "agent_analysis", "同类型但未选中");
 
         SkillService skillService = createSkillService();
 
         assertThat(skillService.getEnabledOptions())
                 .extracting(option -> option.getValue())
-                .containsExactly("enabled-any-agent");
+                .containsExactlyInAnyOrder("enabled-any-agent", "matching-but-not-selected");
         assertThat(skillService.buildTaskSkillPrompt("agent_analysis", List.of("enabled-any-agent")))
-                .contains("已启用 Skill Prompt");
+                .contains("已启用 Skill Prompt")
+                .doesNotContain("同类型但未选中");
         assertThatThrownBy(() -> skillService.validateEnabledSkillIds(List.of("disabled-skill")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("disabled-skill");

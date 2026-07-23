@@ -19,6 +19,21 @@ ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数�
 
 ## 快速开始
 
+### 在线快速部署
+
+脚本会自动检查 Docker 与 Docker Compose、按需拉取项目、匹配 `amd64`/`arm64` 镜像，并在全部容器健康且 Web 页面可访问后输出登录信息：
+
+```bash
+curl -fsSL https://gitee.com/coolxer-studio/zenvis/raw/feature/zenvis-1.0/quick-deploy.sh | bash
+```
+
+在已拉取的项目根目录中也可以直接执行：
+
+```bash
+chmod +x quick-deploy.sh
+./quick-deploy.sh
+```
+
 ### Docker Compose
 
 完整环境由项目根目录的 `deploy` 目录统一编排：

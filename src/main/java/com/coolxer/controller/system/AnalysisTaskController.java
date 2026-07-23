@@ -97,7 +97,7 @@ public class AnalysisTaskController extends BaseController {
     @GetMapping({"/{id}/view"})
     public ResponseWrap<AnalysisTaskVo> query(@PathVariable("id") Long id) {
         try {
-            AnalysisTaskVo analysisTaskVo = analysisTaskService.info(id);
+            AnalysisTaskVo analysisTaskVo = analysisTaskService.detail(id);
             if (analysisTaskVo == null) {
                 return ResponseWrap.fail();
             }

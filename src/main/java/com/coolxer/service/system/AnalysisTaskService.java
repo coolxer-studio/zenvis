@@ -25,6 +25,8 @@ public interface AnalysisTaskService {
 
     AnalysisTaskVo info(Long id);
 
+    AnalysisTaskVo detail(Long id);
+
     AnalysisTaskVo enqueue(Long id);
 
     AnalysisTaskVo cancel(Long id);

@@ -3,8 +3,10 @@ package com.coolxer.service.system.impl;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
+import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AgentLlmService;
+import com.coolxer.service.dih.ChatMessagePartParser;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -105,6 +107,60 @@ class AnalysisTaskServiceImplTest {
         assertThat(agentLlmService.userPrompt).contains("每日研判").contains("分析最近风险");
         assertThat(agentLlmService.modelCleared).isTrue();
         assertThat(agentLlmService.mcpContextCleared).isTrue();
+    }
+
+    @Test
+    void detailResultUsesSharedChatMessagePartParser() {
+        AnalysisTask task = new AnalysisTask()
+                .setName("每日研判")
+                .setResult("""
+                        # 研判结论
+
+                        ```java
+                        System.out.println("risk");
+                        ```
+
+                        ```zenvis:analysis-record
+                        {"title":"异常研判","content":"发现风险"}
+                        ```
+
+                        ```zenvis:disposal-strategy-config
+                        {"name":"阻断高风险请求"}
+                        ```
+
+                        ```zenvis:visualization-chart-preview
+                        {"title":"风险趋势","option":{"xAxis":{"data":["今天"]},"series":[{"data":[1]}]}}
+                        ```
+                        """);
+
+        AnalysisTaskServiceImpl service = new AnalysisTaskServiceImpl();
+        ReflectionTestUtils.setField(service, "chatMessagePartParser", new ChatMessagePartParser());
+
+        AnalysisTaskVo detail = ReflectionTestUtils.invokeMethod(service, "toDetailVo", task);
+
+        assertThat(detail).isNotNull();
+        assertThat(detail.getResultParts())
+                .extracting(part -> part.getType())
+                .contains("markdown", "code", "analysis-record", "config", "visualization-chart-preview");
+    }
+
+    @Test
+    void detailResultHandlesEmptyHistoryAndListVoDoesNotIncludeParts() throws Exception {
+        AnalysisTask task = new AnalysisTask().setName("历史任务").setResult(null);
+        AnalysisTaskServiceImpl service = new AnalysisTaskServiceImpl();
+        ReflectionTestUtils.setField(service, "chatMessagePartParser", new ChatMessagePartParser());
+
+        AnalysisTaskVo detail = ReflectionTestUtils.invokeMethod(service, "toDetailVo", task);
+        AnalysisTaskVo listItem = ReflectionTestUtils.invokeMethod(service, "toVo", task);
+
+        assertThat(detail).isNotNull();
+        assertThat(detail.getResultParts()).isEmpty();
+        assertThat(listItem).isNotNull();
+        assertThat(listItem.getResultParts()).isNull();
+        assertThat(JacksonConfig.OBJECT_MAPPER.writeValueAsString(detail))
+                .contains("\"result_parts\":[]");
+        assertThat(JacksonConfig.OBJECT_MAPPER.writeValueAsString(listItem))
+                .doesNotContain("result_parts");
     }
 
     private void createSkill(String id, boolean enabled, String agentType, String content) throws Exception {

@@ -3,6 +3,7 @@ package com.coolxer.model.system.vo;
 import com.coolxer.commons.enums.AnalysisTaskStatus;
 import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
+import com.coolxer.model.dih.ChatMessagePart;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -27,6 +28,11 @@ public class AnalysisTaskVo implements Serializable {
     private String prompt;
 
     private String result;
+
+    /**
+     * 详情接口返回的结构化结果片段；列表接口不填充该字段。
+     */
+    private List<ChatMessagePart> resultParts;
 
     private String errorMessage;
 

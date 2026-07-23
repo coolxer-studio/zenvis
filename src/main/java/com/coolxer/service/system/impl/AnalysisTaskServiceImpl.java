@@ -3,11 +3,13 @@ package com.coolxer.service.system.impl;
 import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import com.coolxer.commons.enums.AnalysisTaskStatus;
 import com.coolxer.commons.enums.McpInvocationStatus;
+import com.coolxer.commons.enums.MessageType;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
 import com.coolxer.dao.mysql.repository.AnalysisTaskRepository;
 import com.coolxer.model.base.vo.PageRowsVo;
+import com.coolxer.model.dih.ChatMessagePart;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.model.system.dto.AnalysisTaskDto;
 import com.coolxer.model.system.dto.AnalysisTaskSearchDto;
@@ -15,6 +17,7 @@ import com.coolxer.model.system.vo.AnalysisTaskQueueVo;
 import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AgentLlmService;
+import com.coolxer.service.dih.ChatMessagePartParser;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -87,6 +90,8 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     private McpApprovalService mcpApprovalService;
     @Autowired
     private McpTaskToolGrantService taskToolGrantService;
+    @Autowired
+    private ChatMessagePartParser chatMessagePartParser;
 
     @Value("${app.ai.analysis-task.max-concurrency:1}")
     private int configuredMaxConcurrency = 1;
@@ -204,6 +209,11 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     @Override
     public AnalysisTaskVo info(Long id) {
         return analysisTaskRepository.findById(id).map(this::toVo).orElse(null);
+    }
+
+    @Override
+    public AnalysisTaskVo detail(Long id) {
+        return analysisTaskRepository.findById(id).map(this::toDetailVo).orElse(null);
     }
 
     @Override
@@ -541,6 +551,15 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         if (StringUtils.isNotBlank(task.getExecutionId())) {
             vo.setPendingApprovalCount(mcpApprovalService.countPendingTaskApprovals(task.getExecutionId()));
         }
+        return vo;
+    }
+
+    private AnalysisTaskVo toDetailVo(AnalysisTask task) {
+        AnalysisTaskVo vo = toVo(task);
+        List<ChatMessagePart> resultParts = StringUtils.isBlank(task.getResult())
+                ? List.of()
+                : chatMessagePartParser.parse(task.getResult(), MessageType.TEXT);
+        vo.setResultParts(resultParts);
         return vo;
     }
 

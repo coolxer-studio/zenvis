@@ -63,6 +63,9 @@ public class DataInitiator {
         // 初始化菜单权限
         initDefaultPermission();
 
+        // AI分析任务已迁移到 DIH 抽屉，清理历史低代码菜单及权限
+        removeLegacyAnalysisTaskMenu();
+
         // 更新内置菜单名称
         updateBuiltInMenuNames();
 
@@ -158,8 +161,7 @@ public class DataInitiator {
 
             Menu serviceMenu = menuRepository.save(new Menu().setName("服务管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(4).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("数据推送服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("push-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
-            menuRepository.save(new Menu().setName("AI分析任务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("analysis-task").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
-            menuRepository.save(new Menu().setName("业务应用服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("business-service").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(3).setLevel(MenuLevel.LEVEL_2));
+            menuRepository.save(new Menu().setName("业务应用服务").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("business-service").setIsEditable(false).setParentId(serviceMenu.getId()).setOrderNumber(2).setLevel(MenuLevel.LEVEL_2));
 
             Menu systemMenu = menuRepository.save(new Menu().setName("系统管理").setType(MenuType.BUILT_APP).setRoute("system").setIsEditable(false).setParentId(0).setOrderNumber(5).setLevel(MenuLevel.LEVEL_1));
             menuRepository.save(new Menu().setName("菜单管理").setType(MenuType.LOW_CODE_PAGE).setRoute(MenuType.LOW_CODE_PAGE.getRoute()).setParams("menu").setIsEditable(false).setParentId(systemMenu.getId()).setOrderNumber(1).setLevel(MenuLevel.LEVEL_2));
@@ -175,6 +177,28 @@ public class DataInitiator {
         }
 
 
+    }
+
+    /**
+     * 删除旧版本中位于服务管理下的内置 AI分析任务 AMIS 菜单。
+     * 用户自行创建的可编辑菜单不在迁移范围内。
+     */
+    private void removeLegacyAnalysisTaskMenu() {
+        List<Menu> legacyMenus = menuRepository.findAll().stream()
+                .filter(menu -> Boolean.FALSE.equals(menu.getIsEditable()))
+                .filter(menu -> MenuType.LOW_CODE_PAGE == menu.getType())
+                .filter(menu -> "analysis-task".equals(menu.getParams()))
+                .toList();
+        for (Menu menu : legacyMenus) {
+            List<RolePermission> permissions = rolePermissionRepository.findByPermissionId(menu.getId());
+            if (CollectionUtils.isNotEmpty(permissions)) {
+                rolePermissionRepository.deleteAll(permissions);
+            }
+            menuRepository.delete(menu);
+        }
+        if (CollectionUtils.isNotEmpty(legacyMenus)) {
+            log.info("已清理 {} 个历史 AI分析任务低代码菜单，功能入口已迁移到 DIH 抽屉", legacyMenus.size());
+        }
     }
 
     /**
@@ -195,10 +219,6 @@ public class DataInitiator {
     private boolean updateBuiltInMenuName(Menu menu) {
         if ("push-task".equals(menu.getParams()) && "数推服务".equals(menu.getName())) {
             menu.setName("数据推送服务");
-            return true;
-        }
-        if ("analysis-task".equals(menu.getParams()) && "分析任务".equals(menu.getName())) {
-            menu.setName("AI分析任务");
             return true;
         }
         return false;
@@ -233,9 +253,13 @@ public class DataInitiator {
                     .setParams("business-service")
                     .setIsEditable(false)
                     .setParentId(serviceMenu.getId())
-                    .setOrderNumber(3)
+                    .setOrderNumber(2)
                     .setLevel(MenuLevel.LEVEL_2));
             log.info("已新增内置业务应用服务菜单");
+        } else if (!Integer.valueOf(2).equals(businessServiceMenu.getOrderNumber())) {
+            businessServiceMenu.setOrderNumber(2);
+            businessServiceMenu = menuRepository.save(businessServiceMenu);
+            log.info("已更新内置业务应用服务菜单顺序");
         }
 
         Integer permissionId = businessServiceMenu.getId();

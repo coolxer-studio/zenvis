@@ -61,6 +61,7 @@ GET /api/v1/dih/skills/options?enabled=true
   "model": "auto",
   "prompt": "分析最近7天调用量、失败率和异常峰值，并给出建议。",
   "result": null,
+  "result_parts": [],
   "error_message": null,
   "status": "WAITING_APPROVAL",
   "status_description": "等待审批",
@@ -78,6 +79,46 @@ GET /api/v1/dih/skills/options?enabled=true
   "create_by": 1
 }
 ```
+
+`result` 保留模型原始输出，继续兼容已有调用方。`result_parts` 使用与 DIH 对话
+`ChatMessage.parts` 相同的结构化片段协议，仅由 `GET /{id}/view` 详情接口返回：
+
+```json
+[
+  {
+    "id": "5d57a9f1-93c4-43ae-bc17-6422783b74a8",
+    "type": "markdown",
+    "content": "## 关键结论\n失败率出现异常峰值。"
+  },
+  {
+    "id": "64680479-d40e-4486-8d87-b6fd404c4b5d",
+    "type": "visualization-chart-preview",
+    "content": "失败率趋势",
+    "metadata": {
+      "title": "失败率趋势",
+      "option": {
+        "xAxis": {"data": ["07-13", "07-14"]},
+        "series": [{"type": "line", "data": [0.8, 3.2]}]
+      }
+    }
+  }
+]
+```
+
+| `result_parts` 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | String | 片段标识 |
+| `type` | String | `markdown`、`code`、`thinking`、`config`、`report-document`、`analysis-record`、`policy-record`、`visualization-chart-preview` 等 DIH 卡片类型 |
+| `content` | String | 片段正文或配置内容 |
+| `language` | String | 代码、配置或报表语言 |
+| `title` | String | 卡片标题 |
+| `level` | String | 提示级别 |
+| `status` | String | 卡片业务状态 |
+| `metadata` | Object | 卡片扩展数据 |
+
+详情查询会通过 `ChatMessagePartParser` 实时解析 `result`，不依赖新增数据库字段，
+因此历史任务无需回填也能获得卡片展示能力。列表、队列和任务变更接口不返回
+`result_parts`，避免增加轮询响应体积。
 
 ### 状态
 
@@ -179,7 +220,8 @@ curl "http://localhost:11001/api/v1/system/analysis-task/list?page=1&perPage=10&
 GET /api/v1/system/analysis-task/{id}/view
 ```
 
-返回提示词、结果、错误、Skill、审批数量、executionId 和时间信息。
+返回提示词、原始结果 `result`、DIH 结构化卡片 `result_parts`、错误、Skill、审批数量、
+executionId 和时间信息。无结果时 `result_parts` 为空数组。
 
 ## 8. 重新入队、取消和删除
 

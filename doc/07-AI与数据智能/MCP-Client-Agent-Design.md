@@ -432,14 +432,16 @@ mvn -DskipTests clean compile
 ```bash
 cd zenvis-backend
 jq empty deploy/open_config/mcp_config/index.json
-jq empty deploy/open_config/analysis-task_config/index.json
 ```
 
-### 前端类型检查
+AI分析任务已迁移到 DIH 原生前端，不再维护对应的 AMIS JSON。
+
+### 前端类型检查与构建
 
 ```bash
 cd zenvis-frontend
 npm run test
+npm run build:pro
 ```
 
 ### 接口联调流程

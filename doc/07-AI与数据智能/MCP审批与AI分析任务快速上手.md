@@ -11,7 +11,7 @@
 | MCP 服务 | 连接外部系统并发现其工具 | 服务管理 → MCP 服务 |
 | MCP 工具策略 | 决定工具直接执行、需要审批还是禁止 | MCP 服务 → 工具审批策略 |
 | Skill | 向 Agent 注入业务规则、流程和知识提示 | DIH Skill 管理；AI分析任务创建时可选 |
-| AI分析任务 | 在后台持续运行一次 Agent 分析，可定时、排队和审批 | 服务管理 → AI分析任务 |
+| AI分析任务 | 在后台持续运行一次 Agent 分析，可定时、排队和审批 | 数智中心（DIH）→ 顶部下拉抽屉 |
 
 MCP 是“可执行能力”，Skill 是“如何思考和使用能力的说明”。Skill 本身不会绕过 MCP 策略。
 
@@ -334,4 +334,4 @@ app.ai.analysis-task.dispatch-delay-ms=5000
 | 后台任务调度 | `service/system/impl/AnalysisTaskServiceImpl.java` |
 | Skill 扫描与加载 | `service/dih/agent/skill/SkillService.java` |
 | MCP AMIS 页面 | `deploy/open_config/mcp_config/index.json` |
-| AI分析任务 AMIS 页面 | `deploy/open_config/analysis-task_config/index.json` |
+| AI分析任务原生前端 | `zenvis-frontend/src/views/dih/components/view-drawer.vue` |

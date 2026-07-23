@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class PluginUpgradeUiConfigTest {
 
     private static final Path CONFIG_PATH =
-            Path.of("deploy/open_config/plugin_config/index.json");
+            Path.of("../open_config/plugin_config/index.json");
 
     @Test
     void uploadedUpgradePackageEnablesUpgradeAction() throws IOException {

@@ -208,7 +208,7 @@ class SkillServiceTest {
 
     @Test
     void builtinDataAccessSkillDocumentsCheckedMetadataAndVectumWorkflow() throws Exception {
-        Path repoSkill = Path.of("deploy/open_config/skill_config/data-access-agent");
+        Path repoSkill = Path.of("../open_config/skill_config/data-access-agent");
         writeSkill(
                 skillRoot.resolve("data-access-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
@@ -239,7 +239,7 @@ class SkillServiceTest {
 
     @Test
     void builtinDataVisualizationSkillDocumentsVisualizationWorkflow() throws Exception {
-        Path repoSkill = Path.of("deploy/open_config/skill_config/data-visualization-agent");
+        Path repoSkill = Path.of("../open_config/skill_config/data-visualization-agent");
         writeSkill(
                 skillRoot.resolve("data-visualization-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
@@ -279,7 +279,7 @@ class SkillServiceTest {
 
     @Test
     void builtinAnalysisSkillDocumentsDirectAndContinuousWorkflow() throws Exception {
-        Path repoSkill = Path.of("deploy/open_config/skill_config/analysis-agent");
+        Path repoSkill = Path.of("../open_config/skill_config/analysis-agent");
         writeSkill(
                 skillRoot.resolve("analysis-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
@@ -310,7 +310,7 @@ class SkillServiceTest {
 
     @Test
     void builtinDisposeSkillDocumentsPolicyWorkflow() throws Exception {
-        Path repoSkill = Path.of("deploy/open_config/skill_config/dispose-agent");
+        Path repoSkill = Path.of("../open_config/skill_config/dispose-agent");
         writeSkill(
                 skillRoot.resolve("dispose-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
@@ -343,7 +343,7 @@ class SkillServiceTest {
 
     @Test
     void builtinReportSkillDocumentsReportDraftAndEditingWorkflow() throws Exception {
-        Path repoSkill = Path.of("deploy/open_config/skill_config/report-agent");
+        Path repoSkill = Path.of("../open_config/skill_config/report-agent");
         writeSkill(
                 skillRoot.resolve("report-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),

@@ -7,11 +7,11 @@ ZenVis Backend 是基于 Spring Boot构建的ZenVis的后端项目，提供仪�
 ### 1. Docker Compose 运行（推荐）
 
 ```bash
-cd zenvis-backend/deploy
+cd zenvis
 docker compose up -d
 ```
 
-> 默认运行架构由 `deploy/.env` 中的 `ARCH` 决定。初始化账号由部署配置创建，首次登录后应立即修改密码；不要在 README 或生产脚本中固化真实凭据。
+> 默认运行架构由项目根目录 `.env` 中的 `ARCH` 决定。初始化账号由部署配置创建，首次登录后应立即修改密码；不要在 README 或生产脚本中固化真实凭据。
 
 ### 2. 服务访问
 
@@ -269,7 +269,7 @@ MCP_BEARER_TOKEN=your_mcp_token
 
 ### 数据库初始化
 
-**MySQL**：执行 `deploy/config/mysql/init.sql` 创建数据库和用户：
+**MySQL**：执行项目根目录的 `config/mysql/init.sql` 创建数据库和用户：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS zenvis CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -285,46 +285,43 @@ FLUSH PRIVILEGES;
 ## 七、项目结构
 
 ```
-zenvis-backend/
-├── src/main/java/com/coolxer/
-│   ├── Application.java              # 启动类
-│   ├── aop/                          # 切面处理
-│   │   ├── AuthorityInterceptor.java # 权限拦截器
-│   │   ├── LogAopAspect.java         # 日志切面
-│   │   └── ApiExceptionHandler.java  # 全局异常处理
-│   ├── commons/                      # 公共模块
-│   │   ├── constants/                # 常量定义
-│   │   ├── enums/                    # 枚举类
-│   │   └── exception/                # 异常类
-│   ├── component/                    # Spring 组件
-│   ├── configuration/                # 配置类
-│   ├── controller/                   # REST API 控制器
-│   │   ├── dashboard/                # 仪表盘
-│   │   ├── dih/                      # 深度思考助手
-│   │   ├── policy/                   # 策略配置
-│   │   ├── retrieval/                # 检索引擎
-│   │   └── system/                   # 系统管理
-│   ├── dao/                          # 数据访问层
-│   │   ├── clickhouse/               # ClickHouse 实体和仓库
-│   │   └── mysql/                    # MySQL 实体和仓库
-│   ├── model/                        # 数据模型
-│   ├── service/                      # 业务服务层
-│   └── utils/                        # 工具类
-├── src/main/resources/               # 资源文件
-├── deploy/                           # 部署配置
-│   ├── config/                       # 各服务配置
-│   │   ├── mysql/                    # MySQL 配置
-│   │   ├── redis/                    # Redis 配置
-│   │   ├── redis-stack/              # Redis Stack 配置
-│   │   ├── zenvis-backend/config/    # 后端配置
-│   │   └── zenvis-frontend/conf.d/   # 前端 Nginx 配置
-│   └── data/                         # 数据目录
-├── doc/                              # 模块 README 与 banner；整体文档在 ../doc
-├── Dockerfile                        # Docker 配置
-├── build.sh                          # 构建脚本
-├── LICENSE                           # 许可证
-├── CONTRIBUTING.md                   # 贡献指南
-└── README.md                         # 项目文档
+zenvis/
+├── docker-compose.yml               # 系统编排
+├── config/                          # 各服务配置
+├── data/                            # 数据目录
+├── open_config/                     # ZenVis 开放配置
+└── zenvis-backend/
+    ├── src/main/java/com/coolxer/
+    │   ├── Application.java              # 启动类
+    │   ├── aop/                          # 切面处理
+    │   │   ├── AuthorityInterceptor.java # 权限拦截器
+    │   │   ├── LogAopAspect.java         # 日志切面
+    │   │   └── ApiExceptionHandler.java  # 全局异常处理
+    │   ├── commons/                      # 公共模块
+    │   │   ├── constants/                # 常量定义
+    │   │   ├── enums/                    # 枚举类
+    │   │   └── exception/                # 异常类
+    │   ├── component/                    # Spring 组件
+    │   ├── configuration/                # 配置类
+    │   ├── controller/                   # REST API 控制器
+    │   │   ├── dashboard/                # 仪表盘
+    │   │   ├── dih/                      # 深度思考助手
+    │   │   ├── policy/                   # 策略配置
+    │   │   ├── retrieval/                # 检索引擎
+    │   │   └── system/                   # 系统管理
+    │   ├── dao/                          # 数据访问层
+    │   │   ├── clickhouse/               # ClickHouse 实体和仓库
+    │   │   └── mysql/                    # MySQL 实体和仓库
+    │   ├── model/                        # 数据模型
+    │   ├── service/                      # 业务服务层
+    │   └── utils/                        # 工具类
+    ├── src/main/resources/               # 资源文件
+    ├── doc/                              # 模块 README 与 banner；整体文档在 ../doc
+    ├── Dockerfile                        # Docker 配置
+    ├── build.sh                          # 构建脚本
+    ├── LICENSE                           # 许可证
+    ├── CONTRIBUTING.md                   # 贡献指南
+    └── README.md                         # 项目文档
 ```
 
 ***

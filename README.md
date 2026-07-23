@@ -7,11 +7,11 @@ ZenVis Backend 是基于 Spring Boot构建的ZenVis的后端项目，提供仪�
 ### 1. Docker Compose 运行（推荐）
 
 ```bash
-cd zenvis
+cd zenvis/deploy
 docker compose up -d
 ```
 
-> 默认运行架构由项目根目录 `.env` 中的 `ARCH` 决定。初始化账号由部署配置创建，首次登录后应立即修改密码；不要在 README 或生产脚本中固化真实凭据。
+> 默认运行架构由项目根目录 `deploy/.env` 中的 `ARCH` 决定。初始化账号由部署配置创建，首次登录后应立即修改密码；不要在 README 或生产脚本中固化真实凭据。
 
 ### 2. 服务访问
 
@@ -269,7 +269,7 @@ MCP_BEARER_TOKEN=your_mcp_token
 
 ### 数据库初始化
 
-**MySQL**：执行项目根目录的 `config/mysql/init.sql` 创建数据库和用户：
+**MySQL**：执行项目根目录的 `deploy/config/mysql/init.sql` 创建数据库和用户：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS zenvis CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -286,10 +286,11 @@ FLUSH PRIVILEGES;
 
 ```
 zenvis/
-├── docker-compose.yml               # 系统编排
-├── config/                          # 各服务配置
-├── data/                            # 数据目录
-├── open_config/                     # ZenVis 开放配置
+├── deploy/                          # 系统部署目录
+│   ├── docker-compose.yml
+│   ├── config/                      # 各服务配置
+│   ├── data/                        # 数据目录
+│   └── open_config/                 # ZenVis 开放配置
 └── zenvis-backend/
     ├── src/main/java/com/coolxer/
     │   ├── Application.java              # 启动类

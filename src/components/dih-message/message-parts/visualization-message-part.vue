@@ -4,10 +4,16 @@
       <div class="visualization-chart-preview-title">
         <el-icon><DataAnalysis /></el-icon>
         <span class="card-title-text">{{ part.title || '临时图表预览' }}</span>
-        <el-tag size="small" effect="plain">{{ metadataText(part, 'chartType') || 'chart' }}</el-tag>
+        <el-tag size="small" effect="plain">{{
+          metadataText(part, 'chartType') || 'chart'
+        }}</el-tag>
       </div>
       <div class="visualization-chart-preview-tools">
-        <el-tooltip :content="isChartLibraryAdded ? '已加入图表库' : '加入图表库'" placement="top">
+        <el-tooltip
+          v-if="interactive"
+          :content="isChartLibraryAdded ? '已加入图表库' : '加入图表库'"
+          placement="top"
+        >
           <el-button
             class="config-copy-btn"
             size="small"
@@ -47,13 +53,19 @@
       </el-tooltip>
     </div>
     <div v-if="isExpanded" class="notice-content">
-      {{ part.content || metadataText(part, 'description') || '已记录到右侧数据可视化面板。' }}
+      {{
+        part.content ||
+        metadataText(part, 'description') ||
+        (interactive ? '已记录到右侧数据可视化面板。' : '数据可视化记录')
+      }}
     </div>
   </div>
 
   <div v-else class="chart-part">
     <el-icon><DataAnalysis /></el-icon>
-    <span>图表数据已加载，请在右侧面板查看可视化结果。</span>
+    <span>{{
+      interactive ? '图表数据已加载，请在右侧面板查看可视化结果。' : '图表数据已生成。'
+    }}</span>
   </div>
 </template>
 
@@ -70,14 +82,11 @@ import {
 import * as echarts from 'echarts';
 import { useWindowResize } from '@/composables/use-window-resize';
 import type { ChatMessagePart } from '@/types/type-dih';
-import {
-  metadataJsonText,
-  metadataText,
-  useDefaultExpanded,
-} from './message-part-context';
+import { metadataJsonText, metadataText, useDefaultExpanded } from './message-part-context';
 
 const props = defineProps<{
   part: ChatMessagePart;
+  interactive?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -103,7 +112,7 @@ const isChartLibraryAdded = computed(() => {
 });
 
 const requestAddChartLibrary = () => {
-  if (!chartLibraryAction.value || isChartLibraryAdded.value) {
+  if (!props.interactive || !chartLibraryAction.value || isChartLibraryAdded.value) {
     return;
   }
   emit('addChartLibrary', props.part);
@@ -157,7 +166,8 @@ const isDataVisualizationRecord = computed(() => {
 
 const dataVisualizationRecordTitle = computed(() => {
   if (props.part.type === 'visualization-chart-record') return props.part.title || '图表库记录';
-  if (props.part.type === 'visualization-config-record') return props.part.title || '可视化配置记录';
+  if (props.part.type === 'visualization-config-record')
+    return props.part.title || '可视化配置记录';
   if (props.part.type === 'dashboard-config-record') return props.part.title || '数据看板配置记录';
   if (props.part.type === 'menu-config-record') return props.part.title || '菜单配置记录';
   return props.part.title || '数据可视化记录';

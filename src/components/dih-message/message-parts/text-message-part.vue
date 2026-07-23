@@ -4,7 +4,9 @@
       <div class="thinking-title">
         <el-icon><Loading /></el-icon>
         <span>{{ part.title || '思考过程' }}</span>
-        <el-tag size="small" type="info" effect="plain">{{ thinkingStatusText(part.status) }}</el-tag>
+        <el-tag size="small" type="info" effect="plain">{{
+          thinkingStatusText(part.status)
+        }}</el-tag>
       </div>
       <div class="thinking-tools">
         <el-tooltip :content="thinkingExpanded ? '折叠' : '展开'" placement="top">
@@ -40,7 +42,7 @@
 
   <div v-else-if="part.type === 'prompt-suggestions'" class="prompt-suggestions-part">
     <div v-if="part.title" class="prompt-suggestions-title">{{ part.title }}</div>
-    <div class="prompt-suggestion-list">
+    <div v-if="interactive" class="prompt-suggestion-list">
       <el-button
         v-for="(example, exampleIndex) in promptSuggestionExamples"
         :key="`${partKey(part)}-${exampleIndex}`"
@@ -51,6 +53,16 @@
       >
         {{ example.label }}
       </el-button>
+    </div>
+    <div v-else class="prompt-suggestion-list">
+      <el-tag
+        v-for="(example, exampleIndex) in promptSuggestionExamples"
+        :key="`${partKey(part)}-readonly-${exampleIndex}`"
+        size="small"
+        effect="plain"
+      >
+        {{ example.label }}
+      </el-tag>
     </div>
   </div>
 
@@ -83,24 +95,18 @@
     <pre v-if="codeExpanded" class="code-content"><code>{{ part.content }}</code></pre>
   </div>
 
-  <div v-else class="message-content markdown-body" v-html="parseMarkdown(part.content || '')"></div>
+  <div
+    v-else
+    class="message-content markdown-body"
+    v-html="parseMarkdown(part.content || '')"
+  ></div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import {
-  CaretBottom,
-  CaretTop,
-  Close,
-  CopyDocument,
-  Loading,
-} from '@element-plus/icons-vue';
+import { CaretBottom, CaretTop, Close, CopyDocument, Loading } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
-import {
-  isTruthyMetadata,
-  partKey,
-  useMarkdownRenderer,
-} from './message-part-context';
+import { isTruthyMetadata, partKey, useMarkdownRenderer } from './message-part-context';
 
 type PromptSuggestionExample = {
   label: string;
@@ -109,6 +115,7 @@ type PromptSuggestionExample = {
 
 const props = defineProps<{
   part: ChatMessagePart;
+  interactive?: boolean;
 }>();
 
 const emit = defineEmits<{

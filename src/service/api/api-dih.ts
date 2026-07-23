@@ -6,7 +6,6 @@ import {
   SuggestParams,
   ChatParams,
   ChatMessage,
-  ChatMessagePart,
   ChatStreamEvent,
   ChatActionDecisionParams,
   McpApprovalData,
@@ -22,6 +21,10 @@ import {
   SkillVo,
 } from '@/types/type-dih';
 import { withBaseUrl } from '@u/url';
+import {
+  normalizeChatMessagePart,
+  type RawChatMessagePart,
+} from '@/service/normalizers/chat-message';
 
 const prefix = '/api/v1/dih';
 
@@ -44,24 +47,13 @@ type RawAttachment = {
   message?: string;
 };
 
-type RawMessagePart = {
-  id?: string;
-  type?: string;
-  content?: string;
-  language?: string;
-  title?: string;
-  level?: string;
-  status?: string;
-  metadata?: Record<string, unknown>;
-};
-
 type RawMessage = {
   id?: string;
   sender?: string;
   content?: string;
   time?: string;
   type?: string;
-  parts?: RawMessagePart[];
+  parts?: RawChatMessagePart[];
   attachments?: RawAttachment[];
   loading?: boolean;
   is_error?: boolean;
@@ -169,25 +161,16 @@ const normalizeAttachment = (item: RawAttachment) => ({
   message: item?.message || '',
 });
 
-const normalizeMessagePart = (item: RawMessagePart): ChatMessagePart => ({
-  id: item?.id || '',
-  type: item?.type || 'markdown',
-  content: item?.content || '',
-  language: item?.language || '',
-  title: item?.title || '',
-  level: item?.level || '',
-  status: item?.status || '',
-  metadata: item?.metadata || {},
-});
-
 const normalizeMessage = (item: RawMessage): ChatMessage => ({
   id: item?.id || '',
   sender: (item?.sender || 'ai') as ChatMessage['sender'],
   content: item?.content || '',
   time: item?.time || '',
   type: item?.type || 'text',
-  parts: Array.isArray(item?.parts) ? item.parts.map(normalizeMessagePart) : undefined,
-  attachments: Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : undefined,
+  parts: Array.isArray(item?.parts) ? item.parts.map(normalizeChatMessagePart) : undefined,
+  attachments: Array.isArray(item?.attachments)
+    ? item.attachments.map(normalizeAttachment)
+    : undefined,
   loading: item?.loading || false,
   isError: item?.is_error ?? item?.isError,
   effective: item?.effective,
@@ -230,9 +213,10 @@ const normalizeStreamEvent = (event: RawStreamEvent): ChatStreamEvent => {
     event: event?.event || 'error',
     content: event?.content,
     message: event?.message as ChatStreamEvent['message'],
-    data: event?.event === 'approval_required' || event?.event === 'approval_updated'
-      ? normalizeMcpApproval(event?.data || {})
-      : event?.data,
+    data:
+      event?.event === 'approval_required' || event?.event === 'approval_updated'
+        ? normalizeMcpApproval(event?.data || {})
+        : event?.data,
   };
 };
 
@@ -399,7 +383,10 @@ export class DihService {
     return request<string>(`${prefix}/chat/action-decision`, params, 'POST', { silent: true });
   }
 
-  static async decideMcpApproval(requestId: string, params: McpApprovalDecisionParams): Promise<McpApprovalData> {
+  static async decideMcpApproval(
+    requestId: string,
+    params: McpApprovalDecisionParams,
+  ): Promise<McpApprovalData> {
     const response = await request<McpApprovalData>(
       `${prefix}/mcp/approvals/${encodeURIComponent(requestId)}/decision`,
       params,
@@ -410,7 +397,11 @@ export class DihService {
   }
 
   static async getModelList(): Promise<ModelInfo[]> {
-    const response = await request<Array<{ model?: string; desc?: string }>>(`${prefix}/model/list`, '', 'GET');
+    const response = await request<Array<{ model?: string; desc?: string }>>(
+      `${prefix}/model/list`,
+      '',
+      'GET',
+    );
     return response.map(item => ({
       model: item.model || '',
       desc: item.desc || '',
@@ -418,7 +409,11 @@ export class DihService {
   }
 
   static async getSkillList(params: SkillSearchParams = {}): Promise<PageRowsVo<SkillVo>> {
-    const response = await request<{ rows: RawSkill[]; total: number }>(`${prefix}/skills/list`, params, 'GET');
+    const response = await request<{ rows: RawSkill[]; total: number }>(
+      `${prefix}/skills/list`,
+      params,
+      'GET',
+    );
     return {
       rows: (response.rows || []).map(normalizeSkill),
       total: response.total || 0,
@@ -441,11 +436,18 @@ export class DihService {
       per_page: params.per_page ?? params.perPage ?? 10,
       perPage: params.perPage ?? params.per_page ?? 10,
     };
-    const response = await request<{ rows: RawChatSession[] }>(`${prefixChatSession}/list`, requestParams, 'GET');
+    const response = await request<{ rows: RawChatSession[] }>(
+      `${prefixChatSession}/list`,
+      requestParams,
+      'GET',
+    );
     return response.rows.map(normalizeChatSession);
   }
 
-  static async updateChatSession(id: string, params: UpdateChatSessionParams): Promise<UpdateChatSessionResponse> {
+  static async updateChatSession(
+    id: string,
+    params: UpdateChatSessionParams,
+  ): Promise<UpdateChatSessionResponse> {
     return request<UpdateChatSessionResponse>(`${prefixChatSession}/${id}/update`, params);
   }
 
@@ -453,8 +455,15 @@ export class DihService {
     return request<DeleteChatSessionResponse>(`${prefixChatSession}/${id}`, '', 'DELETE');
   }
 
-  static async getChatSession(chatSessionId: string, params: GetChatSessionParams): Promise<ChatSession> {
-    const response = await request<RawChatSession>(`${prefixChatSession}/${chatSessionId}/session`, params, 'GET');
+  static async getChatSession(
+    chatSessionId: string,
+    params: GetChatSessionParams,
+  ): Promise<ChatSession> {
+    const response = await request<RawChatSession>(
+      `${prefixChatSession}/${chatSessionId}/session`,
+      params,
+      'GET',
+    );
     return normalizeChatSession(response);
   }
 }

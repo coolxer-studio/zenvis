@@ -1,5 +1,9 @@
 <template>
-  <div v-if="part.type === 'mcp-approval'" class="mcp-approval-part" :class="`mcp-approval-${part.status || 'pending'}`">
+  <div
+    v-if="part.type === 'mcp-approval'"
+    class="mcp-approval-part"
+    :class="`mcp-approval-${part.status || 'pending'}`"
+  >
     <div class="mcp-approval-title">
       <el-icon><Lock /></el-icon>
       <span class="card-title-text">{{ part.title || 'MCP 工具审批' }}</span>
@@ -26,11 +30,13 @@
           {{ mcpApprovalRiskText }}
         </el-tag>
       </div>
-      <div class="mcp-approval-content">{{ part.content || '该工具需要你的明确许可后才能执行。' }}</div>
+      <div class="mcp-approval-content">
+        {{ part.content || '该工具需要你的明确许可后才能执行。' }}
+      </div>
       <div v-if="mcpApprovalExpiryText" class="mcp-approval-expiry">
         {{ mcpApprovalExpiryText }}
       </div>
-      <div v-if="mcpApprovalCanDecide" class="mcp-approval-actions">
+      <div v-if="interactive && mcpApprovalCanDecide" class="mcp-approval-actions">
         <el-button
           size="small"
           type="primary"
@@ -83,7 +89,10 @@
     </div>
     <template v-if="isExpanded">
       <div class="confirm-content">{{ part.content }}</div>
-      <div class="confirm-actions" v-if="!part.status || part.status === 'pending'">
+      <div
+        v-if="interactive && (!part.status || part.status === 'pending')"
+        class="confirm-actions"
+      >
         <el-button size="small" type="primary" @click="requestDecision('approved')">
           确认执行
         </el-button>
@@ -98,7 +107,12 @@
           {{ confirmReviseLabel }}
         </el-button>
       </div>
-      <div v-if="confirmReviseInputVisible && (!part.status || part.status === 'pending')" class="confirm-revise-box">
+      <div
+        v-if="
+          interactive && confirmReviseInputVisible && (!part.status || part.status === 'pending')
+        "
+        class="confirm-revise-box"
+      >
         <el-input
           v-model="confirmDecisionInput"
           type="textarea"
@@ -147,7 +161,7 @@
               <el-tag v-if="step.required" size="small" type="danger" effect="plain">必填</el-tag>
             </div>
             <div v-if="step.description" class="info-step-description">{{ step.description }}</div>
-            <div class="info-step-suggestions">
+            <div v-if="interactive" class="info-step-suggestions">
               <el-button
                 v-for="(suggestion, suggestionIndex) in stepSuggestions(step)"
                 :key="suggestionIndex"
@@ -162,6 +176,7 @@
               </el-button>
             </div>
             <el-input
+              v-if="interactive"
               v-model="infoStepCustomInputs[step.id]"
               class="info-step-input"
               type="textarea"
@@ -174,7 +189,10 @@
           </div>
         </div>
       </div>
-      <div v-if="!part.status || part.status === 'pending'" class="info-steps-actions">
+      <div
+        v-if="interactive && (!part.status || part.status === 'pending')"
+        class="info-steps-actions"
+      >
         <el-button size="small" type="primary" @click="submitInfoSteps">
           {{ infoStepsSubmitLabel }}
         </el-button>
@@ -186,22 +204,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref, toRef } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import {
-  CaretBottom,
-  CaretTop,
-  InfoFilled,
-  Lock,
-  QuestionFilled,
-} from '@element-plus/icons-vue';
+import { CaretBottom, CaretTop, InfoFilled, Lock, QuestionFilled } from '@element-plus/icons-vue';
 import { useSecondClock } from '@/composables/use-second-clock';
-import type {
-  ChatMessagePart,
-  McpApprovalDecision,
-} from '@/types/type-dih';
-import {
-  metadataText,
-  useDefaultExpanded,
-} from './message-part-context';
+import type { ChatMessagePart, McpApprovalDecision } from '@/types/type-dih';
+import { metadataText, useDefaultExpanded } from './message-part-context';
 
 type InfoStepSuggestion = {
   label: string;
@@ -227,22 +233,32 @@ type InfoStepAnswer = {
 
 const props = defineProps<{
   part: ChatMessagePart;
+  interactive?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'decideAction', payload: {
-    part: ChatMessagePart;
-    decision: 'approved' | 'rejected' | 'revise';
-    detail?: string;
-  }): void;
-  (e: 'submitInfoSteps', payload: {
-    part: ChatMessagePart;
-    answers: InfoStepAnswer[];
-  }): void;
-  (e: 'decideMcpApproval', payload: {
-    part: ChatMessagePart;
-    decision: McpApprovalDecision;
-  }): void;
+  (
+    e: 'decideAction',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'approved' | 'rejected' | 'revise';
+      detail?: string;
+    },
+  ): void;
+  (
+    e: 'submitInfoSteps',
+    payload: {
+      part: ChatMessagePart;
+      answers: InfoStepAnswer[];
+    },
+  ): void;
+  (
+    e: 'decideMcpApproval',
+    payload: {
+      part: ChatMessagePart;
+      decision: McpApprovalDecision;
+    },
+  ): void;
 }>();
 
 const approvalNow = useSecondClock();
@@ -257,26 +273,30 @@ const mcpApprovalScope = computed(() => {
   return typeof value === 'string' ? value.toLowerCase() : '';
 });
 
-const mcpApprovalIsSessionGranted = computed(() => (
-  mcpApprovalScope.value === 'session' && props.part.status !== 'pending'
-));
+const mcpApprovalIsSessionGranted = computed(
+  () => mcpApprovalScope.value === 'session' && props.part.status !== 'pending',
+);
 
 const mcpApprovalStatusText = computed(() => {
   if (mcpApprovalScope.value === 'session') {
     if (props.part.status === 'approved') return '本会话已允许，等待执行';
     if (props.part.status === 'running') return '本会话已允许，执行中';
   }
-  return ({
-    pending: '等待审批',
-    approved: '已允许，等待执行',
-    running: '已允许，执行中',
-    succeeded: '执行成功',
-    failed: '执行失败',
-    rejected: '已拒绝',
-    denied: '策略禁止',
-    expired: '已超时',
-    cancelled: '已取消',
-  }[props.part.status || 'pending'] || props.part.status || '等待审批');
+  return (
+    {
+      pending: '等待审批',
+      approved: '已允许，等待执行',
+      running: '已允许，执行中',
+      succeeded: '执行成功',
+      failed: '执行失败',
+      rejected: '已拒绝',
+      denied: '策略禁止',
+      expired: '已超时',
+      cancelled: '已取消',
+    }[props.part.status || 'pending'] ||
+    props.part.status ||
+    '等待审批'
+  );
 });
 
 const mcpApprovalTagType = computed<'success' | 'warning' | 'info' | 'danger'>(() => {
@@ -330,12 +350,11 @@ const mcpApprovalExpiryText = computed(() => {
 
 const mcpApprovalCanDecide = computed(() => props.part.status === 'pending');
 const mcpApprovalIsDeciding = computed(() => props.part.metadata?.deciding === true);
-const mcpApprovalDecisionLoading = (decision: McpApprovalDecision) => (
-  mcpApprovalIsDeciding.value && props.part.metadata?.decisionInFlight === decision
-);
+const mcpApprovalDecisionLoading = (decision: McpApprovalDecision) =>
+  mcpApprovalIsDeciding.value && props.part.metadata?.decisionInFlight === decision;
 
 const requestMcpApprovalDecision = (decision: McpApprovalDecision) => {
-  if (!mcpApprovalCanDecide.value || mcpApprovalIsDeciding.value) return;
+  if (!props.interactive || !mcpApprovalCanDecide.value || mcpApprovalIsDeciding.value) return;
   emit('decideMcpApproval', { part: props.part, decision });
 };
 
@@ -355,7 +374,7 @@ const confirmStatusText = computed(() => {
 
 const metadataStringList = (key: string) => {
   const value = props.part.metadata?.[key];
-  return Array.isArray(value) ? value.filter(item => typeof item === 'string') as string[] : [];
+  return Array.isArray(value) ? (value.filter(item => typeof item === 'string') as string[]) : [];
 };
 
 const supportsConfirmRevise = computed(() => metadataStringList('actions').includes('revise'));
@@ -367,19 +386,30 @@ const confirmReviseLabel = computed(() => {
 
 const confirmRevisePlaceholder = computed(() => {
   const action = props.part.metadata?.action;
-  if (action === 'analysis.confirm_log_aggregation' || action === 'analysis_demo.confirm_log_aggregation') {
+  if (
+    action === 'analysis.confirm_log_aggregation' ||
+    action === 'analysis_demo.confirm_log_aggregation'
+  ) {
     return '输入需要补充的日志线索，例如：继续关联文件变更记录、补查近 10 分钟网络连接日志';
   }
-  if (action === 'analysis.confirm_sandbox_result' || action === 'analysis_demo.confirm_sandbox_result') {
+  if (
+    action === 'analysis.confirm_sandbox_result' ||
+    action === 'analysis_demo.confirm_sandbox_result'
+  ) {
     return '输入需要继续研判的重点，例如：复核文件落地时间、重点确认异常外联是否成功';
   }
-  if (action === 'policy.confirm_trial' || action === 'policy_demo.confirm_trial' || action === 'policy_demo.confirm_retry_trial') {
+  if (
+    action === 'policy.confirm_trial' ||
+    action === 'policy_demo.confirm_trial' ||
+    action === 'policy_demo.confirm_retry_trial'
+  ) {
     return '输入需要补充的策略调整要求，例如：增加回滚前置确认、扩大来源匹配范围、降低自动处置强度';
   }
   return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';
 });
 
 const submitConfirmRevise = () => {
+  if (!props.interactive) return;
   emit('decideAction', {
     part: props.part,
     decision: 'revise',
@@ -388,6 +418,7 @@ const submitConfirmRevise = () => {
 };
 
 const requestDecision = async (decision: 'approved' | 'rejected') => {
+  if (!props.interactive) return;
   const verb = decision === 'approved' ? '执行' : '取消';
   try {
     await ElMessageBox.confirm(`确认${verb}「${props.part.title || '此操作'}」？`, '操作确认', {
@@ -482,7 +513,10 @@ const infoStepsStatusText = computed(() => {
 });
 
 const submitInfoSteps = () => {
-  const missingStep = infoSteps.value.find(step => step.required && !infoStepAnswerValue(step).value);
+  if (!props.interactive) return;
+  const missingStep = infoSteps.value.find(
+    step => step.required && !infoStepAnswerValue(step).value,
+  );
   if (missingStep) {
     ElMessage.warning(`请补充「${missingStep.title || '必填项'}」`);
     return;

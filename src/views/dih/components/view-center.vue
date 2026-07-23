@@ -24,7 +24,7 @@
                 <span class="typing-dot"></span>
                 <span class="typing-dot"></span>
               </div>
-              <chat-message-renderer
+              <message-card-renderer
                 v-else
                 :message="message"
                 @copy-code="copyMessage"
@@ -197,7 +197,7 @@ import { DihService } from '@/service/api'
 import { useRouter } from 'vue-router'
 import { generateUUID } from '@/utils/util-common'
 import { copyTextToClipboard } from '@/utils/clipboard';
-import ChatMessageRenderer from './chat-message-renderer.vue';
+import MessageCardRenderer from '@/components/dih-message/message-card-renderer.vue';
 import { useChatAttachments } from '../composables/use-chat-attachments';
 import { useChatMessageActions } from '../composables/use-chat-message-actions';
 import { useChatSession } from '../composables/use-chat-session';

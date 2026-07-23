@@ -20,18 +20,22 @@
       <div class="analysis-decision-content">
         {{ part.content || '请选择下一步处理方式。' }}
       </div>
-      <div v-if="!part.status || part.status === 'pending'" class="analysis-decision-actions">
+      <div
+        v-if="interactive && (!part.status || part.status === 'pending')"
+        class="analysis-decision-actions"
+      >
         <el-button size="small" type="primary" @click="requestAnalysisDecision('dispose')">
           执行处置
         </el-button>
-        <el-button size="small" @click="requestAnalysisDecision('ignore')">
-          忽略告警
-        </el-button>
+        <el-button size="small" @click="requestAnalysisDecision('ignore')"> 忽略告警 </el-button>
         <el-button size="small" type="warning" plain @click="requestAnalysisDecision('continue')">
           补充信息继续研判
         </el-button>
       </div>
-      <div v-if="continueInputVisible && (!part.status || part.status === 'pending')" class="analysis-continue-box">
+      <div
+        v-if="interactive && continueInputVisible && (!part.status || part.status === 'pending')"
+        class="analysis-continue-box"
+      >
         <el-input
           v-model="analysisDecisionInput"
           type="textarea"
@@ -41,7 +45,9 @@
           placeholder="输入需要继续研判的重点，例如：补查近 24 小时同源 IP 登录行为、重点关注横向移动证据"
         />
         <div class="analysis-continue-actions">
-          <el-button size="small" type="primary" @click="submitAnalysisContinue">继续研判</el-button>
+          <el-button size="small" type="primary" @click="submitAnalysisContinue"
+            >继续研判</el-button
+          >
           <el-button size="small" @click="continueInputVisible = false">取消</el-button>
         </div>
       </div>
@@ -66,7 +72,11 @@
       </el-tooltip>
     </div>
     <div v-if="isExpanded" class="notice-content">
-      {{ part.content || metadataText(part, 'description') || '研判阶段记录已同步到右侧面板。' }}
+      {{
+        part.content ||
+        metadataText(part, 'description') ||
+        (interactive ? '研判阶段记录已同步到右侧面板。' : '研判阶段记录')
+      }}
     </div>
   </div>
 </template>
@@ -74,28 +84,24 @@
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue';
 import { ElMessageBox } from 'element-plus';
-import {
-  CaretBottom,
-  CaretTop,
-  DataAnalysis,
-  QuestionFilled,
-} from '@element-plus/icons-vue';
+import { CaretBottom, CaretTop, DataAnalysis, QuestionFilled } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
-import {
-  metadataText,
-  useDefaultExpanded,
-} from './message-part-context';
+import { metadataText, useDefaultExpanded } from './message-part-context';
 
 const props = defineProps<{
   part: ChatMessagePart;
+  interactive?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'chooseAnalysisDecision', payload: {
-    part: ChatMessagePart;
-    decision: 'dispose' | 'ignore' | 'continue';
-    detail?: string;
-  }): void;
+  (
+    e: 'chooseAnalysisDecision',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'dispose' | 'ignore' | 'continue';
+      detail?: string;
+    },
+  ): void;
 }>();
 
 const { isExpanded, toggleExpanded } = useDefaultExpanded(toRef(props, 'part'));
@@ -117,6 +123,7 @@ const analysisDecisionStatusText = computed(() => {
 });
 
 const requestAnalysisDecision = async (decision: 'dispose' | 'ignore' | 'continue') => {
+  if (!props.interactive) return;
   if (decision === 'continue') {
     continueInputVisible.value = true;
     return;
@@ -136,6 +143,7 @@ const requestAnalysisDecision = async (decision: 'dispose' | 'ignore' | 'continu
 };
 
 const submitAnalysisContinue = () => {
+  if (!props.interactive) return;
   emit('chooseAnalysisDecision', {
     part: props.part,
     decision: 'continue',
@@ -151,9 +159,11 @@ const analysisStageText = (stage: string) => {
 };
 
 const analysisRecordTitle = computed(() => {
-  return props.part.title
-    || metadataText(props.part, 'title')
-    || analysisStageText(metadataText(props.part, 'stage'));
+  return (
+    props.part.title ||
+    metadataText(props.part, 'title') ||
+    analysisStageText(metadataText(props.part, 'stage'))
+  );
 });
 
 const analysisRecordTagType = computed(() => {

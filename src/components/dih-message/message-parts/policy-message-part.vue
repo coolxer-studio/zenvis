@@ -24,16 +24,9 @@
 
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
-import {
-  CaretBottom,
-  CaretTop,
-  DataAnalysis,
-} from '@element-plus/icons-vue';
+import { CaretBottom, CaretTop, DataAnalysis } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
-import {
-  metadataText,
-  useDefaultExpanded,
-} from './message-part-context';
+import { metadataText, useDefaultExpanded } from './message-part-context';
 
 const props = defineProps<{
   part: ChatMessagePart;
@@ -49,9 +42,11 @@ const policyTypeText = (type: string) => {
 };
 
 const policyRecordTitle = computed(() => {
-  return props.part.title
-    || metadataText(props.part, 'title')
-    || policyTypeText(metadataText(props.part, 'policyType'));
+  return (
+    props.part.title ||
+    metadataText(props.part, 'title') ||
+    policyTypeText(metadataText(props.part, 'policyType'))
+  );
 });
 
 const policyRecordTagType = computed(() => {

@@ -3,7 +3,9 @@
     <div class="config-card-header">
       <div class="config-card-title">
         <el-icon><Document /></el-icon>
-        <span class="config-card-name">{{ part.title || metadataText(part, 'title') || '报表文档' }}</span>
+        <span class="config-card-name">{{
+          part.title || metadataText(part, 'title') || '报表文档'
+        }}</span>
         <el-tag size="small" effect="plain">{{ reportDocumentFormatText }}</el-tag>
       </div>
       <div class="config-card-tools">
@@ -29,7 +31,7 @@
     </div>
     <template v-if="isExpanded">
       <div class="config-card-meta">
-        <span>已同步到右侧报表编辑器</span>
+        <span>{{ interactive ? '已同步到右侧报表编辑器' : '只读报表预览' }}</span>
       </div>
       <iframe
         v-if="isReportDocumentHtml"
@@ -53,7 +55,11 @@
         <el-tag size="small" effect="plain">{{ configKindText }}</el-tag>
       </div>
       <div class="config-card-tools">
-        <el-tooltip v-if="isConfigPreviewable" :content="isConfigPreviewMode ? '查看源码' : '预览最终效果'" placement="top">
+        <el-tooltip
+          v-if="isConfigPreviewable"
+          :content="isConfigPreviewMode ? '查看源码' : '预览最终效果'"
+          placement="top"
+        >
           <el-button
             class="config-copy-btn"
             size="small"
@@ -103,22 +109,13 @@
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue';
 import DOMPurify from 'dompurify';
-import {
-  CaretBottom,
-  CaretTop,
-  CopyDocument,
-  Document,
-  View,
-} from '@element-plus/icons-vue';
+import { CaretBottom, CaretTop, CopyDocument, Document, View } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
-import {
-  metadataText,
-  useDefaultExpanded,
-  useMarkdownRenderer,
-} from './message-part-context';
+import { metadataText, useDefaultExpanded, useMarkdownRenderer } from './message-part-context';
 
 const props = defineProps<{
   part: ChatMessagePart;
+  interactive?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -161,7 +158,9 @@ const defaultConfigFileName = computed(() => {
 });
 
 const isHtmlConfig = computed(() => configKind.value === 'html-page');
-const isLowCodeConfig = computed(() => ['low-code-page', 'low-code-app'].includes(configKind.value));
+const isLowCodeConfig = computed(() =>
+  ['low-code-page', 'low-code-app'].includes(configKind.value),
+);
 const isConfigPreviewable = computed(() => isHtmlConfig.value || isLowCodeConfig.value);
 
 const isConfigPreviewMode = computed(() => {
@@ -235,24 +234,33 @@ const renderLowCodePreview = (schema: unknown, kind: string): string => {
 const renderLowCodeAppPreview = (schema: Record<string, unknown>) => {
   const data = asRecord(schema.data);
   const pages = asRecordArray(data.pages);
-  const menuItems = pages.flatMap(page => {
-    const children = asRecordArray(page.children);
-    return children.length > 0 ? children : [page];
-  }).filter(page => stringValue(page.label));
-  const menus = menuItems.length > 0 ? menuItems : [
-    { label: '首页', url: 'index' },
-    { label: '管理页面', url: 'manage' },
-  ];
+  const menuItems = pages
+    .flatMap(page => {
+      const children = asRecordArray(page.children);
+      return children.length > 0 ? children : [page];
+    })
+    .filter(page => stringValue(page.label));
+  const menus =
+    menuItems.length > 0
+      ? menuItems
+      : [
+          { label: '首页', url: 'index' },
+          { label: '管理页面', url: 'manage' },
+        ];
   return `
     <div class="amis-preview-app">
       <aside class="amis-preview-sidebar">
         <div class="amis-preview-brand">用户事件应用</div>
-        ${menus.map((menu, index) => `
+        ${menus
+          .map(
+            (menu, index) => `
           <div class="amis-preview-nav-item ${index === 0 ? 'active' : ''}">
             <span>${escapeHtml(menu.label)}</span>
             <small>${escapeHtml(menu.url)}</small>
           </div>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </aside>
       <main class="amis-preview-app-main">
         <div class="amis-preview-page-title">低代码应用预览</div>
@@ -301,7 +309,14 @@ const renderLowCodeNode = (node: unknown): string => {
     const columns = asRecordArray(schema.columns);
     return `
       <div class="amis-preview-grid">
-        ${columns.map(column => `<section class="amis-preview-panel">${renderLowCodeNode(column.body || column)}</section>`).join('')}
+        ${columns
+          .map(
+            column =>
+              `<section class="amis-preview-panel">${renderLowCodeNode(
+                column.body || column,
+              )}</section>`,
+          )
+          .join('')}
       </div>
     `;
   }
@@ -325,7 +340,9 @@ const renderLowCodeNode = (node: unknown): string => {
     return renderFormPreview(schema);
   }
   if (type === 'tpl' || type === 'static') {
-    return `<div class="amis-preview-text">${escapeHtml(stripTemplateText(schema.tpl || schema.value || schema.label || '文本内容'))}</div>`;
+    return `<div class="amis-preview-text">${escapeHtml(
+      stripTemplateText(schema.tpl || schema.value || schema.label || '文本内容'),
+    )}</div>`;
   }
   if (type === 'divider') {
     return '<div class="amis-preview-divider"></div>';
@@ -345,26 +362,38 @@ const renderLowCodeToolbar = (toolbar: unknown) => {
   }
   return `
     <div class="amis-preview-toolbar">
-      ${buttons.map(button => `<button type="button">${escapeHtml(button.label || configTypeLabel(stringValue(button.type)))}</button>`).join('')}
+      ${buttons
+        .map(
+          button =>
+            `<button type="button">${escapeHtml(
+              button.label || configTypeLabel(stringValue(button.type)),
+            )}</button>`,
+        )
+        .join('')}
     </div>
   `;
 };
 
 const renderCrudPreview = (schema: Record<string, unknown>) => {
   const columns = asRecordArray(schema.columns).slice(0, 8);
-  const visibleColumns = columns.length > 0 ? columns : [
-    { name: 'id', label: '事件ID' },
-    { name: 'user', label: '用户' },
-    { name: 'event_type', label: '事件类型' },
-    { name: 'reliability', label: '可信度' },
-    { name: 'server_time', label: '入库时间' },
-  ];
+  const visibleColumns =
+    columns.length > 0
+      ? columns
+      : [
+          { name: 'id', label: '事件ID' },
+          { name: 'user', label: '用户' },
+          { name: 'event_type', label: '事件类型' },
+          { name: 'reliability', label: '可信度' },
+          { name: 'server_time', label: '入库时间' },
+        ];
   return `
     <section class="amis-preview-crud">
       <div class="amis-preview-crud-header">
         <div>
           <div class="amis-preview-panel-title">用户事件列表</div>
-          <div class="amis-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/entity/user-event/list')}</div>
+          <div class="amis-preview-api">${escapeHtml(
+            schema.api || '/zenvis/api/v1/entity/user-event/list',
+          )}</div>
         </div>
         <button type="button">查询</button>
       </div>
@@ -376,11 +405,22 @@ const renderCrudPreview = (schema: Record<string, unknown>) => {
       <div class="amis-preview-table-wrap">
         <table class="amis-preview-table">
           <thead>
-            <tr>${visibleColumns.map(column => `<th>${escapeHtml(column.label || column.name || configTypeLabel(stringValue(column.type)))}</th>`).join('')}</tr>
+            <tr>${visibleColumns
+              .map(
+                column =>
+                  `<th>${escapeHtml(
+                    column.label || column.name || configTypeLabel(stringValue(column.type)),
+                  )}</th>`,
+              )
+              .join('')}</tr>
           </thead>
           <tbody>
-            <tr>${visibleColumns.map(column => `<td>${escapeHtml(sampleColumnValue(column))}</td>`).join('')}</tr>
-            <tr>${visibleColumns.map(column => `<td>${escapeHtml(sampleColumnValue(column, true))}</td>`).join('')}</tr>
+            <tr>${visibleColumns
+              .map(column => `<td>${escapeHtml(sampleColumnValue(column))}</td>`)
+              .join('')}</tr>
+            <tr>${visibleColumns
+              .map(column => `<td>${escapeHtml(sampleColumnValue(column, true))}</td>`)
+              .join('')}</tr>
           </tbody>
         </table>
       </div>
@@ -393,7 +433,9 @@ const renderChartSchemaPreview = (schema: Record<string, unknown>) => {
   const title = asRecord(config.title);
   return `
     <section class="amis-preview-chart">
-      <div class="amis-preview-chart-title">${escapeHtml(title.text || schema.title || '用户事件上报趋势')}</div>
+      <div class="amis-preview-chart-title">${escapeHtml(
+        title.text || schema.title || '用户事件上报趋势',
+      )}</div>
       <div class="amis-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/entity/trend')}</div>
       <div class="amis-preview-chart-canvas">
         <span class="amis-preview-bar bar-1"></span>
@@ -413,12 +455,18 @@ const renderFormPreview = (schema: Record<string, unknown>) => {
     <section class="amis-preview-form">
       <div class="amis-preview-panel-title">${escapeHtml(schema.title || '表单')}</div>
       <div class="amis-preview-form-grid">
-        ${fields.map(field => `
+        ${fields
+          .map(
+            field => `
           <label>
-            <span>${escapeHtml(field.label || field.name || configTypeLabel(stringValue(field.type)))}</span>
+            <span>${escapeHtml(
+              field.label || field.name || configTypeLabel(stringValue(field.type)),
+            )}</span>
             <input readonly value="${escapeHtml(sampleColumnValue(field))}" />
           </label>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     </section>
   `;
@@ -443,7 +491,8 @@ const sampleColumnValue = (column: Record<string, unknown>, secondRow = false) =
   if (name.includes('user')) return secondRow ? 'operator-b' : 'demo-user';
   if (name.includes('event_type')) return secondRow ? '点击' : '登录';
   if (name.includes('reliability')) return secondRow ? '7.6' : '8.8';
-  if (name.includes('server_time') || name.includes('time')) return secondRow ? '2026-07-09 11:20:00' : '2026-07-09 10:00:00';
+  if (name.includes('server_time') || name.includes('time'))
+    return secondRow ? '2026-07-09 11:20:00' : '2026-07-09 10:00:00';
   if (name.includes('tag')) return secondRow ? '运营' : '演示, 可视化';
   if (name.includes('detail')) return secondRow ? '{"path":"/event"}' : '{"method":"POST"}';
   return secondRow ? '示例值 B' : '示例值 A';

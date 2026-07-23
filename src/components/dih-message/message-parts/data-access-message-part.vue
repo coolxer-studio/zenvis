@@ -20,7 +20,10 @@
       <div class="data-access-decision-content">
         {{ part.content || '可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。' }}
       </div>
-      <div v-if="!part.status || part.status === 'pending'" class="data-access-decision-actions">
+      <div
+        v-if="interactive && (!part.status || part.status === 'pending')"
+        class="data-access-decision-actions"
+      >
         <el-button size="small" type="primary" @click="requestDataAccessDecision('apply_config')">
           添加配置到系统
         </el-button>
@@ -31,7 +34,10 @@
           补充信息继续更新配置
         </el-button>
       </div>
-      <div v-if="reviseInputVisible && (!part.status || part.status === 'pending')" class="data-access-revise-box">
+      <div
+        v-if="interactive && reviseInputVisible && (!part.status || part.status === 'pending')"
+        class="data-access-revise-box"
+      >
         <el-input
           v-model="decisionInput"
           type="textarea"
@@ -41,40 +47,43 @@
           placeholder="输入需要调整的内容，例如：增加 server_time 字段、修改实体中文名、补充 IP 字段展示类型"
         />
         <div class="data-access-revise-actions">
-          <el-button size="small" type="primary" @click="submitDataAccessRevise">继续更新配置</el-button>
+          <el-button size="small" type="primary" @click="submitDataAccessRevise"
+            >继续更新配置</el-button
+          >
           <el-button size="small" @click="reviseInputVisible = false">取消</el-button>
         </div>
       </div>
     </template>
   </div>
 
-  <div v-else class="message-content markdown-body" v-html="parseMarkdown(part.content || '')"></div>
+  <div
+    v-else
+    class="message-content markdown-body"
+    v-html="parseMarkdown(part.content || '')"
+  ></div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue';
 import { ElMessageBox } from 'element-plus';
-import {
-  CaretBottom,
-  CaretTop,
-  QuestionFilled,
-} from '@element-plus/icons-vue';
+import { CaretBottom, CaretTop, QuestionFilled } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
-import {
-  useDefaultExpanded,
-  useMarkdownRenderer,
-} from './message-part-context';
+import { useDefaultExpanded, useMarkdownRenderer } from './message-part-context';
 
 const props = defineProps<{
   part: ChatMessagePart;
+  interactive?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'chooseDataAccessDecision', payload: {
-    part: ChatMessagePart;
-    decision: 'apply_config' | 'abandon' | 'revise';
-    detail?: string;
-  }): void;
+  (
+    e: 'chooseDataAccessDecision',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'apply_config' | 'abandon' | 'revise';
+      detail?: string;
+    },
+  ): void;
 }>();
 
 const { parseMarkdown } = useMarkdownRenderer();
@@ -97,6 +106,7 @@ const dataAccessDecisionStatusText = computed(() => {
 });
 
 const requestDataAccessDecision = async (decision: 'apply_config' | 'abandon' | 'revise') => {
+  if (!props.interactive) return;
   if (decision === 'revise') {
     reviseInputVisible.value = true;
     return;
@@ -116,6 +126,7 @@ const requestDataAccessDecision = async (decision: 'apply_config' | 'abandon' | 
 };
 
 const submitDataAccessRevise = () => {
+  if (!props.interactive) return;
   emit('chooseDataAccessDecision', {
     part: props.part,
     decision: 'revise',

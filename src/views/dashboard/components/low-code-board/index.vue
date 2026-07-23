@@ -34,6 +34,6 @@ const iframeUrl = computed(() =>
 <style lang="scss" scoped>
 .dashboard-iframe {
   width: 100%;
-  height: calc(100vh - 60px);
+  height: 100%;
 }
 </style>

@@ -1,612 +1,925 @@
 <template>
-  <!-- 自定义下拉抽屉 -->
   <div class="drawer-container">
-    <div class="drawer-header">
-      <span>数智中心-整体概览</span>
-      <el-button type="primary" link @click="closeDrawer">
-        <el-icon><Close /></el-icon>
-      </el-button>
-    </div>
-    <div class="drawer-content">
-      <div class="overview-container">
-        <!-- 系统状态区 -->
-        <el-row :gutter="20">
-          <el-col v-for="(status, index) in statusData" :key="index" :span="6">
-            <div class="status-card">
-              <div class="status-icon" :class="status.iconClass">
-                <el-icon>
-                  <component :is="status.icon" />
-                </el-icon>
-              </div>
-              <div class="status-info">
-                <h4>{{ status.title }}</h4>
-                <div class="status-value">{{ status.value }}</div>
-                <div class="status-desc" v-html="sanitizeHtml(status.desc)"></div>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
-
-        <!-- 数据概览区 -->
-        <div class="section-title">
-          <h3>数据概览</h3>
-        </div>
-        
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <div class="chart-container">
-              <div class="chart-header">
-                <h4>安全态势</h4>
-                <el-dropdown size="small" @command="handleSecurityCommand">
-                  <span class="chart-filter">
-                    {{ securityChartData.period }} <el-icon><ArrowDown /></el-icon>
-                  </span>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item 
-                        v-for="(item, index) in securityChartData.periodOptions" 
-                        :key="index" 
-                        :command="item"
-                      >
-                        {{ item }}
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-              <div class="chart-placeholder">
-                <el-icon><PieChart /></el-icon>
-                <p>安全态势分布图</p>
-              </div>
-              <div class="chart-legend">
-                <div v-for="(item, index) in securityChartData.legend" :key="index" class="legend-item">
-                  <span class="legend-color" :class="item.level"></span>
-                  <span>{{ item.label }}</span>
-                </div>
-              </div>
-            </div>
-          </el-col>
-          <el-col :span="12">
-            <div class="chart-container">
-              <div class="chart-header">
-                <h4>系统性能</h4>
-                <el-dropdown size="small" @command="handlePerformanceCommand">
-                  <span class="chart-filter">
-                    {{ performanceChartData.period }} <el-icon><ArrowDown /></el-icon>
-                  </span>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item 
-                        v-for="(item, index) in performanceChartData.periodOptions" 
-                        :key="index" 
-                        :command="item"
-                      >
-                        {{ item }}
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-              <div class="chart-placeholder">
-                <el-icon><DataAnalysis /></el-icon>
-                <p>系统性能趋势图</p>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
-
-        <!-- 快速访问区 -->
-        <div class="section-title">
-          <h3>快速操作</h3>
-        </div>
-        <div class="quick-access">
-          <div 
-            v-for="(item, index) in quickAccessData" 
-            :key="index" 
-            class="access-item"
-            @click="handleQuickAccess(item.action)"
-          >
-            <div class="access-icon">
-              <el-icon>
-                <component :is="item.icon" />
-              </el-icon>
-            </div>
-            <div class="access-text">{{ item.label }}</div>
-          </div>
-        </div>
-
-        <!-- 最近活动 -->
-        <div class="section-title">
-          <h3>最近活动</h3>
-          <el-link type="primary">查看全部</el-link>
-        </div>
-        <div class="recent-activities">
-          <div 
-            v-for="(activity, index) in recentActivities" 
-            :key="index" 
-            class="activity-item"
-          >
-            <div class="activity-time">{{ activity.time }}</div>
-            <div class="activity-content">
-              <div class="activity-title">{{ activity.title }}</div>
-              <div class="activity-desc">{{ activity.desc }}</div>
-            </div>
-            <div class="activity-action">
-              <el-button size="small" :type="activity.buttonType" plain>
-                {{ activity.buttonText }}
-              </el-button>
-            </div>
-          </div>
-        </div>
+    <header class="drawer-header">
+      <div class="drawer-title">
+        <span>AI分析任务</span>
+        <small>后台 Agent 分析队列</small>
       </div>
-    </div>
+      <div class="header-actions">
+        <el-button type="primary" :icon="Plus" @click="openCreate">创建任务</el-button>
+        <el-button :icon="VideoPlay" :loading="runningOnce" @click="runQueueOnce">
+          执行一次队列
+        </el-button>
+        <el-button :icon="Refresh" :loading="refreshing" @click="refreshAll(false)">刷新</el-button>
+        <el-button link :icon="Close" aria-label="关闭AI分析任务抽屉" @click="closeDrawer" />
+      </div>
+    </header>
+
+    <main class="drawer-content">
+      <section class="queue-section">
+        <div class="queue-cards">
+          <div v-for="item in queueCards" :key="item.label" class="queue-card">
+            <span class="queue-label">{{ item.label }}</span>
+            <strong :class="item.tone">{{ item.value }}</strong>
+          </div>
+        </div>
+        <div class="queue-context">
+          <span> <b>当前任务：</b>{{ queueStatus.runningTask?.name || '暂无任务' }} </span>
+          <span> <b>下一个任务：</b>{{ queueStatus.nextTask?.name || '暂无任务' }} </span>
+          <span><b>检查时间：</b>{{ formatTime(queueStatus.checkedAt) }}</span>
+        </div>
+      </section>
+
+      <section class="task-section">
+        <el-form :model="filters" inline class="filter-form" @submit.prevent="handleSearch">
+          <el-form-item label="任务名称">
+            <el-input
+              v-model="filters.name"
+              clearable
+              placeholder="通过任务名称搜索"
+              @keyup.enter="handleSearch"
+            />
+          </el-form-item>
+          <el-form-item label="任务状态">
+            <el-select
+              v-model="filters.status"
+              clearable
+              placeholder="全部状态"
+              class="filter-select"
+            >
+              <el-option
+                v-for="item in statusOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="审批模式">
+            <el-select
+              v-model="filters.approvalMode"
+              clearable
+              placeholder="全部模式"
+              class="filter-select"
+            >
+              <el-option label="自动批准 ASK" value="AUTO" />
+              <el-option label="人工审批" value="MANUAL" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="模型">
+            <el-select
+              v-model="filters.model"
+              clearable
+              filterable
+              allow-create
+              default-first-option
+              placeholder="全部模型"
+              class="model-filter"
+            >
+              <el-option
+                v-for="item in modelOptions"
+                :key="item.model"
+                :label="item.model"
+                :value="item.model"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item class="filter-actions">
+            <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+            <el-button :icon="RefreshLeft" @click="resetFilters">重置</el-button>
+          </el-form-item>
+        </el-form>
+
+        <div class="table-wrap">
+          <el-table
+            v-loading="tableLoading"
+            :data="tasks"
+            row-key="id"
+            border
+            height="100%"
+            empty-text="暂无AI分析任务"
+          >
+            <el-table-column prop="id" label="ID" width="66" fixed="left" />
+            <el-table-column
+              prop="name"
+              label="任务名称"
+              min-width="160"
+              fixed="left"
+              show-overflow-tooltip
+            />
+            <el-table-column label="状态" width="120" class-name="status-column">
+              <template #default="{ row }">
+                <el-tag
+                  :type="statusType(row.status)"
+                  size="small"
+                  effect="light"
+                  class="status-tag"
+                >
+                  {{ statusLabel(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="model" label="模型" min-width="130" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.model || 'auto' }}</template>
+            </el-table-column>
+            <el-table-column prop="priority" label="优先级" width="80" align="center" />
+            <el-table-column label="审批模式" width="118">
+              <template #default="{ row }">
+                {{ row.approvalMode === 'AUTO' ? '自动批准 ASK' : '人工审批' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="Skill" min-width="140" show-overflow-tooltip>
+              <template #default="{ row }">{{
+                row.skillIds.length ? row.skillIds.join('、') : '-'
+              }}</template>
+            </el-table-column>
+            <el-table-column label="待审批" width="80" align="center">
+              <template #default="{ row }">
+                <el-badge v-if="row.pendingApprovalCount" :value="row.pendingApprovalCount" />
+                <span v-else>0</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="prompt" label="提示词" min-width="190">
+              <template #default="{ row }">
+                <el-popover
+                  v-if="row.prompt"
+                  trigger="hover"
+                  placement="top"
+                  :width="720"
+                  :show-after="250"
+                  :hide-after="100"
+                  popper-class="analysis-result-markdown-popover"
+                >
+                  <template #reference>
+                    <div class="markdown-cell-preview">{{ row.prompt }}</div>
+                  </template>
+                  <div class="result-markdown-preview" v-html="parseMarkdown(row.prompt)"></div>
+                </el-popover>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="result" label="返回结果" min-width="190">
+              <template #default="{ row }">
+                <el-popover
+                  v-if="row.result"
+                  trigger="hover"
+                  placement="top"
+                  :width="720"
+                  :show-after="250"
+                  :hide-after="100"
+                  popper-class="analysis-result-markdown-popover"
+                >
+                  <template #reference>
+                    <div class="markdown-cell-preview">{{ row.result }}</div>
+                  </template>
+                  <div class="result-markdown-preview" v-html="parseMarkdown(row.result)"></div>
+                </el-popover>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="runCount" label="执行次数" width="88" align="center" />
+            <el-table-column label="计划时间" width="170">
+              <template #default="{ row }">{{
+                formatTime(row.scheduledTime, '立即执行')
+              }}</template>
+            </el-table-column>
+            <el-table-column label="更新时间" width="170">
+              <template #default="{ row }">{{ formatTime(row.updateTime) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" fixed="right" width="248">
+              <template #default="{ row }">
+                <div class="row-actions">
+                  <el-tooltip content="查看详情" placement="top">
+                    <el-button link type="primary" :icon="View" @click="openDetail(row)" />
+                  </el-tooltip>
+                  <el-tooltip
+                    v-if="row.pendingApprovalCount > 0"
+                    content="处理MCP审批"
+                    placement="top"
+                  >
+                    <el-button link type="warning" :icon="Lock" @click="openApproval(row)" />
+                  </el-tooltip>
+                  <el-tooltip content="编辑" placement="top">
+                    <el-button
+                      link
+                      :icon="Edit"
+                      :disabled="isActive(row.status)"
+                      @click="openEdit(row)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip content="重新入队" placement="top">
+                    <el-button
+                      link
+                      type="success"
+                      :icon="RefreshRight"
+                      :disabled="isActive(row.status) || row.status === 'PENDING'"
+                      :loading="isRowLoading(row, 'enqueue')"
+                      @click="enqueueTask(row)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip v-if="!isTerminal(row.status)" content="取消任务" placement="top">
+                    <el-button
+                      link
+                      type="warning"
+                      :icon="CircleClose"
+                      :disabled="row.status === 'CANCELING'"
+                      :loading="isRowLoading(row, 'cancel')"
+                      @click="cancelTask(row)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip content="删除" placement="top">
+                    <el-button
+                      link
+                      type="danger"
+                      :icon="Delete"
+                      :disabled="isActive(row.status)"
+                      :loading="isRowLoading(row, 'delete')"
+                      @click="deleteTask(row)"
+                    />
+                  </el-tooltip>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div class="pagination-row">
+          <el-pagination
+            v-model:current-page="filters.page"
+            v-model:page-size="filters.perPage"
+            :total="total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @current-change="loadTasks(false)"
+            @size-change="handlePageSizeChange"
+          />
+        </div>
+      </section>
+    </main>
+
+    <AnalysisTaskFormDialog
+      v-model:visible="formVisible"
+      :task="editingTask"
+      :model-options="modelOptions"
+      :skill-options="skillOptions"
+      @saved="refreshAll(false)"
+    />
+    <AnalysisTaskDetailDialog v-model:visible="detailVisible" :task-id="detailTaskId" />
+    <AnalysisTaskApprovalDialog
+      v-model:visible="approvalVisible"
+      :task="approvalTask"
+      @changed="refreshAll(true)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import dayjs from 'dayjs';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
+  CircleClose,
   Close,
-  Monitor,
-  Connection,
-  DataAnalysis as DataAnalysisIcon,
-  Files,
-  ArrowDown,
-  PieChart,
+  Delete,
+  Edit,
+  Lock,
+  Plus,
+  Refresh,
+  RefreshLeft,
+  RefreshRight,
   Search,
-  Opportunity,
   VideoPlay,
-  Document,
-  MagicStick
-} from '@element-plus/icons-vue'
-import DOMPurify from 'dompurify'
+  View,
+} from '@element-plus/icons-vue';
+import { AnalysisTaskService } from '@/service/api';
+import { createMarkdownRenderer } from '@/components/dih-message/message-parts/message-part-context';
+import type {
+  TAnalysisTask,
+  TAnalysisTaskModelOption,
+  TAnalysisTaskQueue,
+  TAnalysisTaskSearch,
+  TAnalysisTaskSkillOption,
+  TAnalysisTaskStatus,
+} from '@/types/type-analysis-task';
+import AnalysisTaskApprovalDialog from './analysis-task-approval-dialog.vue';
+import AnalysisTaskDetailDialog from './analysis-task-detail-dialog.vue';
+import AnalysisTaskFormDialog from './analysis-task-form-dialog.vue';
 
-// 定义状态卡片数据结构
-interface StatusItem {
-  title: string
-  value: string
-  desc: string
-  icon: any
-  iconClass: string
-}
+defineOptions({ name: 'ViewDrawer' });
 
-// 定义图表数据结构
-interface ChartData {
-  period: string
-  periodOptions: string[]
-  legend?: {
-    level: string
-    label: string
-  }[]
-}
+type Props = {
+  visible?: boolean;
+};
 
-// 定义快速访问项数据结构
-interface QuickAccessItem {
-  label: string
-  icon: any
-  action: string
-}
+const props = withDefaults(defineProps<Props>(), { visible: true });
+const emit = defineEmits<{ (event: 'close'): void }>();
 
-// 定义活动项数据结构
-interface ActivityItem {
-  time: string
-  title: string
-  desc: string
-  buttonText: string
-  buttonType: 'primary' | 'danger' | 'info'
-}
+const emptyQueue = (): TAnalysisTaskQueue => ({
+  runningTask: null,
+  nextTask: null,
+  pendingCount: 0,
+  readyCount: 0,
+  runningCount: 0,
+  waitingApprovalCount: 0,
+  availableSlots: 0,
+  maxSuspended: 0,
+  checkedAt: '',
+});
 
-const sanitizeHtml = (value: string): string => DOMPurify.sanitize(value)
+const tasks = ref<TAnalysisTask[]>([]);
+const total = ref(0);
+const queueStatus = ref<TAnalysisTaskQueue>(emptyQueue());
+const tableLoading = ref(false);
+const refreshing = ref(false);
+const runningOnce = ref(false);
+const rowAction = reactive({ id: 0, action: '' });
+const filters = reactive<TAnalysisTaskSearch>({
+  name: '',
+  status: '',
+  model: '',
+  approvalMode: '',
+  page: 1,
+  perPage: 10,
+});
 
-// 状态数据
-const statusData = ref<StatusItem[]>([
-  {
-    title: '系统状态',
-    value: '正常运行',
-    desc: '已运行 30 天 12 小时',
-    icon: Monitor,
-    iconClass: 'success'
-  },
-  {
-    title: '安全告警',
-    value: '5',
-    desc: '较昨日 <span class="text-danger">+2</span>',
-    icon: Connection,
-    iconClass: 'warning'
-  },
-  {
-    title: '数据分析任务',
-    value: '12',
-    desc: '3 个待处理',
-    icon: DataAnalysisIcon,
-    iconClass: 'info'
-  },
-  {
-    title: '资产总数',
-    value: '356',
-    desc: '服务器: 128 | 终端: 228',
-    icon: Files,
-    iconClass: 'primary'
+const modelOptions = ref<TAnalysisTaskModelOption[]>([]);
+const skillOptions = ref<TAnalysisTaskSkillOption[]>([]);
+const referenceOptionsLoaded = ref(false);
+const formVisible = ref(false);
+const editingTask = ref<TAnalysisTask | null>(null);
+const detailVisible = ref(false);
+const detailTaskId = ref<number | null>(null);
+const approvalVisible = ref(false);
+const approvalTask = ref<TAnalysisTask | null>(null);
+let pollingTimer: ReturnType<typeof setInterval> | undefined;
+let refreshInFlight = false;
+const { parseMarkdown, clearMarkdownCache } = createMarkdownRenderer();
+
+const statusOptions: Array<{ label: string; value: TAnalysisTaskStatus }> = [
+  { label: '等待执行', value: 'PENDING' },
+  { label: '执行中', value: 'RUNNING' },
+  { label: '等待审批', value: 'WAITING_APPROVAL' },
+  { label: '取消中', value: 'CANCELING' },
+  { label: '执行成功', value: 'SUCCESS' },
+  { label: '执行失败', value: 'FAILED' },
+  { label: '已取消', value: 'CANCELED' },
+];
+
+const statusMeta: Record<
+  TAnalysisTaskStatus,
+  { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }
+> = {
+  PENDING: { label: '等待执行', type: 'primary' },
+  RUNNING: { label: '执行中', type: 'warning' },
+  WAITING_APPROVAL: { label: '等待审批', type: 'warning' },
+  CANCELING: { label: '取消中', type: 'info' },
+  SUCCESS: { label: '执行成功', type: 'success' },
+  FAILED: { label: '执行失败', type: 'danger' },
+  CANCELED: { label: '已取消', type: 'info' },
+};
+
+const queueCards = computed(() => [
+  { label: '等待任务', value: queueStatus.value.pendingCount, tone: 'primary' },
+  { label: '到期可执行', value: queueStatus.value.readyCount, tone: 'primary' },
+  { label: '执行中', value: queueStatus.value.runningCount, tone: 'warning' },
+  { label: '等待审批', value: queueStatus.value.waitingApprovalCount, tone: 'danger' },
+  { label: '可用执行槽', value: queueStatus.value.availableSlots, tone: 'success' },
+  { label: '最大挂起数', value: queueStatus.value.maxSuspended, tone: 'info' },
+]);
+
+const statusLabel = (status: TAnalysisTaskStatus) => statusMeta[status]?.label || status;
+const statusType = (status: TAnalysisTaskStatus) => statusMeta[status]?.type || 'info';
+const isActive = (status: TAnalysisTaskStatus) =>
+  ['RUNNING', 'WAITING_APPROVAL', 'CANCELING'].includes(status);
+const isTerminal = (status: TAnalysisTaskStatus) =>
+  ['SUCCESS', 'FAILED', 'CANCELED'].includes(status);
+const isRowLoading = (task: TAnalysisTask, action: string) =>
+  rowAction.id === task.id && rowAction.action === action;
+
+const formatTime = (value: string, emptyText = '-') => {
+  if (!value) return emptyText;
+  const date = dayjs(value);
+  return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : value;
+};
+
+const loadTasks = async (silent = false) => {
+  if (!silent) tableLoading.value = true;
+  try {
+    const response = await AnalysisTaskService.getList(filters, silent);
+    tasks.value = response.rows;
+    total.value = response.total;
+    if (filters.page > 1 && !response.rows.length && response.total > 0) {
+      filters.page = Math.ceil(response.total / filters.perPage);
+      await loadTasks(silent);
+    }
+  } catch (error) {
+    if (!silent) console.error('获取AI分析任务列表失败:', error);
+  } finally {
+    if (!silent) tableLoading.value = false;
   }
-])
+};
 
-// 安全态势图表数据
-const securityChartData = ref<ChartData>({
-  period: '本月',
-  periodOptions: ['今日', '本周', '本月', '全年'],
-  legend: [
-    { level: 'high', label: '高风险: 5' },
-    { level: 'medium', label: '中风险: 12' },
-    { level: 'low', label: '低风险: 28' }
-  ]
-})
-
-// 系统性能图表数据
-const performanceChartData = ref<ChartData>({
-  period: '近7天',
-  periodOptions: ['今日', '近7天', '近30天']
-})
-
-// 快速访问数据
-const quickAccessData = ref<QuickAccessItem[]>([
-  { label: '安全检索', icon: Search, action: 'search' },
-  { label: '威胁猎杀', icon: Opportunity, action: 'hunt' },
-  { label: '调查分析', icon: VideoPlay, action: 'investigate' },
-  { label: '报告中心', icon: Document, action: 'report' },
-  { label: '智能配置', icon: MagicStick, action: 'config' }
-])
-
-// 最近活动数据
-const recentActivities = ref<ActivityItem[]>([
-  {
-    time: '10:25',
-    title: '检测到高危漏洞',
-    desc: '服务器 S-192.168.1.105 存在 Log4j 远程代码执行漏洞',
-    buttonText: '处理',
-    buttonType: 'danger'
-  },
-  {
-    time: '09:18',
-    title: '完成渗透测试',
-    desc: '周期性安全评估已完成，生成报告可在报告中心查看',
-    buttonText: '查看',
-    buttonType: 'info'
-  },
-  {
-    time: '昨天',
-    title: '数据分析任务',
-    desc: '网络流量分析任务已完成，发现3个异常连接',
-    buttonText: '详情',
-    buttonType: 'primary'
+const loadQueueStatus = async (silent = false) => {
+  try {
+    queueStatus.value = await AnalysisTaskService.getQueueStatus(silent);
+  } catch (error) {
+    if (!silent) console.error('获取AI分析任务队列状态失败:', error);
   }
-])
+};
 
-// Emit事件，用于通知父组件关闭抽屉
-const emit = defineEmits(['close'])
+const refreshAll = async (silent = false) => {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+  if (!silent) refreshing.value = true;
+  try {
+    await Promise.all([loadTasks(silent), loadQueueStatus(silent)]);
+  } finally {
+    refreshInFlight = false;
+    if (!silent) refreshing.value = false;
+  }
+};
 
-// 关闭抽屉
-const closeDrawer = () => {
-  emit('close')
-}
+const loadReferenceOptions = async () => {
+  if (referenceOptionsLoaded.value) return;
+  const [models, skills] = await Promise.allSettled([
+    AnalysisTaskService.getModelOptions(),
+    AnalysisTaskService.getSkillOptions(),
+  ]);
+  if (models.status === 'fulfilled') modelOptions.value = models.value;
+  if (skills.status === 'fulfilled') skillOptions.value = skills.value;
+  referenceOptionsLoaded.value = models.status === 'fulfilled' && skills.status === 'fulfilled';
+};
 
-// 处理安全态势筛选
-const handleSecurityCommand = (command: string) => {
-  securityChartData.value.period = command
-}
+const handleSearch = () => {
+  filters.page = 1;
+  loadTasks(false);
+};
 
-// 处理系统性能筛选
-const handlePerformanceCommand = (command: string) => {
-  performanceChartData.value.period = command
-}
+const resetFilters = () => {
+  Object.assign(filters, {
+    name: '',
+    status: '',
+    model: '',
+    approvalMode: '',
+    page: 1,
+    perPage: filters.perPage,
+  });
+  loadTasks(false);
+};
 
-// 处理快速访问点击
-const handleQuickAccess = (action: string) => {
-  console.log(`执行快速操作: ${action}`)
-  // 这里可以添加具体的业务逻辑
-}
+const handlePageSizeChange = () => {
+  filters.page = 1;
+  loadTasks(false);
+};
+
+const openCreate = () => {
+  editingTask.value = null;
+  loadReferenceOptions();
+  formVisible.value = true;
+};
+
+const openEdit = async (task: TAnalysisTask) => {
+  if (isActive(task.status)) return;
+  try {
+    editingTask.value = await AnalysisTaskService.getView(task.id);
+    await loadReferenceOptions();
+    formVisible.value = true;
+  } catch (error) {
+    console.error('获取AI分析任务详情失败:', error);
+  }
+};
+
+const openDetail = (task: TAnalysisTask) => {
+  detailTaskId.value = task.id;
+  detailVisible.value = true;
+};
+
+const openApproval = (task: TAnalysisTask) => {
+  approvalTask.value = task;
+  approvalVisible.value = true;
+};
+
+const runQueueOnce = async () => {
+  try {
+    await ElMessageBox.confirm('确认立即取出一个到期任务执行？', '执行一次队列', {
+      type: 'warning',
+      confirmButtonText: '执行',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  runningOnce.value = true;
+  try {
+    const task = await AnalysisTaskService.runOnce();
+    ElMessage.success(task ? `任务「${task.name}」已提交执行` : '当前暂无可执行任务');
+    await refreshAll(true);
+  } catch (error) {
+    console.error('手动执行AI分析任务队列失败:', error);
+  } finally {
+    runningOnce.value = false;
+  }
+};
+
+const executeRowAction = async (
+  task: TAnalysisTask,
+  action: string,
+  request: () => Promise<unknown>,
+  successMessage: string,
+) => {
+  rowAction.id = task.id;
+  rowAction.action = action;
+  try {
+    await request();
+    ElMessage.success(successMessage);
+    await refreshAll(true);
+  } catch (error) {
+    console.error(`AI分析任务${action}操作失败:`, error);
+  } finally {
+    rowAction.id = 0;
+    rowAction.action = '';
+  }
+};
+
+const enqueueTask = async (task: TAnalysisTask) => {
+  try {
+    await ElMessageBox.confirm(`确认将任务「${task.name}」重新放入队列？`, '重新入队', {
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
+  await executeRowAction(
+    task,
+    'enqueue',
+    () => AnalysisTaskService.enqueue(task.id),
+    '任务已重新入队',
+  );
+};
+
+const cancelTask = async (task: TAnalysisTask) => {
+  try {
+    await ElMessageBox.confirm(`确认取消任务「${task.name}」？`, '取消任务', {
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
+  await executeRowAction(
+    task,
+    'cancel',
+    () => AnalysisTaskService.cancel(task.id),
+    '任务取消请求已提交',
+  );
+};
+
+const deleteTask = async (task: TAnalysisTask) => {
+  try {
+    await ElMessageBox.confirm(`确认删除AI分析任务「${task.name}」？`, '删除任务', {
+      type: 'error',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  await executeRowAction(
+    task,
+    'delete',
+    () => AnalysisTaskService.remove(task.id),
+    'AI分析任务已删除',
+  );
+};
+
+const stopPolling = () => {
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = undefined;
+};
+
+const startPolling = () => {
+  stopPolling();
+  pollingTimer = setInterval(() => refreshAll(true), 5000);
+};
+
+const closeDrawer = () => emit('close');
+
+watch(
+  () => props.visible,
+  visible => {
+    if (!visible) {
+      stopPolling();
+      approvalVisible.value = false;
+      return;
+    }
+    refreshAll(false);
+    loadReferenceOptions();
+    startPolling();
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  stopPolling();
+  clearMarkdownCache();
+});
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .drawer-container {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
+  overflow: hidden;
+  color: var(--el-text-color-primary);
+  background: #f5f7fa;
 }
 
 .drawer-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  border-bottom: 1px solid #e4e7ed;
-  font-size: 16px;
-  font-weight: bold;
   flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.drawer-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  span {
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  small {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    font-weight: 400;
+  }
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
 }
 
 .drawer-content {
-  padding: 20px;
-  overflow-y: auto;
-  flex-grow: 1;
-}
-
-.overview-container {
-  padding: 10px 5px;
-}
-
-/* 状态卡片样式 */
-.status-card {
   display: flex;
-  background-color: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  height: 100%;
-  transition: all 0.3s ease;
-}
-
-.status-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.status-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  margin-right: 12px;
-  font-size: 24px;
-}
-
-.status-icon.success {
-  background-color: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
-}
-
-.status-icon.warning {
-  background-color: rgba(230, 162, 60, 0.1);
-  color: #e6a23c;
-}
-
-.status-icon.info {
-  background-color: rgba(64, 158, 255, 0.1);
-  color: #409eff;
-}
-
-.status-icon.primary {
-  background-color: rgba(103, 119, 239, 0.1);
-  color: #6777ef;
-}
-
-.status-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.status-info h4 {
-  margin: 0 0 5px;
-  font-size: 14px;
-  color: #606266;
-  font-weight: normal;
-}
-
-.status-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-  line-height: 1.2;
-}
-
-.status-desc {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
-}
-
-.text-danger {
-  color: #f56c6c;
-}
-
-/* 标题样式 */
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 25px 0 15px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.section-title h3 {
-  font-size: 18px;
-  margin: 0;
-  font-weight: 600;
-  color: #303133;
-}
-
-/* 图表容器样式 */
-.chart-container {
-  background-color: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  height: 100%;
-  margin-bottom: 20px;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.chart-header h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  color: #303133;
-}
-
-.chart-filter {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: #606266;
-  cursor: pointer;
-}
-
-.chart-filter .el-icon {
-  margin-left: 4px;
-}
-
-.chart-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 180px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
-  color: #909399;
-  margin-bottom: 12px;
-}
-
-.chart-placeholder .el-icon {
-  font-size: 40px;
-  margin-bottom: 10px;
-  opacity: 0.7;
-}
-
-.chart-legend {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding-top: 10px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  color: #606266;
-}
-
-.legend-color {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  margin-right: 6px;
-}
-
-.legend-color.high {
-  background-color: #f56c6c;
-}
-
-.legend-color.medium {
-  background-color: #e6a23c;
-}
-
-.legend-color.low {
-  background-color: #67c23a;
-}
-
-/* 快速访问区样式 */
-.quick-access {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.access-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100px;
-  height: 100px;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.access-item:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.access-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: #f0f2f5;
-  margin-bottom: 8px;
-}
-
-.access-icon .el-icon {
-  font-size: 24px;
-  color: #409eff;
-}
-
-.access-text {
-  font-size: 14px;
-  color: #606266;
-}
-
-/* 最近活动样式 */
-.recent-activities {
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.activity-item {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.activity-item:last-child {
-  border-bottom: none;
-}
-
-.activity-time {
-  width: 50px;
-  color: #909399;
-  font-size: 13px;
-}
-
-.activity-content {
   flex: 1;
-  margin: 0 12px;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 18px 18px;
+  gap: 12px;
 }
 
-.activity-title {
-  font-weight: 500;
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 4px;
+.queue-section,
+.task-section {
+  background: #fff;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
 }
 
-.activity-desc {
+.queue-section {
+  flex-shrink: 0;
+  padding: 12px 16px;
+}
+
+.queue-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.queue-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 14px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 6px;
+
+  strong {
+    font-size: 22px;
+
+    &.primary {
+      color: var(--el-color-primary);
+    }
+
+    &.warning {
+      color: var(--el-color-warning);
+    }
+
+    &.danger {
+      color: var(--el-color-danger);
+    }
+
+    &.success {
+      color: var(--el-color-success);
+    }
+
+    &.info {
+      color: var(--el-color-info);
+    }
+  }
+}
+
+.queue-label {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.queue-context {
+  display: flex;
+  margin-top: 10px;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
-  color: #606266;
-  line-height: 1.5;
+  gap: 30px;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  b {
+    color: var(--el-text-color-regular);
+  }
 }
 
-.activity-action {
-  margin-left: 12px;
+.task-section {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px;
+}
+
+.filter-form {
+  flex-shrink: 0;
+
+  :deep(.el-form-item) {
+    margin-right: 14px;
+    margin-bottom: 12px;
+  }
+}
+
+.filter-select {
+  width: 142px;
+}
+
+.model-filter {
+  width: 170px;
+}
+
+.filter-actions {
+  float: right;
+  margin-right: 0 !important;
+}
+
+.table-wrap {
+  flex: 1;
+  min-height: 240px;
+}
+
+:deep(.status-column .cell) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.status-tag {
+  max-width: none;
+
+  :deep(.el-tag__content) {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+}
+
+.markdown-cell-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+:global(.analysis-result-markdown-popover.el-popper) {
+  max-width: calc(100vw - 32px);
+  padding: 0;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview) {
+  box-sizing: border-box;
+  max-height: 420px;
+  padding: 16px 18px;
+  overflow: auto;
+  color: var(--el-text-color-primary);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview > :first-child) {
+  margin-top: 0;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview > :last-child) {
+  margin-bottom: 0;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview h1),
+:global(.analysis-result-markdown-popover .result-markdown-preview h2),
+:global(.analysis-result-markdown-popover .result-markdown-preview h3),
+:global(.analysis-result-markdown-popover .result-markdown-preview h4) {
+  margin: 16px 0 8px;
+  line-height: 1.35;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview p),
+:global(.analysis-result-markdown-popover .result-markdown-preview ul),
+:global(.analysis-result-markdown-popover .result-markdown-preview ol) {
+  margin: 8px 0;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview pre) {
+  margin: 10px 0;
+  padding: 12px 14px;
+  overflow: auto;
+  color: #d8dee9;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #202630;
+  border-radius: 6px;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview :not(pre) > code) {
+  padding: 2px 5px;
+  color: var(--el-color-danger);
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview table) {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview th),
+:global(.analysis-result-markdown-popover .result-markdown-preview td) {
+  padding: 7px 9px;
+  text-align: left;
+  border: 1px solid var(--el-border-color);
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview blockquote) {
+  margin: 10px 0;
+  padding: 4px 12px;
+  color: var(--el-text-color-secondary);
+  border-left: 3px solid var(--el-color-primary-light-5);
+}
+
+:global(.analysis-result-markdown-popover .result-markdown-preview img) {
+  max-width: 100%;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+
+  :deep(.el-button + .el-button) {
+    margin-left: 8px;
+  }
+}
+
+.pagination-row {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+@media (max-width: 1200px) {
+  .queue-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .queue-context {
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
 }
 </style>

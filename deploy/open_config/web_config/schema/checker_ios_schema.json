@@ -1,0 +1,364 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "startConfig": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      }
+    },
+    "deviceConfig": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "screen": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cpu": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "battery": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uuid": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "storage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sysctl": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fileConfig": {
+      "type": "object",
+      "properties": {
+        "exist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "linkFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "access": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fileList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "infoPlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "properties": {
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stackDylib": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resource": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bundle": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "process": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "thread": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "netConfig": {
+      "type": "object",
+      "properties": {
+        "netInterface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "httpProxy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "socket": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sslPing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "response": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "selfAppConfig": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "permission": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "environment": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "appConfig": {
+      "type": "object",
+      "properties": {
+        "installed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "injectConfig": {
+      "type": "object",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "swizzling": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inlineHook": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fishhook": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "locationConfig": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "viewConfig": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "buttonConfig": {
+      "type": "object",
+      "properties": {
+        "methodName": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "privacyConfig": {
+      "type": "object",
+      "properties": {
+        "methodName": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "urlConfig": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "objcConfig": {
+      "type": "object",
+      "properties": {
+        "exceptionName": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "signalConfig": {
+      "type": "object",
+      "properties": {
+        "signal": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "startConfig",
+    "deviceConfig",
+    "fileConfig",
+    "runtimeConfig",
+    "netConfig",
+    "selfAppConfig",
+    "appConfig",
+    "injectConfig",
+    "locationConfig",
+    "viewConfig",
+    "buttonConfig",
+    "privacyConfig",
+    "urlConfig",
+    "objcConfig",
+    "signalConfig"
+  ]
+}

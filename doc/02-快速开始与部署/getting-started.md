@@ -15,13 +15,12 @@
 ### 1. 进入项目
 
 ```bash
-cd zenvis/zenvis-backend
+cd zenvis/deploy
 ```
 
 ### 2. 一键启动
 
 ```bash
-cd deploy
 docker compose up -d
 ```
 
@@ -79,14 +78,15 @@ curl -H "Authorization: Bearer <API_BEARER_TOKEN>" \
 ## 目录结构
 
 ```
-zenvis-backend/
-├── deploy/              # 部署配置
+zenvis/
+├── deploy/              # 系统部署目录
 │   ├── docker-compose.yml
 │   ├── config/          # 服务配置
-│   └── data/           # 数据持久化目录
-├── doc/                 # 仅保留模块 README 与 banner；整体文档位于 ../doc
-├── src/                 # 源代码
-└── pom.xml
+│   ├── data/            # 数据持久化目录
+│   └── open_config/     # ZenVis 开放配置
+├── zenvis-backend/      # 后端代码
+├── zenvis-frontend/     # 前端代码
+└── doc/                 # 文档中心
 ```
 
 ## 下一步

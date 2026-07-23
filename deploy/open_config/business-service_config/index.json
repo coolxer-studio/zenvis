@@ -1,0 +1,296 @@
+{
+  "type": "page",
+  "title": "业务应用服务",
+  "remark": "通过心跳和事件上报汇总业务服务程序的实时运行状态",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "刷新",
+      "icon": "fa fa-refresh",
+      "actionType": "reload",
+      "target": "business_service_summary,business_service_instance_list,business_service_event_list"
+    }
+  ],
+  "body": [
+    {
+      "name": "business_service_summary",
+      "type": "service",
+      "api": "/zenvis/api/v1/system/business-services/summary",
+      "interval": 10000,
+      "silentPolling": true,
+      "body": {
+        "type": "property",
+        "title": "服务概览",
+        "column": 4,
+        "items": [
+          { "label": "业务服务", "content": "${service_count|default:0}" },
+          { "label": "实例总数", "content": "${instance_count|default:0}" },
+          { "label": "健康", "content": "${up_count|default:0}" },
+          { "label": "降级", "content": "${degraded_count|default:0}" },
+          { "label": "主动下线", "content": "${down_count|default:0}" },
+          { "label": "心跳离线", "content": "${offline_count|default:0}" },
+          { "label": "异常合计", "content": "${abnormal_count|default:0}" },
+          { "label": "近24小时事件", "content": "${event_count24h|default:0}" },
+          { "label": "检查时间", "content": "${checked_at|default:'-'}" }
+        ]
+      }
+    },
+    {
+      "type": "tabs",
+      "tabsMode": "line",
+      "tabs": [
+        {
+          "title": "实例状态",
+          "body": {
+            "name": "business_service_instance_list",
+            "type": "crud",
+            "api": "/zenvis/api/v1/system/business-services/instances",
+            "interval": 10000,
+            "silentPolling": true,
+            "defaultParams": { "page": 1, "perPage": 20 },
+            "perPage": 20,
+            "perPageAvailable": [10, 20, 50, 100],
+            "filter": {
+              "title": "实例检索",
+              "body": [
+                {
+                  "label": "关键词",
+                  "name": "keyword",
+                  "type": "input-text",
+                  "clearable": true,
+                  "placeholder": "服务标识、名称、实例或主机"
+                },
+                {
+                  "label": "环境",
+                  "name": "environment",
+                  "type": "input-text",
+                  "clearable": true
+                },
+                {
+                  "label": "有效状态",
+                  "name": "status",
+                  "type": "select",
+                  "clearable": true,
+                  "options": [
+                    { "label": "健康", "value": "UP" },
+                    { "label": "降级", "value": "DEGRADED" },
+                    { "label": "主动下线", "value": "DOWN" },
+                    { "label": "心跳离线", "value": "OFFLINE" }
+                  ]
+                }
+              ],
+              "actions": [
+                { "type": "reset", "label": "重置" },
+                { "type": "submit", "label": "查询", "level": "primary" }
+              ]
+            },
+            "columns": [
+              { "name": "service_name", "label": "服务名称", "type": "text" },
+              { "name": "service_code", "label": "服务标识", "type": "text" },
+              { "name": "instance_id", "label": "实例标识", "type": "text" },
+              {
+                "name": "effective_status",
+                "label": "有效状态",
+                "type": "mapping",
+                "map": {
+                  "UP": "<span class='label label-success'>健康</span>",
+                  "DEGRADED": "<span class='label label-warning'>降级</span>",
+                  "DOWN": "<span class='label label-danger'>主动下线</span>",
+                  "OFFLINE": "<span class='label label-default'>心跳离线</span>"
+                }
+              },
+              { "name": "version", "label": "版本", "type": "text", "placeholder": "-" },
+              { "name": "environment", "label": "环境", "type": "text", "placeholder": "-" },
+              { "name": "host", "label": "主机", "type": "text", "placeholder": "-" },
+              { "name": "port", "label": "端口", "type": "text", "placeholder": "-" },
+              { "name": "last_heartbeat_time", "label": "最后心跳", "type": "datetime" },
+              { "name": "seconds_since_heartbeat", "label": "距心跳(秒)", "type": "text" },
+              { "name": "last_event_time", "label": "最后事件", "type": "datetime", "placeholder": "-" },
+              {
+                "type": "operation",
+                "label": "操作",
+                "buttons": [
+                  {
+                    "type": "button",
+                    "label": "详情",
+                    "icon": "fa fa-eye",
+                    "actionType": "dialog",
+                    "dialog": {
+                      "title": "业务应用服务实例详情",
+                      "size": "xl",
+                      "body": {
+                        "type": "service",
+                        "api": "/zenvis/api/v1/system/business-services/instances/${id}",
+                        "body": [
+                          {
+                            "type": "property",
+                            "column": 3,
+                            "items": [
+                              { "label": "服务名称", "content": "${service_name}" },
+                              { "label": "服务标识", "content": "${service_code}" },
+                              { "label": "实例标识", "content": "${instance_id}" },
+                              { "label": "有效状态", "content": "${effective_status}" },
+                              { "label": "上报状态", "content": "${reported_status}" },
+                              { "label": "状态说明", "content": "${status_message|default:'-'}" },
+                              { "label": "版本", "content": "${version|default:'-'}" },
+                              { "label": "环境", "content": "${environment|default:'-'}" },
+                              { "label": "主机", "content": "${host|default:'-'}" },
+                              { "label": "端口", "content": "${port|default:'-'}" },
+                              { "label": "管理地址", "content": "${management_url|default:'-'}" },
+                              { "label": "来源地址", "content": "${remote_address|default:'-'}" },
+                              { "label": "首次心跳", "content": "${first_heartbeat_time}" },
+                              { "label": "最后心跳", "content": "${last_heartbeat_time}" },
+                              { "label": "客户端心跳时间", "content": "${reported_heartbeat_time|default:'-'}" },
+                              { "label": "最后事件", "content": "${last_event_time|default:'-'}" }
+                            ]
+                          },
+                          {
+                            "type": "panel",
+                            "title": "实例元数据",
+                            "body": {
+                              "type": "json",
+                              "value": "${metadata | json}"
+                            }
+                          },
+                          {
+                            "type": "panel",
+                            "title": "最近事件",
+                            "body": {
+                              "type": "crud",
+                              "api": "/zenvis/api/v1/system/business-services/events?serviceCode=${service_code}&instanceId=${instance_id}",
+                              "defaultParams": { "page": 1, "perPage": 20 },
+                              "columns": [
+                                { "name": "occurred_time", "label": "发生时间", "type": "datetime" },
+                                { "name": "severity", "label": "级别", "type": "text" },
+                                { "name": "event_type", "label": "类型", "type": "text" },
+                                { "name": "title", "label": "标题", "type": "text" },
+                                { "name": "message", "label": "内容", "type": "text", "placeholder": "-" }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "事件记录",
+          "body": {
+            "name": "business_service_event_list",
+            "type": "crud",
+            "api": "/zenvis/api/v1/system/business-services/events",
+            "defaultParams": { "page": 1, "perPage": 20 },
+            "perPage": 20,
+            "perPageAvailable": [10, 20, 50, 100],
+            "filter": {
+              "title": "事件检索",
+              "body": [
+                { "label": "关键词", "name": "keyword", "type": "input-text", "clearable": true },
+                { "label": "服务标识", "name": "serviceCode", "type": "input-text", "clearable": true },
+                { "label": "实例标识", "name": "instanceId", "type": "input-text", "clearable": true },
+                { "label": "事件类型", "name": "eventType", "type": "input-text", "clearable": true },
+                {
+                  "label": "事件级别",
+                  "name": "severity",
+                  "type": "select",
+                  "clearable": true,
+                  "options": [
+                    { "label": "INFO", "value": "INFO" },
+                    { "label": "WARN", "value": "WARN" },
+                    { "label": "ERROR", "value": "ERROR" },
+                    { "label": "CRITICAL", "value": "CRITICAL" }
+                  ]
+                },
+                {
+                  "label": "开始时间",
+                  "name": "startTime",
+                  "type": "input-datetime",
+                  "format": "YYYY-MM-DD HH:mm:ss",
+                  "inputFormat": "YYYY-MM-DD HH:mm:ss",
+                  "clearable": true
+                },
+                {
+                  "label": "结束时间",
+                  "name": "endTime",
+                  "type": "input-datetime",
+                  "format": "YYYY-MM-DD HH:mm:ss",
+                  "inputFormat": "YYYY-MM-DD HH:mm:ss",
+                  "clearable": true
+                }
+              ],
+              "actions": [
+                { "type": "reset", "label": "重置" },
+                { "type": "submit", "label": "查询", "level": "primary" }
+              ]
+            },
+            "columns": [
+              { "name": "occurred_time", "label": "发生时间", "type": "datetime" },
+              { "name": "service_code", "label": "服务标识", "type": "text" },
+              { "name": "instance_id", "label": "实例标识", "type": "text" },
+              {
+                "name": "severity",
+                "label": "级别",
+                "type": "mapping",
+                "map": {
+                  "INFO": "<span class='label label-info'>INFO</span>",
+                  "WARN": "<span class='label label-warning'>WARN</span>",
+                  "ERROR": "<span class='label label-danger'>ERROR</span>",
+                  "CRITICAL": "<span class='label label-danger'>CRITICAL</span>"
+                }
+              },
+              { "name": "event_type", "label": "事件类型", "type": "text" },
+              { "name": "title", "label": "标题", "type": "text" },
+              { "name": "trace_id", "label": "Trace ID", "type": "text", "placeholder": "-" },
+              { "name": "create_time", "label": "接收时间", "type": "datetime" },
+              {
+                "type": "operation",
+                "label": "操作",
+                "buttons": [
+                  {
+                    "type": "button",
+                    "label": "详情",
+                    "icon": "fa fa-eye",
+                    "actionType": "dialog",
+                    "dialog": {
+                      "title": "事件详情",
+                      "size": "lg",
+                      "body": [
+                        {
+                          "type": "property",
+                          "column": 2,
+                          "items": [
+                            { "label": "事件ID", "content": "${event_id}" },
+                            { "label": "服务标识", "content": "${service_code}" },
+                            { "label": "实例标识", "content": "${instance_id}" },
+                            { "label": "事件类型", "content": "${event_type}" },
+                            { "label": "事件级别", "content": "${severity}" },
+                            { "label": "事件标题", "content": "${title}" },
+                            { "label": "发生时间", "content": "${occurred_time}" },
+                            { "label": "接收时间", "content": "${create_time}" },
+                            { "label": "Trace ID", "content": "${trace_id|default:'-'}" },
+                            { "label": "来源地址", "content": "${remote_address|default:'-'}" }
+                          ]
+                        },
+                        { "type": "divider" },
+                        { "type": "tpl", "tpl": "<strong>事件内容</strong><pre>${message|default:'-'}</pre>" },
+                        {
+                          "type": "panel",
+                          "title": "扩展数据",
+                          "body": { "type": "json", "value": "${data | json}" }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

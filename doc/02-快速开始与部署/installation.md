@@ -32,7 +32,7 @@ ZenVis 支持两种部署模式：
 ### 1. 准备部署目录
 
 ```bash
-cd zenvis-backend/deploy
+cd zenvis/deploy
 ```
 
 ### 2. 配置文件说明
@@ -127,7 +127,7 @@ docker run -d \
 初始化数据库：
 
 ```bash
-mysql -h localhost -u root -p < deploy/open_config/web_config/init/mysql-init.sql
+mysql -h localhost -u root -p < open_config/web_config/init/mysql-init.sql
 ```
 
 #### ClickHouse
@@ -145,7 +145,7 @@ docker run -d \
 初始化数据库：
 
 ```bash
-cat deploy/open_config/web_config/init/clickhouse-init.sql | docker exec -i zenvis-clickhouse clickhouse-client
+cat open_config/web_config/init/clickhouse-init.sql | docker exec -i zenvis-clickhouse clickhouse-client
 ```
 
 当前版本不再创建固定的 `zenvis.msg` 业务表，实体表由元数据 `auto_create` 配置按需创建。旧版本升级后如已确认不再需要历史 `msg` 数据，可手工清理：
@@ -186,7 +186,7 @@ mvn clean package -DskipTests -Dproguard.skip=true
 
 ### 4. 配置后端
 
-编辑 `deploy/config/zenvis-backend/config/application.properties`。以下仅展示配置项形式，凭据应通过环境变量或密钥管理系统注入：
+编辑项目根目录的 `deploy/config/zenvis-backend/config/application.properties`。以下仅展示配置项形式，凭据应通过环境变量或密钥管理系统注入：
 
 ```properties
 # 数据库配置

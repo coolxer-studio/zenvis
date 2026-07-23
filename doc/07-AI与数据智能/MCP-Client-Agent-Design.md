@@ -430,7 +430,7 @@ mvn -DskipTests clean compile
 ### AMIS JSON 校验
 
 ```bash
-cd zenvis-backend
+cd zenvis
 jq empty deploy/open_config/mcp_config/index.json
 ```
 

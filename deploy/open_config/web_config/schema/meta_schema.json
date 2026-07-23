@@ -1,0 +1,180 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "entity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "实体ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "实体名称"
+          },
+          "label": {
+            "type": "string",
+            "description": "实体标签"
+          },
+          "description": {
+            "type": "string",
+            "description": "实体描述"
+          },
+          "table_name": {
+            "type": "string",
+            "description": "表名"
+          },
+          "data_source": {
+            "type": "string",
+            "description": "数据源"
+          },
+          "auto_create": {
+            "type": "object",
+            "properties": {
+              "engine": {
+                "type": "string",
+                "description": "数据库引擎"
+              },
+              "order_by": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "排序字段"
+              },
+              "partition_by": {
+                "type": "string",
+                "description": "分区字段"
+              }
+            },
+            "required": [
+              "engine",
+              "order_by",
+              "partition_by"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "label",
+          "description",
+          "table_name",
+          "data_source"
+        ]
+      }
+    },
+    "attribute": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "属性ID"
+          },
+          "entity": {
+            "type": "string",
+            "description": "所属实体"
+          },
+          "name": {
+            "type": "string",
+            "description": "属性名称"
+          },
+          "label": {
+            "type": "string",
+            "description": "属性标签"
+          },
+          "description": {
+            "type": "string",
+            "description": "属性描述"
+          },
+          "column_name": {
+            "type": "string",
+            "description": "列名"
+          },
+          "column_type": {
+            "type": "string",
+            "description": "列类型"
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "支持的操作符"
+          },
+          "display_selected": {
+            "type": "boolean",
+            "description": "是否显示"
+          },
+          "must_candidate": {
+            "type": "boolean",
+            "description": "是否必须候选",
+            "default": false
+          },
+          "mapping": {
+            "type": "object",
+            "description": "映射关系",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "display_type": {
+            "type": "string",
+            "description": "显示类型",
+            "default": "string"
+          },
+          "search_type": {
+            "type": "string",
+            "description": "搜索类型",
+            "default": "string"
+          }
+        },
+        "required": [
+          "id",
+          "entity",
+          "name",
+          "label",
+          "description",
+          "column_name",
+          "column_type",
+          "operators"
+        ]
+      }
+    },
+    "operator": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "操作符ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "操作符名称"
+          },
+          "label": {
+            "type": "string",
+            "description": "操作符标签"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "label"
+        ]
+      }
+    }
+  },
+  "required": [
+    "entity",
+    "attribute",
+    "operator"
+  ]
+}

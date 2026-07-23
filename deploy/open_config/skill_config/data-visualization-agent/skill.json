@@ -1,0 +1,19 @@
+{
+  "id": "data-visualization-agent",
+  "name": "数据可视化",
+  "description": "系统内置数据可视化 Skill，基于元数据实体和 retrieval/entity REST API 生成临时图表、低代码页面/应用、静态 HTML、数据看板和菜单配置。",
+  "version": "1.1.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_data_visualization"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "data-visualization",
+    "retrieval",
+    "amis"
+  ],
+  "enabled": true,
+  "entry": "SKILL.md"
+}

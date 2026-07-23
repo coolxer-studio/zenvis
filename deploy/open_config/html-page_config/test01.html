@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网络安全防御攻击拦截比例可视化</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Microsoft YaHei", Consolas, monospace;
+}
+body {
+  min-height: 100vh;
+  background: #060916;
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(0,130,255,0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 75%, rgba(255,30,120,0.06) 0%, transparent 40%);
+  padding: 40px 20px;
+  color: #e6f4ff;
+}
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.page-title {
+  text-align: center;
+  font-size: 34px;
+  letter-spacing: 3px;
+  background: linear-gradient(90deg, #00d8ff, #00ff9c);
+  -webkit-background-clip: text;
+  color: transparent;
+  margin-bottom: 40px;
+}
+.grid-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+@media (max-width:768px) {
+  .grid-box { grid-template-columns: 1fr; }
+}
+.card {
+  background: rgba(12, 20, 40, 0.65);
+  border: 1px solid rgba(0,160,255,0.22);
+  border-radius: 14px;
+  padding: 26px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 30px rgba(0,140,255,0.1);
+}
+.card-full {
+  grid-column: 1 / -1;
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.card-name {
+  font-size: 18px;
+  color: #94d8ff;
+}
+.card-desc {
+  font-size: 13px;
+  color: #709cc2;
+}
+
+/* 线性防御进度条 */
+.prog-wrap {
+  width: 100%;
+  height: 18px;
+  background: rgba(0,45,90,0.35);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(0,180,255,0.25);
+}
+.prog-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0099ff, #00e890);
+  box-shadow: 0 0 14px #00d8ff, 0 0 26px rgba(0,230,150,0.4);
+  transition: width 1.4s ease-out;
+  position: relative;
+}
+.prog-bar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  animation: scan 2s infinite linear;
+}
+@keyframes scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(260%); }
+}
+.percent-text {
+  font-size: 22px;
+  font-weight: bold;
+  color: #00ffb8;
+}
+
+/* 环形防御仪表盘 */
+.circle-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 30px;
+}
+.circle-svg {
+  width: 180px;
+  height: 180px;
+}
+.circle-bg {
+  fill: none;
+  stroke: rgba(0,50,100,0.3);
+  stroke-width: 12;
+}
+.circle-success {
+  fill: none;
+  stroke: url(#defenseGrad);
+  stroke-width: 12;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  filter: drop-shadow(0 0 10px #00e890);
+}
+.circle-inner-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.circle-num {
+  font-size: 36px;
+  font-weight: bold;
+  color: #00ffb8;
+}
+.circle-label {
+  font-size: 14px;
+  color: #82b8e0;
+}
+.data-info p {
+  line-height: 2;
+  font-size: 15px;
+}
+.data-info span {
+  color: #00e8ff;
+  font-weight: bold;
+}
+
+/* 柱状对比图表 */
+.chart-box {
+  display: flex;
+  align-items: flex-end;
+  height: 220px;
+  gap: 20px;
+  padding-top: 20px;
+}
+.chart-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+.chart-bar {
+  width: 60%;
+  border-radius: 6px 6px 0 0;
+  transition: height 1.5s ease-out;
+}
+.bar-block {
+  background: linear-gradient(180deg, #00e890, #0088ff);
+  box-shadow: 0 0 12px #00d8ff;
+}
+.bar-pass {
+  background: linear-gradient(180deg, #ff4466, #ff2244);
+  box-shadow: 0 0 12px #ff3355;
+}
+.chart-label {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #a0c8e8;
+}
+.chart-val {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: bold;
+}
+.val-block { color: #00ffb8; }
+.val-pass { color: #ff5577; }
+
+/* 攻击类型列表 */
+.attack-list {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.attack-tag {
+  padding: 6px 14px;
+  background: rgba(0,120,220,0.15);
+  border: 1px solid rgba(0,180,255,0.25);
+  border-radius: 30px;
+  font-size: 13px;
+  color: #94d8ff;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1 class="page-title">网络安全防御攻击拦截统计看板</h1>
+
+  <div class="grid-box">
+    <!-- 1. 总攻击抵御进度条 -->
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-name">全局防御策略拦截率</div>
+          <div class="card-desc">防火墙 + WAF + 入侵检测联动防御</div>
+        </div>
+        <div class="percent-text" id="rateText">0%</div>
+      </div>
+      <div class="prog-wrap">
+        <div class="prog-bar" id="defenseBar"></div>
+      </div>
+      <div class="attack-list">
+        <span class="attack-tag">SQL注入</span>
+        <span class="attack-tag">XSS跨站</span>
+        <span class="attack-tag">CC流量攻击</span>
+        <span class="attack-tag">暴力破解</span>
+        <span class="attack-tag">恶意爬虫</span>
+      </div>
+    </div>
+
+    <!-- 2. 环形防御仪表盘 -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-name">攻击拦截环形指标</div>
+      </div>
+      <div class="circle-box">
+        <div style="position: relative; width:180px;height:180px;">
+          <svg class="circle-svg" viewBox="0 0 100 100">
+            <defs>
+              <linearGradient id="defenseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#0088ff"/>
+                <stop offset="100%" stop-color="#00e890"/>
+              </linearGradient>
+            </defs>
+            <circle class="circle-bg" cx="50" cy="50" r="44"></circle>
+            <circle class="circle-success" cx="50" cy="50" r="44" stroke-dasharray="276.46" stroke-dashoffset="276.46" id="circleStroke"></circle>
+          </svg>
+          <div class="circle-inner-text">
+            <div class="circle-num" id="circleNum">0</div>
+            <div class="circle-label">拦截率 %</div>
+          </div>
+        </div>
+        <div class="data-info">
+          <p>今日总攻击量：<span id="totalAttack">0</span> 次</p>
+          <p>成功拦截：<span id="blockAttack">0</span> 次</p>
+          <p>穿透风险：<span id="passAttack">0</span> 次</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. 柱状对比图表 占整行 -->
+    <div class="card card-full">
+      <div class="card-head">
+        <div class="card-name">拦截攻击 vs 穿透攻击数量对比</div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-item">
+          <div class="chart-bar bar-block" id="barBlock"></div>
+          <div class="chart-label">已拦截攻击</div>
+          <div class="chart-val val-block" id="valBlock">0</div>
+        </div>
+        <div class="chart-item">
+          <div class="chart-bar bar-pass" id="barPass"></div>
+          <div class="chart-label">穿透风险攻击</div>
+          <div class="chart-val val-pass" id="valPass">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 防御数据配置
+const totalAttack = 12680;   // 今日总攻击
+const blockRate = 94.7;      // 整体拦截率
+const blockAttack = Math.floor(totalAttack * blockRate / 100);
+const passAttack = totalAttack - blockAttack;
+const circumference = 2 * Math.PI * 44;
+
+// 1. 线性进度条动画
+setTimeout(()=>{
+  document.getElementById('defenseBar').style.width = blockRate + "%";
+  let num = 0;
+  const timer = setInterval(()=>{
+    num += 0.1;
+    if(num >= blockRate) {
+      num = blockRate;
+      clearInterval(timer);
+    }
+    document.getElementById('rateText').innerText = num.toFixed(1) + "%";
+  }, 15);
+}, 300);
+
+// 2. 环形进度 + 数字统计
+setTimeout(()=>{
+  const offset = circumference - (blockRate / 100) * circumference;
+  document.getElementById('circleStroke').style.strokeDashoffset = offset;
+
+  // 环形数字滚动
+  let cNum = 0;
+  const cTimer = setInterval(()=>{
+    cNum += 0.1;
+    if(cNum >= blockRate) {
+      cNum = blockRate;
+      clearInterval(cTimer);
+    }
+    document.getElementById('circleNum').innerText = cNum.toFixed(1);
+  },15);
+
+  // 攻击数量数字滚动
+  animateNum('totalAttack', 0, totalAttack, 30);
+  animateNum('blockAttack', 0, blockAttack, 30);
+  animateNum('passAttack', 0, passAttack, 30);
+}, 800);
+
+// 3. 柱状图表高度动画
+setTimeout(()=>{
+  const maxH = 200;
+  const blockH = maxH * (blockAttack / totalAttack);
+  const passH = maxH * (passAttack / totalAttack);
+  document.getElementById('barBlock').style.height = blockH + "px";
+  document.getElementById('barPass').style.height = passH + "px";
+
+  animateNum('valBlock', 0, blockAttack, 25);
+  animateNum('valPass', 0, passAttack, 25);
+}, 1200);
+
+// 数字滚动通用函数
+function animateNum(id, start, end, speed) {
+  const el = document.getElementById(id);
+  let n = start;
+  const t = setInterval(()=>{
+    n += Math.ceil((end - start) / 40);
+    if(n >= end) {
+      n = end;
+      clearInterval(t);
+    }
+    el.innerText = n.toLocaleString();
+  }, speed);
+}
+</script>
+</body>
+</html>

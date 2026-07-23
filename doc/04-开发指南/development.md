@@ -14,25 +14,29 @@
 ## 项目结构
 
 ```
-zenvis-backend/
-├── src/main/java/com/coolxer/
-│   ├── controller/          # REST接口
-│   │   ├── dih/           # AI对话
-│   │   ├── dashboard/     # 仪表盘
-│   │   └── system/         # 系统管理
-│   ├── service/            # 业务逻辑
-│   │   └── dih/           # AI服务
-│   │       └── agent/     # Agent实现
-│   ├── dao/                # 数据访问
-│   │   ├── mysql/         # MySQL实体
-│   │   └── clickhouse/    # ClickHouse实体
-│   ├── configuration/      # 配置类
-│   └── aop/               # 切面
-├── src/main/resources/
-│   └── application.properties
-├── deploy/                 # 部署配置
-├── doc/                    # 文档
-└── pom.xml
+zenvis/
+├── deploy/                  # 系统部署目录
+│   ├── docker-compose.yml
+│   ├── config/              # 容器服务配置
+│   ├── data/                # 数据持久化目录
+│   └── open_config/         # ZenVis 开放配置
+└── zenvis-backend/
+    ├── src/main/java/com/coolxer/
+    │   ├── controller/          # REST接口
+    │   │   ├── dih/            # AI对话
+    │   │   ├── dashboard/      # 仪表盘
+    │   │   └── system/         # 系统管理
+    │   ├── service/            # 业务逻辑
+    │   │   └── dih/            # AI服务
+    │   │       └── agent/      # Agent实现
+    │   ├── dao/                # 数据访问
+    │   │   ├── mysql/          # MySQL实体
+    │   │   └── clickhouse/     # ClickHouse实体
+    │   ├── configuration/      # 配置类
+    │   └── aop/                # 切面
+    ├── src/main/resources/
+    │   └── application.properties
+    └── pom.xml
 ```
 
 ## 开发环境搭建
@@ -48,10 +52,8 @@ cd zenvis/zenvis-backend
 使用 Docker 启动数据库服务：
 
 ```bash
-cd deploy
-
 # 启动数据库服务（不包含后端）
-docker compose -f docker-compose.yml up -d redis-service redis-stack-service mysql-service clickhouse-service
+docker compose -f ../deploy/docker-compose.yml up -d redis-service redis-stack-service mysql-service clickhouse-service
 ```
 
 ### 3. 配置 IDE
@@ -75,7 +77,7 @@ docker compose -f docker-compose.yml up -d redis-service redis-stack-service mys
 复制并修改配置文件：
 
 ```bash
-cp deploy/config/zenvis-backend/config/application.properties src/main/resources/application-dev.properties
+cp ../deploy/config/zenvis-backend/config/application.properties src/main/resources/application-dev.properties
 ```
 
 修改数据库连接：

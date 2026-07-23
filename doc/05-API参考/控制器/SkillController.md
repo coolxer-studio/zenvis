@@ -170,7 +170,7 @@ curl "http://localhost:11001/api/v1/dih/skills/agent/agent_data_visualization/pr
 
 ## Skill 文件结构
 
-默认目录由 `app.paths.skills` 配置，开发环境为 `deploy/open_config/skill_config`。
+默认目录由 `app.paths.skills` 配置，开发环境为 `../deploy/open_config/skill_config`（以 `zenvis-backend` 为工作目录）。
 
 ```text
 skill_config/

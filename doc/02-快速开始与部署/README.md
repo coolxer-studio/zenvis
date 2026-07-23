@@ -34,7 +34,7 @@
 ## 使用 Docker Compose 启动
 
 ```bash
-cd zenvis-backend/deploy
+cd zenvis/deploy
 docker compose up -d
 docker compose ps
 ```
@@ -71,10 +71,10 @@ docker compose down
 
 ### 1. 启动基础服务
 
-可以从 `zenvis-backend/deploy/docker-compose.yml` 选择启动数据库与中间件：
+可以从根目录的 `deploy/docker-compose.yml` 选择启动数据库与中间件：
 
 ```bash
-cd zenvis-backend/deploy
+cd zenvis/deploy
 docker compose up -d mysql-service clickhouse-service redis-service redis-stack-service kafka-service vectum-service
 ```
 

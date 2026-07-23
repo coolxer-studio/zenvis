@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "tag": {
+        "type": "string",
+        "description": "标签"
+      },
+      "sourceRegex": {
+        "type": "string",
+        "description": "来源正则表达式"
+      },
+      "action": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "integer",
+            "description": "动作类型"
+          },
+          "title": {
+            "type": "string",
+            "description": "动作标题"
+          },
+          "message": {
+            "type": "string",
+            "description": "动作消息"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "message"
+        ]
+      }
+    },
+    "required": [
+      "tag",
+      "sourceRegex",
+      "action"
+    ]
+  }
+}

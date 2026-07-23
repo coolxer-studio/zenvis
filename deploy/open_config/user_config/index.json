@@ -1,0 +1,168 @@
+{
+  "type": "page",
+  "title": "用户管理",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "dialog",
+      "label": "创建用户",
+      "primary": true,
+      "dialog": {
+        "title": "创建用户",
+        "mode": "horizontal",
+        "body": {
+          "type": "form",
+          "api": "/zenvis/api/v1/system/user/add",
+          "rules": [
+            {
+              "rule": "data.password == data.password_confirm",
+              "message": "两次密码不一致！"
+            }
+          ],
+          "body": [
+            {
+              "label": "用户名称",
+              "name": "name",
+              "type": "input-text",
+              "required": true
+            },
+            {
+              "label": "邮箱",
+              "name": "email",
+              "type": "input-text",
+              "required": true
+            },
+            {
+              "label": "密码",
+              "name": "password",
+              "type": "input-password",
+              "required": true
+            },
+            {
+              "label": "确认密码",
+              "name": "password_confirm",
+              "type": "input-password",
+              "required": true
+            },
+            {
+              "label": "角色",
+              "name": "role_id",
+              "type": "select",
+              "required": true,
+              "source": "/zenvis/api/v1/system/role/type/list"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/system/user/list",
+      "autoGenerateFilter": true,
+      "columns": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "name": "name",
+          "label": "用户名称",
+          "type": "text",
+          "searchable": true,
+          "toggled": true
+        },
+        {
+          "name": "role_name",
+          "label": "角色",
+          "type": "tpl",
+          "tpl": "<span class='label label-info m-l-sm'>${role_name}</span>",
+          "toggled": true
+        },
+        {
+          "name": "email",
+          "label": "邮箱",
+          "type": "text",
+          "searchable": true,
+          "toggled": true
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": 100,
+          "buttons": [
+            {
+              "type": "button",
+              "icon": "fa fa-pencil",
+              "actionType": "dialog",
+              "dialog": {
+                "size": "lg",
+                "title": "编辑",
+                "body": {
+                  "type": "form",
+                  "name": "sample-edit-form",
+                  "api": "/zenvis/api/v1/system/user/$id/update",
+                  "rules": [
+                    {
+                      "rule": "data.password == data.password_confirm",
+                      "message": "两次密码不一致！"
+                    }
+                  ],
+                  "body": [
+                    {
+                      "label": "用户名称",
+                      "name": "name",
+                      "type": "input-text",
+                      "required": true
+                    },
+                    {
+                      "label": "邮箱",
+                      "name": "email",
+                      "type": "input-text",
+                      "required": true
+                    },
+                    {
+                      "label": "密码",
+                      "name": "password",
+                      "type": "input-password"
+                    },
+                    {
+                      "label": "确认密码",
+                      "name": "password_confirm",
+                      "type": "input-password"
+                    },
+                    {
+                      "label": "用户类型",
+                      "name": "role_id",
+                      "type": "select",
+                      "required": true,
+                      "source": "/zenvis/api/v1/system/role/type/list"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-times text-danger",
+              "actionType": "ajax",
+              "confirmText": "您确认要删除?",
+              "api": "delete:/zenvis/api/v1/system/user/$id"
+            }
+          ],
+          "toggled": true
+        }
+      ]
+    }
+  ]
+}

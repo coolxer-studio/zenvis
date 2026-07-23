@@ -21,10 +21,10 @@ ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数�
 
 ### Docker Compose
 
-完整环境由后端的部署目录统一编排：
+完整环境由项目根目录的 `deploy` 目录统一编排：
 
 ```bash
-cd zenvis-backend/deploy
+cd zenvis/deploy
 docker compose up -d
 ```
 

@@ -1,0 +1,22 @@
+{
+  "id": "dispose-agent",
+  "name": "策略控制",
+  "description": "根据策略控制需求生成采集、标记和处置策略配置，按策略记录、试验场验证、正式下发三阶段完成策略控制闭环。",
+  "version": "1.2.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_dispose"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "dispose",
+    "policy",
+    "validation",
+    "simulation",
+    "policy-record",
+    "trial"
+  ],
+  "enabled": true,
+  "entry": "SKILL.md"
+}

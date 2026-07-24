@@ -30,6 +30,7 @@ type UseChatStreamOptions = {
   isUploadingAttachment: Ref<boolean>;
   isDeepThinking: Ref<boolean>;
   selectedModel: Ref<string>;
+  isChatUnavailable: Ref<boolean>;
   chatSessionId: Ref<string>;
   chatSessionRecordId: Ref<string>;
   chatSessionType: Ref<string>;
@@ -54,6 +55,7 @@ export const useChatStream = ({
   isUploadingAttachment,
   isDeepThinking,
   selectedModel,
+  isChatUnavailable,
   chatSessionId,
   chatSessionRecordId,
   chatSessionType,
@@ -71,7 +73,8 @@ export const useChatStream = ({
   const currentStreamingMessageIndex = ref<number | null>(null);
   const isUserStoppingChat = ref(false);
   const canSendMessage = computed(() => {
-    return !isUploadingAttachment.value
+    return !isChatUnavailable.value
+      && !isUploadingAttachment.value
       && !isStreamingResponse.value
       && (inputMessage.value.trim().length > 0 || pendingAttachments.value.length > 0);
   });
@@ -157,6 +160,10 @@ export const useChatStream = ({
   };
 
   const sendMessage = async (options: SendMessageOptions = {}) => {
+    if (isChatUnavailable.value) {
+      ElMessage.warning('当前 Skill 已停用或不存在，请选择其他可用技能');
+      return;
+    }
     const explicitMessage = options.content?.trim();
     const explicitRequestMessage = options.requestContent?.trim();
     const canSend = explicitMessage

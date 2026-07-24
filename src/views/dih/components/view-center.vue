@@ -85,6 +85,14 @@
 
     <!-- 输入区域 -->
     <div class="input-area">
+      <el-alert
+        v-if="skillEntryUnavailable"
+        class="skill-unavailable-alert"
+        title="当前 Skill 已停用或不存在，请选择其他可用技能后继续。"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
       <div class="input-container">
         <el-input v-model="inputMessage" type="textarea" :rows="1" :autosize="{ minRows: 2, maxRows: 6 }"
           placeholder="输入你的问题，帮你深度解答" @keydown.enter.exact.prevent="handleEnterPress" 
@@ -246,9 +254,12 @@ interface Props {
   suggestions: Suggestion[]
   chatSessionId?: string
   chatSessionType?: string
+  skillEntryUnavailable?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  skillEntryUnavailable: false,
+})
 
 const {
   pendingAttachments,
@@ -527,6 +538,7 @@ const {
   upsertMcpApprovalPart,
   mergeFinalApprovalParts,
   rejectPendingMcpApprovals,
+  isChatUnavailable: computed(() => props.skillEntryUnavailable),
 });
 
 onMounted(() => {
@@ -994,6 +1006,10 @@ const dislikeMessage = (index: number) => {
 .input-area {
   padding: 15px;
   border-top: 1px solid #f0f0f0;
+}
+
+.skill-unavailable-alert {
+  margin-bottom: 10px;
 }
 
 .input-container {

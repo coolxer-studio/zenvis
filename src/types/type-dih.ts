@@ -210,6 +210,16 @@ export type AgentSkillVo = {
   updateTime?: string;
 };
 
+export type ChatSkillEntryVo = {
+  skillId: string;
+  chatType: string;
+  agentType: string;
+  label: string;
+  description?: string;
+  icon: string;
+  order: number;
+};
+
 export type SkillSearchParams = {
   keyword?: string;
   agentType?: string;

@@ -16,6 +16,7 @@ import {
   DeleteChatSessionResponse,
   GetChatSessionParams,
   AgentSkillVo,
+  ChatSkillEntryVo,
   PageRowsVo,
   SkillSearchParams,
   SkillVo,
@@ -137,6 +138,19 @@ type RawAgentSkill = {
   updateTime?: string;
 };
 
+type RawChatSkillEntry = {
+  skill_id?: string;
+  skillId?: string;
+  chat_type?: string;
+  chatType?: string;
+  agent_type?: string;
+  agentType?: string;
+  label?: string;
+  description?: string;
+  icon?: string;
+  order?: number;
+};
+
 type RawChatSession = {
   id?: string;
   session_id?: string;
@@ -256,6 +270,16 @@ const normalizeAgentSkill = (item: RawAgentSkill): AgentSkillVo => ({
   order: item?.order ?? 0,
   path: item?.path || '',
   updateTime: item?.update_time || item?.updateTime || '',
+});
+
+const normalizeChatSkillEntry = (item: RawChatSkillEntry): ChatSkillEntryVo => ({
+  skillId: item?.skill_id || item?.skillId || '',
+  chatType: item?.chat_type || item?.chatType || '',
+  agentType: item?.agent_type || item?.agentType || '',
+  label: item?.label || '',
+  description: item?.description || '',
+  icon: item?.icon || 'magic-stick',
+  order: item?.order ?? 1000,
 });
 
 const normalizeChatSession = (item: RawChatSession): ChatSession => ({
@@ -423,6 +447,15 @@ export class DihService {
   static async getAgentSkills(enabled = true): Promise<AgentSkillVo[]> {
     const response = await request<RawAgentSkill[]>(`${prefix}/skills/agents`, { enabled }, 'GET');
     return response.map(normalizeAgentSkill);
+  }
+
+  static async getChatSkillEntries(enabled = true): Promise<ChatSkillEntryVo[]> {
+    const response = await request<RawChatSkillEntry[]>(
+      `${prefix}/skills/chat-entries`,
+      { enabled },
+      'GET',
+    );
+    return response.map(normalizeChatSkillEntry);
   }
 
   static async getChatSessionForPin(): Promise<ChatSession[]> {

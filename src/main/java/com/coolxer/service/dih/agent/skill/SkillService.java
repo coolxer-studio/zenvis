@@ -5,6 +5,8 @@ import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
+import com.coolxer.model.dih.vo.SkillChatConfigVo;
+import com.coolxer.model.dih.vo.SkillChatEntryVo;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.utils.WalkFileUtil;
@@ -17,6 +19,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -52,6 +55,10 @@ public class SkillService {
     private static final String DEFAULT_MANIFEST_FILE = "skill.json";
     private static final String PLUGIN_SKILL_ROOT_DIR = "plugins";
     private static final String DEFAULT_PLUGIN_AGENT_TYPE = "ask";
+    public static final String CHAT_TYPE_PREFIX = "skill:";
+    public static final String GENERIC_SKILL_AGENT_TYPE = "agent_skill";
+    private static final String DEFAULT_CHAT_ICON = "magic-stick";
+    private static final int DEFAULT_CHAT_ORDER = 1000;
     private static final long MAX_SKILL_CONTENT_BYTES = 200 * 1024L;
     private static final int MAX_PROMPT_CHARS = 8000;
     private static final Pattern SAFE_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$");
@@ -60,6 +67,9 @@ public class SkillService {
     private final CustomWebConfig customWebConfig;
     private final ObjectMapper objectMapper;
     private final ConcurrentHashMap<String, SkillRecord> skillCache = new ConcurrentHashMap<>();
+
+    @Value("${app.ai.skill.max-selected-prompt-chars:32000}")
+    private int maxSelectedPromptChars = 32000;
 
     public SkillService(CustomWebConfig customWebConfig, ObjectMapper objectMapper) {
         this.customWebConfig = customWebConfig;
@@ -128,6 +138,61 @@ public class SkillService {
                         || enabled.equals(Boolean.TRUE.equals(agentSkill.getEnabled())))
                 .sorted(Comparator.comparing(AgentSkillVo::getOrder))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 查询 DIH 输入区可展示的 Skill 聊天入口。
+     */
+    public List<SkillChatEntryVo> getChatEntries(Boolean enabled) {
+        return getAll().stream()
+                .filter(skill -> skill.getChat() != null && Boolean.TRUE.equals(skill.getChat().getEnabled()))
+                .filter(skill -> enabled == null
+                        || enabled.equals(Boolean.TRUE.equals(skill.getEnabled())))
+                .map(this::toChatEntrySafely)
+                .filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparing(SkillChatEntryVo::getOrder)
+                        .thenComparing(SkillChatEntryVo::getSkillId))
+                .toList();
+    }
+
+    /**
+     * 解析并校验动态 Skill 会话入口。
+     */
+    public SkillChatEntryVo requireEnabledChatEntry(String chatType) {
+        SkillVo skill = requireEnabledChatSkill(chatType);
+        return toChatEntry(skill);
+    }
+
+    /**
+     * 解析动态会话类型对应的 Skill，供开场白等会话元数据使用。
+     */
+    public SkillVo requireEnabledChatSkill(String chatType) {
+        if (!isDynamicChatType(chatType)) {
+            throw new IllegalArgumentException("不是动态 Skill 会话类型: " + chatType);
+        }
+        String skillId = StringUtils.removeStart(chatType, CHAT_TYPE_PREFIX);
+        if (StringUtils.isBlank(skillId)) {
+            throw new IllegalArgumentException("动态 Skill 会话缺少 Skill ID");
+        }
+        SkillRecord record;
+        try {
+            record = getRecord(skillId);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Skill 已停用或不存在: " + skillId, e);
+        }
+        SkillVo skill = record.getSkill();
+        if (!Boolean.TRUE.equals(skill.getEnabled())) {
+            throw new IllegalArgumentException("Skill 已停用或不存在: " + skillId);
+        }
+        if (skill.getChat() == null || !Boolean.TRUE.equals(skill.getChat().getEnabled())) {
+            throw new IllegalArgumentException("Skill 未开放 DIH 聊天入口: " + skillId);
+        }
+        toChatEntry(skill);
+        return skill;
+    }
+
+    public static boolean isDynamicChatType(String chatType) {
+        return StringUtils.startsWith(chatType, CHAT_TYPE_PREFIX);
     }
 
     public boolean isBuiltinAgentType(String agentType) {
@@ -212,7 +277,7 @@ public class SkillService {
                 .filter(record -> selectedIds.contains(record.getSkill().getId()))
                 .sorted(Comparator.comparing(record -> record.getSkill().getId()))
                 .toList();
-        return buildSkillPrompt(records);
+        return buildSelectedSkillPrompt(records);
     }
 
     /**
@@ -302,6 +367,30 @@ public class SkillService {
                 prompt.append(block).append("\n");
             } catch (IOException e) {
                 log.warn("读取已启用 Skill 失败: {}", record.getSkill().getId(), e);
+            }
+        }
+        return prompt.toString().trim();
+    }
+
+    private String buildSelectedSkillPrompt(List<SkillRecord> records) {
+        StringBuilder prompt = new StringBuilder();
+        int configuredLimit = Math.max(maxSelectedPromptChars, 1);
+        for (SkillRecord record : records) {
+            try {
+                String content = readSkillContent(record.getEntryPath()).trim();
+                if (StringUtils.isBlank(content)) {
+                    continue;
+                }
+                String block = "### " + record.getSkill().getName() + " (" + record.getSkill().getId() + ")\n"
+                        + content + "\n";
+                if (prompt.length() + block.length() > configuredLimit) {
+                    throw new IllegalArgumentException(
+                            "Skill 提示词超过上限 " + configuredLimit + " 字符: " + record.getSkill().getId()
+                    );
+                }
+                prompt.append(block).append("\n");
+            } catch (IOException e) {
+                throw new IllegalStateException("读取已选择 Skill 失败: " + record.getSkill().getId(), e);
             }
         }
         return prompt.toString().trim();
@@ -465,6 +554,61 @@ public class SkillService {
         return agentSkillVo;
     }
 
+    private SkillChatEntryVo toChatEntrySafely(SkillVo skill) {
+        try {
+            return toChatEntry(skill);
+        } catch (IllegalArgumentException e) {
+            log.warn("忽略无效的 Skill 聊天入口: skillId={}, reason={}", skill.getId(), e.getMessage());
+            return null;
+        }
+    }
+
+    private SkillChatEntryVo toChatEntry(SkillVo skill) {
+        SkillChatConfigVo chat = skill.getChat();
+        if (chat == null || !Boolean.TRUE.equals(chat.getEnabled())) {
+            throw new IllegalArgumentException("Skill 未开放 DIH 聊天入口: " + skill.getId());
+        }
+        String agentType = resolveChatAgentType(skill, chat);
+        String chatType = BuiltinAgentSkillRegistry.findBySkillId(skill.getId())
+                .filter(agent -> agent.agentType().equals(agentType))
+                .map(BuiltinAgentSkillRegistry.BuiltinAgentSkill::agentType)
+                .orElse(CHAT_TYPE_PREFIX + skill.getId());
+        return new SkillChatEntryVo(
+                skill.getId(),
+                chatType,
+                agentType,
+                StringUtils.defaultIfBlank(chat.getLabel(), skill.getName()),
+                skill.getDescription(),
+                StringUtils.defaultIfBlank(chat.getIcon(), DEFAULT_CHAT_ICON),
+                chat.getOrder() == null ? DEFAULT_CHAT_ORDER : chat.getOrder()
+        );
+    }
+
+    private String resolveChatAgentType(SkillVo skill, SkillChatConfigVo chat) {
+        String configuredAgentType = StringUtils.trimToNull(chat.getAgentType());
+        if (configuredAgentType != null) {
+            if (!isSupportedChatAgentType(configuredAgentType)) {
+                throw new IllegalArgumentException("Skill 聊天 Agent 类型不受支持: " + configuredAgentType);
+            }
+            return configuredAgentType;
+        }
+        List<String> supportedAgentTypes = skill.getAgentTypes() == null ? List.of() : skill.getAgentTypes().stream()
+                .filter(this::isSupportedBusinessAgentType)
+                .distinct()
+                .toList();
+        return supportedAgentTypes.size() == 1
+                ? supportedAgentTypes.get(0)
+                : GENERIC_SKILL_AGENT_TYPE;
+    }
+
+    private boolean isSupportedChatAgentType(String agentType) {
+        return GENERIC_SKILL_AGENT_TYPE.equals(agentType) || isSupportedBusinessAgentType(agentType);
+    }
+
+    private boolean isSupportedBusinessAgentType(String agentType) {
+        return BuiltinAgentSkillRegistry.isBuiltinAgentType(agentType);
+    }
+
     private boolean isPluginSkillDir(Path skillDir, Path root) {
         Path relativePath = root.toAbsolutePath().normalize()
                 .relativize(skillDir.toAbsolutePath().normalize());
@@ -599,6 +743,7 @@ public class SkillService {
         detail.setAgentTypes(skill.getAgentTypes());
         detail.setTags(skill.getTags());
         detail.setEnabled(skill.getEnabled());
+        detail.setChat(skill.getChat());
         detail.setEntry(skill.getEntry());
         detail.setPath(skill.getPath());
         detail.setUpdateTime(skill.getUpdateTime());

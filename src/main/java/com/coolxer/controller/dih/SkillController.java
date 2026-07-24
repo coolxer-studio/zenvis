@@ -5,6 +5,7 @@ import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.base.vo.SingleValueVo;
 import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.AgentSkillVo;
+import com.coolxer.model.dih.vo.SkillChatEntryVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.model.dih.vo.SkillOptionVo;
@@ -52,6 +53,18 @@ public class SkillController {
             return ResponseWrap.success(skillService.getBuiltinAgentSkills(enabled));
         } catch (Exception e) {
             log.error("查询内置 Agent Skill 列表失败", e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/chat-entries")
+    @Operation(summary = "Skill 聊天入口", description = "查询 DIH 输入区可展示的内置和动态 Skill 入口")
+    public ResponseWrap<List<SkillChatEntryVo>> chatEntries(
+            @RequestParam(value = "enabled", required = false) Boolean enabled) {
+        try {
+            return ResponseWrap.success(skillService.getChatEntries(enabled));
+        } catch (Exception e) {
+            log.error("查询 Skill 聊天入口失败", e);
             return ResponseWrap.fail(e);
         }
     }

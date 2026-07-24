@@ -65,6 +65,12 @@ public final class BuiltinAgentSkillRegistry {
                 .findFirst();
     }
 
+    public static Optional<BuiltinAgentSkill> findBySkillId(String skillId) {
+        return AGENT_SKILLS.stream()
+                .filter(agentSkill -> agentSkill.skillId().equals(skillId))
+                .findFirst();
+    }
+
     public static boolean isBuiltinAgentType(String agentType) {
         return findByAgentType(agentType).isPresent();
     }

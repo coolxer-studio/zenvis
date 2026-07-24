@@ -4,6 +4,10 @@ import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.MetaDataConstants;
+import com.coolxer.model.retrieval.query.IpEventTimelineQueryRequest;
+import com.coolxer.model.retrieval.query.IpEventTimelineQuerySource;
+import com.coolxer.model.retrieval.query.IpRelationQueryRequest;
+import com.coolxer.model.retrieval.query.IpRelationQuerySource;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.retrieval.QueryEngine;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +25,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 class EntityCoreServiceImplTest {
 
@@ -180,6 +186,346 @@ class EntityCoreServiceImplTest {
                 .hasMessageContaining("实体列表不能为空");
     }
 
+    @Test
+    void ipRelationsResolvesLogicalFieldsAndEnrichesPeerEntityLabels() {
+        DataEntity traffic = relationEntity();
+        DataEntity status = entity("status", "设备状态", "zenvis.status");
+        when(metaDataService.getDataEntityByName("traffic")).thenReturn(traffic);
+        when(metaDataService.getDataEntityByName("status")).thenReturn(status);
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "source_address", "Nullable(String)"),
+                attribute("traffic", "dst_ip", "destination_address", "LowCardinality(String)"),
+                attribute("traffic", "found_time", "detected_at", "DateTime64(3)")));
+        when(metaDataService.getAllDataAttributeByEntity(status)).thenReturn(List.of(
+                attribute("status", "device_id", "device_id", "String")));
+        when(queryEngine.countAnyOfInTime(
+                any(IpRelationQuerySource.class), eq("2001:db8::1"),
+                eq("2026-07-18 00:00:00"), eq("2026-07-24 15:30:00")))
+                .thenReturn(BigDecimal.valueOf(7));
+        when(queryEngine.findIpRelations(
+                any(), eq("2001:db8::1"),
+                eq("2026-07-18 00:00:00"), eq("2026-07-24 15:30:00"), eq(50)))
+                .thenReturn(new LinkedHashMap<>(Map.of(
+                        "relation_total", 4L,
+                        "peer_total", 1L,
+                        "has_more", false,
+                        "peers", List.of(new LinkedHashMap<>(Map.of(
+                                "ip", "2001:db8::2",
+                                "total", 4L,
+                                "inbound", 1L,
+                                "outbound", 3L,
+                                "entities", List.of(new LinkedHashMap<>(Map.of(
+                                        "entity", "traffic",
+                                        "total", 4L,
+                                        "inbound", 1L,
+                                        "outbound", 3L)))))))));
+
+        Map<String, Object> result = service.ipRelations(request(
+                "2001:db8::1",
+                "2026-07-18 00:00:00",
+                "2026-07-24 15:30:00",
+                50,
+                List.of("traffic", "status"),
+                List.of(mapping("traffic", "src_ip", "dst_ip", "found_time"))));
+
+        assertThat(result)
+                .containsEntry("ip", "2001:db8::1")
+                .containsEntry("total", 7L)
+                .containsEntry("entity_count", 2)
+                .containsEntry("matched_entity_count", 1)
+                .containsEntry("relation_total", 4L)
+                .containsEntry("peer_total", 1L)
+                .containsEntry("peer_count", 1)
+                .containsEntry("has_more", false);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> peers = (List<Map<String, Object>>) result.get("peers");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> peerEntities =
+                (List<Map<String, Object>>) peers.get(0).get("entities");
+        assertThat(peerEntities.get(0)).containsEntry("label", "网络流量");
+
+        org.mockito.ArgumentCaptor<IpRelationQuerySource> source =
+                org.mockito.ArgumentCaptor.forClass(IpRelationQuerySource.class);
+        verify(queryEngine).countAnyOfInTime(
+                source.capture(), eq("2001:db8::1"),
+                eq("2026-07-18 00:00:00"), eq("2026-07-24 15:30:00"));
+        assertThat(source.getValue())
+                .extracting(
+                        IpRelationQuerySource::sourceColumn,
+                        IpRelationQuerySource::targetColumn,
+                        IpRelationQuerySource::timeColumn)
+                .containsExactly("source_address", "destination_address", "detected_at");
+    }
+
+    @Test
+    void ipRelationsRejectsPhysicalUnknownAndCrossEntityFields() {
+        DataEntity traffic = relationEntity();
+        when(metaDataService.getDataEntityByName("traffic")).thenReturn(traffic);
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "source_address", "String"),
+                attribute("other", "dst_ip", "destination_address", "String"),
+                attribute("traffic", "found_time", "detected_at", "DateTime")));
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("traffic"),
+                List.of(mapping("traffic", "source_address", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("逻辑字段不存在");
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("traffic"),
+                List.of(mapping("traffic", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("字段不属于映射实体");
+    }
+
+    @Test
+    void ipRelationsRejectsInvalidTypesDuplicateFieldsAndDuplicateMappings() {
+        DataEntity traffic = relationEntity();
+        when(metaDataService.getDataEntityByName("traffic")).thenReturn(traffic);
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "src_ip", "Array(String)"),
+                attribute("traffic", "dst_ip", "dst_ip", "String"),
+                attribute("traffic", "found_time", "found_time", "UInt64")));
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("traffic"),
+                List.of(mapping("traffic", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("标量String");
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("traffic"),
+                List.of(mapping("traffic", "src_ip", "src_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不得重复");
+
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "src_ip", "String"),
+                attribute("traffic", "dst_ip", "dst_ip", "String"),
+                attribute("traffic", "found_time", "found_time", "DateTime")));
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("traffic"),
+                List.of(
+                        mapping("traffic", "src_ip", "dst_ip", "found_time"),
+                        mapping("traffic", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("最多配置一组");
+    }
+
+    @Test
+    void ipRelationsEnforcesStrictTimeRangeLimitAndRequestedMappingEntity() {
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026/07/18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("asset"),
+                List.of(mapping("asset", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("yyyy-MM-dd HH:mm:ss");
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-01-01 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("asset"),
+                List.of(mapping("asset", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不得超过90天");
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 30,
+                List.of("asset"),
+                List.of(mapping("asset", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("20、50或100");
+
+        assertThatThrownBy(() -> service.ipRelations(request(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 50,
+                List.of("asset"),
+                List.of(mapping("not_requested", "src_ip", "dst_ip", "found_time")))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不在请求实体列表");
+    }
+
+    @Test
+    void ipEventTimelineResolvesLogicalFieldsAndUsesHourAtFortyEightHourBoundary() {
+        DataEntity traffic = relationEntity();
+        when(metaDataService.getDataEntityByName("traffic")).thenReturn(traffic);
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "source_address", "Nullable(String)"),
+                attribute("traffic", "dst_ip", "destination_address", "LowCardinality(String)"),
+                attribute("traffic", "found_time", "detected_at", "DateTime64(3)"),
+                attribute("traffic", "event_id", "event_number", "String")));
+        when(queryEngine.findIpEventTimeline(
+                any(), eq("2001:db8::1"),
+                eq("2026-07-23 15:30:00"), eq("2026-07-25 15:30:00"), eq(true)))
+                .thenReturn(Map.of(
+                        "total", 9L,
+                        "inbound_total", 5L,
+                        "outbound_total", 4L,
+                        "buckets", List.of(Map.of(
+                                "time", "2026-07-25 15:00:00",
+                                "inbound_total", 5L,
+                                "outbound_total", 4L,
+                                "inbound", List.of(Map.of("event_type", "010901", "total", 5L)),
+                                "outbound", List.of(Map.of("event_type", "030303", "total", 4L))))));
+
+        Map<String, Object> result = service.ipEventTimeline(timelineRequest(
+                " 2001:db8::1 ",
+                "2026-07-23 15:30:00",
+                "2026-07-25 15:30:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time", "event_id", 2, 6))));
+
+        assertThat(result)
+                .containsEntry("ip", "2001:db8::1")
+                .containsEntry("time_zone", "Asia/Shanghai")
+                .containsEntry("granularity", "hour")
+                .containsEntry("total", 9L)
+                .containsEntry("inbound_total", 5L)
+                .containsEntry("outbound_total", 4L);
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<IpEventTimelineQuerySource>> sources =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(queryEngine).findIpEventTimeline(
+                sources.capture(), eq("2001:db8::1"),
+                eq("2026-07-23 15:30:00"), eq("2026-07-25 15:30:00"), eq(true));
+        assertThat(sources.getValue()).singleElement().satisfies(source -> {
+            assertThat(source.sourceColumn()).isEqualTo("source_address");
+            assertThat(source.targetColumn()).isEqualTo("destination_address");
+            assertThat(source.timeColumn()).isEqualTo("detected_at");
+            assertThat(source.eventTypeColumn()).isEqualTo("event_number");
+            assertThat(source.eventTypeStart()).isEqualTo(2);
+            assertThat(source.eventTypeLength()).isEqualTo(6);
+        });
+    }
+
+    @Test
+    void ipEventTimelineUsesDayBeyondFortyEightHoursAndReturnsEmptyAggregates() {
+        DataEntity traffic = timelineEntityWithValidAttributes();
+        when(queryEngine.findIpEventTimeline(
+                any(), eq("192.0.2.1"),
+                eq("2026-07-22 15:29:59"), eq("2026-07-24 15:30:00"), eq(false)))
+                .thenReturn(Map.of());
+
+        Map<String, Object> result = service.ipEventTimeline(timelineRequest(
+                "192.0.2.1",
+                "2026-07-22 15:29:59",
+                "2026-07-24 15:30:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time", "event_id", 2, 6))));
+
+        assertThat(result)
+                .containsEntry("granularity", "day")
+                .containsEntry("total", 0L)
+                .containsEntry("inbound_total", 0L)
+                .containsEntry("outbound_total", 0L)
+                .containsEntry("buckets", List.of());
+        verify(metaDataService).getAllDataAttributeByEntity(traffic);
+    }
+
+    @Test
+    void ipEventTimelineRejectsPhysicalCrossEntityDuplicateAndInvalidTypeMappings() {
+        DataEntity traffic = relationEntity();
+        when(metaDataService.getDataEntityByName("traffic")).thenReturn(traffic);
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "source_address", "String"),
+                attribute("other", "dst_ip", "destination_address", "String"),
+                attribute("traffic", "found_time", "detected_at", "DateTime"),
+                attribute("traffic", "event_id", "event_number", "String")));
+
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "source_address", "dst_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("逻辑字段不存在");
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("字段不属于映射实体");
+
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "src_ip", "Array(String)"),
+                attribute("traffic", "dst_ip", "dst_ip", "String"),
+                attribute("traffic", "found_time", "found_time", "DateTime"),
+                attribute("traffic", "event_id", "event_id", "String")));
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("标量String");
+
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "src_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不得重复");
+    }
+
+    @Test
+    void ipEventTimelineEnforcesTimeExtractionAndUniqueEntityLimits() {
+        timelineEntityWithValidAttributes();
+
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026/07/18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("yyyy-MM-dd HH:mm:ss");
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-25 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不得晚于");
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-01-01 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不得超过90天");
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 0, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("1到64");
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(timelineMapping(
+                        "traffic", "src_ip", "dst_ip", "found_time",
+                        "event_id", 2, 17)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("1到16");
+        assertThatThrownBy(() -> service.ipEventTimeline(timelineRequest(
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00",
+                List.of(
+                        timelineMapping(
+                                "traffic", "src_ip", "dst_ip", "found_time",
+                                "event_id", 2, 6),
+                        timelineMapping(
+                                "traffic", "src_ip", "dst_ip", "found_time",
+                                "event_id", 2, 6)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("最多配置一组");
+    }
+
     private DataEntity entity(String name, String label, String tableName) {
         DataEntity entity = new DataEntity();
         entity.setName(name);
@@ -189,11 +535,71 @@ class EntityCoreServiceImplTest {
     }
 
     private DataAttribute attribute(String name, String columnName, String columnType) {
+        return attribute("asset", name, columnName, columnType);
+    }
+
+    private DataAttribute attribute(String entityName, String name,
+                                    String columnName, String columnType) {
         DataAttribute attribute = new DataAttribute();
-        attribute.setEntity("asset");
+        attribute.setEntity(entityName);
         attribute.setName(name);
         attribute.setColumnName(columnName);
         attribute.setColumnType(columnType);
         return attribute;
+    }
+
+    private DataEntity relationEntity() {
+        return entity("traffic", "网络流量", "zenvis.traffic");
+    }
+
+    private DataEntity timelineEntityWithValidAttributes() {
+        DataEntity traffic = relationEntity();
+        when(metaDataService.getDataEntityByName("traffic")).thenReturn(traffic);
+        when(metaDataService.getAllDataAttributeByEntity(traffic)).thenReturn(List.of(
+                attribute("traffic", "src_ip", "source_address", "String"),
+                attribute("traffic", "dst_ip", "destination_address", "String"),
+                attribute("traffic", "found_time", "detected_at", "DateTime"),
+                attribute("traffic", "event_id", "event_number", "String")));
+        return traffic;
+    }
+
+    private IpRelationQueryRequest request(
+            String ip, String startTime, String endTime, int limit,
+            List<String> entities,
+            List<IpRelationQueryRequest.RelationMapping> mappings) {
+        return new IpRelationQueryRequest(
+                ip, startTime, endTime, limit, entities, mappings);
+    }
+
+    private IpRelationQueryRequest.RelationMapping mapping(
+            String entity, String sourceField, String targetField, String timeField) {
+        return new IpRelationQueryRequest.RelationMapping(
+                entity, sourceField, targetField, timeField);
+    }
+
+    private IpEventTimelineQueryRequest timelineRequest(
+            String ip,
+            String startTime,
+            String endTime,
+            List<IpEventTimelineQueryRequest.EventMapping> mappings) {
+        return new IpEventTimelineQueryRequest(ip, startTime, endTime, mappings);
+    }
+
+    private IpEventTimelineQueryRequest.EventMapping timelineMapping(
+            String entity,
+            String sourceField,
+            String targetField,
+            String timeField,
+            String eventTypeField,
+            int eventTypeStart,
+            int eventTypeLength) {
+        return new IpEventTimelineQueryRequest.EventMapping(
+                entity,
+                sourceField,
+                targetField,
+                timeField,
+                eventTypeField,
+                eventTypeStart,
+                eventTypeLength);
     }
 }

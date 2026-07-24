@@ -4,6 +4,7 @@ import com.coolxer.configuration.JacksonConfig;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.slf4j.Logger;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
@@ -18,7 +19,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class LlmLogHelper {
 
     private static final AtomicLong REQUEST_SEQUENCE = new AtomicLong();
-    private static final int TEXT_PREVIEW_CHARS = 160;
+    private static final int TEXT_PREVIEW_CHARS = 1000;
+    private static final int PROVIDER_RESPONSE_PREVIEW_CHARS = 8000;
 
     private LlmLogHelper() {
     }
@@ -44,12 +46,13 @@ public final class LlmLogHelper {
             long startedAtNanos,
             Throwable throwable
     ) {
-        logger.error("[LLM][{}][{}] error elapsedMs={} partialResponse={} message={}",
+        logger.error("[LLM][{}][{}] error elapsedMs={} partialResponse={} providerError={} message={}",
                 requestId,
                 scene,
                 elapsedMs(startedAtNanos),
                 toLogText(partialResponse),
-                throwable.getMessage(),
+                toLogText(httpErrorDetails(throwable)),
+                throwable == null ? null : throwable.getMessage(),
                 throwable);
     }
 
@@ -101,7 +104,7 @@ public final class LlmLogHelper {
         return (System.nanoTime() - startedAtNanos) / 1_000_000;
     }
 
-    private static String toLogText(Object value) {
+    static String toLogText(Object value) {
         Object sanitized = sanitize(value, "");
         if (sanitized == null) {
             return "null";
@@ -113,6 +116,47 @@ public final class LlmLogHelper {
             return JacksonConfig.OBJECT_MAPPER.writeValueAsString(sanitized);
         } catch (JsonProcessingException e) {
             return String.valueOf(sanitized);
+        }
+    }
+
+    static Map<String, Object> httpErrorDetails(Throwable throwable) {
+        WebClientResponseException responseException = findWebClientResponseException(throwable);
+        if (responseException == null) {
+            return Map.of();
+        }
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("status_code", responseException.getStatusCode().value());
+        details.put("status_text", responseException.getStatusText());
+        if (responseException.getRequest() != null) {
+            details.put("request_method", responseException.getRequest().getMethod().name());
+            details.put("request_url", responseException.getRequest().getURI().toString());
+        }
+        details.put("response_body", parseProviderResponseBody(responseException.getResponseBodyAsString()));
+        return details;
+    }
+
+    private static WebClientResponseException findWebClientResponseException(Throwable throwable) {
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth++ < 20) {
+            if (current instanceof WebClientResponseException responseException) {
+                return responseException;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private static Object parseProviderResponseBody(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return "";
+        }
+        try {
+            Object parsedBody = JacksonConfig.OBJECT_MAPPER.readValue(responseBody, Object.class);
+            return sanitize(parsedBody, "response_body");
+        } catch (JsonProcessingException ignored) {
+            return summarizeText(responseBody, PROVIDER_RESPONSE_PREVIEW_CHARS);
         }
     }
 
@@ -158,7 +202,7 @@ public final class LlmLogHelper {
             return "<image-data-uri length=" + value.length() + ">";
         }
         if (isTextPayloadKey(key)) {
-            return summarizeText(value);
+            return summarizeText(value, TEXT_PREVIEW_CHARS);
         }
         return value;
     }
@@ -173,13 +217,13 @@ public final class LlmLogHelper {
                 || normalizedKey.contains("message");
     }
 
-    private static String summarizeText(String value) {
+    private static String summarizeText(String value, int previewChars) {
         if (value == null) {
             return null;
         }
         String preview = value.replaceAll("\\s+", " ").trim();
-        if (preview.length() > TEXT_PREVIEW_CHARS) {
-            preview = preview.substring(0, TEXT_PREVIEW_CHARS) + "...";
+        if (preview.length() > previewChars) {
+            preview = preview.substring(0, previewChars) + "...";
         }
         return "<text length=" + value.length() + " preview=\"" + preview + "\">";
     }

@@ -4,6 +4,8 @@ import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.retrieval.query.ColumnCriteria;
 import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
 import com.coolxer.model.retrieval.query.DisplayColumn;
+import com.coolxer.model.retrieval.query.IpEventTimelineQuerySource;
+import com.coolxer.model.retrieval.query.IpRelationQuerySource;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
 import jakarta.persistence.EntityManager;
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 import static org.mockito.ArgumentMatchers.anyString;
 
 class QueryEngineImplTest {
@@ -239,6 +242,260 @@ class QueryEngineImplTest {
     }
 
     @Test
+    void countAnyOfInTimeUsesMetaColumnsAndBoundTimeValues() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of(BigDecimal.valueOf(3)));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+
+        BigDecimal result = queryEngine.countAnyOfInTime(
+                relationSource("traffic", "zenvis.traffic", "source_address",
+                        "destination_address", "detected_at", "DateTime64(3)"),
+                "2001:db8::1", "2026-07-18 00:00:00", "2026-07-24 15:30:00");
+
+        assertThat(result).isEqualByComparingTo(BigDecimal.valueOf(3));
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains(
+                "(source_address = :ip or destination_address = :ip)",
+                "detected_at >= toDateTime64(:startTime, 3, 'Asia/Shanghai')",
+                "detected_at <= toDateTime64(:endTime, 3, 'Asia/Shanghai')");
+        verify(query).setParameter("ip", "2001:db8::1");
+        verify(query).setParameter("startTime", "2026-07-18 00:00:00");
+        verify(query).setParameter("endTime", "2026-07-24 15:30:00");
+    }
+
+    @Test
+    void findIpRelationsAggregatesDirectionsGloballyAndReturnsEntityBreakdown() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query topQuery = mock(Query.class);
+        Query breakdownQuery = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(topQuery, breakdownQuery);
+        when(topQuery.getResultList()).thenReturn(Collections.singletonList(
+                new Object[]{"198.51.100.8", 6L, 2L, 4L, 40L, 25L}));
+        when(breakdownQuery.getResultList()).thenReturn(Collections.singletonList(
+                new Object[]{"198.51.100.8", "traffic", 6L, 2L, 4L}));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+        String injectionIp = "2001:db8::1' OR 1=1 --";
+
+        Map<String, Object> result = queryEngine.findIpRelations(
+                List.of(
+                        relationSource("traffic", "zenvis.traffic", "src_addr",
+                                "dst_addr", "found_at", "DateTime64(3)"),
+                        relationSource("packet", "zenvis.packet", "source_ip",
+                                "dest_ip", "event_at", "DateTime")),
+                injectionIp, "2026-07-18 00:00:00", "2026-07-24 15:30:00", 20);
+
+        assertThat(result)
+                .containsEntry("relation_total", 40L)
+                .containsEntry("peer_total", 25L)
+                .containsEntry("peer_count", 1)
+                .containsEntry("has_more", true);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> peers = (List<Map<String, Object>>) result.get("peers");
+        assertThat(peers).singleElement().satisfies(peer -> {
+            assertThat(peer)
+                    .containsEntry("ip", "198.51.100.8")
+                    .containsEntry("total", 6L)
+                    .containsEntry("inbound", 2L)
+                    .containsEntry("outbound", 4L);
+            assertThat((List<?>) peer.get("entities")).singleElement();
+        });
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager, times(2)).createNativeQuery(sql.capture());
+        String topSql = sql.getAllValues().get(0);
+        assertThat(topSql).contains(
+                "trim(dst_addr) as peer",
+                "trim(src_addr) as peer",
+                "'outbound' as relation_direction",
+                "'inbound' as relation_direction",
+                "union all",
+                "group by peer",
+                "order by total desc, peer asc limit 21",
+                "trim(dst_addr) != :ip",
+                "notEmpty(trim(src_addr))");
+        assertThat(topSql).doesNotContain(injectionIp);
+        verify(topQuery).setParameter("ip", injectionIp);
+        verify(breakdownQuery).setParameter("peer0", "198.51.100.8");
+    }
+
+    @Test
+    void findIpRelationsRejectsUnsafeIdentifiersTypesAndLimit() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+
+        assertThatThrownBy(() -> queryEngine.findIpRelations(
+                List.of(relationSource("traffic", "traffic;drop table traffic",
+                        "src_ip", "dst_ip", "found_time", "DateTime")),
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 20))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("表名不合法");
+        assertThatThrownBy(() -> queryEngine.findIpRelations(
+                List.of(relationSource("traffic", "traffic",
+                        "src_ip", "dst_ip", "found_time", "UInt64")),
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 20))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("DateTime");
+        assertThatThrownBy(() -> queryEngine.findIpRelations(
+                List.of(relationSource("traffic", "traffic",
+                        "src_ip", "dst_ip", "found_time", "DateTime")),
+                "192.0.2.1", "2026-07-18 00:00:00", "2026-07-24 00:00:00", 30))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("20、50或100");
+    }
+
+    @Test
+    void findIpEventTimelineAggregatesDirectionsCategoriesAndUsesBoundValues() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of(
+                new Object[]{"2026-07-25 06:00:00", "inbound", "010901", 5L},
+                new Object[]{"2026-07-25 06:00:00", "inbound", "unknown", 2L},
+                new Object[]{"2026-07-25 06:00:00", "outbound", "030303", 3L},
+                new Object[]{"2026-07-25 05:00:00", "outbound", "010101", 1L}));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+        String injectionIp = "2001:db8::1' OR 1=1 --";
+
+        Map<String, Object> result = queryEngine.findIpEventTimeline(
+                List.of(
+                        timelineSource(
+                                "controlled", "zenvis.controlled",
+                                "src_addr", "dst_addr", "found_at", "event_number",
+                                "DateTime64(3)", 2, 6),
+                        timelineSource(
+                                "topic", "zenvis.topic",
+                                "source_ip", "destination_ip", "event_at", "topic_event_id",
+                                "DateTime", 2, 6)),
+                injectionIp,
+                "2026-07-23 06:30:00",
+                "2026-07-25 06:30:00",
+                true);
+
+        assertThat(result)
+                .containsEntry("total", 11L)
+                .containsEntry("inbound_total", 7L)
+                .containsEntry("outbound_total", 4L);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> buckets =
+                (List<Map<String, Object>>) result.get("buckets");
+        assertThat(buckets).hasSize(2);
+        assertThat(buckets.get(0))
+                .containsEntry("time", "2026-07-25 06:00:00")
+                .containsEntry("inbound_total", 7L)
+                .containsEntry("outbound_total", 3L);
+        assertThat((List<?>) buckets.get(0).get("inbound")).hasSize(2);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains(
+                "union all",
+                "'outbound' as event_direction",
+                "'inbound' as event_direction",
+                "src_addr = :ip and (dst_addr is null or dst_addr != :ip)",
+                "dst_addr = :ip and (src_addr is null or src_addr != :ip)",
+                "substring(ifNull(event_number, ''), 2, 6)",
+                "'^[0-9]{6}$'",
+                "'unknown'",
+                "toStartOfHour(toTimeZone(found_at, 'Asia/Shanghai'))",
+                "group by bucket_time, event_direction, event_type",
+                "order by bucket_time desc");
+        assertThat(sql.getValue()).doesNotContain(injectionIp);
+        verify(query).setParameter("ip", injectionIp);
+        verify(query).setParameter("startTime", "2026-07-23 06:30:00");
+        verify(query).setParameter("endTime", "2026-07-25 06:30:00");
+    }
+
+    @Test
+    void findIpEventTimelineUsesNaturalDayBucketsAndHandlesEmptyResults() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+
+        Map<String, Object> result = queryEngine.findIpEventTimeline(
+                List.of(timelineSource(
+                        "controlled", "controlled",
+                        "src_ip", "dst_ip", "found_time", "event_id",
+                        "DateTime", 2, 6)),
+                "192.0.2.1",
+                "2026-07-18 00:00:00",
+                "2026-07-24 15:30:00",
+                false);
+
+        assertThat(result)
+                .containsEntry("total", 0L)
+                .containsEntry("inbound_total", 0L)
+                .containsEntry("outbound_total", 0L)
+                .containsEntry("buckets", List.of());
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains(
+                "toStartOfDay(toTimeZone(found_time, 'Asia/Shanghai'))");
+    }
+
+    @Test
+    void findIpEventTimelineRejectsUnsafeIdentifiersTypesAndExtractionRanges() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+
+        assertThatThrownBy(() -> queryEngine.findIpEventTimeline(
+                List.of(timelineSource(
+                        "controlled", "controlled;drop table controlled",
+                        "src_ip", "dst_ip", "found_time", "event_id",
+                        "DateTime", 2, 6)),
+                "192.0.2.1",
+                "2026-07-18 00:00:00",
+                "2026-07-24 00:00:00",
+                false))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("表名不合法");
+        assertThatThrownBy(() -> queryEngine.findIpEventTimeline(
+                List.of(new IpEventTimelineQuerySource(
+                        "controlled", "controlled",
+                        "src_ip", "dst_ip", "found_time", "event_id",
+                        "src_ip", "dst_ip", "found_time", "event_id",
+                        "Array(String)", "String", "DateTime", "String", 2, 6)),
+                "192.0.2.1",
+                "2026-07-18 00:00:00",
+                "2026-07-24 00:00:00",
+                false))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("标量String");
+        assertThatThrownBy(() -> queryEngine.findIpEventTimeline(
+                List.of(timelineSource(
+                        "controlled", "controlled",
+                        "src_ip", "dst_ip", "found_time", "event_id",
+                        "UInt64", 2, 6)),
+                "192.0.2.1",
+                "2026-07-18 00:00:00",
+                "2026-07-24 00:00:00",
+                false))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("DateTime");
+        assertThatThrownBy(() -> queryEngine.findIpEventTimeline(
+                List.of(timelineSource(
+                        "controlled", "controlled",
+                        "src_ip", "dst_ip", "found_time", "event_id",
+                        "DateTime", 65, 6)),
+                "192.0.2.1",
+                "2026-07-18 00:00:00",
+                "2026-07-24 00:00:00",
+                false))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("1到64");
+    }
+
+    @Test
     void displayColumnAlwaysUsesLogicalNameAsResponseAlias() {
         DataAttribute attribute = new DataAttribute();
         attribute.setName("device_name");
@@ -317,5 +574,43 @@ class QueryEngineImplTest {
         expression.setLogic(logic);
         expression.setChildren(List.of(children));
         return expression;
+    }
+
+    private IpRelationQuerySource relationSource(
+            String entity, String tableName, String sourceColumn,
+            String targetColumn, String timeColumn, String timeColumnType) {
+        return new IpRelationQuerySource(
+                entity, entity, tableName,
+                "src_ip", "dst_ip", "found_time",
+                sourceColumn, targetColumn, timeColumn, timeColumnType);
+    }
+
+    private IpEventTimelineQuerySource timelineSource(
+            String entity,
+            String tableName,
+            String sourceColumn,
+            String targetColumn,
+            String timeColumn,
+            String eventTypeColumn,
+            String timeColumnType,
+            int eventTypeStart,
+            int eventTypeLength) {
+        return new IpEventTimelineQuerySource(
+                entity,
+                tableName,
+                "src_ip",
+                "dst_ip",
+                "found_time",
+                "event_id",
+                sourceColumn,
+                targetColumn,
+                timeColumn,
+                eventTypeColumn,
+                "String",
+                "Nullable(String)",
+                timeColumnType,
+                "LowCardinality(String)",
+                eventTypeStart,
+                eventTypeLength);
     }
 }

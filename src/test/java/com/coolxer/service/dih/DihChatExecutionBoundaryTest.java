@@ -4,6 +4,7 @@ import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
+import com.coolxer.model.dih.vo.SkillChatEntryVo;
 import com.coolxer.service.dih.agent.AnalysisAgent;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
@@ -85,6 +86,84 @@ class DihChatExecutionBoundaryTest {
                 anyString(), anyString(), anyString(), anyList(), any(), anyBoolean()
         );
         assertThat(capturedSessionDefaults(fixture).getDeepThink()).isFalse();
+    }
+
+    @Test
+    void dynamicSkillUsesInheritedAgentAndOnlySelectedSkill() {
+        Fixture fixture = fixture();
+        String chatType = "skill:jmr-analysis";
+        when(fixture.skillService.requireEnabledChatEntry(chatType))
+                .thenReturn(new SkillChatEntryVo(
+                        "jmr-analysis",
+                        chatType,
+                        BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
+                        "僵木蠕研判",
+                        "说明",
+                        "data-analysis",
+                        60
+                ));
+        when(fixture.agentMcpToolService.resolve(BuiltinAgentSkillRegistry.AGENT_ANALYSIS))
+                .thenReturn(McpToolContext.empty());
+        when(fixture.analysisAgent.chat(
+                anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
+        )).thenReturn(Flux.just("专项研判回答"));
+
+        List<String> response = fixture.service.chat(chatDto(chatType, true), null).collectList().block();
+
+        assertThat(response).containsExactly("专项研判回答");
+        verify(fixture.agentMcpToolService).resolve(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        verify(fixture.analysisAgent).chat(
+                eq("chat-1"),
+                eq("model-1"),
+                eq("问题"),
+                eq(List.of()),
+                isNull(),
+                eq(List.of("jmr-analysis")),
+                any(McpToolContext.class)
+        );
+        verify(fixture.skillService, never()).isBuiltinAgentEnabled(anyString());
+        assertThat(capturedSessionDefaults(fixture).getType()).isEqualTo(chatType);
+        assertThat(capturedSessionDefaults(fixture).getDeepThink()).isFalse();
+    }
+
+    @Test
+    void genericDynamicSkillUsesNoMcpOrRag() {
+        Fixture fixture = fixture();
+        String chatType = "skill:generic";
+        when(fixture.skillService.requireEnabledChatEntry(chatType))
+                .thenReturn(new SkillChatEntryVo(
+                        "generic",
+                        chatType,
+                        SkillService.GENERIC_SKILL_AGENT_TYPE,
+                        "通用技能",
+                        null,
+                        "magic-stick",
+                        1000
+                ));
+        when(fixture.skillService.buildAgentSkillPrompt(
+                SkillService.GENERIC_SKILL_AGENT_TYPE,
+                List.of("generic")
+        )).thenReturn("通用技能完整提示词");
+        when(fixture.chatService.agentChat(
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+        )).thenReturn(Flux.just("通用技能回答"));
+
+        List<String> response = fixture.service.chat(chatDto(chatType, false), null).collectList().block();
+
+        assertThat(response).containsExactly("通用技能回答");
+        verifyNoInteractions(fixture.agentMcpToolService);
+        verify(fixture.chatService).agentChat(
+                eq("chat-1"),
+                eq("model-1"),
+                org.mockito.ArgumentMatchers.contains("通用技能完整提示词"),
+                eq("问题"),
+                eq(List.of()),
+                isNull(),
+                any(McpToolContext.class)
+        );
+        verify(fixture.chatService, never()).qaChat(
+                anyString(), anyString(), anyString(), anyList(), isNull(), anyBoolean()
+        );
     }
 
     @Test

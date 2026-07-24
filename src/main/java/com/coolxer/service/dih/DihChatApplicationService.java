@@ -61,6 +61,11 @@ public class DihChatApplicationService {
     private static final String LEGACY_MCP_AGENT_TYPE = "mcp_agent";
     private static final String LEGACY_MCP_AGENT_TYPE_ALIAS = "agent_mcp";
     private static final String CHAT_ERROR_MESSAGE = "抱歉，回复失败，请稍后重试~";
+    private static final String GENERIC_SKILL_SYSTEM_PROMPT = """
+            你是 ZenVis Skill 智能体。请严格遵循下方已加载 Skill 的工作流程、能力边界和输出要求。
+            只处理当前 Skill 定义的任务；信息不足时先向用户询问，不得编造系统数据、工具结果或已执行动作。
+            通用 Skill 会话不提供 RAG 或 MCP 工具，只能依据用户输入、附件和对话上下文作答。
+            """;
     private final AIChatService chatService;
     private final AIBaseService baseService;
     private final ChatSessionService chatSessionService;
@@ -139,7 +144,12 @@ public class DihChatApplicationService {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
         String chatType = normalizeChatType(chatDto.getType());
-        Optional<DihChatExecutionPolicy> policyOptional = DihChatExecutionPolicy.resolve(chatType);
+        Optional<DihChatExecutionPolicy> policyOptional;
+        try {
+            policyOptional = DihChatExecutionPolicy.resolve(chatType, skillService);
+        } catch (IllegalArgumentException e) {
+            return errorResponse(eventStream, "智能体能力不可用：" + e.getMessage());
+        }
         if (policyOptional.isEmpty()) {
             return errorResponse(eventStream, "会话类型不支持。");
         }
@@ -151,7 +161,9 @@ public class DihChatApplicationService {
             log.debug("忽略智能体深度思考参数: chatType={}, chatId={}", chatType, chatDto.getChatId());
         }
 
-        if (executionPolicy.isAgent() && !skillService.isBuiltinAgentEnabled(chatType)) {
+        if (executionPolicy.isAgent()
+                && !executionPolicy.isDynamicSkill()
+                && !skillService.isBuiltinAgentEnabled(chatType)) {
             return errorResponse(
                     eventStream,
                     "智能体能力不可用：以下 Skill 不存在或未启用: "
@@ -236,7 +248,7 @@ public class DihChatApplicationService {
                 hasImageAttachment
         );
         McpToolContext mcpToolContext = executionPolicy.toolsAllowed() && !hasImageAttachment
-                ? agentMcpToolService.resolve(chatType)
+                ? agentMcpToolService.resolve(executionPolicy.agentType())
                 : McpToolContext.empty();
         McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
         String turnId = UUID.randomUUID().toString();
@@ -247,7 +259,7 @@ public class DihChatApplicationService {
                     currentUser == null ? null : currentUser.getId(),
                     chatId,
                     turnId,
-                    chatType,
+                    executionPolicy.agentType(),
                     null,
                     null,
                     mcpToolLogStream::emitApproval
@@ -317,16 +329,20 @@ public class DihChatApplicationService {
                                       DihChatExecutionPolicy executionPolicy,
                                       boolean effectiveDeepThink,
                                       AtomicReference<MessageType> messageType) {
-        if (DataAccessAgent.AGENT_TYPE.equals(chatType)) {
+        String agentType = executionPolicy.agentType();
+        boolean allowBuiltinDemo = !executionPolicy.isDynamicSkill();
+        if (DataAccessAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            Optional<Flux<String>> demoResponse = dataAccessDemoResponseService.findResponse(
-                    chatSession,
-                    chatId,
-                    prompt,
-                    currentUser
-            );
-            if (demoResponse.isPresent()) {
-                return demoResponse.get();
+            if (allowBuiltinDemo) {
+                Optional<Flux<String>> demoResponse = dataAccessDemoResponseService.findResponse(
+                        chatSession,
+                        chatId,
+                        prompt,
+                        currentUser
+                );
+                if (demoResponse.isPresent()) {
+                    return demoResponse.get();
+                }
             }
             return dataAccessAgent.chat(
                     chatId,
@@ -338,17 +354,19 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (AnalysisAgent.AGENT_TYPE.equals(chatType)) {
+        if (AnalysisAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            Optional<Flux<String>> demoResponse = findAnalysisDemoResponse(
-                    chatType,
-                    chatId,
-                    prompt,
-                    currentUser,
-                    chatSession
-            );
-            if (demoResponse.isPresent()) {
-                return demoResponse.get();
+            if (allowBuiltinDemo) {
+                Optional<Flux<String>> demoResponse = findAnalysisDemoResponse(
+                        agentType,
+                        chatId,
+                        prompt,
+                        currentUser,
+                        chatSession
+                );
+                if (demoResponse.isPresent()) {
+                    return demoResponse.get();
+                }
             }
             return analysisAgent.chat(
                     chatId,
@@ -360,17 +378,19 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (DisposeAgent.AGENT_TYPE.equals(chatType)) {
+        if (DisposeAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            Optional<Flux<String>> demoResponse = findDisposeDemoResponse(
-                    chatType,
-                    chatId,
-                    prompt,
-                    currentUser,
-                    chatSession
-            );
-            if (demoResponse.isPresent()) {
-                return demoResponse.get();
+            if (allowBuiltinDemo) {
+                Optional<Flux<String>> demoResponse = findDisposeDemoResponse(
+                        agentType,
+                        chatId,
+                        prompt,
+                        currentUser,
+                        chatSession
+                );
+                if (demoResponse.isPresent()) {
+                    return demoResponse.get();
+                }
             }
             return disposeAgent.chat(
                     chatId,
@@ -382,17 +402,19 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (ReportAgent.AGENT_TYPE.equals(chatType)) {
+        if (ReportAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            Optional<Flux<String>> demoResponse = findReportDemoResponse(
-                    chatType,
-                    chatId,
-                    prompt,
-                    currentUser,
-                    chatSession
-            );
-            if (demoResponse.isPresent()) {
-                return demoResponse.get();
+            if (allowBuiltinDemo) {
+                Optional<Flux<String>> demoResponse = findReportDemoResponse(
+                        agentType,
+                        chatId,
+                        prompt,
+                        currentUser,
+                        chatSession
+                );
+                if (demoResponse.isPresent()) {
+                    return demoResponse.get();
+                }
             }
             return reportAgent.chat(
                     chatId,
@@ -404,16 +426,18 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (DataVisualizationAgent.AGENT_TYPE.equals(chatType)) {
+        if (DataVisualizationAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            Optional<Flux<String>> demoResponse = dataVisualizationDemoResponseService.findResponse(
-                    chatSession,
-                    chatId,
-                    prompt,
-                    currentUser
-            );
-            if (demoResponse.isPresent()) {
-                return demoResponse.get();
+            if (allowBuiltinDemo) {
+                Optional<Flux<String>> demoResponse = dataVisualizationDemoResponseService.findResponse(
+                        chatSession,
+                        chatId,
+                        prompt,
+                        currentUser
+                );
+                if (demoResponse.isPresent()) {
+                    return demoResponse.get();
+                }
             }
             return dataVisualizationAgent.chat(
                     chatId,
@@ -425,9 +449,25 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (isPlaceholderBuiltinAgent(chatType)) {
+        if (SkillService.GENERIC_SKILL_AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            return Flux.just(skillService.getBuiltinAgentPlaceholder(chatType));
+            try {
+                String skillPrompt = skillService.buildAgentSkillPrompt(agentType, executionPolicy.skillIds());
+                return chatService.agentChat(
+                        chatId,
+                        model,
+                        GENERIC_SKILL_SYSTEM_PROMPT + "\n\n【已加载 Skill】\n" + skillPrompt,
+                        prompt,
+                        chatDto.getAttachments(),
+                        currentUser,
+                        McpToolContext.empty()
+                );
+            } catch (IllegalArgumentException e) {
+                return Flux.error(new AgentCapabilityUnavailableException(
+                        "智能体能力不可用：" + e.getMessage(),
+                        e
+                ));
+            }
         }
         messageType.set(MessageType.TEXT);
         if (!executionPolicy.ragAllowed()) {

@@ -11,9 +11,14 @@ import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
+import com.coolxer.model.dih.vo.SkillChatConfigVo;
+import com.coolxer.model.dih.vo.SkillChatPromptSuggestionVo;
+import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.utils.JacksonUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,6 +44,9 @@ public class ChatSessionController extends BaseController {
 
     @Autowired
     private ChatSessionService chatSessionService;
+
+    @Autowired
+    private SkillService skillService;
 
     @PostMapping({"/add"})
     public ResponseWrap<?> add(@RequestBody ChatSessionDto chatSessionDto) {
@@ -263,6 +271,9 @@ public class ChatSessionController extends BaseController {
     }
 
     private Message buildPrologueMessage(String type) {
+        if (SkillService.isDynamicChatType(normalizeType(type))) {
+            return buildDynamicSkillPrologueMessage(type);
+        }
         if ("agent_data_access".equals(normalizeType(type))) {
             String content = PROLOGUE_AGENT_DATA_ACCESS
                     + "\n\n"
@@ -413,6 +424,56 @@ public class ChatSessionController extends BaseController {
             return message;
         }
         return new Message("ai", resolvePrologue(type));
+    }
+
+    private Message buildDynamicSkillPrologueMessage(String type) {
+        try {
+            SkillVo skill = skillService.requireEnabledChatSkill(normalizeType(type));
+            SkillChatConfigVo chat = skill.getChat();
+            String label = StringUtils.defaultIfBlank(chat.getLabel(), skill.getName());
+            String prologue = StringUtils.defaultIfBlank(
+                    chat.getPrologue(),
+                    StringUtils.defaultIfBlank(skill.getDescription(), "我是" + label + "助手，请告诉我你希望处理的任务。")
+            );
+            List<SkillChatPromptSuggestionVo> suggestions = chat.getPromptSuggestions() == null
+                    ? List.of()
+                    : chat.getPromptSuggestions().stream()
+                    .filter(item -> item != null
+                            && StringUtils.isNotBlank(item.getLabel())
+                            && StringUtils.isNotBlank(item.getPrompt()))
+                    .toList();
+            Message message = new Message("ai", prologue);
+            if (suggestions.isEmpty()) {
+                message.setParts(List.of(
+                        ChatMessagePart.builder()
+                                .type("markdown")
+                                .content(prologue)
+                                .build()
+                ));
+                return message;
+            }
+            List<Map<String, String>> examples = suggestions.stream()
+                    .map(item -> Map.of("label", item.getLabel(), "prompt", item.getPrompt()))
+                    .toList();
+            message.setContent(prologue + "\n\n" + String.join(
+                    "｜",
+                    suggestions.stream().map(SkillChatPromptSuggestionVo::getLabel).toList()
+            ));
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(prologue)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title(label + "示例")
+                            .metadata(Map.of("examples", examples))
+                            .build()
+            ));
+            return message;
+        } catch (IllegalArgumentException e) {
+            return new Message("ai", "当前 Skill 已停用或不存在，请返回 DIH 选择其他可用技能。");
+        }
     }
 
     private String resolvePrologue(String type) {

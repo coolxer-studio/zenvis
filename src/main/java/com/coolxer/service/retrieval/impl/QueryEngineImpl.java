@@ -8,6 +8,8 @@ import com.coolxer.model.retrieval.query.ColumnCriteria;
 import com.coolxer.model.retrieval.query.ColumnCriteriaExpression;
 import com.coolxer.model.retrieval.query.DataQuery;
 import com.coolxer.model.retrieval.query.DisplayColumn;
+import com.coolxer.model.retrieval.query.IpEventTimelineQuerySource;
+import com.coolxer.model.retrieval.query.IpRelationQuerySource;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
 import com.coolxer.service.retrieval.QueryEngine;
 import com.coolxer.utils.JacksonUtil;
@@ -160,6 +162,402 @@ public class QueryEngineImpl implements QueryEngine {
         query.setParameter("value", value);
         List<BigDecimal> result = query.getResultList();
         return result.isEmpty() ? BigDecimal.ZERO : result.get(0);
+    }
+
+    @Override
+    @Transactional
+    public BigDecimal countAnyOfInTime(IpRelationQuerySource source, String value,
+                                       String startTime, String endTime) {
+        ValidatedIpRelationSource safeSource = validateIpRelationSource(source);
+        requireRelationQueryValues(value, startTime, endTime);
+        String timeStart = relationTimeParameter(":startTime", source.timeColumnType());
+        String timeEnd = relationTimeParameter(":endTime", source.timeColumnType());
+        String countSql = "select count(*) from " + safeSource.tableName()
+                + " where (" + safeSource.sourceColumn() + " = :ip or "
+                + safeSource.targetColumn() + " = :ip) and "
+                + safeSource.timeColumn() + " >= " + timeStart + " and "
+                + safeSource.timeColumn() + " <= " + timeEnd;
+        Query query = entityManager.createNativeQuery(countSql);
+        bindRelationParameters(query, value, startTime, endTime);
+        List<?> result = query.getResultList();
+        return result.isEmpty() ? BigDecimal.ZERO : toBigDecimal(result.get(0));
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> findIpRelations(List<IpRelationQuerySource> sources, String value,
+                                               String startTime, String endTime, int limit) {
+        if (CollectionUtils.isEmpty(sources)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "关系查询源不能为空");
+        }
+        if (!Set.of(20, 50, 100).contains(limit)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "limit仅支持20、50或100");
+        }
+        requireRelationQueryValues(value, startTime, endTime);
+        List<ValidatedIpRelationSource> safeSources = sources.stream()
+                .map(this::validateIpRelationSource)
+                .toList();
+        String relationRowsSql = buildRelationRowsSql(sources, safeSources);
+        String topSql = "select peer, total, inbound, outbound, "
+                + "sum(total) over () as relation_total, count(*) over () as peer_total from ("
+                + "select peer, count(*) as total, "
+                + "countIf(relation_direction = 'inbound') as inbound, "
+                + "countIf(relation_direction = 'outbound') as outbound from ("
+                + relationRowsSql
+                + ") relation_rows group by peer"
+                + ") peer_totals order by total desc, peer asc limit " + (limit + 1);
+        Query topQuery = entityManager.createNativeQuery(topSql);
+        bindRelationParameters(topQuery, value, startTime, endTime);
+        List<Object[]> topRows = topQuery.getResultList();
+
+        long relationTotal = topRows.isEmpty() ? 0L : toLong(topRows.get(0)[4]);
+        long peerTotal = topRows.isEmpty() ? 0L : toLong(topRows.get(0)[5]);
+        boolean hasMore = peerTotal > limit || topRows.size() > limit;
+        List<Object[]> visibleRows = topRows.size() > limit
+                ? topRows.subList(0, limit) : topRows;
+        List<Map<String, Object>> peers = new ArrayList<>();
+        Map<String, Map<String, Object>> peerByIp = new LinkedHashMap<>();
+        for (Object[] row : visibleRows) {
+            if (row == null || row.length < 6) {
+                throw new IllegalArgumentException("IP关系聚合查询结果字段数量不足");
+            }
+            Map<String, Object> peer = new LinkedHashMap<>();
+            String peerIp = String.valueOf(row[0]);
+            peer.put("ip", peerIp);
+            peer.put("total", toLong(row[1]));
+            peer.put("inbound", toLong(row[2]));
+            peer.put("outbound", toLong(row[3]));
+            peer.put("entities", new ArrayList<Map<String, Object>>());
+            peers.add(peer);
+            peerByIp.put(peerIp, peer);
+        }
+
+        if (!peers.isEmpty()) {
+            List<String> peerIps = new ArrayList<>(peerByIp.keySet());
+            List<String> peerParameterNames = new ArrayList<>();
+            for (int i = 0; i < peerIps.size(); i++) {
+                peerParameterNames.add(":peer" + i);
+            }
+            String peerParameters = String.join(",", peerParameterNames);
+            String breakdownSql = "select peer, relation_entity, count(*) as total, "
+                    + "countIf(relation_direction = 'inbound') as inbound, "
+                    + "countIf(relation_direction = 'outbound') as outbound from ("
+                    + relationRowsSql
+                    + ") relation_rows where peer in (" + peerParameters + ") "
+                    + "group by peer, relation_entity order by peer, total desc, relation_entity";
+            Query breakdownQuery = entityManager.createNativeQuery(breakdownSql);
+            bindRelationParameters(breakdownQuery, value, startTime, endTime);
+            int peerIndex = 0;
+            for (String peer : peerIps) {
+                breakdownQuery.setParameter("peer" + peerIndex++, peer);
+            }
+            List<Object[]> breakdownRows = breakdownQuery.getResultList();
+            for (Object[] row : breakdownRows) {
+                if (row == null || row.length < 5) {
+                    throw new IllegalArgumentException("IP关系实体汇总查询结果字段数量不足");
+                }
+                Map<String, Object> peer = peerByIp.get(String.valueOf(row[0]));
+                if (peer == null) {
+                    continue;
+                }
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> entities =
+                        (List<Map<String, Object>>) peer.get("entities");
+                Map<String, Object> entity = new LinkedHashMap<>();
+                entity.put("entity", String.valueOf(row[1]));
+                entity.put("total", toLong(row[2]));
+                entity.put("inbound", toLong(row[3]));
+                entity.put("outbound", toLong(row[4]));
+                entities.add(entity);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("relation_total", relationTotal);
+        result.put("peer_total", peerTotal);
+        result.put("peer_count", peers.size());
+        result.put("has_more", hasMore);
+        result.put("peers", peers);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> findIpEventTimeline(
+            List<IpEventTimelineQuerySource> sources,
+            String value,
+            String startTime,
+            String endTime,
+            boolean hourly) {
+        if (CollectionUtils.isEmpty(sources)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "事件时间轴查询源不能为空");
+        }
+        requireRelationQueryValues(value, startTime, endTime);
+        List<ValidatedIpEventTimelineSource> safeSources = sources.stream()
+                .map(this::validateIpEventTimelineSource)
+                .toList();
+        String timelineRowsSql = buildEventTimelineRowsSql(sources, safeSources, hourly);
+        String timelineSql = "select bucket_time, event_direction, event_type, count(*) as total from ("
+                + timelineRowsSql
+                + ") timeline_rows group by bucket_time, event_direction, event_type "
+                + "order by bucket_time desc, event_direction, total desc, event_type";
+        Query query = entityManager.createNativeQuery(timelineSql);
+        bindRelationParameters(query, value, startTime, endTime);
+        List<Object[]> rows = query.getResultList();
+
+        Map<String, Map<String, Object>> bucketByTime = new LinkedHashMap<>();
+        long total = 0L;
+        long inboundTotal = 0L;
+        long outboundTotal = 0L;
+        for (Object[] row : rows) {
+            if (row == null || row.length < 4) {
+                throw new IllegalArgumentException("IP安全事件时间轴查询结果字段数量不足");
+            }
+            String bucketTime = String.valueOf(row[0]);
+            String direction = String.valueOf(row[1]);
+            String eventType = String.valueOf(row[2]);
+            long count = toLong(row[3]);
+            if (!"inbound".equals(direction) && !"outbound".equals(direction)) {
+                throw new IllegalArgumentException("IP安全事件时间轴查询返回了未知方向");
+            }
+
+            Map<String, Object> bucket = bucketByTime.computeIfAbsent(
+                    bucketTime, this::newEventTimelineBucket);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> eventTypes =
+                    (List<Map<String, Object>>) bucket.get(direction);
+            Map<String, Object> eventTypeTotal = new LinkedHashMap<>();
+            eventTypeTotal.put("event_type", eventType);
+            eventTypeTotal.put("total", count);
+            eventTypes.add(eventTypeTotal);
+            bucket.put(direction + "_total",
+                    ((Number) bucket.get(direction + "_total")).longValue() + count);
+
+            total += count;
+            if ("inbound".equals(direction)) {
+                inboundTotal += count;
+            } else {
+                outboundTotal += count;
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", total);
+        result.put("inbound_total", inboundTotal);
+        result.put("outbound_total", outboundTotal);
+        result.put("buckets", new ArrayList<>(bucketByTime.values()));
+        return result;
+    }
+
+    private Map<String, Object> newEventTimelineBucket(String bucketTime) {
+        Map<String, Object> bucket = new LinkedHashMap<>();
+        bucket.put("time", bucketTime);
+        bucket.put("inbound_total", 0L);
+        bucket.put("outbound_total", 0L);
+        bucket.put("inbound", new ArrayList<Map<String, Object>>());
+        bucket.put("outbound", new ArrayList<Map<String, Object>>());
+        return bucket;
+    }
+
+    private String buildEventTimelineRowsSql(
+            List<IpEventTimelineQuerySource> sources,
+            List<ValidatedIpEventTimelineSource> safeSources,
+            boolean hourly) {
+        List<String> selects = new ArrayList<>();
+        for (int i = 0; i < sources.size(); i++) {
+            IpEventTimelineQuerySource source = sources.get(i);
+            ValidatedIpEventTimelineSource safe = safeSources.get(i);
+            String start = relationTimeParameter(":startTime", source.timeColumnType());
+            String end = relationTimeParameter(":endTime", source.timeColumnType());
+            String timePredicate = safe.timeColumn() + " >= " + start + " and "
+                    + safe.timeColumn() + " <= " + end;
+            String bucket = eventTimelineBucketExpression(safe.timeColumn(), hourly);
+            String eventType = eventTimelineTypeExpression(
+                    safe.eventTypeColumn(), safe.eventTypeStart(), safe.eventTypeLength());
+            selects.add("select " + bucket + " as bucket_time, "
+                    + "'outbound' as event_direction, " + eventType + " as event_type from "
+                    + safe.tableName() + " where " + safe.sourceColumn() + " = :ip and ("
+                    + safe.targetColumn() + " is null or " + safe.targetColumn()
+                    + " != :ip) and " + timePredicate);
+            selects.add("select " + bucket + " as bucket_time, "
+                    + "'inbound' as event_direction, " + eventType + " as event_type from "
+                    + safe.tableName() + " where " + safe.targetColumn() + " = :ip and ("
+                    + safe.sourceColumn() + " is null or " + safe.sourceColumn()
+                    + " != :ip) and " + timePredicate);
+        }
+        return String.join(" union all ", selects);
+    }
+
+    private String eventTimelineBucketExpression(String timeColumn, boolean hourly) {
+        String timezone = ZoneId.of(retrievalTimeZone).getId().replace("'", "''");
+        String localTime = "toTimeZone(" + timeColumn + ", '" + timezone + "')";
+        String bucket = hourly
+                ? "toStartOfHour(" + localTime + ")"
+                : "toStartOfDay(" + localTime + ")";
+        return "formatDateTime(" + bucket
+                + ", '%Y-%m-%d %H:%i:%S', '" + timezone + "')";
+    }
+
+    private String eventTimelineTypeExpression(
+            String eventTypeColumn, int eventTypeStart, int eventTypeLength) {
+        String extracted = "substring(ifNull(" + eventTypeColumn + ", ''), "
+                + eventTypeStart + ", " + eventTypeLength + ")";
+        return "if(match(" + extracted + ", '^[0-9]{6}$'), "
+                + extracted + ", 'unknown')";
+    }
+
+    private ValidatedIpEventTimelineSource validateIpEventTimelineSource(
+            IpEventTimelineQuerySource source) {
+        if (source == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "事件时间轴查询源不能为空");
+        }
+        String entity = requireIdentifier(source.entity(), "实体名");
+        String tableName = requireIdentifier(source.tableName(), "表名");
+        String sourceColumn = requireIdentifier(source.sourceColumn(), "源IP字段");
+        String targetColumn = requireIdentifier(source.targetColumn(), "目的IP字段");
+        String timeColumn = requireIdentifier(source.timeColumn(), "时间字段");
+        String eventTypeColumn = requireIdentifier(source.eventTypeColumn(), "事件分类字段");
+        if (new HashSet<>(List.of(
+                sourceColumn, targetColumn, timeColumn, eventTypeColumn)).size() != 4) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                    "事件时间轴查询字段不得重复");
+        }
+        if (!isScalarStringColumn(source.sourceColumnType())
+                || !isScalarStringColumn(source.targetColumnType())
+                || !isScalarStringColumn(source.eventTypeColumnType())) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                    "事件时间轴源IP、目的IP和事件分类字段必须是标量String");
+        }
+        relationTimeParameter(":time", source.timeColumnType());
+        if (source.eventTypeStart() < 1 || source.eventTypeStart() > 64) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                    "事件分类起始位置必须在1到64之间");
+        }
+        if (source.eventTypeLength() < 1 || source.eventTypeLength() > 16) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                    "事件分类长度必须在1到16之间");
+        }
+        return new ValidatedIpEventTimelineSource(
+                entity,
+                tableName,
+                sourceColumn,
+                targetColumn,
+                timeColumn,
+                eventTypeColumn,
+                source.eventTypeStart(),
+                source.eventTypeLength());
+    }
+
+    private boolean isScalarStringColumn(String columnType) {
+        return "String".equalsIgnoreCase(unwrapColumnType(columnType));
+    }
+
+    private String buildRelationRowsSql(List<IpRelationQuerySource> sources,
+                                        List<ValidatedIpRelationSource> safeSources) {
+        List<String> selects = new ArrayList<>();
+        for (int i = 0; i < sources.size(); i++) {
+            IpRelationQuerySource source = sources.get(i);
+            ValidatedIpRelationSource safe = safeSources.get(i);
+            String start = relationTimeParameter(":startTime", source.timeColumnType());
+            String end = relationTimeParameter(":endTime", source.timeColumnType());
+            String timePredicate = safe.timeColumn() + " >= " + start + " and "
+                    + safe.timeColumn() + " <= " + end;
+            selects.add("select trim(" + safe.targetColumn() + ") as peer, "
+                    + quote(safe.entity()) + " as relation_entity, 'outbound' as relation_direction from "
+                    + safe.tableName() + " where " + safe.sourceColumn() + " = :ip and "
+                    + safe.targetColumn() + " is not null and notEmpty(trim(" + safe.targetColumn()
+                    + ")) and trim(" + safe.targetColumn() + ") != :ip and " + timePredicate);
+            selects.add("select trim(" + safe.sourceColumn() + ") as peer, "
+                    + quote(safe.entity()) + " as relation_entity, 'inbound' as relation_direction from "
+                    + safe.tableName() + " where " + safe.targetColumn() + " = :ip and "
+                    + safe.sourceColumn() + " is not null and notEmpty(trim(" + safe.sourceColumn()
+                    + ")) and trim(" + safe.sourceColumn() + ") != :ip and " + timePredicate);
+        }
+        return String.join(" union all ", selects);
+    }
+
+    private ValidatedIpRelationSource validateIpRelationSource(IpRelationQuerySource source) {
+        if (source == null) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "关系查询源不能为空");
+        }
+        String entity = requireIdentifier(source.entity(), "实体名");
+        String tableName = requireIdentifier(source.tableName(), "表名");
+        String sourceColumn = requireIdentifier(source.sourceColumn(), "源IP字段");
+        String targetColumn = requireIdentifier(source.targetColumn(), "目的IP字段");
+        String timeColumn = requireIdentifier(source.timeColumn(), "时间字段");
+        if (sourceColumn.equals(targetColumn)
+                || sourceColumn.equals(timeColumn)
+                || targetColumn.equals(timeColumn)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "关系查询字段不得重复");
+        }
+        relationTimeParameter(":time", source.timeColumnType());
+        return new ValidatedIpRelationSource(
+                entity, tableName, sourceColumn, targetColumn, timeColumn);
+    }
+
+    private void requireRelationQueryValues(String value, String startTime, String endTime) {
+        if (StringUtils.isBlank(value)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "IP不能为空");
+        }
+        if (StringUtils.isBlank(startTime) || StringUtils.isBlank(endTime)) {
+            throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "查询时间不能为空");
+        }
+    }
+
+    private void bindRelationParameters(Query query, String value,
+                                        String startTime, String endTime) {
+        query.setParameter("ip", value);
+        query.setParameter("startTime", startTime);
+        query.setParameter("endTime", endTime);
+    }
+
+    private String relationTimeParameter(String parameter, String columnType) {
+        String type = unwrapColumnType(columnType).toLowerCase(Locale.ROOT);
+        String timezone = ZoneId.of(retrievalTimeZone).getId().replace("'", "''");
+        if (type.startsWith("datetime64(")) {
+            return "toDateTime64(" + parameter + ", 3, '" + timezone + "')";
+        }
+        if ("datetime".equals(type)) {
+            return "toDateTime(" + parameter + ", '" + timezone + "')";
+        }
+        throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                "关系查询时间字段必须是DateTime或DateTime64");
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.longValue());
+        }
+        return new BigDecimal(String.valueOf(value));
+    }
+
+    private long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(String.valueOf(value));
+    }
+
+    private record ValidatedIpRelationSource(
+            String entity,
+            String tableName,
+            String sourceColumn,
+            String targetColumn,
+            String timeColumn) {
+    }
+
+    private record ValidatedIpEventTimelineSource(
+            String entity,
+            String tableName,
+            String sourceColumn,
+            String targetColumn,
+            String timeColumn,
+            String eventTypeColumn,
+            int eventTypeStart,
+            int eventTypeLength) {
     }
 
     @Transactional

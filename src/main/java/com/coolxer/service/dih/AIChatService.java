@@ -376,18 +376,42 @@ public class AIChatService {
             String systemPrompt
     ) {
         Map<String, Object> request = new LinkedHashMap<>();
+        String resolvedModel = StringUtils.hasText(model) ? model : defaultChatModel;
+        List<Map<String, Object>> messages = buildChatLogMessages(chatId, systemPrompt, prompt);
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", resolvedModel);
+        requestBody.put("messages", messages);
+        requestBody.put("temperature", 0.8);
+        requestBody.put("stream", true);
+
+        request.put("url", openAiChatCompletionsUrl());
+        request.put("body", requestBody);
         request.put("chat_id", chatId);
-        request.put("model", StringUtils.hasText(model) ? model : defaultChatModel);
-        if (StringUtils.hasText(systemPrompt)) {
-            request.put("system_prompt", systemPrompt);
-        }
-        request.put("prompt", prompt);
+        request.put("model", resolvedModel);
+        request.put("message_count", messages.size());
         request.put("deep_thinking", deepThinking);
         request.put("rag_requested", ragRequested);
         request.put("rag_used", ragUsed);
         request.put("rag_document_count", ragDocumentCount);
         request.put("attachment_count", attachments == null ? 0 : attachments.size());
         return request;
+    }
+
+    private List<Map<String, Object>> buildChatLogMessages(String chatId, String systemPrompt, String prompt) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        if (StringUtils.hasText(systemPrompt)) {
+            messages.add(Map.of("role", "system", "content", systemPrompt));
+        }
+        if (StringUtils.hasText(chatId)) {
+            for (Message message : chatMemory.get(chatId)) {
+                String role = toOpenAiRole(message);
+                if (StringUtils.hasText(role) && StringUtils.hasText(message.getText())) {
+                    messages.add(Map.of("role", role, "content", message.getText()));
+                }
+            }
+        }
+        messages.add(Map.of("role", "user", "content", prompt));
+        return messages;
     }
 
     private Map<String, Object> buildNativeHttpLogRequest(String url, Map<String, Object> body) {

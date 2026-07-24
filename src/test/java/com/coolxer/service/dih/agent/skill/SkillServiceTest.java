@@ -164,6 +164,140 @@ class SkillServiceTest {
     }
 
     @Test
+    void chatEntriesIncludeOnlyEnabledOptInSkillsAndResolveDefaults() throws Exception {
+        writeSkill(
+                skillRoot.resolve("analysis-chat-skill"),
+                """
+                        {
+                          "id": "analysis-chat-skill",
+                          "name": "专项研判",
+                          "description": "专项研判说明",
+                          "enabled": true,
+                          "agentTypes": ["agent_analysis"],
+                          "chat": {
+                            "enabled": true,
+                            "icon": "data-analysis",
+                            "order": 20
+                          },
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "专项研判提示词"
+        );
+        writeSkill(
+                skillRoot.resolve("generic-chat-skill"),
+                """
+                        {
+                          "id": "generic-chat-skill",
+                          "name": "通用能力",
+                          "enabled": true,
+                          "chat": {
+                            "enabled": true,
+                            "label": "通用技能",
+                            "order": 10
+                          },
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "通用提示词"
+        );
+        writeSkill(
+                skillRoot.resolve("hidden-skill"),
+                """
+                        {
+                          "id": "hidden-skill",
+                          "name": "后台能力",
+                          "enabled": true,
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "不展示"
+        );
+        writeSkill(
+                skillRoot.resolve("disabled-chat-skill"),
+                """
+                        {
+                          "id": "disabled-chat-skill",
+                          "name": "停用入口",
+                          "enabled": false,
+                          "chat": {"enabled": true},
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "停用提示词"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        assertThat(service.getChatEntries(true))
+                .extracting("skillId")
+                .containsExactly("generic-chat-skill", "analysis-chat-skill");
+        assertThat(service.getChatEntries(true).get(0))
+                .satisfies(entry -> {
+                    assertThat(entry.getChatType()).isEqualTo("skill:generic-chat-skill");
+                    assertThat(entry.getAgentType()).isEqualTo(SkillService.GENERIC_SKILL_AGENT_TYPE);
+                    assertThat(entry.getLabel()).isEqualTo("通用技能");
+                    assertThat(entry.getIcon()).isEqualTo("magic-stick");
+                });
+        assertThat(service.getChatEntries(true).get(1))
+                .satisfies(entry -> {
+                    assertThat(entry.getChatType()).isEqualTo("skill:analysis-chat-skill");
+                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+                    assertThat(entry.getLabel()).isEqualTo("专项研判");
+                });
+        assertThat(service.requireEnabledChatEntry("skill:analysis-chat-skill").getSkillId())
+                .isEqualTo("analysis-chat-skill");
+        assertThatThrownBy(() -> service.requireEnabledChatEntry("skill:disabled-chat-skill"))
+                .hasMessageContaining("已停用或不存在");
+    }
+
+    @Test
+    void builtinChatSkillKeepsLegacyAgentType() throws Exception {
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/analysis-agent");
+        writeSkill(
+                skillRoot.resolve("analysis-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        assertThat(service.getChatEntries(true))
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.getChatType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+                });
+    }
+
+    @Test
+    void selectedSkillPromptRejectsContentOverConfiguredLimitWithoutTruncating() throws Exception {
+        writeSkill(
+                skillRoot.resolve("oversized-skill"),
+                """
+                        {
+                          "id": "oversized-skill",
+                          "name": "超长能力",
+                          "enabled": true,
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "完整提示词".repeat(100)
+        );
+
+        SkillService service = newSkillService();
+        ReflectionTestUtils.setField(service, "maxSelectedPromptChars", 100);
+        service.reload();
+
+        assertThatThrownBy(() -> service.buildAgentSkillPrompt("agent_skill", List.of("oversized-skill")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("超过上限 100")
+                .hasMessageContaining("oversized-skill");
+    }
+
+    @Test
     void disabledBuiltinSkillIsHiddenAndNotLoadedIntoPrompt() throws Exception {
         writeSkill(
                 skillRoot.resolve("data-access-agent"),

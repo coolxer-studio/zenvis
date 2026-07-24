@@ -60,6 +60,11 @@ public class SkillVo implements Serializable {
     private Boolean enabled = false;
 
     /**
+     * DIH 聊天入口配置。未配置或 chat.enabled=false 时不展示。
+     */
+    private SkillChatConfigVo chat;
+
+    /**
      * 入口文件，默认 SKILL.md
      */
     private String entry = "SKILL.md";

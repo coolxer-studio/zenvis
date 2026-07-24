@@ -18,6 +18,12 @@
     "push-task",
     "analysis-task"
   ],
+  "chat": {
+    "enabled": true,
+    "label": "研判分析",
+    "icon": "data-analysis",
+    "order": 30
+  },
   "enabled": true,
   "entry": "SKILL.md"
 }

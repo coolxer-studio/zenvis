@@ -176,6 +176,12 @@ HTML 文件放在 `05_dashboard/html-page/`，`html_path` 只写相对于该目�
 
 - `06_mcp/config.json` 可以注册外部 MCP 服务，也可以为空数组；
 - `07_skill/` 可以包含一个或多个 Skill；
+- Skill 如需显示在 DIH 输入框下方，必须在 `skill.json` 增加 `chat.enabled=true`；可配置
+  `label`、`icon`、`order`、`agentType`、`prologue` 和 `promptSuggestions`。仅安装或启用 Skill
+  不会自动暴露聊天入口；
+- 动态入口只加载当前 Skill；`agentType` 仅用于继承现有 Agent 的基础能力、右侧面板和 MCP
+  权限范围，不能通过 Skill 配置新增工具权限。没有明确归属时使用无 RAG、无 MCP 的通用 Skill
+  会话；
 - `08_menu/config.json` 在安装生命周期末尾创建菜单；
 - 菜单、UI 配置索引和页面路由必须一致；
 - 安装后仍需给角色分配菜单权限。

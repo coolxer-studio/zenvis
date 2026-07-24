@@ -12,6 +12,12 @@
     "agent",
     "data-access"
   ],
+  "chat": {
+    "enabled": true,
+    "label": "数据接入",
+    "icon": "connection",
+    "order": 10
+  },
   "enabled": true,
   "entry": "SKILL.md"
 }

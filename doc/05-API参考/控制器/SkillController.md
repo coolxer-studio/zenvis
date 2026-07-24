@@ -56,6 +56,7 @@
 |----------|----------|----------|
 | GET | `/api/v1/dih/skills/list` | 分页查询 Skill 列表 |
 | GET | `/api/v1/dih/skills/agents` | 查询内置 Agent Skill 状态 |
+| GET | `/api/v1/dih/skills/chat-entries?enabled=true` | 查询 DIH 输入区可用的 Skill 聊天入口 |
 | GET | `/api/v1/dih/skills/options?enabled=true` | 查询 AI分析任务可选的全部启用 Skill |
 | GET | `/api/v1/dih/skills/{id}/view` | 查询 Skill 详情和入口文件内容 |
 | POST | `/api/v1/dih/skills/reload` | 重新扫描并加载 Skill 目录 |
@@ -134,6 +135,27 @@ AI分析任务保存 Skill ID，并在实际执行时读取最新内容。创建
 
 可选参数 `enabled=true/false`。该接口用于查看内置智能体入口对应的 Skill 状态，与 AI分析任务的全量启用选项接口用途不同。
 
+### 查询 DIH Skill 聊天入口
+
+**接口地址**：`GET /api/v1/dih/skills/chat-entries?enabled=true`
+
+仅返回同时满足 `skill.enabled=true` 和 `skill.chat.enabled=true` 的入口。内置 Skill 保留原有
+`agent_*` 会话类型，插件或自定义 Skill 使用 `skill:<skillId>`：
+
+```json
+[
+  {
+    "skill_id": "jmr-continuous-threat-analysis",
+    "chat_type": "skill:jmr-continuous-threat-analysis",
+    "agent_type": "agent_analysis",
+    "label": "僵木蠕研判",
+    "description": "对 JMR 日志执行证据化研判",
+    "icon": "data-analysis",
+    "order": 60
+  }
+]
+```
+
 ### 重载 Skill
 
 **接口地址**: `POST /api/v1/dih/skills/reload`
@@ -190,10 +212,32 @@ skill_config/
   "author": "ZenVis",
   "agent_types": ["agent_data_visualization"],
   "tags": ["data-visualization", "retrieval"],
+  "chat": {
+    "enabled": true,
+    "label": "数据可视化",
+    "icon": "monitor",
+    "order": 20,
+    "agentType": "agent_data_visualization",
+    "prologue": "我是数据可视化助手。",
+    "promptSuggestions": [
+      {
+        "label": "生成趋势图",
+        "prompt": "请生成最近 24 小时的数据趋势图。"
+      }
+    ]
+  },
   "enabled": true,
   "entry": "SKILL.md"
 }
 ```
+
+`chat` 为可选配置；安装 Skill 本身不会自动创建聊天入口。字段规则：
+
+- `chat.enabled=true` 才会展示；Skill 停用后入口同步消失。
+- `label` 默认使用 Skill 名称，`icon` 默认 `magic-stick`，`order` 默认 `1000`。
+- `agentType` 未填写时，若 `agentTypes` 只有一个受支持业务 Agent，则自动继承；否则使用无 RAG、无 MCP 的 `agent_skill`。
+- 动态会话只加载当前选中的 Skill。关联业务 Agent 时，仅继承该 Agent 已授权的 Prompt、右侧面板和 MCP scope，不会扩大工具权限。
+- 显式选择的 Skill 提示词上限由 `app.ai.skill.max-selected-prompt-chars` 控制，默认 `32000` 字符；超限会明确失败，不做静默截断。
 
 ## AI分析任务加载规则
 

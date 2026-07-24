@@ -32,6 +32,7 @@
 | 3 | GET | `/api/v1/entity/trend` | 实体趋势统计 | 获取多个实体的趋势数据 |
 | 4 | GET | `/api/v1/entity/statistics` | 实体字段统计 | 获取实体指定字段的统计信息 |
 | 5 | GET | `/api/v1/entity/ip-statistics` | 跨实体 IP 统计 | 获取指定 IP 在多个实体中的数据量统计 |
+| 6 | POST | `/api/v1/entity/ip-relations/query` | 跨实体 IP 关系聚合 | 按显式逻辑字段映射和时间范围聚合真实对端 IP |
 
 ---
 
@@ -248,6 +249,130 @@ curl -G "http://localhost:11001/api/v1/entity/ip-statistics" \
 | rows[].fields | 该实体实际参与统计的逻辑 IP 字段 |
 | xaxis_data | 与 `rows` 同序的实体展示名称，可用作图表横轴 |
 | series_data | 与 `rows` 同序的实体数据量，可用作图表序列 |
+
+---
+
+### 6️⃣ 跨实体 IP 关系聚合
+
+**接口地址**: `POST /api/v1/entity/ip-relations/query`
+
+**功能描述**: 以当前 IP 为中心，在指定业务时间范围内跨实体聚合真实对端 IP。查询在 ClickHouse 内通过带时间条件的 `UNION ALL` 完成，只向 Java 返回全局 Top N 和实体级汇总，不加载原始明细。
+
+**请求体**:
+
+```json
+{
+  "ip": "192.0.2.1",
+  "startTime": "2026-07-18 00:00:00",
+  "endTime": "2026-07-24 15:30:00",
+  "limit": 50,
+  "entities": [
+    "jmr_0001_controlled_event",
+    "jmr_0022_rule_report"
+  ],
+  "relationMappings": [
+    {
+      "entity": "jmr_0001_controlled_event",
+      "sourceField": "src_ip",
+      "targetField": "dst_ip",
+      "timeField": "found_time"
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| ip | String | 是 | 中心 IPv4 或 IPv6；仅去除首尾空白，之后精确匹配 |
+| startTime | String | 是 | 开始时间，严格格式 `yyyy-MM-dd HH:mm:ss` |
+| endTime | String | 是 | 结束时间，严格格式 `yyyy-MM-dd HH:mm:ss` |
+| limit | Integer | 是 | 仅允许 `20`、`50`、`100` |
+| entities | Array\<String\> | 是 | 统计范围内的 Meta 实体逻辑名称；不可重复 |
+| relationMappings | Array\<Object\> | 是 | 参与关系聚合的显式字段映射 |
+| relationMappings[].entity | String | 是 | 必须存在于 `entities`，每个实体最多一组映射 |
+| relationMappings[].sourceField | String | 是 | Meta 源 IP 逻辑字段，必须是标量 `String` |
+| relationMappings[].targetField | String | 是 | Meta 目的 IP 逻辑字段，必须是标量 `String` |
+| relationMappings[].timeField | String | 是 | Meta 业务时间逻辑字段，必须是 `DateTime` 或 `DateTime64` |
+
+**校验和安全约束**:
+
+1. 三个字段必须属于映射声明的同一实体且互不重复。接口只按 Meta 的 `name` 解析逻辑字段，再使用相应 `column_name`；未知字段、跨实体字段和仅传物理列名都会被拒绝。
+2. 开始时间不得晚于结束时间，时间跨度可等于但不得超过 90 天。时间边界按 `app.retrieval.time-zone` 解释，默认 `Asia/Shanghai`，开始和结束边界均包含。
+3. 表名与列名只能来自已校验的 Meta 并再次执行安全标识符校验；IP、时间和 Top 对端使用查询参数绑定。
+4. 当前 IP 位于源字段时记为 `outbound`，位于目的字段时记为 `inbound`。空对端和当前 IP 指向自身的自环会从关系聚合中排除。
+5. 同一条记录若在两个方向分别满足条件，会按相应方向产生关系计数；`total = inbound + outbound`。IPv6 不做地址规范化。
+
+**成功响应**:
+
+```json
+{
+  "status": 0,
+  "msg": "success",
+  "data": {
+    "ip": "192.0.2.1",
+    "start_time": "2026-07-18 00:00:00",
+    "end_time": "2026-07-24 15:30:00",
+    "time_zone": "Asia/Shanghai",
+    "limit": 50,
+    "total": 18,
+    "entity_count": 2,
+    "matched_entity_count": 1,
+    "relation_total": 16,
+    "peer_count": 2,
+    "peer_total": 2,
+    "has_more": false,
+    "peers": [
+      {
+        "ip": "198.51.100.8",
+        "total": 12,
+        "inbound": 4,
+        "outbound": 8,
+        "entities": [
+          {
+            "entity": "jmr_0001_controlled_event",
+            "label": "木马和僵尸网络受控事件",
+            "total": 12,
+            "inbound": 4,
+            "outbound": 8
+          }
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "entity": "jmr_0001_controlled_event",
+        "label": "木马和僵尸网络受控事件",
+        "fields": ["src_ip", "dst_ip"],
+        "time_field": "found_time",
+        "total": 18
+      },
+      {
+        "entity": "jmr_0022_rule_report",
+        "label": "规则下发结果上报",
+        "fields": [],
+        "time_field": null,
+        "total": 0
+      }
+    ],
+    "xaxis_data": [
+      "木马和僵尸网络受控事件",
+      "规则下发结果上报"
+    ],
+    "series_data": [18, 0]
+  }
+}
+```
+
+| 响应字段 | 说明 |
+|---------|------|
+| total | 时间范围内，各映射实体中源或目的 IP 匹配当前 IP 的去重记录数之和 |
+| relation_total | 排除空对端和自环后的全部方向关联次数，不受 Top N 截断影响 |
+| peer_count | 当前 `peers` 实际返回数量 |
+| peer_total | 时间范围内全部不同对端 IP 数量 |
+| has_more | `peer_total` 是否超过请求的 `limit` |
+| peers | 按 `total` 降序、IP 升序返回的全局 Top N |
+| peers[].entities | 当前对端按实体聚合后的方向和数量 |
+| rows | 与 `entities` 同序的时间范围统计；没有关系映射的实体保留为 0 |
 
 ---
 

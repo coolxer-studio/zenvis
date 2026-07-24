@@ -17,6 +17,12 @@
     "policy-record",
     "trial"
   ],
+  "chat": {
+    "enabled": true,
+    "label": "策略控制",
+    "icon": "operation",
+    "order": 40
+  },
   "enabled": true,
   "entry": "SKILL.md"
 }

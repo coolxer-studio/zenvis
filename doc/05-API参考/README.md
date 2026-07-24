@@ -290,6 +290,7 @@ curl -X POST http://localhost:11001/api/v1/retrieval/do \
 
 ```text
 GET  /api/v1/dih/skills/list
+GET  /api/v1/dih/skills/chat-entries?enabled=true
 GET  /api/v1/dih/skills/{id}/view
 POST /api/v1/dih/skills/reload
 POST /api/v1/dih/skills/{id}/enable

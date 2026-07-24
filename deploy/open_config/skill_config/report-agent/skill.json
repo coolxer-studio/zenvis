@@ -15,6 +15,12 @@
     "summary",
     "editing"
   ],
+  "chat": {
+    "enabled": true,
+    "label": "报表制作",
+    "icon": "document",
+    "order": 50
+  },
   "enabled": true,
   "entry": "SKILL.md"
 }

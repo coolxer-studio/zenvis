@@ -146,7 +146,7 @@
                                 "title": "元数据",
                                 "body": {
                                   "type": "json",
-                                  "value": "${metadata}"
+                                  "source": "${metadata}"
                                 }
                               }
                             ]

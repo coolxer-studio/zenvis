@@ -4,6 +4,7 @@ import com.coolxer.service.dih.rag.RagDocumentManagementService.RagDocument;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -45,6 +46,65 @@ class RagDocumentManagementServiceTest {
 
         assertThat(success).isTrue();
         assertThat(service.deletedIds).containsExactly("doc-1", "doc-2");
+    }
+
+    @Test
+    void fromRedisDocumentFallsBackToTextWhenContentIsMissing() {
+        RagDocumentManagementService service = new RagDocumentManagementService();
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("text", "插件使用说明");
+        properties.put("metadata", "{\"source\":\"com_coolxer_asset\",\"title\":\"资产\"}");
+        redis.clients.jedis.search.Document redisDocument =
+                new redis.clients.jedis.search.Document("doc-1", properties);
+
+        RagDocument document = service.fromRedisDocument(redisDocument);
+
+        assertThat(document.id()).isEqualTo("doc-1");
+        assertThat(document.text()).isEqualTo("插件使用说明");
+        assertThat(document.source()).isEqualTo("com_coolxer_asset");
+        assertThat(document.metadata()).containsEntry("title", "资产");
+    }
+
+    @Test
+    void fromRedisDocumentUsesEmptyTextWhenContentAndTextAreNull() {
+        RagDocumentManagementService service = new RagDocumentManagementService();
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("content", null);
+        properties.put("text", null);
+        redis.clients.jedis.search.Document redisDocument =
+                new redis.clients.jedis.search.Document("doc-1", properties);
+
+        RagDocument document = service.fromRedisDocument(redisDocument);
+
+        assertThat(document.text()).isEmpty();
+    }
+
+    @Test
+    void fromRedisDocumentReadsRedisJsonRootDocument() {
+        RagDocumentManagementService service = new RagDocumentManagementService();
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("$", """
+                {
+                  "chunk_index": 0,
+                  "source": "com_coolxer_plugin_user_event",
+                  "title": "菜单概述",
+                  "content": "用户事件插件说明",
+                  "embedding": [0.1, 0.2]
+                }
+                """);
+        redis.clients.jedis.search.Document redisDocument =
+                new redis.clients.jedis.search.Document("doc-json-1", properties);
+
+        RagDocument document = service.fromRedisDocument(redisDocument);
+
+        assertThat(document.id()).isEqualTo("doc-json-1");
+        assertThat(document.text()).isEqualTo("用户事件插件说明");
+        assertThat(document.source()).isEqualTo("com_coolxer_plugin_user_event");
+        assertThat(document.metadata())
+                .containsEntry("chunk_index", 0)
+                .containsEntry("title", "菜单概述")
+                .containsEntry("source", "com_coolxer_plugin_user_event")
+                .doesNotContainKeys("content", "embedding");
     }
 
     private static final class FakeRagDocumentManagementService extends RagDocumentManagementService {

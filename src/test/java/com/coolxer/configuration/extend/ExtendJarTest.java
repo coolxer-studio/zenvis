@@ -19,4 +19,26 @@ class ExtendJarTest {
         assertThat(extendJar.getBeanNamePrefix())
                 .isEqualTo("com.coolxer.plugin.asset.");
     }
+
+    @Test
+    void usesDifferentBeanNamespacesWhenPluginIsReloaded() {
+        ExtendJar firstLoad = new ExtendJar(
+                "com.coolxer.plugin.user.event",
+                null,
+                "com.coolxer.plugin"
+        );
+        ExtendJar secondLoad = new ExtendJar(
+                "com.coolxer.plugin.user.event",
+                null,
+                "com.coolxer.plugin"
+        );
+
+        String className = "com.coolxer.plugin.servicer.impl.UserServiceImpl";
+
+        assertThat(firstLoad.beanNameBuild(className))
+                .startsWith(firstLoad.getBeanNamePrefix())
+                .isNotEqualTo(secondLoad.beanNameBuild(className));
+        assertThat(secondLoad.beanNameBuild(className))
+                .startsWith(secondLoad.getBeanNamePrefix());
+    }
 }

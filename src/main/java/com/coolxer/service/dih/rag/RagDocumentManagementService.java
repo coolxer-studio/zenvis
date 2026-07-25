@@ -186,11 +186,22 @@ public class RagDocumentManagementService {
         return new RagDocument(document.getId(), document.getText(), metadata, stringValue(metadata.get("source")));
     }
 
-    private RagDocument fromRedisDocument(redis.clients.jedis.search.Document document) {
+    RagDocument fromRedisDocument(redis.clients.jedis.search.Document document) {
         if (document == null) {
             return null;
         }
+        for (Map.Entry<String, Object> entry : document.getProperties()) {
+            if ("$".equals(entry.getKey())) {
+                Map<String, Object> jsonDocument = parseObject(entry.getValue());
+                if (!jsonDocument.isEmpty()) {
+                    return fromRedisJsonDocument(document.getId(), jsonDocument);
+                }
+            }
+        }
+
         Map<String, Object> metadata = new LinkedHashMap<>();
+        String content = "";
+        String text = "";
         for (Map.Entry<String, Object> entry : document.getProperties()) {
             String key = entry.getKey();
             if ("embedding".equals(key)) {
@@ -198,20 +209,48 @@ public class RagDocumentManagementService {
             }
             Object value = normalizeValue(entry.getValue());
             if ("metadata".equals(key)) {
-                metadata.putAll(parseMetadata(value));
+                metadata.putAll(parseObject(value));
+            }
+            else if ("content".equals(key)) {
+                content = stringValue(value);
+            }
+            else if ("text".equals(key)) {
+                text = stringValue(value);
             }
             else if (!"content".equals(key) && !"text".equals(key)) {
                 metadata.put(key, value);
             }
         }
-        String text = firstNonBlank(document.getString("content"), document.getString("text"));
-        return new RagDocument(document.getId(), text, metadata, stringValue(metadata.get("source")));
+        return new RagDocument(
+                document.getId(),
+                firstNonBlank(content, text),
+                metadata,
+                stringValue(metadata.get("source"))
+        );
     }
 
-    private Map<String, Object> parseMetadata(Object value) {
+    private RagDocument fromRedisJsonDocument(String id, Map<String, Object> jsonDocument) {
+        Map<String, Object> values = new LinkedHashMap<>(jsonDocument);
+        values.remove("embedding");
+        String content = stringValue(values.remove("content"));
+        String text = stringValue(values.remove("text"));
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.putAll(parseObject(values.remove("metadata")));
+        metadata.putAll(values);
+        return new RagDocument(
+                id,
+                firstNonBlank(content, text),
+                metadata,
+                stringValue(metadata.get("source"))
+        );
+    }
+
+    private Map<String, Object> parseObject(Object value) {
         if (value == null) {
             return Map.of();
         }
+        value = normalizeValue(value);
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> metadata = new LinkedHashMap<>();
             map.forEach((key, mapValue) -> metadata.put(String.valueOf(key), normalizeValue(mapValue)));

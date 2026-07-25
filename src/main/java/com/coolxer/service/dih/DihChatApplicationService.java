@@ -248,7 +248,7 @@ public class DihChatApplicationService {
                 hasImageAttachment
         );
         McpToolContext mcpToolContext = executionPolicy.toolsAllowed() && !hasImageAttachment
-                ? agentMcpToolService.resolve(executionPolicy.agentType())
+                ? agentMcpToolService.resolve(executionPolicy.agentType(), executionPolicy.skillIds())
                 : McpToolContext.empty();
         McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
         String turnId = UUID.randomUUID().toString();

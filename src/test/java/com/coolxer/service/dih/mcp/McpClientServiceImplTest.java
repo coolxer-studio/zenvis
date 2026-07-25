@@ -1,17 +1,26 @@
 package com.coolxer.service.dih.mcp;
 
 import com.coolxer.commons.exception.ApiException;
+import com.coolxer.dao.mysql.entity.McpServerConfig;
+import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.model.dih.dto.McpServerDto;
+import com.coolxer.model.dih.vo.McpServerVo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Map;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class McpClientServiceImplTest {
 
@@ -91,5 +100,28 @@ class McpClientServiceImplTest {
                 service, "validateBaseUrl", "http://127.0.0.1:${missing.port}"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("无法解析");
+    }
+
+    @Test
+    void retriesUnavailableLoopbackMcpServersAfterApplicationIsReady() {
+        McpServerConfigRepository repository = mock(McpServerConfigRepository.class);
+        McpServerConfig config = new McpServerConfig()
+                .setCode("jmr")
+                .setEnabled(true);
+        config.setId(52);
+        when(repository.findByEnabledTrueOrderByIdAsc()).thenReturn(List.of(config));
+        McpClientServiceImpl service = spy(new McpClientServiceImpl(
+                repository,
+                new ObjectMapper(),
+                new MockEnvironment().withProperty("server.port", "11001"),
+                "1.0.0",
+                true,
+                false
+        ));
+        doReturn(new McpServerVo(config, 3)).when(service).refresh(52);
+
+        service.reconnectUnavailableServersAfterStartup();
+
+        verify(service).refresh(52);
     }
 }

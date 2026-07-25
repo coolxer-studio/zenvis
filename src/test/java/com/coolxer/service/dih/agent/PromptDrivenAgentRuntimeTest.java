@@ -1,5 +1,6 @@
 package com.coolxer.service.dih.agent;
 
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.AgentCapabilityUnavailableException;
 import com.coolxer.service.dih.agent.skill.SkillService;
@@ -82,5 +83,48 @@ class PromptDrivenAgentRuntimeTest {
         assertThatThrownBy(response::blockLast)
                 .isInstanceOf(AgentCapabilityUnavailableException.class)
                 .hasMessageContaining("missing");
+    }
+
+    @Test
+    void skillOnlyRuntimeDoesNotInheritGenericAnalysisOrSandboxWorkflow() {
+        AIChatService chatService = mock(AIChatService.class);
+        SkillService skillService = mock(SkillService.class);
+        when(skillService.buildAgentSkillPrompt(
+                "agent_analysis", List.of("jmr-continuous-threat-analysis")))
+                .thenReturn("JMR 0001–0004 专项流程");
+        when(chatService.agentChat(
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+        )).thenReturn(Flux.just("完成"));
+        PromptDrivenAgentRuntime runtime = new PromptDrivenAgentRuntime(chatService, skillService);
+        SkillRuntimeConfigVo runtimeConfig = new SkillRuntimeConfigVo();
+        runtimeConfig.setPromptMode(SkillRuntimeConfigVo.PROMPT_MODE_SKILL_ONLY);
+        McpToolContext toolContext = McpToolContext.empty(runtimeConfig);
+
+        runtime.chat(
+                "agent_analysis",
+                List.of("jmr-continuous-threat-analysis"),
+                new PromptTemplate("通用研判：日志聚合、外部沙箱、报告"),
+                "chat-1",
+                "model-1",
+                "分析事件",
+                List.of(),
+                null,
+                toolContext
+        ).blockLast();
+
+        org.mockito.ArgumentCaptor<String> promptCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(chatService).agentChat(
+                eq("chat-1"),
+                eq("model-1"),
+                promptCaptor.capture(),
+                eq("分析事件"),
+                eq(List.of()),
+                isNull(),
+                eq(toolContext)
+        );
+        assertThat(promptCaptor.getValue())
+                .contains("专项 Skill 智能体", "JMR 0001–0004 专项流程")
+                .doesNotContain("外部沙箱");
     }
 }

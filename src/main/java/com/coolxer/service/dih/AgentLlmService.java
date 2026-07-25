@@ -3,6 +3,7 @@ package com.coolxer.service.dih;
 import com.coolxer.service.dih.logging.LlmLogHelper;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -22,6 +23,8 @@ public class AgentLlmService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentLlmService.class);
 
+    private static final int TOOL_CALL_MAX_TOKENS = 4096;
+
     private static final ThreadLocal<String> CURRENT_MODEL = new ThreadLocal<>();
 
     private static final ThreadLocal<ToolCallbackProvider> CURRENT_TOOL_CALLBACK_PROVIDER = new ThreadLocal<>();
@@ -29,6 +32,8 @@ public class AgentLlmService {
     private static final ThreadLocal<String> CURRENT_TOOL_SYSTEM_PROMPT = new ThreadLocal<>();
 
     private static final ThreadLocal<McpInvocationContext> CURRENT_TOOL_INVOCATION_CONTEXT = new ThreadLocal<>();
+
+    private static final ThreadLocal<ToolRuntimeContext> CURRENT_TOOL_RUNTIME_CONTEXT = new ThreadLocal<>();
 
     private final ChatClient chatClient;
 
@@ -55,6 +60,11 @@ public class AgentLlmService {
             CURRENT_TOOL_SYSTEM_PROMPT.set(context.systemPrompt());
             CURRENT_TOOL_INVOCATION_CONTEXT.set(context.invocationContext() == null
                     ? McpInvocationContext.background(null) : context.invocationContext());
+            if (context.toolRuntimeContext() != null && context.toolRuntimeContext().hasLimits()) {
+                CURRENT_TOOL_RUNTIME_CONTEXT.set(context.toolRuntimeContext());
+            } else {
+                CURRENT_TOOL_RUNTIME_CONTEXT.remove();
+            }
         }
         else {
             clearMcpToolContext();
@@ -65,6 +75,7 @@ public class AgentLlmService {
         CURRENT_TOOL_CALLBACK_PROVIDER.remove();
         CURRENT_TOOL_SYSTEM_PROMPT.remove();
         CURRENT_TOOL_INVOCATION_CONTEXT.remove();
+        CURRENT_TOOL_RUNTIME_CONTEXT.remove();
     }
 
     public String call(String prompt) {
@@ -159,12 +170,20 @@ public class AgentLlmService {
 
     private OpenAiChatOptions buildModelOptions() {
         String model = CURRENT_MODEL.get();
-        if (model == null) {
+        boolean toolCalling = currentToolCallbackProvider() != null;
+        if (model == null && !toolCalling) {
             return null;
         }
-        return OpenAiChatOptions.builder()
-                .model(model)
-                .build();
+        var builder = OpenAiChatOptions.builder();
+        if (model != null) {
+            builder.model(model);
+        }
+        if (toolCalling) {
+            builder.temperature(0.1)
+                    .parallelToolCalls(false)
+                    .maxTokens(TOOL_CALL_MAX_TOKENS);
+        }
+        return builder.build();
     }
 
     private ToolCallbackProvider currentToolCallbackProvider() {
@@ -177,7 +196,15 @@ public class AgentLlmService {
 
     private ChatClient.ChatClientRequestSpec applyToolContext(ChatClient.ChatClientRequestSpec spec) {
         McpInvocationContext context = CURRENT_TOOL_INVOCATION_CONTEXT.get();
-        return context == null ? spec : spec.toolContext(Map.of(McpInvocationContext.TOOL_CONTEXT_KEY, context));
+        ToolRuntimeContext runtimeContext = CURRENT_TOOL_RUNTIME_CONTEXT.get();
+        Map<String, Object> toolContext = new LinkedHashMap<>();
+        if (context != null) {
+            toolContext.put(McpInvocationContext.TOOL_CONTEXT_KEY, context);
+        }
+        if (runtimeContext != null) {
+            toolContext.put(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext);
+        }
+        return toolContext.isEmpty() ? spec : spec.toolContext(toolContext);
     }
 
     private String appendToolSystemPrompt(String systemPrompt) {

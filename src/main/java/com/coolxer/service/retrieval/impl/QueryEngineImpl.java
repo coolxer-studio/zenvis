@@ -27,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigDecimal;
+import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -43,6 +45,9 @@ public class QueryEngineImpl implements QueryEngine {
     private static final int MAX_PAGE_SIZE = 200;
     private static final DateTimeFormatter TREND_BOUNDARY_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Pattern EPOCH_MILLIS_PATTERN = Pattern.compile("-?\\d{11,17}");
 
     @Value("${app.retrieval.time-zone:Asia/Shanghai}")
     private String retrievalTimeZone = "Asia/Shanghai";
@@ -946,13 +951,30 @@ public class QueryEngineImpl implements QueryEngine {
         switch (retrievalType) {
             case "date":
                 if (isTemporalType(columnType)) {
-                    return origin;
+                    return normalizeTemporalDateValue(origin, columnType);
                 }
                 long epoch = LocalDateTime.parse(origin, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                         .atZone(ZoneId.of(retrievalTimeZone)).toInstant().toEpochMilli();
                 return Long.toString(epoch);
             default:
                 return origin;
+        }
+    }
+
+    private String normalizeTemporalDateValue(String origin, String columnType) {
+        if (!EPOCH_MILLIS_PATTERN.matcher(origin).matches()) {
+            return origin;
+        }
+        try {
+            Instant instant = Instant.ofEpochMilli(Long.parseLong(origin));
+            DateTimeFormatter formatter = unwrapColumnType(columnType)
+                    .toLowerCase(Locale.ROOT)
+                    .startsWith("datetime64")
+                    ? TREND_BOUNDARY_FORMATTER
+                    : DATE_TIME_FORMATTER;
+            return formatter.format(instant.atZone(ZoneId.of(retrievalTimeZone)));
+        } catch (NumberFormatException | DateTimeException e) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "毫秒时间戳条件不合法: " + origin);
         }
     }
 

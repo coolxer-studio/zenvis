@@ -29,8 +29,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.mcp.McpToolUtils;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.data.domain.Page;
@@ -118,6 +120,30 @@ public class McpClientServiceImpl implements McpClientService {
     @PostConstruct
     public void init() {
         refreshEnabledServers();
+    }
+
+    /**
+     * A plugin may expose its MCP SSE endpoint from this same web application.
+     * The initial {@link PostConstruct} refresh necessarily runs before Tomcat is
+     * listening, so those loopback clients cannot initialize yet. Retry only the
+     * still-unavailable servers after the application has become ready.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void reconnectUnavailableServersAfterStartup() {
+        try {
+            List<McpServerConfig> unavailable = mcpServerConfigRepository
+                    .findByEnabledTrueOrderByIdAsc()
+                    .stream()
+                    .filter(config -> !clients.containsKey(config.getId()))
+                    .toList();
+            unavailable.forEach(config -> refresh(config.getId()));
+            if (!unavailable.isEmpty()) {
+                log.info("应用就绪后重连 MCP 服务完成，重试数: {}, 可用服务数: {}",
+                        unavailable.size(), clients.size());
+            }
+        } catch (Exception e) {
+            log.warn("应用就绪后重连 MCP 服务失败，后端将继续运行: {}", e.getMessage(), e);
+        }
     }
 
     @PreDestroy

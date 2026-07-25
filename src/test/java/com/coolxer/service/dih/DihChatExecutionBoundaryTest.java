@@ -59,7 +59,8 @@ class DihChatExecutionBoundaryTest {
                 BuiltinAgentSkillRegistry.AGENT_ANALYSIS
         )).thenReturn(true);
         when(fixture.agentMcpToolService.resolve(
-                BuiltinAgentSkillRegistry.AGENT_ANALYSIS
+                BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
+                List.of("analysis-agent")
         )).thenReturn(McpToolContext.empty());
         when(fixture.analysisAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
@@ -71,7 +72,10 @@ class DihChatExecutionBoundaryTest {
         ).collectList().block();
 
         assertThat(response).containsExactly("智能体回答");
-        verify(fixture.agentMcpToolService).resolve(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        verify(fixture.agentMcpToolService).resolve(
+                BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
+                List.of("analysis-agent")
+        );
         verify(fixture.analysisAgent).chat(
                 eq("chat-1"),
                 eq("model-1"),
@@ -102,7 +106,10 @@ class DihChatExecutionBoundaryTest {
                         "data-analysis",
                         60
                 ));
-        when(fixture.agentMcpToolService.resolve(BuiltinAgentSkillRegistry.AGENT_ANALYSIS))
+        when(fixture.agentMcpToolService.resolve(
+                BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
+                List.of("jmr-analysis")
+        ))
                 .thenReturn(McpToolContext.empty());
         when(fixture.analysisAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
@@ -111,7 +118,10 @@ class DihChatExecutionBoundaryTest {
         List<String> response = fixture.service.chat(chatDto(chatType, true), null).collectList().block();
 
         assertThat(response).containsExactly("专项研判回答");
-        verify(fixture.agentMcpToolService).resolve(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        verify(fixture.agentMcpToolService).resolve(
+                BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
+                List.of("jmr-analysis")
+        );
         verify(fixture.analysisAgent).chat(
                 eq("chat-1"),
                 eq("model-1"),

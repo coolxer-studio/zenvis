@@ -65,6 +65,11 @@ public class SkillVo implements Serializable {
     private SkillChatConfigVo chat;
 
     /**
+     * 可选的 DIH 运行时提示词、工具白名单和预算配置。
+     */
+    private SkillRuntimeConfigVo runtime;
+
+    /**
      * 入口文件，默认 SKILL.md
      */
     private String entry = "SKILL.md";

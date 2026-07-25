@@ -214,6 +214,12 @@ class AnalysisTaskServiceImplTest {
             this.agentType = agentType;
             return mcpToolContext;
         }
+
+        @Override
+        public McpToolContext resolve(String agentType, List<String> selectedSkillIds) {
+            this.agentType = agentType;
+            return mcpToolContext;
+        }
     }
 
     private static final class FakeAgentLlmService extends AgentLlmService {

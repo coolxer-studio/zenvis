@@ -6,6 +6,10 @@ import com.coolxer.model.dih.dto.McpServerSearchDto;
 import com.coolxer.model.dih.dto.McpToolCallDto;
 import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.dih.vo.McpToolVo;
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
+import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
+import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
+import com.coolxer.service.dih.agent.skill.SkillService;
 import io.modelcontextprotocol.client.McpSyncClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
@@ -16,6 +20,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -154,6 +159,66 @@ class AgentMcpToolServiceTest {
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
                 .containsExactly("local_write");
+    }
+
+    @Test
+    void resolveSelectedSkillExposesOnlyItsFiveReadOnlyToolsWithoutLoopbackDuplicates() {
+        SkillService skillService = mock(SkillService.class);
+        SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
+                SkillRuntimeConfigVo.PROMPT_MODE_SKILL_ONLY,
+                new SkillRuntimeToolsVo(
+                        List.of("retrieval_search", "retrieval_list_attribute"),
+                        Map.of("jmr", List.of(
+                                "dictionary_lookup",
+                                "payload_decode_base64",
+                                "ioc_lookup"))
+                ),
+                new SkillRuntimeLimitsVo(16, 2, 12000, 48000)
+        );
+        when(skillService.resolveRuntimeConfig(List.of("jmr-continuous-threat-analysis")))
+                .thenReturn(runtime);
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(
+                        new FakeToolCallback("jmr_dictionary_lookup", "批量字典"),
+                        new FakeToolCallback("jmr_payload_decode_base64", "载荷解码"),
+                        new FakeToolCallback("jmr_ioc_lookup", "IOC"),
+                        new FakeToolCallback("zenvis_retrieval_search", "回环重复检索"),
+                        new FakeToolCallback("external_write", "外部写入")
+                ),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("retrieval_search", "根据条件检索数据"),
+                        new FakeToolCallback("retrieval_list_attribute", "获取字段"),
+                        new FakeToolCallback("retrieval_list_candidate", "数字字段候选"),
+                        new FakeToolCallback("entity_update", "更新实体")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_analysis",
+                List.of("jmr-continuous-threat-analysis"));
+
+        assertThat(context.hasTools()).isTrue();
+        assertThat(context.skillRuntime()).isSameAs(runtime);
+        assertThat(context.toolRuntimeContext()).isNotNull();
+        assertThat(context.systemPrompt())
+                .contains("retrieval_search", "retrieval_list_attribute")
+                .contains("jmr_dictionary_lookup", "jmr_payload_decode_base64", "jmr_ioc_lookup")
+                .doesNotContain(
+                        "retrieval_list_candidate",
+                        "entity_update",
+                        "zenvis_retrieval_search",
+                        "external_write");
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly(
+                        "retrieval_search",
+                        "retrieval_list_attribute",
+                        "jmr_dictionary_lookup",
+                        "jmr_payload_decode_base64",
+                        "jmr_ioc_lookup");
     }
 
     private record FakeToolCallback(String name, String description) implements ToolCallback {

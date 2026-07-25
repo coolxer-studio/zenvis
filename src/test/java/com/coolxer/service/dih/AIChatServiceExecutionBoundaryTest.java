@@ -8,10 +8,13 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import reactor.core.publisher.Flux;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -56,6 +59,25 @@ class AIChatServiceExecutionBoundaryTest {
         );
 
         verify(ragContextService, never()).retrieve(any(), any());
+    }
+
+    @Test
+    void toolCallingUsesLowTemperatureAndDisablesParallelCalls() throws Exception {
+        AIChatService service = service(mock(RagContextService.class));
+        Method method = AIChatService.class.getDeclaredMethod(
+                "buildRuntimeOptions", String.class, boolean.class);
+        method.setAccessible(true);
+
+        OpenAiChatOptions toolOptions =
+                (OpenAiChatOptions) method.invoke(service, "model-1", true);
+        OpenAiChatOptions qaOptions =
+                (OpenAiChatOptions) method.invoke(service, "model-1", false);
+
+        assertThat(toolOptions.getTemperature()).isEqualTo(0.1);
+        assertThat(toolOptions.getParallelToolCalls()).isFalse();
+        assertThat(toolOptions.getMaxTokens()).isEqualTo(4096);
+        assertThat(qaOptions.getTemperature()).isEqualTo(0.8);
+        assertThat(qaOptions.getMaxTokens()).isNull();
     }
 
     private AIChatService service(RagContextService ragContextService) {

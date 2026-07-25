@@ -8,6 +8,7 @@ import com.coolxer.service.dih.advisor.ReasoningContentAdvisor;
 import com.coolxer.service.dih.logging.LlmLogHelper;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.rag.RagContextService;
 import com.coolxer.service.dih.rag.RagContextService.RagContext;
 import org.slf4j.Logger;
@@ -55,6 +56,12 @@ import java.util.stream.Stream;
 public class AIChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AIChatService.class);
+
+    /**
+     * Tool sessions can otherwise spend an unbounded amount of time producing a
+     * verbose final report after all evidence has already been collected.
+     */
+    private static final int TOOL_CALL_MAX_TOKENS = 4096;
 
     private static final String QWEN_NATIVE_DEEP_THINK_SYSTEM_PROMPT = """
             You are a thoughtful AI assistant. Use the enabled reasoning mode to think before answering.
@@ -168,11 +175,12 @@ public class AIChatService {
                         ragContext.requested(),
                         ragContext.used(),
                         ragContext.documentCount(),
-                        systemPrompt
+                        systemPrompt,
+                        false
                 ));
 
         var promptSpec = systemPromptChatClient.prompt()
-                .options(buildRuntimeOptions(model))
+                .options(buildRuntimeOptions(model, false))
                 .system(systemPrompt)
                 .user(prompt)
                 .advisors(memoryAdvisor -> memoryAdvisor
@@ -225,10 +233,11 @@ public class AIChatService {
         long startedAtNanos = System.nanoTime();
         LlmLogHelper.logRequest(log, requestId, scene,
                 buildChatLogRequest(chatId, model, prompt, attachments, false,
-                        false, false, 0, systemPrompt));
+                        false, false, 0, systemPrompt,
+                        resolvedMcpToolContext.hasTools()));
 
         var promptSpec = systemPromptChatClient.prompt()
-                .options(buildRuntimeOptions(model))
+                .options(buildRuntimeOptions(model, resolvedMcpToolContext.hasTools()))
                 .system(systemPrompt)
                 .user(prompt)
                 .advisors(memoryAdvisor -> memoryAdvisor
@@ -237,11 +246,20 @@ public class AIChatService {
 
         if (resolvedMcpToolContext.hasTools()) {
             promptSpec = promptSpec.toolCallbacks(resolvedMcpToolContext.toolCallbackProvider());
+            Map<String, Object> toolContext = new HashMap<>();
             if (resolvedMcpToolContext.invocationContext() != null) {
-                promptSpec = promptSpec.toolContext(Map.of(
+                toolContext.put(
                         McpInvocationContext.TOOL_CONTEXT_KEY,
-                        resolvedMcpToolContext.invocationContext()
-                ));
+                        resolvedMcpToolContext.invocationContext());
+            }
+            if (resolvedMcpToolContext.toolRuntimeContext() != null
+                    && resolvedMcpToolContext.toolRuntimeContext().hasLimits()) {
+                toolContext.put(
+                        ToolRuntimeContext.TOOL_CONTEXT_KEY,
+                        resolvedMcpToolContext.toolRuntimeContext());
+            }
+            if (!toolContext.isEmpty()) {
+                promptSpec = promptSpec.toolContext(toolContext);
             }
         }
 
@@ -373,7 +391,8 @@ public class AIChatService {
             boolean ragRequested,
             boolean ragUsed,
             int ragDocumentCount,
-            String systemPrompt
+            String systemPrompt,
+            boolean toolCalling
     ) {
         Map<String, Object> request = new LinkedHashMap<>();
         String resolvedModel = StringUtils.hasText(model) ? model : defaultChatModel;
@@ -381,8 +400,12 @@ public class AIChatService {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", resolvedModel);
         requestBody.put("messages", messages);
-        requestBody.put("temperature", 0.8);
+        requestBody.put("temperature", toolCalling ? 0.1 : 0.8);
         requestBody.put("stream", true);
+        if (toolCalling) {
+            requestBody.put("parallel_tool_calls", false);
+            requestBody.put("max_tokens", TOOL_CALL_MAX_TOKENS);
+        }
 
         request.put("url", openAiChatCompletionsUrl());
         request.put("body", requestBody);
@@ -589,9 +612,13 @@ public class AIChatService {
                 """;
     }
 
-    private OpenAiChatOptions buildRuntimeOptions(String model) {
+    private OpenAiChatOptions buildRuntimeOptions(String model, boolean toolCalling) {
         var builder = OpenAiChatOptions.builder()
-                .temperature(0.8);
+                .temperature(toolCalling ? 0.1 : 0.8);
+        if (toolCalling) {
+            builder.parallelToolCalls(false)
+                    .maxTokens(TOOL_CALL_MAX_TOKENS);
+        }
         if (StringUtils.hasText(model)) {
             builder.model(model);
         }

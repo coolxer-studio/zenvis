@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_DEMO_TITLE;
 import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
@@ -45,6 +46,29 @@ import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVEN
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DihChatApplicationServiceTest {
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void eventStreamFailureEmitsExactlyOneTerminalErrorEvent() {
+        DihChatApplicationService service = emptyService();
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.error(new IllegalStateException("upstream failed")),
+                null,
+                null,
+                true,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        List<String> events = response.collectList().block();
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).contains("\"event\":\"error\"");
+        assertThat(events.get(0)).doesNotContain("\"event\":\"done\"");
+    }
 
     @Test
     void mcpToolLogPayloadsAreSavedAsPrettyCodeParts() throws Exception {

@@ -76,7 +76,21 @@ public class McpApprovalToolCallbackProvider implements ToolCallbackProvider {
         public String call(String toolInput, ToolContext toolContext) {
             McpInvocationContext context = resolveContext(toolContext);
             return approvalService.execute(descriptor, toolInput, context,
-                    () -> McpInvocationContextHolder.callWith(context, () -> delegate.call(toolInput, toolContext)));
+                    () -> McpInvocationContextHolder.callWith(
+                            context,
+                            () -> delegate.call(toolInput, externalMcpContext())
+                    ));
+        }
+
+        /**
+         * Spring AI forwards ToolContext entries as JSON-RPC {@code _meta} for
+         * external MCP calls. Zenvis stores mutable runtime and approval objects
+         * there for local orchestration; they are neither MCP metadata nor safely
+         * serializable. The approval context has already been resolved above, so
+         * external servers receive an intentionally empty public metadata map.
+         */
+        private ToolContext externalMcpContext() {
+            return new ToolContext(Map.of());
         }
 
         private McpInvocationContext resolveContext(ToolContext toolContext) {

@@ -94,6 +94,66 @@ class SkillServiceTest {
     }
 
     @Test
+    void loadsAndMergesOptionalSkillRuntimePolicyWithoutChangingLegacySkills() throws Exception {
+        writeSkill(
+                skillRoot.resolve("jmr-runtime"),
+                """
+                        {
+                          "id": "jmr-runtime",
+                          "name": "JMR",
+                          "enabled": true,
+                          "runtime": {
+                            "promptMode": "skill_only",
+                            "tools": {
+                              "local": ["retrieval_search", "retrieval_list_attribute"],
+                              "mcp": {
+                                "jmr": ["dictionary_lookup", "payload_decode_base64", "ioc_lookup"]
+                              }
+                            },
+                            "limits": {
+                              "maxToolCalls": 16,
+                              "maxRepeatedFailures": 2,
+                              "maxToolResultChars": 12000,
+                              "maxAccumulatedToolResultChars": 48000
+                            }
+                          },
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "JMR 提示词"
+        );
+        writeSkill(
+                skillRoot.resolve("legacy"),
+                """
+                        {
+                          "id": "legacy",
+                          "name": "旧 Skill",
+                          "enabled": true,
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "旧提示词"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        assertThat(service.resolveRuntimeConfig(List.of("legacy"))).isNull();
+        assertThat(service.resolveRuntimeConfig(List.of("jmr-runtime")))
+                .satisfies(runtime -> {
+                    assertThat(runtime.getPromptMode()).isEqualTo("skill_only");
+                    assertThat(runtime.getTools().getLocal())
+                            .containsExactly("retrieval_search", "retrieval_list_attribute");
+                    assertThat(runtime.getTools().getMcp().get("jmr"))
+                            .containsExactly("dictionary_lookup", "payload_decode_base64", "ioc_lookup");
+                    assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(16);
+                    assertThat(runtime.getLimits().getMaxRepeatedFailures()).isEqualTo(2);
+                    assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(12000);
+                    assertThat(runtime.getLimits().getMaxAccumulatedToolResultChars()).isEqualTo(48000);
+                });
+    }
+
+    @Test
     void taskSelectionLoadsOnlySelectedSkillEvenWhenMatchingSkillExceedsPromptBudget() throws Exception {
         writeSkill(
                 skillRoot.resolve("analysis-agent"),

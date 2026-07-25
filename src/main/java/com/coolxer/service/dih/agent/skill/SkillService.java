@@ -7,6 +7,9 @@ import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillChatConfigVo;
 import com.coolxer.model.dih.vo.SkillChatEntryVo;
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
+import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
+import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.utils.WalkFileUtil;
@@ -32,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -324,6 +328,94 @@ public class SkillService {
         if (!invalid.isEmpty()) {
             throw new IllegalArgumentException("以下 Skill 不存在或未启用: " + String.join(", ", invalid));
         }
+    }
+
+    /**
+     * 合并显式选择 Skill 的可选运行时约束。
+     *
+     * <p>工具白名单取并集；数值预算取所有 Skill 中最严格的正数值。没有任何
+     * Skill 声明 runtime 时返回 {@code null}，保持旧行为。</p>
+     */
+    public SkillRuntimeConfigVo resolveRuntimeConfig(List<String> skillIds) {
+        if (skillIds == null || skillIds.isEmpty()) {
+            return null;
+        }
+        List<SkillRuntimeConfigVo> runtimes = skillIds.stream()
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .map(skillCache::get)
+                .filter(java.util.Objects::nonNull)
+                .map(SkillRecord::getSkill)
+                .filter(skill -> Boolean.TRUE.equals(skill.getEnabled()))
+                .map(SkillVo::getRuntime)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (runtimes.isEmpty()) {
+            return null;
+        }
+
+        SkillRuntimeConfigVo merged = new SkillRuntimeConfigVo();
+        merged.setPromptMode(runtimes.stream()
+                .map(SkillRuntimeConfigVo::getPromptMode)
+                .filter(StringUtils::isNotBlank)
+                .findFirst()
+                .orElse(null));
+
+        LinkedHashSet<String> localTools = new LinkedHashSet<>();
+        Map<String, LinkedHashSet<String>> mcpTools = new LinkedHashMap<>();
+        for (SkillRuntimeConfigVo runtime : runtimes) {
+            if (runtime.getTools() == null) {
+                continue;
+            }
+            if (runtime.getTools().getLocal() != null) {
+                runtime.getTools().getLocal().stream()
+                        .filter(StringUtils::isNotBlank)
+                        .map(String::trim)
+                        .forEach(localTools::add);
+            }
+            if (runtime.getTools().getMcp() != null) {
+                runtime.getTools().getMcp().forEach((serverCode, toolNames) -> {
+                    if (StringUtils.isBlank(serverCode) || toolNames == null) {
+                        return;
+                    }
+                    LinkedHashSet<String> mergedNames = mcpTools.computeIfAbsent(
+                            serverCode.trim(), ignored -> new LinkedHashSet<>());
+                    toolNames.stream()
+                            .filter(StringUtils::isNotBlank)
+                            .map(String::trim)
+                            .forEach(mergedNames::add);
+                });
+            }
+        }
+        SkillRuntimeToolsVo tools = new SkillRuntimeToolsVo();
+        tools.setLocal(new ArrayList<>(localTools));
+        Map<String, List<String>> external = new LinkedHashMap<>();
+        mcpTools.forEach((serverCode, toolNames) ->
+                external.put(serverCode, new ArrayList<>(toolNames)));
+        tools.setMcp(external);
+        merged.setTools(tools);
+
+        SkillRuntimeLimitsVo limits = new SkillRuntimeLimitsVo();
+        limits.setMaxToolCalls(minPositive(runtimes, runtime ->
+                runtime.getLimits() == null ? null : runtime.getLimits().getMaxToolCalls()));
+        limits.setMaxRepeatedFailures(minPositive(runtimes, runtime ->
+                runtime.getLimits() == null ? null : runtime.getLimits().getMaxRepeatedFailures()));
+        limits.setMaxToolResultChars(minPositive(runtimes, runtime ->
+                runtime.getLimits() == null ? null : runtime.getLimits().getMaxToolResultChars()));
+        limits.setMaxAccumulatedToolResultChars(minPositive(runtimes, runtime ->
+                runtime.getLimits() == null ? null : runtime.getLimits().getMaxAccumulatedToolResultChars()));
+        merged.setLimits(limits);
+        return merged;
+    }
+
+    private Integer minPositive(List<SkillRuntimeConfigVo> runtimes,
+                                java.util.function.Function<SkillRuntimeConfigVo, Integer> extractor) {
+        return runtimes.stream()
+                .map(extractor)
+                .filter(java.util.Objects::nonNull)
+                .filter(value -> value > 0)
+                .min(Integer::compareTo)
+                .orElse(null);
     }
 
     public List<SkillOptionVo> getEnabledOptions() {
@@ -744,6 +836,7 @@ public class SkillService {
         detail.setTags(skill.getTags());
         detail.setEnabled(skill.getEnabled());
         detail.setChat(skill.getChat());
+        detail.setRuntime(skill.getRuntime());
         detail.setEntry(skill.getEntry());
         detail.setPath(skill.getPath());
         detail.setUpdateTime(skill.getUpdateTime());

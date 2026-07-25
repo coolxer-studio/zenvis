@@ -154,6 +154,23 @@ class QueryEngineImplTest {
     }
 
     @Test
+    void dateRetrievalTypeConvertsEpochMillisecondsForTemporalBetweenCriteria() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+        ColumnCriteria criteria = criteria(
+                "found_time", "DateTime", "between",
+                List.of("1784821799000", "1784822999000"));
+        criteria.setRetrievalType("date");
+
+        String criteriaSql = ReflectionTestUtils.invokeMethod(queryEngine, "buildCriteriaSql", criteria);
+
+        assertThat(criteriaSql).isEqualTo(
+                "found_time between "
+                        + "toDateTime('2026-07-23 23:49:59', 'Asia/Shanghai') and "
+                        + "toDateTime('2026-07-24 00:09:59', 'Asia/Shanghai')");
+    }
+
+    @Test
     void trendTimeExpressionSupportsSecondsMillisecondsAndDateTime() {
         QueryEngineImpl queryEngine = new QueryEngineImpl();
         ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");

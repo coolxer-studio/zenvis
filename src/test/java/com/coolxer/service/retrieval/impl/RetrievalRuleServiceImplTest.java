@@ -253,10 +253,36 @@ class RetrievalRuleServiceImplTest {
                 .hasMessageContaining("不支持");
     }
 
+    @Test
+    void conditionalSamplingAcceptsTopOneAndTopHundredButRejectsTopHundredOne() {
+        RetrievalRuleServiceImpl retrievalRuleService = service();
+
+        RetrievalRequestDto request = new RetrievalRequestDto();
+        request.setEntity("asset");
+        request.setPage(1);
+        request.setSize(1);
+        request.setDisplayList(List.of(display("asset", "ip")));
+        RetrievalRule topOne = retrievalRuleService.generateRetrievalRule(request);
+
+        request.setSize(100);
+        RetrievalRule topHundred = retrievalRuleService.generateRetrievalRule(request);
+
+        assertThat(topOne.getRetrievalPageable().getSize()).isEqualTo(1);
+        assertThat(topHundred.getRetrievalPageable().getSize()).isEqualTo(100);
+        assertThat(topHundred.getRetrievalPageable().getSortBy()).isEqualTo("zenvis_insert_time");
+        assertThat(topHundred.getRetrievalPageable().getOrder()).isNull();
+
+        request.setSize(101);
+        assertThatThrownBy(() -> retrievalRuleService.generateRetrievalRule(request))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("1到100");
+    }
+
     private DataEntity entity() {
         DataEntity entity = new DataEntity();
         entity.setName("asset");
         entity.setTableName("asset_table");
+        entity.setSortColumn("zenvis_insert_time");
         return entity;
     }
 

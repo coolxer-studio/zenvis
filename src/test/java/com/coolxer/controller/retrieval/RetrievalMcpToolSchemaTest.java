@@ -7,6 +7,8 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 
 import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,6 +52,22 @@ class RetrievalMcpToolSchemaTest {
                 .path("items").path("required"))
                 .extracting(JsonNode::asText)
                 .containsExactlyInAnyOrder("entity", "attribute_list");
+    }
+
+    @Test
+    void exposesGenericAnalyticsToolsAndRemovesRetiredTools() {
+        Set<String> names = Arrays.stream(MethodToolCallbackProvider.builder()
+                        .toolObjects(new RetrievalMcpTool())
+                        .build()
+                        .getToolCallbacks())
+                .map(tool -> tool.getToolDefinition().name())
+                .collect(Collectors.toSet());
+
+        assertThat(names).contains(
+                "entity_overview", "entity_summary", "entity_trend",
+                "entity_distribution", "entity_value_statistics",
+                "entity_relations", "entity_relation_timeline");
+        assertThat(names).doesNotContain("entity_count", "entity_statistics");
     }
 
     private ToolCallback findTool(String name) {

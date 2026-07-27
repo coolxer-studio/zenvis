@@ -61,7 +61,16 @@ public class DataVisualizationDemoResponseService {
               "body": [
                 {
                   "type": "chart",
-                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/trend/query",
+                    "data": {
+                      "entities": ["user-event"],
+                      "time_range": {"preset": "LAST_7_DAYS"},
+                      "granularity": "DAY"
+                    },
+                    "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
                   "config": {
                     "title": {
                       "text": "用户事件上报趋势"
@@ -69,23 +78,15 @@ public class DataVisualizationDemoResponseService {
                     "tooltip": {
                       "trigger": "axis"
                     },
-                    "legend": {
-                      "data": "${legend_data || []}"
-                    },
+                    "legend": {},
+                    "dataset": "${chart_dataset}",
                     "xAxis": {
-                      "type": "category",
-                      "data": "${xaxis_data || []}"
+                      "type": "category"
                     },
                     "yAxis": {
                       "type": "value"
                     },
-                    "series": [
-                      {
-                        "name": "用户事件",
-                        "type": "line",
-                        "data": "${series_data_user\\\\-event || []}"
-                      }
-                    ]
+                    "series": "${chart_series}"
                   }
                 }
               ]
@@ -274,14 +275,20 @@ public class DataVisualizationDemoResponseService {
               "body": [
                 {
                   "type": "chart",
-                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/trend/query",
+                    "data": {"entities": ["user-event"], "time_range": {"preset": "LAST_7_DAYS"}, "granularity": "DAY"},
+                    "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
                   "config": {
                     "title": {"text": "用户事件上报趋势"},
                     "tooltip": {"trigger": "axis"},
-                    "legend": {"data": "${legend_data || []}"},
-                    "xAxis": {"type": "category", "data": "${xaxis_data || []}"},
+                    "legend": {},
+                    "dataset": "${chart_dataset}",
+                    "xAxis": {"type": "category"},
                     "yAxis": {"type": "value"},
-                    "series": [{"name": "用户事件", "type": "line", "data": "${series_data_user\\\\-event || []}"}]
+                    "series": "${chart_series}"
                   }
                 }
               ]
@@ -314,14 +321,20 @@ public class DataVisualizationDemoResponseService {
                 },
                 {
                   "type": "chart",
-                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/trend/query",
+                    "data": {"entities": ["user-event"], "time_range": {"preset": "LAST_7_DAYS"}, "granularity": "DAY"},
+                    "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
                   "config": {
                     "title": {"text": "近 7 天上报趋势"},
                     "tooltip": {"trigger": "axis"},
-                    "legend": {"data": "${legend_data || []}"},
-                    "xAxis": {"type": "category", "data": "${xaxis_data || []}"},
+                    "legend": {},
+                    "dataset": "${chart_dataset}",
+                    "xAxis": {"type": "category"},
                     "yAxis": {"type": "value"},
-                    "series": [{"name": "用户事件", "type": "line", "data": "${series_data_user\\\\-event || []}"}]
+                    "series": "${chart_series}"
                   }
                 }
               ]
@@ -873,8 +886,11 @@ public class DataVisualizationDemoResponseService {
                   "content": "按系统创建时间统计近 7 天用户事件上报趋势。",
                   "chartType": "line",
                   "entity": "%s",
-                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
-                  "echartsOption": %s,
+                  "api": "/zenvis/api/v1/entity/trend/query",
+                  "echarts": {
+                    "chart_type": "line",
+                    "option": %s
+                  },
                   "amisConfig": %s,
                   "action": "%s"
                 }
@@ -899,7 +915,7 @@ public class DataVisualizationDemoResponseService {
                   "description": "按系统创建时间统计近 7 天用户事件上报趋势的临时 amis 图表配置。",
                   "entity": "%s",
                   "chartType": "line",
-                  "api": "/zenvis/api/v1/entity/trend?entities=user-event",
+                  "api": "/zenvis/api/v1/entity/trend/query",
                   "status": "temporary",
                   "config": %s
                 }

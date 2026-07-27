@@ -1,8 +1,6 @@
 package com.coolxer.service.retrieval;
 
 import com.coolxer.model.base.vo.PageRowsVo;
-import com.coolxer.model.retrieval.query.IpEventTimelineQueryRequest;
-import com.coolxer.model.retrieval.query.IpRelationQueryRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -116,30 +114,4 @@ public interface EntityCoreService {
     long countTotal(String entityName, Map<String, Object> searchMapDto);
 
 
-    Map<String, Object> count(List<String> entities);
-
-    Map<String, Object> countToady(List<String> entities);
-
-    Map<String, Object> trend(List<String> entities);
-
-    Map<String, Object> statistics(List<String> entities, String field);
-
-    /**
-     * 按 IP 统计多个实体中源、目的 IP 字段匹配的数据量。
-     *
-     * @param entities 实体名称列表
-     * @param ip       待统计的 IP
-     * @return 跨实体统计结果
-     */
-    Map<String, Object> ipStatistics(List<String> entities, String ip);
-
-    /**
-     * 按显式 Meta 逻辑字段映射查询指定时间范围内的真实对端 IP。
-     */
-    Map<String, Object> ipRelations(IpRelationQueryRequest request);
-
-    /**
-     * 按显式 Meta 逻辑字段映射聚合指定 IP 的安全事件时间轴。
-     */
-    Map<String, Object> ipEventTimeline(IpEventTimelineQueryRequest request);
 }

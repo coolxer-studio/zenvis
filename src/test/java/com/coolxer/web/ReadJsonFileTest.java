@@ -2,9 +2,10 @@ package com.coolxer.web;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,8 +14,9 @@ import java.io.InputStream;
  * desc
  */
 @SpringBootTest
-@Slf4j
 public class ReadJsonFileTest {
+
+    private static final Logger log = LoggerFactory.getLogger(ReadJsonFileTest.class);
 
     @Autowired
     private CustomWebConfig customWebConfig;

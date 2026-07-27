@@ -1,6 +1,14 @@
 package com.coolxer.controller.retrieval;
 
 import com.coolxer.model.base.vo.PageRowsVo;
+import com.coolxer.model.retrieval.analytics.AnalyticsResponse;
+import com.coolxer.model.retrieval.analytics.DistributionQueryRequest;
+import com.coolxer.model.retrieval.analytics.OverviewQueryRequest;
+import com.coolxer.model.retrieval.analytics.RelationQueryRequest;
+import com.coolxer.model.retrieval.analytics.RelationTimelineQueryRequest;
+import com.coolxer.model.retrieval.analytics.SummaryQueryRequest;
+import com.coolxer.model.retrieval.analytics.TrendQueryRequest;
+import com.coolxer.model.retrieval.analytics.ValueStatisticsQueryRequest;
 import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleDeleteDto;
@@ -9,6 +17,7 @@ import com.coolxer.model.retrieval.vo.DataAttributeResultVo;
 import com.coolxer.model.retrieval.vo.DataEntityResultVo;
 import com.coolxer.model.retrieval.vo.DataListVo;
 import com.coolxer.service.retrieval.EntityCoreService;
+import com.coolxer.service.retrieval.EntityAnalyticsService;
 import com.coolxer.service.retrieval.RetrievalService;
 import com.coolxer.service.dih.mcp.McpToolApproval;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
@@ -36,6 +45,9 @@ public class RetrievalMcpTool {
 
     @Autowired
     private EntityCoreService entityCoreService;
+
+    @Autowired
+    private EntityAnalyticsService entityAnalyticsService;
 
     @Autowired
     private RetrievalService retrievalService;
@@ -133,32 +145,53 @@ public class RetrievalMcpTool {
         return retrievalService.listAttributeForDisplay(entity, ruleId, currentUserId());
     }
 
-    /**
-     * 实体计数 - 统计多个实体的数量
-     */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "entity_count", description = "统计多个实体的数量")
-    public Map<String, Object> entityCount(@ToolParam(description = "实体名称列表") List<String> entities) {
-        return entityCoreService.count(entities);
+    @Tool(name = "entity_overview", description = "统计多个实体的累计量、当前周期量和对比周期")
+    public AnalyticsResponse entityOverview(
+            @ToolParam(description = "实体概览查询请求") OverviewQueryRequest request) {
+        return entityAnalyticsService.overview(request);
     }
 
-    /**
-     * 实体趋势 - 获取多个实体的趋势数据
-     */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "entity_trend", description = "获取多个实体的趋势数据")
-    public Map<String, Object> entityTrend(@ToolParam(description = "实体名称列表") List<String> entities) {
-        return entityCoreService.trend(entities);
+    @Tool(name = "entity_summary", description = "汇总单个实体的多个统计指标")
+    public AnalyticsResponse entitySummary(
+            @ToolParam(description = "实体指标汇总请求") SummaryQueryRequest request) {
+        return entityAnalyticsService.summary(request);
     }
 
-    /**
-     * 实体统计 - 对多个实体的指定字段进行统计
-     */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "entity_statistics", description = "对多个实体的指定字段进行统计")
-    public Map<String, Object> entityStatistics(@ToolParam(description = "实体名称列表") List<String> entities,
-                                                 @ToolParam(description = "统计字段名") String field) {
-        return entityCoreService.statistics(entities, field);
+    @Tool(name = "entity_trend", description = "按时间粒度统计一个或多个实体指标趋势")
+    public AnalyticsResponse entityTrend(
+            @ToolParam(description = "实体趋势查询请求") TrendQueryRequest request) {
+        return entityAnalyticsService.trend(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_distribution", description = "按任意标量字段分组统计TopN，最大100")
+    public AnalyticsResponse entityDistribution(
+            @ToolParam(description = "实体字段分布查询请求") DistributionQueryRequest request) {
+        return entityAnalyticsService.distribution(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_value_statistics", description = "统计指定值在任意实体字段中的命中数量")
+    public AnalyticsResponse entityValueStatistics(
+            @ToolParam(description = "指定值统计请求") ValueStatisticsQueryRequest request) {
+        return entityAnalyticsService.valueStatistics(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_relations", description = "按任意源字段和目标字段聚合指定值的关系")
+    public AnalyticsResponse entityRelations(
+            @ToolParam(description = "实体关系查询请求") RelationQueryRequest request) {
+        return entityAnalyticsService.relations(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_relation_timeline", description = "按任意关系和分类字段统计时间轴")
+    public AnalyticsResponse entityRelationTimeline(
+            @ToolParam(description = "实体关系时间轴请求") RelationTimelineQueryRequest request) {
+        return entityAnalyticsService.relationTimeline(request);
     }
 
     /**

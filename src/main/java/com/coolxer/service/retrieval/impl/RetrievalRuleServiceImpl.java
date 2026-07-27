@@ -627,8 +627,8 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         if (request.getPage() != null && request.getPage() < 1) {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "页码必须大于等于1");
         }
-        if (request.getSize() != null && (request.getSize() < 1 || request.getSize() > 200)) {
-            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "页大小必须为1到200");
+        if (request.getSize() != null && (request.getSize() < 1 || request.getSize() > 100)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "页大小必须为1到100");
         }
         if (StringUtils.isNotBlank(request.getOrder()) && !StringUtils.equalsAnyIgnoreCase(request.getOrder(), "asc", "desc")) {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "排序方向仅支持asc或desc");

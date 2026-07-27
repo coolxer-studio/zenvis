@@ -2,8 +2,6 @@ package com.coolxer.service.retrieval;
 
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.query.DataQuery;
-import com.coolxer.model.retrieval.query.IpEventTimelineQuerySource;
-import com.coolxer.model.retrieval.query.IpRelationQuerySource;
 import com.coolxer.model.retrieval.rule.RetrievalPageable;
 
 import java.math.BigDecimal;
@@ -35,27 +33,6 @@ public interface QueryEngine {
      * @return 匹配的数据量
      */
     BigDecimal countAnyOf(String tableName, List<String> fields, String value);
-
-    /**
-     * 在指定业务时间范围内统计源或目的字段精确匹配 IP 的记录数。
-     */
-    BigDecimal countAnyOfInTime(IpRelationQuerySource source, String value,
-                                String startTime, String endTime);
-
-    /**
-     * 在 ClickHouse 中跨实体聚合真实对端 IP，并返回全局 Top N。
-     */
-    Map<String, Object> findIpRelations(List<IpRelationQuerySource> sources, String value,
-                                        String startTime, String endTime, int limit);
-
-    /**
-     * 在 ClickHouse 中跨实体按时间、方向和事件分类聚合安全事件。
-     */
-    Map<String, Object> findIpEventTimeline(List<IpEventTimelineQuerySource> sources,
-                                            String value,
-                                            String startTime,
-                                            String endTime,
-                                            boolean hourly);
 
     public BigDecimal countToday(String tableName, Map<String, Object> searchMap);
 

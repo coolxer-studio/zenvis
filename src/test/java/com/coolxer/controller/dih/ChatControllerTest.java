@@ -15,7 +15,7 @@ class ChatControllerTest {
         Boolean disposePlaceholder = ReflectionTestUtils.invokeMethod(
                 controller,
                 "isPlaceholderBuiltinAgent",
-                BuiltinAgentSkillRegistry.AGENT_DISPOSE
+                BuiltinAgentSkillRegistry.AGENT_CONFIG_MANAGEMENT
         );
         Boolean reportPlaceholder = ReflectionTestUtils.invokeMethod(
                 controller,

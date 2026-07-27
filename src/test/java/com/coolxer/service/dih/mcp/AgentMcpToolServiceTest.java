@@ -32,7 +32,7 @@ class AgentMcpToolServiceTest {
 
     @Test
     void resolveUsesLocalToolsWhenNoExternalMcpServerIsConnected() {
-        ToolCallback localTool = new FakeToolCallback("policy_config_tree", "获取配置文件树");
+        ToolCallback localTool = new FakeToolCallback("config_tree", "获取配置文件树");
         AgentMcpToolService service = new AgentMcpToolService(
                 new EmptyMcpClientService(),
                 new MockEnvironment(),
@@ -43,12 +43,12 @@ class AgentMcpToolServiceTest {
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
-                .contains("policy_config_tree")
+                .contains("config_tree")
                 .contains("zenvis:meta-config-record")
                 .contains("绝不能作为工具调用");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .contains("policy_config_tree");
+                .contains("config_tree");
     }
 
     @Test
@@ -58,7 +58,7 @@ class AgentMcpToolServiceTest {
         AgentMcpToolService service = new AgentMcpToolService(
                 new EmptyMcpClientService(),
                 environment,
-                ToolCallbackProvider.from(new FakeToolCallback("policy_config_tree", "获取配置文件树"))
+                ToolCallbackProvider.from(new FakeToolCallback("config_tree", "获取配置文件树"))
         );
 
         assertThat(service.resolve("agent_data_access").hasTools()).isFalse();
@@ -75,8 +75,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("entity_view", "获取指定实体的单条记录详情"),
                         new FakeToolCallback("retrieval_create_rule", "创建一个新的检索规则"),
                         new FakeToolCallback("entity_update", "更新指定实体的记录"),
-                        new FakeToolCallback("policy_config_apply", "应用配置"),
-                        new FakeToolCallback("policy_config_delete", "删除配置"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("config_delete", "删除配置"),
                         new FakeToolCallback("dashboard_create", "创建看板"),
                         new FakeToolCallback("dashboard_delete", "删除看板"),
                         new FakeToolCallback("menu_create", "创建菜单"),
@@ -88,11 +88,11 @@ class AgentMcpToolServiceTest {
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
-                .contains("retrieval_search", "entity_view", "policy_config_apply", "dashboard_create", "menu_create")
-                .doesNotContain("retrieval_create_rule", "entity_update", "policy_config_delete", "dashboard_delete", "menu_update", "external_write");
+                .contains("retrieval_search", "entity_view", "config_apply", "dashboard_create", "menu_create")
+                .doesNotContain("retrieval_create_rule", "entity_update", "config_delete", "dashboard_delete", "menu_update", "external_write");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("retrieval_search", "entity_view", "policy_config_apply", "dashboard_create", "menu_create");
+                .containsExactly("retrieval_search", "entity_view", "config_apply", "dashboard_create", "menu_create");
     }
 
     @Test
@@ -101,7 +101,7 @@ class AgentMcpToolServiceTest {
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),
                 ToolCallbackProvider.from(
-                        new FakeToolCallback("policy_config_tree", "获取配置文件树"),
+                        new FakeToolCallback("config_tree", "获取配置文件树"),
                         new FakeToolCallback("dashboard_create", "创建看板")
                 )
         );
@@ -121,7 +121,7 @@ class AgentMcpToolServiceTest {
                 new MockEnvironment(),
                 ToolCallbackProvider.from(
                         new FakeToolCallback("retrieval_search", "根据条件检索数据"),
-                        new FakeToolCallback("policy_config_tree", "获取配置文件树")
+                        new FakeToolCallback("config_tree", "获取配置文件树")
                 )
         );
 
@@ -129,10 +129,10 @@ class AgentMcpToolServiceTest {
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
-                .contains("retrieval_search", "policy_config_tree", "external_search");
+                .contains("retrieval_search", "config_tree", "external_search");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("retrieval_search", "policy_config_tree", "external_search");
+                .containsExactly("retrieval_search", "config_tree", "external_search");
     }
 
     @Test
@@ -197,7 +197,7 @@ class AgentMcpToolServiceTest {
         );
 
         McpToolContext context = service.resolve(
-                "agent_analysis",
+                "agent_data_analysis",
                 List.of("jmr-continuous-threat-analysis"));
 
         assertThat(context.hasTools()).isTrue();

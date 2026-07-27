@@ -1,6 +1,7 @@
 package com.coolxer.service.system.impl;
 
 import com.coolxer.commons.enums.DashboardType;
+import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.dao.mysql.entity.Dashboard;
@@ -11,7 +12,9 @@ import com.coolxer.model.retrieval.meta.MetaData;
 import com.coolxer.dao.mysql.entity.Plugin;
 import com.coolxer.dao.mysql.repository.DashboardRepository;
 import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
+import com.coolxer.dao.mysql.repository.PluginRepository;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.rag.VectorStoreInitializerService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.model.system.vo.PluginVo;
@@ -30,11 +33,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PluginServiceImplTest {
@@ -442,6 +452,138 @@ class PluginServiceImplTest {
         assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
                 service, "validateUpgradeIdentity", current, wrongPackage))
                 .isInstanceOf(ApiException.class).hasMessageContaining("包名");
+    }
+
+    @Test
+    void installContinuesWhenEmbeddingOrRagServiceIsUnavailable() {
+        PluginServiceImpl service = newService();
+        Runnable ragAction = mock(Runnable.class);
+        doThrow(new RuntimeException("HTTP 502")).when(ragAction).run();
+
+        Boolean succeeded = ReflectionTestUtils.invokeMethod(
+                service,
+                "runPluginRagAction",
+                41L,
+                "com.acme.demo",
+                "加载RAG文档",
+                "安装",
+                ragAction
+        );
+
+        assertThat(succeeded).isFalse();
+        assertThat(service.getLogs(41L)).contains("跳过RAG，继续安装");
+    }
+
+    @Test
+    void upgradeSkipsRemainingRagWorkWhenOldRagCannotBeUnloaded() {
+        PluginServiceImpl service = newService();
+        VectorStoreInitializerService vectorStoreInitializerService = mock(VectorStoreInitializerService.class);
+        ReflectionTestUtils.setField(service, "vectorStoreInitializerService", vectorStoreInitializerService);
+        when(vectorStoreInitializerService.isRagAvailable()).thenReturn(true);
+        doThrow(new RuntimeException("HTTP 502"))
+                .when(vectorStoreInitializerService)
+                .unloadDocFromRag("com_acme_demo");
+        List<String> warnings = new ArrayList<>();
+
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "updatePluginRag",
+                42L,
+                "com.acme.demo",
+                pluginRoot.resolve("old-doc"),
+                pluginRoot.resolve("new-doc"),
+                warnings
+        )).doesNotThrowAnyException();
+
+        assertThat(warnings).containsExactly("Embedding/RAG服务不可用，已跳过RAG更新");
+        assertThat(service.getLogs(42L)).contains("跳过RAG，继续升级");
+        verify(vectorStoreInitializerService).unloadDocFromRag("com_acme_demo");
+        verify(vectorStoreInitializerService, never()).loadDocToRag(anyString(), any(Path.class));
+    }
+
+    @Test
+    void upgradeContinuesAndRestoresOldRagWhenLoadingNewRagFails() {
+        PluginServiceImpl service = newService();
+        VectorStoreInitializerService vectorStoreInitializerService = mock(VectorStoreInitializerService.class);
+        ReflectionTestUtils.setField(service, "vectorStoreInitializerService", vectorStoreInitializerService);
+        when(vectorStoreInitializerService.isRagAvailable()).thenReturn(true);
+        Path oldDocPath = pluginRoot.resolve("old-doc");
+        Path newDocPath = pluginRoot.resolve("new-doc");
+        doThrow(new RuntimeException("HTTP 502"))
+                .when(vectorStoreInitializerService)
+                .loadDocToRag("com_acme_demo", newDocPath);
+        List<String> warnings = new ArrayList<>();
+
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "updatePluginRag",
+                43L,
+                "com.acme.demo",
+                oldDocPath,
+                newDocPath,
+                warnings
+        )).doesNotThrowAnyException();
+
+        assertThat(warnings).containsExactly("Embedding/RAG服务不可用，已跳过RAG更新");
+        verify(vectorStoreInitializerService).loadDocToRag("com_acme_demo", newDocPath);
+        verify(vectorStoreInitializerService).loadDocToRag("com_acme_demo", oldDocPath);
+    }
+
+    @Test
+    void upgradeSkipsRagBeforeSpringAiRetryWhenHealthCheckFails() {
+        PluginServiceImpl service = newService();
+        VectorStoreInitializerService vectorStoreInitializerService = mock(VectorStoreInitializerService.class);
+        ReflectionTestUtils.setField(service, "vectorStoreInitializerService", vectorStoreInitializerService);
+        when(vectorStoreInitializerService.isRagAvailable()).thenReturn(false);
+        List<String> warnings = new ArrayList<>();
+
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "updatePluginRag",
+                44L,
+                "com.acme.demo",
+                pluginRoot.resolve("old-doc"),
+                pluginRoot.resolve("new-doc"),
+                warnings
+        )).doesNotThrowAnyException();
+
+        assertThat(warnings).containsExactly("Embedding/RAG服务不可用，已跳过RAG更新");
+        assertThat(service.getLogs(44L)).contains("跳过RAG，继续升级");
+        verify(vectorStoreInitializerService, never()).unloadDocFromRag(anyString());
+        verify(vectorStoreInitializerService, never()).loadDocToRag(anyString(), any(Path.class));
+    }
+
+    @Test
+    void unexpectedBackgroundFailureSettlesInProgressStatus() {
+        PluginServiceImpl service = newService();
+        PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        Plugin plugin = new Plugin();
+        plugin.setId(45);
+        plugin.setStatus(PluginStatusType.INSTALLING);
+        when(pluginRepository.findById(45L)).thenReturn(Optional.of(plugin));
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(executor).submit(any(Runnable.class));
+        ReflectionTestUtils.setField(service, "pluginOperationExecutor", executor);
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "submitPluginOperation",
+                45L,
+                PluginStatusType.INSTALL_FAILED,
+                "安装",
+                (Runnable) () -> {
+                    throw new RuntimeException("unexpected");
+                }
+        )).doesNotThrowAnyException();
+
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.INSTALL_FAILED);
+        assertThat(plugin.getOperationMessage()).contains("异常中止");
+        assertThat(plugin.getOperationEndedAt()).isNotNull();
+        verify(pluginRepository).save(plugin);
     }
 
     private PluginServiceImpl newService() {

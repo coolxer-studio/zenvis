@@ -98,8 +98,7 @@ public class ChatMessagePartParser {
         if (!"zenvis:notice".equals(info)
                 && !"zenvis:confirm".equals(info)
                 && !"zenvis:info-steps".equals(info)
-                && !"zenvis:analysis-decision".equals(info)
-                && !"zenvis:analysis-record".equals(info)
+                && !"zenvis:data-analysis-record".equals(info)
                 && !"zenvis:data-access-decision".equals(info)
                 && !"zenvis:meta-config-record".equals(info)
                 && !"zenvis:vectum-task-record".equals(info)
@@ -108,7 +107,7 @@ public class ChatMessagePartParser {
                 && !"zenvis:visualization-config-record".equals(info)
                 && !"zenvis:dashboard-config-record".equals(info)
                 && !"zenvis:menu-config-record".equals(info)
-                && !"zenvis:policy-record".equals(info)
+                && !"zenvis:config-record".equals(info)
                 && !"zenvis:mcp-approval".equals(info)) {
             return null;
         }
@@ -123,8 +122,7 @@ public class ChatMessagePartParser {
             String type = switch (info) {
                 case "zenvis:notice" -> "notice";
                 case "zenvis:info-steps" -> "info-steps";
-                case "zenvis:analysis-decision" -> "analysis-decision";
-                case "zenvis:analysis-record" -> "analysis-record";
+                case "zenvis:data-analysis-record" -> "data-analysis-record";
                 case "zenvis:data-access-decision" -> "data-access-decision";
                 case "zenvis:meta-config-record" -> "metadata-config-record";
                 case "zenvis:vectum-task-record" -> "data-push-service-record";
@@ -133,7 +131,7 @@ public class ChatMessagePartParser {
                 case "zenvis:visualization-config-record" -> "visualization-config-record";
                 case "zenvis:dashboard-config-record" -> "dashboard-config-record";
                 case "zenvis:menu-config-record" -> "menu-config-record";
-                case "zenvis:policy-record" -> "policy-record";
+                case "zenvis:config-record" -> "config-record";
                 case "zenvis:mcp-approval" -> "mcp-approval";
                 default -> "confirm";
             };
@@ -146,7 +144,6 @@ public class ChatMessagePartParser {
                     .metadata(metadata);
             if ("confirm".equals(type)
                     || "info-steps".equals(type)
-                    || "analysis-decision".equals(type)
                     || "data-access-decision".equals(type)) {
                 builder.status("pending");
             } else if ("mcp-approval".equals(type)) {
@@ -199,38 +196,6 @@ public class ChatMessagePartParser {
                     "json",
                     "meta-config",
                     "meta_config/<entity>.json",
-                    info
-            );
-            case "zenvis:disposal-strategy-config" -> configPart(
-                    body,
-                    "处置策略配置",
-                    "json",
-                    "disposal-strategy",
-                    "analysis-disposal-strategy.json",
-                    info
-            );
-            case "zenvis:collection-policy-config" -> configPart(
-                    body,
-                    "采集策略配置",
-                    "json",
-                    "collection-policy",
-                    "checker_config/{host|android|ios|h5|wechat}.json",
-                    info
-            );
-            case "zenvis:tagging-policy-config" -> configPart(
-                    body,
-                    "标记评分策略配置",
-                    "json",
-                    "tagging-policy",
-                    "rating_config/rating_rule.json",
-                    info
-            );
-            case "zenvis:disposal-policy-config" -> configPart(
-                    body,
-                    "处置策略配置",
-                    "json",
-                    "disposal-policy",
-                    "punish_config/<stable-name>.json",
                     info
             );
             case "zenvis:report-document-config" -> reportDocumentPart(body, info);

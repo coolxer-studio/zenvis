@@ -12,15 +12,15 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 
 @Service
-public class AnalysisAgent {
+public class DataAnalysisAgent {
 
-    public static final String AGENT_TYPE = "agent_analysis";
+    public static final String AGENT_TYPE = "agent_data_analysis";
 
     private final PromptDrivenAgentRuntime agentRuntime;
     private final PromptTemplate systemPromptTemplate;
 
-    public AnalysisAgent(PromptDrivenAgentRuntime agentRuntime,
-                         @Qualifier("agentAnalysisSystemPromptTemplate") PromptTemplate systemPromptTemplate) {
+    public DataAnalysisAgent(PromptDrivenAgentRuntime agentRuntime,
+                             @Qualifier("agentDataAnalysisSystemPromptTemplate") PromptTemplate systemPromptTemplate) {
         this.agentRuntime = agentRuntime;
         this.systemPromptTemplate = systemPromptTemplate;
     }

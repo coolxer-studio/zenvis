@@ -1,10 +1,10 @@
-package com.coolxer.controller.policy;
+package com.coolxer.controller.config;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.base.vo.ResponseWrap;
-import com.coolxer.model.policy.dto.ConfigDto;
-import com.coolxer.model.policy.vo.ConfigVo;
+import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.utils.JacksonUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 策略配置
+ * 系统配置
  */
-@Tag(name = "策略配置")
+@Tag(name = "系统配置")
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/config/{type}")
@@ -114,8 +114,8 @@ public class ConfigController {
         if (configService.fileExistsInConfigPath(type, configDto.getFileName())) {
             // 先保存
             configService.modifyConfig(type, configDto);
-            // 后执行策略
-            configService.applyPolicy(type, configDto);
+            // 保存后应用配置
+            configService.applyConfig(type, configDto);
             return ResponseWrap.success();
         }
         return ResponseWrap.fail(ResultCodeEnum.NO_AUTHORITY);

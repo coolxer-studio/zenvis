@@ -8,8 +8,8 @@ import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.Menu;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.Message;
-import com.coolxer.model.policy.dto.ConfigDto;
-import com.coolxer.model.policy.vo.ConfigVo;
+import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.model.system.dto.DashboardDto;
 import com.coolxer.model.system.dto.DashboardSearchDto;
 import com.coolxer.model.system.dto.MenuDto;
@@ -340,7 +340,7 @@ class DataVisualizationDemoResponseServiceTest {
         }
 
         @Override
-        public void applyPolicy(String type, ConfigDto configDto) {
+        public void applyConfig(String type, ConfigDto configDto) {
         }
 
         @Override

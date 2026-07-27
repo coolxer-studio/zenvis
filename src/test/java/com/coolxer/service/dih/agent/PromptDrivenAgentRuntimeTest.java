@@ -28,7 +28,7 @@ class PromptDrivenAgentRuntimeTest {
     void explicitSkillsAndMcpArePassedToAgentChatWithoutQaRagPath() {
         AIChatService chatService = mock(AIChatService.class);
         SkillService skillService = mock(SkillService.class);
-        when(skillService.buildAgentSkillPrompt("agent_analysis", List.of("analysis-agent")))
+        when(skillService.buildAgentSkillPrompt("agent_data_analysis", List.of("data-analysis-agent")))
                 .thenReturn("分析 Skill");
         when(chatService.agentChat(
                 anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
@@ -36,8 +36,8 @@ class PromptDrivenAgentRuntimeTest {
         PromptDrivenAgentRuntime runtime = new PromptDrivenAgentRuntime(chatService, skillService);
 
         List<String> response = runtime.chat(
-                "agent_analysis",
-                List.of("analysis-agent"),
+                "agent_data_analysis",
+                List.of("data-analysis-agent"),
                 new PromptTemplate("系统提示"),
                 "chat-1",
                 "model-1",
@@ -48,7 +48,7 @@ class PromptDrivenAgentRuntimeTest {
         ).collectList().block();
 
         assertThat(response).containsExactly("完成");
-        verify(skillService).buildAgentSkillPrompt("agent_analysis", List.of("analysis-agent"));
+        verify(skillService).buildAgentSkillPrompt("agent_data_analysis", List.of("data-analysis-agent"));
         verify(chatService).agentChat(
                 eq("chat-1"),
                 eq("model-1"),
@@ -69,7 +69,7 @@ class PromptDrivenAgentRuntimeTest {
         PromptDrivenAgentRuntime runtime = new PromptDrivenAgentRuntime(chatService, skillService);
 
         Flux<String> response = runtime.chat(
-                "agent_analysis",
+                "agent_data_analysis",
                 List.of("missing"),
                 new PromptTemplate("系统提示"),
                 "chat-1",
@@ -90,7 +90,7 @@ class PromptDrivenAgentRuntimeTest {
         AIChatService chatService = mock(AIChatService.class);
         SkillService skillService = mock(SkillService.class);
         when(skillService.buildAgentSkillPrompt(
-                "agent_analysis", List.of("jmr-continuous-threat-analysis")))
+                "agent_data_analysis", List.of("jmr-continuous-threat-analysis")))
                 .thenReturn("JMR 0001–0004 专项流程");
         when(chatService.agentChat(
                 anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
@@ -101,9 +101,9 @@ class PromptDrivenAgentRuntimeTest {
         McpToolContext toolContext = McpToolContext.empty(runtimeConfig);
 
         runtime.chat(
-                "agent_analysis",
+                "agent_data_analysis",
                 List.of("jmr-continuous-threat-analysis"),
-                new PromptTemplate("通用研判：日志聚合、外部沙箱、报告"),
+                new PromptTemplate("通用数据分析：数据集、分析服务、报告"),
                 "chat-1",
                 "model-1",
                 "分析事件",
@@ -125,6 +125,6 @@ class PromptDrivenAgentRuntimeTest {
         );
         assertThat(promptCaptor.getValue())
                 .contains("专项 Skill 智能体", "JMR 0001–0004 专项流程")
-                .doesNotContain("外部沙箱");
+                .doesNotContain("分析服务、报告");
     }
 }

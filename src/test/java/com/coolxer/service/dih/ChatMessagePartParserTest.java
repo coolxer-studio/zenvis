@@ -208,97 +208,21 @@ class ChatMessagePartParserTest {
     }
 
     @Test
-    @DisplayName("处置策略配置围栏应解析为配置片段")
-    void parseDisposalStrategyConfigFence() {
+    @DisplayName("配置记录围栏应解析为配置记录片段")
+    void parseConfigRecordFence() {
         String content = """
-                ```zenvis:disposal-strategy-config
-                {"disposalObject":{},"disposalMethod":{}}
+                ```zenvis:config-record
+                {"recordId":"config-001","changeDescription":"调整系统信息展示配置","changeMode":"modify","configType":"system","fileName":"system-info.json","format":"json","validationStatus":"unverified","effectiveStatus":"no"}
                 ```
                 """;
 
         List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
 
         assertEquals(1, parts.size());
-        assertEquals("config", parts.get(0).getType());
-        assertEquals("处置策略配置", parts.get(0).getTitle());
-        assertEquals("json", parts.get(0).getLanguage());
-        assertEquals("disposal-strategy", parts.get(0).getMetadata().get("configKind"));
-        assertEquals("analysis-disposal-strategy.json", parts.get(0).getMetadata().get("defaultFileName"));
-    }
-
-    @Test
-    @DisplayName("采集策略配置围栏应解析为配置片段")
-    void parseCollectionPolicyConfigFence() {
-        String content = """
-                ```zenvis:collection-policy-config
-                {"runtimeConfig":{"process":["frpc"]}}
-                ```
-                """;
-
-        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
-
-        assertEquals(1, parts.size());
-        assertEquals("config", parts.get(0).getType());
-        assertEquals("采集策略配置", parts.get(0).getTitle());
-        assertEquals("json", parts.get(0).getLanguage());
-        assertEquals("collection-policy", parts.get(0).getMetadata().get("configKind"));
-        assertEquals("checker_config/{host|android|ios|h5|wechat}.json", parts.get(0).getMetadata().get("defaultFileName"));
-    }
-
-    @Test
-    @DisplayName("标记评分策略配置围栏应解析为配置片段")
-    void parseTaggingPolicyConfigFence() {
-        String content = """
-                ```zenvis:tagging-policy-config
-                [{"name":"高危评分","score_rules":[]}]
-                ```
-                """;
-
-        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
-
-        assertEquals(1, parts.size());
-        assertEquals("config", parts.get(0).getType());
-        assertEquals("标记评分策略配置", parts.get(0).getTitle());
-        assertEquals("json", parts.get(0).getLanguage());
-        assertEquals("tagging-policy", parts.get(0).getMetadata().get("configKind"));
-        assertEquals("rating_config/rating_rule.json", parts.get(0).getMetadata().get("defaultFileName"));
-    }
-
-    @Test
-    @DisplayName("生产处置策略配置围栏应解析为配置片段")
-    void parseDisposalPolicyConfigFence() {
-        String content = """
-                ```zenvis:disposal-policy-config
-                [{"tag":"webshell","sourceRegex":".*","action":{"type":1,"title":"阻断","message":"阻断风险源"}}]
-                ```
-                """;
-
-        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
-
-        assertEquals(1, parts.size());
-        assertEquals("config", parts.get(0).getType());
-        assertEquals("处置策略配置", parts.get(0).getTitle());
-        assertEquals("json", parts.get(0).getLanguage());
-        assertEquals("disposal-policy", parts.get(0).getMetadata().get("configKind"));
-        assertEquals("punish_config/<stable-name>.json", parts.get(0).getMetadata().get("defaultFileName"));
-    }
-
-    @Test
-    @DisplayName("策略记录围栏应解析为策略记录片段")
-    void parsePolicyRecordFence() {
-        String content = """
-                ```zenvis:policy-record
-                {"recordId":"policy-001","policyType":"disposal","changeDescription":"新增处置策略","validationStatus":"unverified","effectiveStatus":"no"}
-                ```
-                """;
-
-        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
-
-        assertEquals(1, parts.size());
-        assertEquals("policy-record", parts.get(0).getType());
-        assertEquals("新增处置策略", parts.get(0).getContent());
-        assertEquals("policy-001", parts.get(0).getMetadata().get("recordId"));
-        assertEquals("disposal", parts.get(0).getMetadata().get("policyType"));
+        assertEquals("config-record", parts.get(0).getType());
+        assertEquals("调整系统信息展示配置", parts.get(0).getContent());
+        assertEquals("config-001", parts.get(0).getMetadata().get("recordId"));
+        assertEquals("system", parts.get(0).getMetadata().get("configType"));
     }
 
     @Test
@@ -306,7 +230,7 @@ class ChatMessagePartParserTest {
     void parseReportDocumentConfigFence() {
         String content = """
                 ```zenvis:report-document-config
-                # 巡检研判报告
+                # 数据分析报告
 
                 ## 摘要
 
@@ -318,11 +242,11 @@ class ChatMessagePartParserTest {
 
         assertEquals(1, parts.size());
         assertEquals("report-document", parts.get(0).getType());
-        assertEquals("巡检研判报告", parts.get(0).getTitle());
+        assertEquals("数据分析报告", parts.get(0).getTitle());
         assertEquals("markdown", parts.get(0).getLanguage());
         assertEquals("report-document", parts.get(0).getMetadata().get("configKind"));
         assertEquals("report.md", parts.get(0).getMetadata().get("defaultFileName"));
-        assertEquals("巡检研判报告", parts.get(0).getMetadata().get("title"));
+        assertEquals("数据分析报告", parts.get(0).getMetadata().get("title"));
         assertNotNull(parts.get(0).getMetadata().get("updatedAt"));
         assertFalse(((List<?>) parts.get(0).getMetadata().get("outline")).isEmpty());
     }
@@ -381,42 +305,22 @@ class ChatMessagePartParserTest {
     }
 
     @Test
-    @DisplayName("研判后续选择围栏应解析为待选择片段")
-    void parseAnalysisDecisionFence() {
+    @DisplayName("数据分析阶段记录围栏应解析为记录片段")
+    void parseDataAnalysisRecordFence() {
         String content = """
-                ```zenvis:analysis-decision
-                {"title":"研判完成，请选择后续处理","content":"可以执行处置、忽略告警，或补充研判重点继续分析。","actions":["dispose","ignore","continue"]}
+                ```zenvis:data-analysis-record
+                {"recordId":"analysis-dataset-001","stage":"dataset_preparation","status":"completed","title":"数据集准备完成","content":"已关联用户事件数据。","analysisTarget":"分析近七天上报量与失败率异常波动","datasetSummary":"按应用和日期聚合","datasetRecords":[{"date":"2026-07-27","count":120,"failureRate":0.02}]}
                 ```
                 """;
 
         List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
 
         assertEquals(1, parts.size());
-        assertEquals("analysis-decision", parts.get(0).getType());
-        assertEquals("研判完成，请选择后续处理", parts.get(0).getTitle());
-        assertEquals("可以执行处置、忽略告警，或补充研判重点继续分析。", parts.get(0).getContent());
-        assertEquals("pending", parts.get(0).getStatus());
-        assertEquals(List.of("dispose", "ignore", "continue"), parts.get(0).getMetadata().get("actions"));
-    }
-
-    @Test
-    @DisplayName("研判阶段记录围栏应解析为记录片段")
-    void parseAnalysisRecordFence() {
-        String content = """
-                ```zenvis:analysis-record
-                {"recordId":"analysis-log-001","stage":"log_aggregation","status":"completed","title":"日志聚合完成","content":"已关联 12 条告警日志。","evidenceCount":12,"riskLevel":"高危","confidence":0.86,"toolNames":["retrieval_search"]}
-                ```
-                """;
-
-        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
-
-        assertEquals(1, parts.size());
-        assertEquals("analysis-record", parts.get(0).getType());
-        assertEquals("日志聚合完成", parts.get(0).getTitle());
-        assertEquals("已关联 12 条告警日志。", parts.get(0).getContent());
-        assertEquals("log_aggregation", parts.get(0).getMetadata().get("stage"));
-        assertEquals(12, parts.get(0).getMetadata().get("evidenceCount"));
-        assertEquals("高危", parts.get(0).getMetadata().get("riskLevel"));
+        assertEquals("data-analysis-record", parts.get(0).getType());
+        assertEquals("数据集准备完成", parts.get(0).getTitle());
+        assertEquals("已关联用户事件数据。", parts.get(0).getContent());
+        assertEquals("dataset_preparation", parts.get(0).getMetadata().get("stage"));
+        assertEquals("分析近七天上报量与失败率异常波动", parts.get(0).getMetadata().get("analysisTarget"));
     }
 
     @Test

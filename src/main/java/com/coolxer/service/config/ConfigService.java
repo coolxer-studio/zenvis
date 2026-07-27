@@ -1,7 +1,7 @@
 package com.coolxer.service.config;
 
-import com.coolxer.model.policy.dto.ConfigDto;
-import com.coolxer.model.policy.vo.ConfigVo;
+import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigVo;
 
 import java.util.List;
 
@@ -81,12 +81,12 @@ public interface ConfigService {
     public String configPath(String type);
 
     /**
-     * 执行策略
+     * 应用配置
      *
      * @param type
      * @param configDto
      */
-    public void applyPolicy(String type, ConfigDto configDto);
+    public void applyConfig(String type, ConfigDto configDto);
 
     /**
      * 添加根路径

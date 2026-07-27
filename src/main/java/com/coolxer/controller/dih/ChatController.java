@@ -60,9 +60,6 @@ public class ChatController extends BaseController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private static final String DECISION_APPROVED = "approved";
     private static final String DECISION_REJECTED = "rejected";
-    private static final String DECISION_DISPOSE = "dispose";
-    private static final String DECISION_IGNORE = "ignore";
-    private static final String DECISION_CONTINUE = "continue";
     private static final String DECISION_APPLY_CONFIG = "apply_config";
     private static final String DECISION_ABANDON = "abandon";
     private static final String DECISION_REVISE = "revise";
@@ -225,9 +222,6 @@ public class ChatController extends BaseController {
     private boolean isSupportedDecision(String decision) {
         return DECISION_APPROVED.equals(decision)
                 || DECISION_REJECTED.equals(decision)
-                || DECISION_DISPOSE.equals(decision)
-                || DECISION_IGNORE.equals(decision)
-                || DECISION_CONTINUE.equals(decision)
                 || DECISION_APPLY_CONFIG.equals(decision)
                 || DECISION_ABANDON.equals(decision)
                 || DECISION_REVISE.equals(decision)
@@ -237,7 +231,6 @@ public class ChatController extends BaseController {
     private boolean isDecisionPart(ChatMessagePart part) {
         return "confirm".equals(part.getType())
                 || "info-steps".equals(part.getType())
-                || "analysis-decision".equals(part.getType())
                 || "data-access-decision".equals(part.getType());
     }
 
@@ -299,11 +292,6 @@ public class ChatController extends BaseController {
     }
 
     private String expectedDecisionPartType(String decision) {
-        if (DECISION_DISPOSE.equals(decision)
-                || DECISION_IGNORE.equals(decision)
-                || DECISION_CONTINUE.equals(decision)) {
-            return "analysis-decision";
-        }
         if (DECISION_APPLY_CONFIG.equals(decision)
                 || DECISION_ABANDON.equals(decision)
                 || DECISION_REVISE.equals(decision)) {

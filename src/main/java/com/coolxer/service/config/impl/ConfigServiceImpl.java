@@ -4,8 +4,8 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.file.FileNameUtil;
 import com.coolxer.commons.constants.ConfigConstants;
 import com.coolxer.configuration.CustomWebConfig;
-import com.coolxer.model.policy.dto.ConfigDto;
-import com.coolxer.model.policy.vo.ConfigVo;
+import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.model.retrieval.meta.MetaData;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.core.ClickhouseSchemeService;
@@ -226,7 +226,7 @@ public class ConfigServiceImpl implements ConfigService {
     }
 
     @Override
-    public void applyPolicy(String type, ConfigDto configDto) {
+    public void applyConfig(String type, ConfigDto configDto) {
         switch (type) {
             case "meta":
                 // 重新加载meta

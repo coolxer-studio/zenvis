@@ -380,7 +380,8 @@ public class PluginServiceImpl implements PluginService {
         updateOperationState(plugin, PluginStatusType.UNINSTALLING, "卸载已开始", null, true);
         Plugin saved = pluginRepository.save(plugin);
         try {
-            pluginOperationExecutor.submit(() -> executeUninstall(id));
+            submitPluginOperation(
+                    id, PluginStatusType.UNINSTALL_FAILED, "卸载", () -> executeUninstall(id));
         } catch (RuntimeException e) {
             String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
             finishOperation(id, PluginStatusType.UNINSTALL_FAILED, "卸载任务提交失败", error);
@@ -406,7 +407,8 @@ public class PluginServiceImpl implements PluginService {
         updateOperationState(plugin, PluginStatusType.INSTALLING, "安装已开始", null, true);
         Plugin saved = pluginRepository.save(plugin);
         try {
-            pluginOperationExecutor.submit(() -> executeInstall(id));
+            submitPluginOperation(
+                    id, PluginStatusType.INSTALL_FAILED, "安装", () -> executeInstall(id));
         } catch (RuntimeException e) {
             String error = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
             finishOperation(id, PluginStatusType.INSTALL_FAILED, "安装任务提交失败", error);
@@ -450,7 +452,8 @@ public class PluginServiceImpl implements PluginService {
                     "升级预检完成，等待进入维护窗口", null, true);
             Plugin saved = pluginRepository.save(plugin);
             try {
-                pluginOperationExecutor.submit(() -> executeUpgrade(id));
+                submitPluginOperation(
+                        id, PluginStatusType.UPGRADE_FAILED, "升级", () -> executeUpgrade(id));
             } catch (RuntimeException submitError) {
                 plugin.setPendingUpgradePath(null);
                 plugin.setPendingUpgradeVersion(null);
@@ -482,7 +485,11 @@ public class PluginServiceImpl implements PluginService {
         updateOperationState(plugin, PluginStatusType.UPGRADING, "开始恢复旧版本", plugin.getOperationError(), true);
         Plugin saved = pluginRepository.save(plugin);
         try {
-            pluginOperationExecutor.submit(() -> executeUpgradeRecovery(id, "手动恢复旧版本"));
+            submitPluginOperation(
+                    id,
+                    PluginStatusType.UPGRADE_FAILED,
+                    "恢复升级",
+                    () -> executeUpgradeRecovery(id, "手动恢复旧版本"));
         } catch (RuntimeException e) {
             finishOperation(id, PluginStatusType.UPGRADE_FAILED, "恢复任务提交失败", e.getMessage());
             throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "插件恢复任务提交失败");
@@ -497,8 +504,13 @@ public class PluginServiceImpl implements PluginService {
                 .forEach(plugin -> {
                     log.warn("检测到未完成的插件升级，开始恢复: id={}, package={}, operation={}",
                             plugin.getId(), plugin.getPackageName(), plugin.getUpgradeOperationId());
-                    resetLogs(plugin.getId().longValue());
-                    executeUpgradeRecovery(plugin.getId().longValue(), "应用重启时自动恢复未完成升级");
+                    Long pluginId = plugin.getId().longValue();
+                    resetLogs(pluginId);
+                    submitPluginOperation(
+                            pluginId,
+                            PluginStatusType.UPGRADE_FAILED,
+                            "自动恢复升级",
+                            () -> executeUpgradeRecovery(pluginId, "应用重启时自动恢复未完成升级"));
                 });
     }
 
@@ -1334,22 +1346,12 @@ public class PluginServiceImpl implements PluginService {
                                          PluginPackTool activePack,
                                          List<String> warnings) {
         Path oldInstalled = snapshotRoot(packageName, snapshot).resolve("installed");
-        try {
-            vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
-            vectorStoreInitializerService.loadDocToRag(
-                    packageName.replaceAll("\\.", "_"), activePack.getDocPath());
-        } catch (Exception e) {
-            log.warn("升级插件RAG失败，恢复旧文档: package={}", packageName, e);
-            warnings.add("RAG更新失败，已尝试恢复旧文档");
-            try {
-                vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
-                vectorStoreInitializerService.loadDocToRag(
-                        packageName.replaceAll("\\.", "_"), oldInstalled.resolve("00_doc"));
-            } catch (Exception restoreError) {
-                log.warn("恢复旧RAG文档失败: package={}", packageName, restoreError);
-                writeLog(id, "恢复旧RAG文档失败，请人工检查");
-            }
-        }
+        updatePluginRag(
+                id,
+                packageName,
+                oldInstalled.resolve("00_doc"),
+                activePack.getDocPath(),
+                warnings);
 
         try {
             skillService.installPluginSkills(packageName, activePack.getSkillPath());
@@ -1359,6 +1361,82 @@ public class PluginServiceImpl implements PluginService {
             Path snapshotSkill = snapshotRoot(packageName, snapshot).resolve("skill");
             Path oldSkill = Files.isDirectory(snapshotSkill) ? snapshotSkill : oldInstalled.resolve(PLUGIN_SKILL_DIR_NAME);
             skillService.installPluginSkills(packageName, oldSkill);
+        }
+    }
+
+    private void updatePluginRag(Long id,
+                                 String packageName,
+                                 Path oldDocPath,
+                                 Path newDocPath,
+                                 List<String> warnings) {
+        if (!isPluginRagAvailable(id, packageName, "升级")) {
+            warnings.add("Embedding/RAG服务不可用，已跳过RAG更新");
+            return;
+        }
+        String ragSource = packageName.replaceAll("\\.", "_");
+        boolean oldRagUnloaded = runPluginRagAction(
+                id,
+                packageName,
+                "卸载旧RAG文档",
+                "升级",
+                () -> vectorStoreInitializerService.unloadDocFromRag(ragSource));
+        if (!oldRagUnloaded) {
+            warnings.add("Embedding/RAG服务不可用，已跳过RAG更新");
+            return;
+        }
+
+        boolean newRagLoaded = runPluginRagAction(
+                id,
+                packageName,
+                "加载新RAG文档",
+                "升级",
+                () -> vectorStoreInitializerService.loadDocToRag(ragSource, newDocPath));
+        if (newRagLoaded) {
+            return;
+        }
+
+        warnings.add("Embedding/RAG服务不可用，已跳过RAG更新");
+        boolean oldRagRestored = runPluginRagAction(
+                id,
+                packageName,
+                "恢复旧RAG文档",
+                "升级",
+                () -> vectorStoreInitializerService.loadDocToRag(ragSource, oldDocPath));
+        if (!oldRagRestored) {
+            writeLog(id, "旧RAG文档恢复失败，请在Embedding/RAG服务恢复后人工重建索引");
+        }
+    }
+
+    private boolean isPluginRagAvailable(Long id, String packageName, String operation) {
+        boolean available;
+        try {
+            available = vectorStoreInitializerService.isRagAvailable();
+        } catch (Exception e) {
+            log.warn("插件{}前检查Embedding/RAG服务失败，跳过RAG并继续: package={}",
+                    operation, packageName, e);
+            available = false;
+        }
+        if (!available) {
+            log.warn("插件{}时Embedding/RAG服务不可用，已跳过RAG并继续: package={}",
+                    operation, packageName);
+            writeLog(id, "Embedding/RAG服务不可用，跳过RAG，继续" + operation);
+        }
+        return available;
+    }
+
+    private boolean runPluginRagAction(Long id,
+                                       String packageName,
+                                       String action,
+                                       String operation,
+                                       Runnable ragAction) {
+        try {
+            ragAction.run();
+            return true;
+        } catch (Exception e) {
+            log.warn("插件{}期间{}失败，Embedding/RAG服务不可用或处理异常，已跳过RAG并继续: package={}",
+                    operation, action, packageName, e);
+            writeLog(id, action + "失败（Embedding/RAG服务不可用或处理异常），跳过RAG，继续" + operation);
+            return false;
         }
     }
 
@@ -1473,13 +1551,17 @@ public class PluginServiceImpl implements PluginService {
             log.warn("恢复旧Skill失败: package={}", packageName, skillError);
             writeLog(plugin.getId().longValue(), "恢复旧Skill失败，请人工检查");
         }
-        try {
-            vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
-            vectorStoreInitializerService.loadDocToRag(
-                    packageName.replaceAll("\\.", "_"), installedRoot.resolve("00_doc"));
-        } catch (Exception ragError) {
-            log.warn("恢复旧RAG文档失败: package={}", packageName, ragError);
-            writeLog(plugin.getId().longValue(), "恢复旧RAG文档失败，请人工检查");
+        if (isPluginRagAvailable(plugin.getId().longValue(), packageName, "恢复升级")) {
+            runPluginRagAction(
+                    plugin.getId().longValue(),
+                    packageName,
+                    "恢复旧RAG文档",
+                    "恢复升级",
+                    () -> {
+                        vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
+                        vectorStoreInitializerService.loadDocToRag(
+                                packageName.replaceAll("\\.", "_"), installedRoot.resolve("00_doc"));
+                    });
         }
 
         loadPluginApiJars(packageName, new PluginPackTool().buildFromDirectory(installedRoot).init());
@@ -1658,12 +1740,16 @@ public class PluginServiceImpl implements PluginService {
             createPluginMcpServers(id, packageName, pluginPackTool);
 
             writeLog(id, "9 文档加载到RAG......");
-            try {
-                vectorStoreInitializerService.loadDocToRag(packageName.replaceAll("\\.", "_"), pluginPackTool.getDocPath());
-            } catch (Exception e) {
-                log.error("加载到RAG失败", e);
-                warnings.add("RAG加载失败");
-                writeLog(id, "加载到RAG失败，跳过");
+            boolean ragLoaded = isPluginRagAvailable(id, packageName, "安装")
+                    && runPluginRagAction(
+                            id,
+                            packageName,
+                            "加载RAG文档",
+                            "安装",
+                            () -> vectorStoreInitializerService.loadDocToRag(
+                                    packageName.replaceAll("\\.", "_"), pluginPackTool.getDocPath()));
+            if (!ragLoaded) {
+                warnings.add("Embedding/RAG服务不可用，已跳过RAG加载");
             }
 
             writeLog(id, "10 加载插件Skill......");
@@ -1886,6 +1972,39 @@ public class PluginServiceImpl implements PluginService {
         pluginRepository.save(plugin);
     }
 
+    private void submitPluginOperation(Long id,
+                                       PluginStatusType unexpectedFailureStatus,
+                                       String operation,
+                                       Runnable task) {
+        pluginOperationExecutor.submit(() -> {
+            try {
+                task.run();
+            } catch (Throwable failure) {
+                String error = StringUtils.defaultIfBlank(
+                        failure.getMessage(), failure.getClass().getSimpleName());
+                log.error("插件{}后台任务异常退出: id={}", operation, id, failure);
+                writeLog(id, operation + "异常中止......" + error);
+                try {
+                    Plugin plugin = getPluginOrThrow(id);
+                    if (normalizeStatus(plugin.getStatus()).isInProgress()) {
+                        updateOperationState(
+                                plugin,
+                                unexpectedFailureStatus,
+                                operation + "异常中止，可重试或恢复",
+                                error,
+                                false);
+                        pluginRepository.save(plugin);
+                    }
+                } catch (Exception stateError) {
+                    log.error("插件{}异常退出后保存终态失败: id={}", operation, id, stateError);
+                }
+                if (failure instanceof Error errorFailure) {
+                    throw errorFailure;
+                }
+            }
+        });
+    }
+
     private void validatePackageName(String packageName) {
         if (StringUtils.isBlank(packageName) || !SAFE_PACKAGE_PATTERN.matcher(packageName).matches()
                 || packageName.contains("..") || packageName.contains("/") || packageName.contains("\\")) {
@@ -2015,11 +2134,14 @@ public class PluginServiceImpl implements PluginService {
 
         if (includeRagSkill) {
             writeLog(id, "卸载RAG中的文档......");
-            try {
-                vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
-            } catch (Exception e) {
-                log.error("卸载RAG中的文档失败", e);
-                writeLog(id, "卸载RAG中的文档失败，跳过");
+            if (isPluginRagAvailable(id, packageName, "卸载")) {
+                runPluginRagAction(
+                        id,
+                        packageName,
+                        "卸载RAG文档",
+                        "卸载",
+                        () -> vectorStoreInitializerService.unloadDocFromRag(
+                                packageName.replaceAll("\\.", "_")));
             }
 
             writeLog(id, "卸载插件Skill......");

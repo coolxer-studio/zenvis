@@ -1,4 +1,4 @@
-package com.coolxer.model.policy.vo;
+package com.coolxer.model.config.vo;
 
 import lombok.Data;
 import lombok.experimental.Accessors;

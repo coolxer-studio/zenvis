@@ -11,10 +11,10 @@ import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
-import com.coolxer.service.dih.agent.AnalysisAgent;
+import com.coolxer.service.dih.agent.DataAnalysisAgent;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
-import com.coolxer.service.dih.agent.DisposeAgent;
+import com.coolxer.service.dih.agent.ConfigManagementAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -36,15 +36,12 @@ import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_DEMO_TITLE;
-import static com.coolxer.service.dih.AnalysisDemoResponseService.ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DisposeDemoResponseService.DISPOSE_DEMO_TITLE;
-import static com.coolxer.service.dih.DisposeDemoResponseService.DISPOSE_WEBSHELL_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -268,8 +265,8 @@ class DihChatApplicationServiceTest {
                 null,
                 null,
                 null,
-                (AnalysisAgent) null,
-                (DisposeAgent) null,
+                (DataAnalysisAgent) null,
+                (ConfigManagementAgent) null,
                 (ReportAgent) null,
                 (DataAccessAgent) null,
                 (DataVisualizationAgent) null,
@@ -317,7 +314,7 @@ class DihChatApplicationServiceTest {
     private DihChatApplicationService emptyService() {
         return new DihChatApplicationService(
                 null, null, null, null, null, null, null, null,
-                (AnalysisAgent) null, (DisposeAgent) null, (ReportAgent) null,
+                (DataAnalysisAgent) null, (ConfigManagementAgent) null, (ReportAgent) null,
                 (DataAccessAgent) null, (DataVisualizationAgent) null,
                 null, null, null, (AgentMcpToolService) null, (SkillService) null,
                 null, (PushTaskService) null, (DashboardService) null, (MenuService) null
@@ -326,7 +323,7 @@ class DihChatApplicationServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void buildStructuredExtraDataPatchIncludesPolicyRecords() {
+    void buildStructuredExtraDataPatchIncludesConfigurationRecords() {
         DihChatApplicationService service = new DihChatApplicationService(
                 null,
                 null,
@@ -336,8 +333,8 @@ class DihChatApplicationServiceTest {
                 null,
                 null,
                 null,
-                (AnalysisAgent) null,
-                (DisposeAgent) null,
+                (DataAnalysisAgent) null,
+                (ConfigManagementAgent) null,
                 (ReportAgent) null,
                 (DataAccessAgent) null,
                 (DataVisualizationAgent) null,
@@ -353,17 +350,22 @@ class DihChatApplicationServiceTest {
         );
 
         ChatMessagePart part = ChatMessagePart.builder()
-                .type("policy-record")
-                .content("新增 WebShell 处置策略")
-                .metadata(Map.of(
-                        "recordId", "policy-001",
-                        "policyType", "disposal",
-                        "changeMode", "add",
-                        "configType", "punish",
-                        "fileName", "webshell.json",
-                        "newConfig", List.of(Map.of("tag", "webshell_high_risk")),
-                        "validationStatus", "unverified",
-                        "effectiveStatus", "no"
+                .type("config-record")
+                .content("调整系统信息展示配置")
+                .metadata(Map.ofEntries(
+                        Map.entry("recordId", "config-001"),
+                        Map.entry("changeDescription", "调整系统信息展示配置"),
+                        Map.entry("changeMode", "modify"),
+                        Map.entry("configType", "system"),
+                        Map.entry("fileName", "system-info.json"),
+                        Map.entry("format", "json"),
+                        Map.entry("oldConfig", Map.of("displayName", "Old")),
+                        Map.entry("newConfig", Map.of("displayName", "ZenVis")),
+                        Map.entry("validationStatus", "unverified"),
+                        Map.entry("effectiveStatus", "no"),
+                        Map.entry("validationResult", Map.of()),
+                        Map.entry("applyResult", Map.of()),
+                        Map.entry("updatedAt", "2026-07-27T12:00:00+08:00")
                 ))
                 .build();
 
@@ -374,16 +376,292 @@ class DihChatApplicationServiceTest {
         );
 
         assertThat(patch).isNotNull();
-        Map<String, Object> policy = (Map<String, Object>) patch.get("policy");
-        assertThat(policy).isNotNull();
-        List<Map<String, Object>> records = (List<Map<String, Object>>) policy.get("records");
+        Map<String, Object> configuration = (Map<String, Object>) patch.get("configuration");
+        assertThat(configuration).isNotNull();
+        List<Map<String, Object>> records = (List<Map<String, Object>>) configuration.get("records");
         assertThat(records).hasSize(1);
         assertThat(records.get(0))
-                .containsEntry("id", "policy-001")
-                .containsEntry("policyType", "disposal")
-                .containsEntry("configType", "punish")
+                .containsEntry("recordId", "config-001")
+                .containsEntry("configType", "system")
+                .containsEntry("format", "json")
                 .containsEntry("validationStatus", "unverified")
                 .containsEntry("effectiveStatus", "no");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void buildStructuredExtraDataPatchUsesDataAnalysisStagesAndCanonicalFields() {
+        DihChatApplicationService service = emptyService();
+        ChatMessagePart dataset = ChatMessagePart.builder()
+                .type("data-analysis-record")
+                .metadata(Map.ofEntries(
+                        Map.entry("recordId", "dataset-001"),
+                        Map.entry("stage", "dataset_preparation"),
+                        Map.entry("status", "completed"),
+                        Map.entry("title", "数据集准备完成"),
+                        Map.entry("analysisTarget", "分析近七天上报量与失败率异常波动"),
+                        Map.entry("datasetSummary", "按应用和日期聚合"),
+                        Map.entry("datasetRecords", List.of(Map.of("date", "2026-07-27", "count", 120)))
+                ))
+                .build();
+        ChatMessagePart serviceResult = ChatMessagePart.builder()
+                .type("data-analysis-record")
+                .metadata(Map.of(
+                        "recordId", "service-001",
+                        "stage", "service_analysis",
+                        "serviceTaskId", "task-001",
+                        "analysisResult", Map.of("method", "change-point", "anomaly", true)
+                ))
+                .build();
+        ChatMessagePart report = ChatMessagePart.builder()
+                .type("data-analysis-record")
+                .metadata(Map.of(
+                        "recordId", "report-001",
+                        "stage", "report_output",
+                        "timeline", List.of(
+                                Map.of("title", "分析目标", "content", "识别异常波动"),
+                                Map.of("title", "分析过程", "content", "使用变点检测"),
+                                Map.of("title", "分析结论", "content", "发现一处异常波动")
+                        )
+                ))
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(dataset, serviceResult, report));
+
+        Map<String, Object> dataAnalysis = (Map<String, Object>) patch.get("dataAnalysis");
+        assertThat(dataAnalysis).containsKeys("records", "datasetRecords", "serviceResults", "reportTimeline");
+        assertThat((List<Map<String, Object>>) dataAnalysis.get("records")).hasSize(3);
+        assertThat((List<Map<String, Object>>) dataAnalysis.get("datasetRecords"))
+                .containsExactly(Map.of("date", "2026-07-27", "count", 120));
+        assertThat((List<Map<String, Object>>) dataAnalysis.get("serviceResults"))
+                .singleElement()
+                .satisfies(item -> assertThat(item)
+                        .containsEntry("serviceTaskId", "task-001")
+                        .containsKey("analysisResult"));
+        assertThat((List<Map<String, Object>>) dataAnalysis.get("reportTimeline"))
+                .extracting(item -> item.get("title"))
+                .containsExactly("分析目标", "分析过程", "分析结论");
+    }
+
+    @Test
+    void incompleteDatasetOrAnalysisServiceResultIsNotPersisted() {
+        DihChatApplicationService service = emptyService();
+        ChatMessagePart emptyDataset = ChatMessagePart.builder()
+                .type("data-analysis-record")
+                .metadata(Map.of(
+                        "recordId", "dataset-empty",
+                        "stage", "dataset_preparation",
+                        "analysisTarget", "识别异常波动",
+                        "datasetSummary", "用户事件近七天聚合数据",
+                        "datasetRecords", List.of()
+                ))
+                .build();
+        ChatMessagePart emptyServiceResult = ChatMessagePart.builder()
+                .type("data-analysis-record")
+                .metadata(Map.of(
+                        "recordId", "service-empty",
+                        "stage", "service_analysis",
+                        "serviceTaskId", "task-empty",
+                        "analysisResult", Map.of()
+                ))
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(emptyDataset, emptyServiceResult));
+
+        assertThat(patch).isNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void configurationRecordCannotBecomeEffectiveWithoutSuccessfulValidationApprovalWriteAndReadBack() {
+        DihChatApplicationService service = emptyService();
+
+        for (Map<String, Object> scenario : List.<Map<String, Object>>of(
+                Map.of("validationStatus", "failed", "approvalStatus", "approved", "writeSucceeded", true, "readBackMatched", true),
+                Map.of("validationStatus", "blocked", "approvalStatus", "approved", "writeSucceeded", true, "readBackMatched", true),
+                Map.of("validationStatus", "success", "approvalStatus", "rejected", "writeSucceeded", true, "readBackMatched", true),
+                Map.of("validationStatus", "success", "approvalStatus", "approved", "writeSucceeded", false, "readBackMatched", true),
+                Map.of("validationStatus", "success", "approvalStatus", "approved", "writeSucceeded", true, "readBackMatched", false)
+        )) {
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("recordId", "config-" + scenario.hashCode());
+            metadata.put("changeDescription", "调整系统信息展示配置");
+            metadata.put("changeMode", "modify");
+            metadata.put("configType", "system");
+            metadata.put("fileName", "system-info.json");
+            metadata.put("format", "json");
+            metadata.put("oldConfig", Map.of("displayName", "Old"));
+            metadata.put("newConfig", Map.of("displayName", "ZenVis"));
+            metadata.put("validationStatus", scenario.get("validationStatus"));
+            metadata.put("effectiveStatus", "yes");
+            metadata.put("validationResult", Map.of());
+            metadata.put("applyResult", Map.of(
+                    "approvalStatus", scenario.get("approvalStatus"),
+                    "writeSucceeded", scenario.get("writeSucceeded"),
+                    "readBackMatched", scenario.get("readBackMatched")
+            ));
+            metadata.put("updatedAt", "2026-07-27T12:00:00+08:00");
+
+            ChatMessagePart part = ChatMessagePart.builder().type("config-record").metadata(metadata).build();
+            Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                    service, "buildStructuredExtraDataPatch", List.of(part));
+            Map<String, Object> configuration = (Map<String, Object>) patch.get("configuration");
+            List<Map<String, Object>> records = (List<Map<String, Object>>) configuration.get("records");
+            assertThat(records).singleElement()
+                    .satisfies(record -> assertThat(record).containsEntry("effectiveStatus", "no"));
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void configurationRecordBecomesEffectiveOnlyAfterApprovedWriteAndMatchingReadBack() {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("recordId", "config-effective");
+        metadata.put("changeDescription", "调整系统信息展示配置");
+        metadata.put("changeMode", "modify");
+        metadata.put("configType", "system");
+        metadata.put("fileName", "system-info.json");
+        metadata.put("format", "json");
+        metadata.put("oldConfig", Map.of("displayName", "Old"));
+        metadata.put("newConfig", Map.of("displayName", "ZenVis"));
+        metadata.put("validationStatus", "success");
+        metadata.put("effectiveStatus", "yes");
+        metadata.put("validationResult", Map.of("status", "success"));
+        metadata.put("applyResult", Map.of(
+                "approvalStatus", "approved",
+                "writeSucceeded", true,
+                "readBackMatched", true
+        ));
+        metadata.put("updatedAt", "2026-07-27T12:00:00+08:00");
+
+        ChatMessagePart part = ChatMessagePart.builder().type("config-record").metadata(metadata).build();
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(part));
+        Map<String, Object> configuration = (Map<String, Object>) patch.get("configuration");
+        List<Map<String, Object>> records = (List<Map<String, Object>>) configuration.get("records");
+
+        assertThat(records).singleElement()
+                .satisfies(record -> assertThat(record).containsEntry("effectiveStatus", "yes"));
+    }
+
+    @Test
+    void dataAnalysisExampleUsesBuiltinThreeStageResultsWithoutModelOrAgent() {
+        FakeChatSessionService sessionService = new FakeChatSessionService();
+        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
+        CountingDataAnalysisAgent dataAnalysisAgent = new CountingDataAnalysisAgent();
+        ThrowingChatModel titleModel = new ThrowingChatModel();
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                baseService,
+                sessionService,
+                null,
+                null,
+                new DataAnalysisDemoResponseService(),
+                null,
+                null,
+                dataAnalysisAgent,
+                null,
+                null,
+                null,
+                null,
+                new ChatMessagePartParser(),
+                null,
+                new ChatTitleService(titleModel),
+                null,
+                new EnabledSkillService(),
+                null,
+                null,
+                null,
+                null
+        );
+        ChatDto chatDto = new ChatDto();
+        chatDto.setType(DataAnalysisAgent.AGENT_TYPE);
+        chatDto.setChatId("data-analysis-demo-chat");
+        chatDto.setModel("unsupported-model-should-not-be-checked");
+        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+
+        chatDto.setMessage(DataAnalysisDemoResponseService.DATA_ANALYSIS_EXAMPLE_PROMPT);
+        String dataset = String.join("", service.chat(chatDto, null).collectList().block());
+        chatDto.setMessage("我已确认当前数据集。请继续分析。");
+        String analysis = String.join("", service.chat(chatDto, null).collectList().block());
+        chatDto.setMessage("我已确认分析服务结果。请生成报告。");
+        String report = String.join("", service.chat(chatDto, null).collectList().block());
+
+        assertThat(dataset).contains("dataset_preparation", "analysis.confirm_dataset");
+        assertThat(analysis).contains("service_analysis", "builtin-demo-analysis-001");
+        assertThat(report).contains("report_output", "zenvis:report-document-config");
+        assertThat(dataAnalysisAgent.calls.get()).isZero();
+        assertThat(baseService.isModelSupportedCalls.get()).isZero();
+        assertThat(baseService.resolveChatModelCalls.get()).isZero();
+        assertThat(titleModel.calls.get()).isZero();
+        assertThat(sessionService.session.getTitle())
+                .isEqualTo(DataAnalysisDemoResponseService.DATA_ANALYSIS_DEMO_TITLE);
+        assertThat(sessionService.session.getExtraData())
+                .contains("\"dataAnalysis\"")
+                .contains("demo-analysis-dataset-001")
+                .contains("demo-analysis-service-001")
+                .contains("demo-analysis-report-001");
+    }
+
+    @Test
+    void configManagementExampleUsesBuiltinThreeStageResultsWithoutModelOrAgent() {
+        FakeChatSessionService sessionService = new FakeChatSessionService();
+        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
+        CountingConfigManagementAgent configManagementAgent = new CountingConfigManagementAgent();
+        ThrowingChatModel titleModel = new ThrowingChatModel();
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                baseService,
+                sessionService,
+                null,
+                null,
+                null,
+                new ConfigManagementDemoResponseService(),
+                null,
+                null,
+                configManagementAgent,
+                null,
+                null,
+                null,
+                new ChatMessagePartParser(),
+                null,
+                new ChatTitleService(titleModel),
+                null,
+                new EnabledSkillService(),
+                null,
+                null,
+                null,
+                null
+        );
+        ChatDto chatDto = new ChatDto();
+        chatDto.setType(ConfigManagementAgent.AGENT_TYPE);
+        chatDto.setChatId("config-management-demo-chat");
+        chatDto.setModel("unsupported-model-should-not-be-checked");
+        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+
+        chatDto.setMessage(ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_EXAMPLE_PROMPT);
+        String generated = String.join("", service.chat(chatDto, null).collectList().block());
+        chatDto.setMessage("我已确认进入试验场验证。");
+        String validated = String.join("", service.chat(chatDto, null).collectList().block());
+        chatDto.setMessage("我已确认将验证成功的配置正式下发。");
+        String applied = String.join("", service.chat(chatDto, null).collectList().block());
+
+        assertThat(generated).contains("demo-config-system-info-001", "config.confirm_trial");
+        assertThat(validated).contains("validationStatus", "success", "config.confirm_apply");
+        assertThat(applied).contains("effectiveStatus", "yes", "actualSystemChanged");
+        assertThat(configManagementAgent.calls.get()).isZero();
+        assertThat(baseService.isModelSupportedCalls.get()).isZero();
+        assertThat(baseService.resolveChatModelCalls.get()).isZero();
+        assertThat(titleModel.calls.get()).isZero();
+        assertThat(sessionService.session.getTitle())
+                .isEqualTo(ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_DEMO_TITLE);
+        assertThat(sessionService.session.getExtraData())
+                .contains("\"configuration\"")
+                .contains("demo-config-system-info-001")
+                .contains("\"effectiveStatus\":\"yes\"");
     }
 
     @Test
@@ -402,8 +680,8 @@ class DihChatApplicationServiceTest {
                 null,
                 null,
                 new ReportDemoResponseService(),
-                (AnalysisAgent) null,
-                (DisposeAgent) null,
+                (DataAnalysisAgent) null,
+                (ConfigManagementAgent) null,
                 reportAgent,
                 (DataAccessAgent) null,
                 (DataVisualizationAgent) null,
@@ -439,124 +717,6 @@ class DihChatApplicationServiceTest {
                 .contains("用户事件数据分析报告");
     }
 
-    @Test
-    void analysisDemoChatUsesTemplateWithoutCallingModelAgent() {
-        FakeChatSessionService sessionService = new FakeChatSessionService();
-        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
-        CountingAnalysisAgent analysisAgent = new CountingAnalysisAgent();
-        ThrowingChatModel titleModel = new ThrowingChatModel();
-
-        DihChatApplicationService service = new DihChatApplicationService(
-                null,
-                baseService,
-                sessionService,
-                null,
-                null,
-                new AnalysisDemoResponseService(),
-                null,
-                null,
-                analysisAgent,
-                (DisposeAgent) null,
-                (ReportAgent) null,
-                (DataAccessAgent) null,
-                (DataVisualizationAgent) null,
-                new ChatMessagePartParser(),
-                null,
-                new ChatTitleService(titleModel),
-                null,
-                new EnabledSkillService(),
-                null,
-                (PushTaskService) null,
-                (DashboardService) null,
-                (MenuService) null
-        );
-
-        ChatDto chatDto = new ChatDto();
-        chatDto.setType(AnalysisAgent.AGENT_TYPE);
-        chatDto.setChatId("analysis-demo-chat");
-        chatDto.setModel("unsupported-model-should-not-be-checked");
-        chatDto.setMessage(ANALYSIS_WEB_SHELL_EXAMPLE_PROMPT);
-        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
-
-        String response = String.join("", service.chat(chatDto, null).collectList().block());
-
-        assertThat(response)
-                .contains("zenvis:analysis-record")
-                .contains("analysis_demo.confirm_log_aggregation")
-                .contains("log_aggregation")
-                .doesNotContain("sandbox_analysis")
-                .doesNotContain("zenvis:report-document-config");
-        assertThat(analysisAgent.calls.get()).isZero();
-        assertThat(baseService.isModelSupportedCalls.get()).isZero();
-        assertThat(baseService.resolveChatModelCalls.get()).isZero();
-        assertThat(titleModel.calls.get()).isZero();
-        assertThat(sessionService.session.getTitle()).isEqualTo(ANALYSIS_DEMO_TITLE);
-        assertThat(sessionService.session.getExtraData())
-                .contains("\"analysis\"")
-                .contains("\"aggregatedLogs\"")
-                .doesNotContain("\"sandboxResults\"")
-                .doesNotContain("\"conclusionTimeline\"")
-                .doesNotContain("\"report\"");
-    }
-
-    @Test
-    void disposeDemoChatUsesTemplateWithoutCallingModelAgent() {
-        FakeChatSessionService sessionService = new FakeChatSessionService();
-        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
-        CountingDisposeAgent disposeAgent = new CountingDisposeAgent();
-        ThrowingChatModel titleModel = new ThrowingChatModel();
-
-        DihChatApplicationService service = new DihChatApplicationService(
-                null,
-                baseService,
-                sessionService,
-                null,
-                null,
-                null,
-                new DisposeDemoResponseService(),
-                null,
-                (AnalysisAgent) null,
-                disposeAgent,
-                (ReportAgent) null,
-                (DataAccessAgent) null,
-                (DataVisualizationAgent) null,
-                new ChatMessagePartParser(),
-                null,
-                new ChatTitleService(titleModel),
-                null,
-                new EnabledSkillService(),
-                null,
-                (PushTaskService) null,
-                (DashboardService) null,
-                (MenuService) null
-        );
-
-        ChatDto chatDto = new ChatDto();
-        chatDto.setType(DisposeAgent.AGENT_TYPE);
-        chatDto.setChatId("dispose-demo-chat");
-        chatDto.setModel("unsupported-model-should-not-be-checked");
-        chatDto.setMessage(DISPOSE_WEBSHELL_EXAMPLE_PROMPT);
-        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
-
-        String response = String.join("", service.chat(chatDto, null).collectList().block());
-
-        assertThat(response)
-                .contains("zenvis:policy-record")
-                .contains("policy_demo.confirm_trial")
-                .contains("webshell-high-risk-isolate.json")
-                .doesNotContain("policy_demo.confirm_apply");
-        assertThat(disposeAgent.calls.get()).isZero();
-        assertThat(baseService.isModelSupportedCalls.get()).isZero();
-        assertThat(baseService.resolveChatModelCalls.get()).isZero();
-        assertThat(titleModel.calls.get()).isZero();
-        assertThat(sessionService.session.getTitle()).isEqualTo(DISPOSE_DEMO_TITLE);
-        assertThat(sessionService.session.getExtraData())
-                .contains("\"policy\"")
-                .contains("\"records\"")
-                .contains("\"validationStatus\":\"unverified\"")
-                .contains("\"effectiveStatus\":\"no\"");
-    }
-
     private static class ThrowingAIBaseService extends AIBaseService {
         private final AtomicInteger isModelSupportedCalls = new AtomicInteger();
         private final AtomicInteger resolveChatModelCalls = new AtomicInteger();
@@ -568,13 +728,13 @@ class DihChatApplicationServiceTest {
         @Override
         public boolean isModelSupported(String model) {
             isModelSupportedCalls.incrementAndGet();
-            throw new AssertionError("报表示例不应校验后台模型");
+            throw new AssertionError("内置演示示例不应校验后台模型");
         }
 
         @Override
         public String resolveChatModel(String requestedModel, boolean deepThinking, boolean hasImageAttachment) {
             resolveChatModelCalls.incrementAndGet();
-            throw new AssertionError("报表示例不应选择后台模型");
+            throw new AssertionError("内置演示示例不应选择后台模型");
         }
     }
 
@@ -593,33 +753,43 @@ class DihChatApplicationServiceTest {
         }
     }
 
-    private static class CountingAnalysisAgent extends AnalysisAgent {
+    private static class CountingDataAnalysisAgent extends DataAnalysisAgent {
         private final AtomicInteger calls = new AtomicInteger();
 
-        private CountingAnalysisAgent() {
+        private CountingDataAnalysisAgent() {
             super(null, null);
         }
 
         @Override
-        public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+        public Flux<String> chat(String chatId,
+                                 String model,
+                                 String prompt,
+                                 List<ChatAttachment> attachments,
+                                 User user,
+                                 List<String> skillIds,
                                  McpToolContext mcpToolContext) {
             calls.incrementAndGet();
-            throw new AssertionError("研判示例不应调用 AnalysisAgent");
+            throw new AssertionError("数据分析示例不应调用 DataAnalysisAgent");
         }
     }
 
-    private static class CountingDisposeAgent extends DisposeAgent {
+    private static class CountingConfigManagementAgent extends ConfigManagementAgent {
         private final AtomicInteger calls = new AtomicInteger();
 
-        private CountingDisposeAgent() {
+        private CountingConfigManagementAgent() {
             super(null, null);
         }
 
         @Override
-        public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user,
+        public Flux<String> chat(String chatId,
+                                 String model,
+                                 String prompt,
+                                 List<ChatAttachment> attachments,
+                                 User user,
+                                 List<String> skillIds,
                                  McpToolContext mcpToolContext) {
             calls.incrementAndGet();
-            throw new AssertionError("策略控制示例不应调用 DisposeAgent");
+            throw new AssertionError("配置管理示例不应调用 ConfigManagementAgent");
         }
     }
 

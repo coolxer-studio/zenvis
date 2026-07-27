@@ -1,4 +1,4 @@
-package com.coolxer.model.policy.dto;
+package com.coolxer.model.config.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;

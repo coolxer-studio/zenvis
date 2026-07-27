@@ -52,10 +52,10 @@ public class AgentMcpToolService {
             "entity_relation_timeline",
             "entity_list",
             "entity_view",
-            "policy_config_ensure_root",
-            "policy_config_add",
-            "policy_config_apply",
-            "policy_config_read",
+            "config_ensure_root",
+            "config_add",
+            "config_apply",
+            "config_read",
             "dashboard_create",
             "dashboard_list",
             "dashboard_view",
@@ -75,9 +75,9 @@ public class AgentMcpToolService {
             不要在调用前额外进行一轮自然语言确认。用户拒绝或审批超时后，根据工具返回的结构化状态继续说明结果。
             工具返回后，请用中文归纳结果，保留关键字段、异常信息和下一步建议。
             只能调用下方“可用 MCP 工具”中明确列出的工具名。`zenvis:*` 是前端 UI 代码块协议，
-            例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:analysis-record`、`zenvis:analysis-decision`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
+            例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-analysis-record`、`zenvis:config-record`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
             `zenvis:vectum-task-record`、`zenvis:visualization-chart-preview`、`zenvis:visualization-chart-record`、`zenvis:visualization-config-record`、
-            `zenvis:dashboard-config-record`、`zenvis:menu-config-record`、`zenvis:policy-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
+            `zenvis:dashboard-config-record`、`zenvis:menu-config-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
 
             【可用 MCP 工具】
             %s

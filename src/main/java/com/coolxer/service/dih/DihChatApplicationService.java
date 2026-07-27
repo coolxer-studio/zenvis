@@ -10,10 +10,10 @@ import com.coolxer.model.dih.ChatStreamEvent;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
-import com.coolxer.service.dih.agent.AnalysisAgent;
+import com.coolxer.service.dih.agent.DataAnalysisAgent;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
-import com.coolxer.service.dih.agent.DisposeAgent;
+import com.coolxer.service.dih.agent.ConfigManagementAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
@@ -75,11 +76,11 @@ public class DihChatApplicationService {
     private final ChatSessionService chatSessionService;
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
-    private final AnalysisDemoResponseService analysisDemoResponseService;
-    private final DisposeDemoResponseService disposeDemoResponseService;
+    private final DataAnalysisDemoResponseService dataAnalysisDemoResponseService;
+    private final ConfigManagementDemoResponseService configManagementDemoResponseService;
     private final ReportDemoResponseService reportDemoResponseService;
-    private final AnalysisAgent analysisAgent;
-    private final DisposeAgent disposeAgent;
+    private final DataAnalysisAgent dataAnalysisAgent;
+    private final ConfigManagementAgent configManagementAgent;
     private final ReportAgent reportAgent;
     private final DataAccessAgent dataAccessAgent;
     private final DataVisualizationAgent dataVisualizationAgent;
@@ -101,11 +102,11 @@ public class DihChatApplicationService {
                                      ChatSessionService chatSessionService,
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
                                      DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
-                                     AnalysisDemoResponseService analysisDemoResponseService,
-                                     DisposeDemoResponseService disposeDemoResponseService,
+                                     DataAnalysisDemoResponseService dataAnalysisDemoResponseService,
+                                     ConfigManagementDemoResponseService configManagementDemoResponseService,
                                      ReportDemoResponseService reportDemoResponseService,
-                                     AnalysisAgent analysisAgent,
-                                     DisposeAgent disposeAgent,
+                                     DataAnalysisAgent dataAnalysisAgent,
+                                     ConfigManagementAgent configManagementAgent,
                                      ReportAgent reportAgent,
                                      DataAccessAgent dataAccessAgent,
                                      DataVisualizationAgent dataVisualizationAgent,
@@ -123,11 +124,11 @@ public class DihChatApplicationService {
         this.chatSessionService = chatSessionService;
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
-        this.analysisDemoResponseService = analysisDemoResponseService;
-        this.disposeDemoResponseService = disposeDemoResponseService;
+        this.dataAnalysisDemoResponseService = dataAnalysisDemoResponseService;
+        this.configManagementDemoResponseService = configManagementDemoResponseService;
         this.reportDemoResponseService = reportDemoResponseService;
-        this.analysisAgent = analysisAgent;
-        this.disposeAgent = disposeAgent;
+        this.dataAnalysisAgent = dataAnalysisAgent;
+        this.configManagementAgent = configManagementAgent;
         this.reportAgent = reportAgent;
         this.dataAccessAgent = dataAccessAgent;
         this.dataVisualizationAgent = dataVisualizationAgent;
@@ -184,56 +185,19 @@ public class DihChatApplicationService {
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
-        Optional<Flux<String>> analysisDemoResponse = findAnalysisDemoResponse(
+        ChatSession existingChatSession = chatSessionService.getChatSessionBySessionId(chatId, currentUser);
+        Optional<Flux<String>> builtinDemoResponse = findBuiltinDemoResponse(
                 chatType,
                 chatId,
                 userMessage,
                 currentUser,
-                null
+                existingChatSession
         );
-        if (analysisDemoResponse.isPresent()) {
+        if (builtinDemoResponse.isPresent()) {
             ChatSession chatSession = appendUserMessage(
                     chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
             return emitAndSaveTextResponse(
-                    analysisDemoResponse.get(),
-                    chatSession,
-                    currentUser,
-                    eventStream,
-                    new AtomicReference<>(MessageType.TEXT),
-                    effectiveDeepThink
-            );
-        }
-        Optional<Flux<String>> reportDemoResponse = findReportDemoResponse(
-                chatType,
-                chatId,
-                userMessage,
-                currentUser,
-                null
-        );
-        if (reportDemoResponse.isPresent()) {
-            ChatSession chatSession = appendUserMessage(
-                    chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
-            return emitAndSaveTextResponse(
-                    reportDemoResponse.get(),
-                    chatSession,
-                    currentUser,
-                    eventStream,
-                    new AtomicReference<>(MessageType.TEXT),
-                    effectiveDeepThink
-            );
-        }
-        Optional<Flux<String>> disposeDemoResponse = findDisposeDemoResponse(
-                chatType,
-                chatId,
-                userMessage,
-                currentUser,
-                null
-        );
-        if (disposeDemoResponse.isPresent()) {
-            ChatSession chatSession = appendUserMessage(
-                    chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
-            return emitAndSaveTextResponse(
-                    disposeDemoResponse.get(),
+                    builtinDemoResponse.get(),
                     chatSession,
                     currentUser,
                     eventStream,
@@ -358,21 +322,20 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (AnalysisAgent.AGENT_TYPE.equals(agentType)) {
+        if (DataAnalysisAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            if (allowBuiltinDemo) {
-                Optional<Flux<String>> demoResponse = findAnalysisDemoResponse(
-                        agentType,
+            if (allowBuiltinDemo && dataAnalysisDemoResponseService != null) {
+                Optional<Flux<String>> demoResponse = dataAnalysisDemoResponseService.findResponse(
+                        chatSession,
                         chatId,
                         prompt,
-                        currentUser,
-                        chatSession
+                        currentUser
                 );
                 if (demoResponse.isPresent()) {
                     return demoResponse.get();
                 }
             }
-            return analysisAgent.chat(
+            return dataAnalysisAgent.chat(
                     chatId,
                     model,
                     prompt,
@@ -382,21 +345,20 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (DisposeAgent.AGENT_TYPE.equals(agentType)) {
+        if (ConfigManagementAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            if (allowBuiltinDemo) {
-                Optional<Flux<String>> demoResponse = findDisposeDemoResponse(
-                        agentType,
+            if (allowBuiltinDemo && configManagementDemoResponseService != null) {
+                Optional<Flux<String>> demoResponse = configManagementDemoResponseService.findResponse(
+                        chatSession,
                         chatId,
                         prompt,
-                        currentUser,
-                        chatSession
+                        currentUser
                 );
                 if (demoResponse.isPresent()) {
                     return demoResponse.get();
                 }
             }
-            return disposeAgent.chat(
+            return configManagementAgent.chat(
                     chatId,
                     model,
                     prompt,
@@ -498,26 +460,18 @@ public class DihChatApplicationService {
         return reportDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
     }
 
-    private Optional<Flux<String>> findAnalysisDemoResponse(String chatType,
-                                                            String chatId,
-                                                            String prompt,
-                                                            User currentUser,
-                                                            ChatSession chatSession) {
-        if (!AnalysisAgent.AGENT_TYPE.equals(chatType) || analysisDemoResponseService == null) {
-            return Optional.empty();
-        }
-        return analysisDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
-    }
-
-    private Optional<Flux<String>> findDisposeDemoResponse(String chatType,
+    private Optional<Flux<String>> findBuiltinDemoResponse(String chatType,
                                                            String chatId,
                                                            String prompt,
                                                            User currentUser,
                                                            ChatSession chatSession) {
-        if (!DisposeAgent.AGENT_TYPE.equals(chatType) || disposeDemoResponseService == null) {
-            return Optional.empty();
+        if (DataAnalysisAgent.AGENT_TYPE.equals(chatType) && dataAnalysisDemoResponseService != null) {
+            return dataAnalysisDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
         }
-        return disposeDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
+        if (ConfigManagementAgent.AGENT_TYPE.equals(chatType) && configManagementDemoResponseService != null) {
+            return configManagementDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
+        }
+        return findReportDemoResponse(chatType, chatId, prompt, currentUser, chatSession);
     }
 
     private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
@@ -865,13 +819,13 @@ public class DihChatApplicationService {
                 "dashboardConfigs",
                 "menuConfigs"
         ));
-        mergeSectionRecords(extraData, patch, "analysis", List.of(
+        mergeSectionRecords(extraData, patch, "dataAnalysis", List.of(
                 "records",
-                "aggregatedLogs",
-                "sandboxResults",
-                "conclusionTimeline"
+                "datasetRecords",
+                "serviceResults",
+                "reportTimeline"
         ));
-        mergeSectionRecords(extraData, patch, "policy", List.of("records"));
+        mergeSectionRecords(extraData, patch, "configuration", List.of("records"));
         mergeReportRecords(extraData, patch);
 
         String extraDataJson = JacksonUtil.toJson(extraData);
@@ -898,24 +852,24 @@ public class DihChatApplicationService {
         if (reportPatch != null && !reportPatch.isEmpty()) {
             patch.putAll(reportPatch);
         }
-        Map<String, Object> analysisPatch = buildAnalysisExtraDataPatch(parts);
-        if (analysisPatch != null && !analysisPatch.isEmpty()) {
-            patch.putAll(analysisPatch);
+        Map<String, Object> dataAnalysisPatch = buildDataAnalysisExtraDataPatch(parts);
+        if (dataAnalysisPatch != null && !dataAnalysisPatch.isEmpty()) {
+            patch.putAll(dataAnalysisPatch);
         }
-        Map<String, Object> policyPatch = buildPolicyExtraDataPatch(parts);
-        if (policyPatch != null && !policyPatch.isEmpty()) {
-            patch.putAll(policyPatch);
+        Map<String, Object> configurationPatch = buildConfigurationExtraDataPatch(parts);
+        if (configurationPatch != null && !configurationPatch.isEmpty()) {
+            patch.putAll(configurationPatch);
         }
         return patch.isEmpty() ? null : patch;
     }
 
-    private Map<String, Object> buildPolicyExtraDataPatch(List<ChatMessagePart> parts) {
+    private Map<String, Object> buildConfigurationExtraDataPatch(List<ChatMessagePart> parts) {
         List<Map<String, Object>> records = new ArrayList<>();
         for (ChatMessagePart part : parts) {
-            if (!"policy-record".equals(part.getType())) {
+            if (!"config-record".equals(part.getType())) {
                 continue;
             }
-            Map<String, Object> record = buildPolicyRecord(part);
+            Map<String, Object> record = buildConfigurationRecord(part);
             if (!record.isEmpty()) {
                 records.add(record);
             }
@@ -924,129 +878,117 @@ public class DihChatApplicationService {
             return null;
         }
 
-        Map<String, Object> policy = new LinkedHashMap<>();
-        policy.put("records", records);
+        Map<String, Object> configuration = new LinkedHashMap<>();
+        configuration.put("records", records);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("policy", policy);
+        metadata.put("configuration", configuration);
         return metadata;
     }
 
-    private Map<String, Object> buildPolicyRecord(ChatMessagePart part) {
+    private Map<String, Object> buildConfigurationRecord(ChatMessagePart part) {
         Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
-        String policyType = firstNonBlank(
-                stringValue(raw, "policyType", null),
-                stringValue(raw, "policy_type", null),
-                stringValue(raw, "type", null)
-        );
-        String configType = firstNonBlank(
-                stringValue(raw, "configType", null),
-                stringValue(raw, "config_type", null),
-                policyConfigType(policyType)
-        );
-        String fileName = firstNonBlank(
-                stringValue(raw, "fileName", null),
-                stringValue(raw, "file_name", null),
-                stringValue(raw, "targetFile", null)
-        );
-        String id = firstNonBlank(
-                stringValue(raw, "recordId", null),
-                stringValue(raw, "record_id", null),
-                stringValue(raw, "id", null),
-                configType != null && fileName != null ? configType + ":" + fileName : null,
-                java.util.UUID.randomUUID().toString()
-        );
+        String id = stringValue(raw, "recordId", null);
+        String changeDescription = stringValue(raw, "changeDescription", null);
+        String changeMode = stringValue(raw, "changeMode", null);
+        String configType = stringValue(raw, "configType", null);
+        String fileName = stringValue(raw, "fileName", null);
+        String format = stringValue(raw, "format", null);
+        String updatedAt = stringValue(raw, "updatedAt", null);
+        if (!StringUtils.hasText(id)
+                || !StringUtils.hasText(changeDescription)
+                || !Set.of("add", "modify").contains(changeMode)
+                || !StringUtils.hasText(configType)
+                || !StringUtils.hasText(fileName)
+                || !StringUtils.hasText(format)
+                || !raw.containsKey("oldConfig")
+                || !raw.containsKey("newConfig")
+                || !StringUtils.hasText(updatedAt)) {
+            log.warn("忽略字段不完整的配置记录：{}", raw);
+            return Map.of();
+        }
+
+        String validationStatus = stringValue(raw, "validationStatus", "unverified");
+        if (!Set.of("unverified", "success", "failed", "blocked").contains(validationStatus)) {
+            validationStatus = "unverified";
+        }
+        Object validationResult = raw.getOrDefault("validationResult", Map.of());
+        Object applyResult = raw.getOrDefault("applyResult", Map.of());
+        boolean requestedEffective = "yes".equals(stringValue(raw, "effectiveStatus", "no"));
+        String effectiveStatus = requestedEffective
+                && "success".equals(validationStatus)
+                && hasVerifiedApplyResult(applyResult)
+                ? "yes"
+                : "no";
 
         Map<String, Object> record = new LinkedHashMap<>();
-        record.put("id", id);
         record.put("recordId", id);
-        record.put("policyType", firstNonBlank(policyType, "disposal"));
-        record.put("changeDescription", firstNonBlank(
-                stringValue(raw, "changeDescription", null),
-                stringValue(raw, "change_description", null),
-                stringValue(raw, "description", null),
-                part.getContent()
-        ));
-        record.put("changeMode", firstNonBlank(
-                stringValue(raw, "changeMode", null),
-                stringValue(raw, "change_mode", null),
-                stringValue(raw, "operation", null),
-                "add"
-        ));
+        record.put("changeDescription", changeDescription);
+        record.put("changeMode", changeMode);
         record.put("configType", configType);
         record.put("fileName", fileName);
-        record.put("oldConfig", raw.getOrDefault("oldConfig", raw.getOrDefault("old_config", "")));
-        record.put("newConfig", raw.getOrDefault("newConfig", raw.getOrDefault("new_config", Map.of())));
-        record.put("validationStatus", firstNonBlank(
-                stringValue(raw, "validationStatus", null),
-                stringValue(raw, "validation_status", null),
-                "unverified"
-        ));
-        record.put("effectiveStatus", firstNonBlank(
-                stringValue(raw, "effectiveStatus", null),
-                stringValue(raw, "effective_status", null),
-                "no"
-        ));
-        record.put("trialResult", raw.getOrDefault("trialResult", raw.getOrDefault("trial_result", Map.of())));
-        record.put("applyResult", raw.getOrDefault("applyResult", raw.getOrDefault("apply_result", Map.of())));
-        record.put("updatedAt", firstNonBlank(
-                stringValue(raw, "updatedAt", null),
-                stringValue(raw, "updated_at", null),
-                java.time.OffsetDateTime.now().toString()
-        ));
-        record.put("source", "agent_dispose");
-        record.put("raw", raw);
+        record.put("format", format.toLowerCase(Locale.ROOT));
+        record.put("oldConfig", raw.get("oldConfig"));
+        record.put("newConfig", raw.get("newConfig"));
+        record.put("validationStatus", validationStatus);
+        record.put("effectiveStatus", effectiveStatus);
+        record.put("validationResult", validationResult);
+        record.put("applyResult", applyResult);
+        record.put("updatedAt", updatedAt);
         return record;
     }
 
-    private String policyConfigType(String policyType) {
-        return switch (StringUtils.hasText(policyType) ? policyType : "") {
-            case "collection" -> "checker";
-            case "tagging" -> "rating";
-            case "disposal" -> "punish";
-            default -> null;
-        };
+    private boolean hasVerifiedApplyResult(Object applyResult) {
+        Map<String, Object> result = mapValue(applyResult);
+        String approvalStatus = stringValue(result, "approvalStatus", "");
+        boolean approvalSucceeded = "approved".equals(approvalStatus);
+        boolean writeSucceeded = Boolean.TRUE.equals(result.get("writeSucceeded"));
+        boolean readBackMatched = Boolean.TRUE.equals(result.get("readBackMatched"));
+        return approvalSucceeded && writeSucceeded && readBackMatched;
     }
 
-    private Map<String, Object> buildAnalysisExtraDataPatch(List<ChatMessagePart> parts) {
+    private Map<String, Object> buildDataAnalysisExtraDataPatch(List<ChatMessagePart> parts) {
         List<Map<String, Object>> records = new ArrayList<>();
-        List<Map<String, Object>> aggregatedLogs = new ArrayList<>();
-        List<Map<String, Object>> sandboxResults = new ArrayList<>();
-        List<Map<String, Object>> conclusionTimeline = new ArrayList<>();
+        List<Map<String, Object>> datasetRecords = new ArrayList<>();
+        List<Map<String, Object>> serviceResults = new ArrayList<>();
+        List<Map<String, Object>> reportTimeline = new ArrayList<>();
         for (ChatMessagePart part : parts) {
-            if (!"analysis-record".equals(part.getType())) {
+            if (!"data-analysis-record".equals(part.getType())) {
                 continue;
             }
-            Map<String, Object> record = buildAnalysisRecord(part);
+            Map<String, Object> record = buildDataAnalysisRecord(part);
+            if (record.isEmpty()) {
+                continue;
+            }
             records.add(record);
             String stage = stringValue(record, "stage", "");
             Map<String, Object> raw = mapValue(record.get("raw"));
-            if ("log_aggregation".equals(stage)) {
-                aggregatedLogs.addAll(extractAnalysisLogRecords(raw));
-            } else if ("sandbox_analysis".equals(stage)) {
-                sandboxResults.add(buildSandboxAnalysisResult(record, raw));
+            if ("dataset_preparation".equals(stage)) {
+                datasetRecords.addAll(extractDatasetRecords(raw));
+            } else if ("service_analysis".equals(stage)) {
+                serviceResults.add(buildServiceAnalysisResult(record, raw));
             } else if ("report_output".equals(stage)) {
-                conclusionTimeline.addAll(extractAnalysisConclusionTimeline(record, raw));
+                reportTimeline.addAll(extractReportTimeline(record, raw));
             }
         }
         if (records.isEmpty()) {
             return null;
         }
 
-        Map<String, Object> analysis = new LinkedHashMap<>();
-        analysis.put("records", records);
-        if (!aggregatedLogs.isEmpty()) {
-            analysis.put("aggregatedLogs", aggregatedLogs);
+        Map<String, Object> dataAnalysis = new LinkedHashMap<>();
+        dataAnalysis.put("records", records);
+        if (!datasetRecords.isEmpty()) {
+            dataAnalysis.put("datasetRecords", datasetRecords);
         }
-        if (!sandboxResults.isEmpty()) {
-            analysis.put("sandboxResults", sandboxResults);
+        if (!serviceResults.isEmpty()) {
+            dataAnalysis.put("serviceResults", serviceResults);
         }
-        if (!conclusionTimeline.isEmpty()) {
-            analysis.put("conclusionTimeline", conclusionTimeline);
+        if (!reportTimeline.isEmpty()) {
+            dataAnalysis.put("reportTimeline", reportTimeline);
         }
 
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("analysis", analysis);
+        metadata.put("dataAnalysis", dataAnalysis);
         return metadata;
     }
 
@@ -1168,188 +1110,108 @@ public class DihChatApplicationService {
         return metadata;
     }
 
-    private Map<String, Object> buildAnalysisRecord(ChatMessagePart part) {
+    private Map<String, Object> buildDataAnalysisRecord(ChatMessagePart part) {
         Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
-        String stage = firstNonBlank(stringValue(raw, "stage", null), "report_output");
+        String stage = stringValue(raw, "stage", null);
+        String id = stringValue(raw, "recordId", null);
+        if (!StringUtils.hasText(id)
+                || !Set.of("dataset_preparation", "service_analysis", "report_output").contains(stage)
+                || !hasRequiredDataAnalysisFields(stage, raw)) {
+            log.warn("忽略字段不完整的数据分析记录：{}", raw);
+            return Map.of();
+        }
         String title = firstNonBlank(
                 stringValue(raw, "title", null),
                 part.getTitle(),
-                defaultAnalysisStageTitle(stage)
-        );
-        String id = firstNonBlank(
-                stringValue(raw, "recordId", null),
-                stringValue(raw, "record_id", null),
-                stringValue(raw, "id", null),
-                stage
+                defaultDataAnalysisStageTitle(stage)
         );
 
         Map<String, Object> record = new LinkedHashMap<>();
-        record.put("id", id);
         record.put("recordId", id);
         record.put("stage", stage);
         record.put("status", stringValue(raw, "status", "completed"));
         record.put("title", title);
         record.put("content", firstNonBlank(
-                stringValue(raw, "content", null),
-                stringValue(raw, "message", null),
-                stringValue(raw, "description", null),
-                part.getContent()
+                stringValue(raw, "content", null), part.getContent()
         ));
-        record.put("startedAt", firstNonBlank(stringValue(raw, "startedAt", null), stringValue(raw, "started_at", null)));
-        record.put("completedAt", firstNonBlank(stringValue(raw, "completedAt", null), stringValue(raw, "completed_at", null)));
-        record.put("alarm", raw.getOrDefault("alarm", Map.of()));
-        record.put("evidenceCount", raw.getOrDefault("evidenceCount", raw.getOrDefault("evidence_count", 0)));
-        record.put("riskLevel", firstNonBlank(stringValue(raw, "riskLevel", null), stringValue(raw, "risk_level", null)));
-        record.put("confidence", raw.get("confidence"));
-        record.put("keyFindings", raw.getOrDefault("keyFindings", raw.getOrDefault("key_findings", List.of())));
-        record.put("recommendations", raw.getOrDefault("recommendations", List.of()));
-        record.put("sandboxTaskId", firstNonBlank(stringValue(raw, "sandboxTaskId", null), stringValue(raw, "sandbox_task_id", null)));
-        record.put("toolNames", raw.getOrDefault("toolNames", raw.getOrDefault("tool_names", List.of())));
-        record.put("source", "agent_analysis");
+        record.put("startedAt", stringValue(raw, "startedAt", null));
+        record.put("completedAt", stringValue(raw, "completedAt", null));
+        record.put("analysisTarget", raw.get("analysisTarget"));
+        record.put("datasetSummary", raw.get("datasetSummary"));
+        record.put("datasetRecords", raw.get("datasetRecords"));
+        record.put("serviceTaskId", raw.get("serviceTaskId"));
+        record.put("analysisResult", raw.get("analysisResult"));
+        record.put("timeline", raw.get("timeline"));
+        record.put("toolNames", raw.getOrDefault("toolNames", List.of()));
         record.put("raw", raw);
         return record;
     }
 
-    private String defaultAnalysisStageTitle(String stage) {
-        return switch (StringUtils.hasText(stage) ? stage : "") {
-            case "log_aggregation" -> "日志聚合";
-            case "sandbox_analysis" -> "研判分析";
-            case "report_output" -> "输出分析结论";
-            default -> "研判记录";
+    private boolean hasRequiredDataAnalysisFields(String stage, Map<String, Object> raw) {
+        return switch (stage) {
+            case "dataset_preparation" -> StringUtils.hasText(stringValue(raw, "analysisTarget", null))
+                    && StringUtils.hasText(stringValue(raw, "datasetSummary", null))
+                    && raw.get("datasetRecords") instanceof List<?> records
+                    && !records.isEmpty();
+            case "service_analysis" -> StringUtils.hasText(stringValue(raw, "serviceTaskId", null))
+                    && hasCompleteAnalysisResult(raw.get("analysisResult"));
+            case "report_output" -> hasCompleteReportTimeline(raw.get("timeline"));
+            default -> false;
         };
     }
 
-    private List<Map<String, Object>> extractAnalysisLogRecords(Map<String, Object> raw) {
-        List<Map<String, Object>> logs = firstNonEmptyListOfMaps(
-                raw.get("logs"),
-                raw.get("aggregatedLogs"),
-                raw.get("aggregated_logs"),
-                raw.get("relatedLogs"),
-                raw.get("related_logs")
-        );
-        List<Map<String, Object>> normalized = new ArrayList<>();
-        for (int i = 0; i < logs.size(); i++) {
-            Map<String, Object> logRecord = new LinkedHashMap<>(logs.get(i));
-            logRecord.putIfAbsent("id", firstNonBlank(
-                    stringValue(logRecord, "id", null),
-                    stringValue(logRecord, "logId", null),
-                    stringValue(logRecord, "log_id", null),
-                    stringValue(logRecord, "eventId", null),
-                    stringValue(logRecord, "event_id", null),
-                    "analysis-log-" + (i + 1)
-            ));
-            normalized.add(logRecord);
-        }
-        return normalized;
-    }
-
-    private Map<String, Object> buildSandboxAnalysisResult(Map<String, Object> record, Map<String, Object> raw) {
-        Object result = firstNonNull(
-                raw.get("sandboxResult"),
-                raw.get("sandbox_result"),
-                raw.get("result"),
-                raw.get("jsonResult"),
-                raw.get("json_result")
-        );
-        Map<String, Object> sandboxRecord = new LinkedHashMap<>();
-        sandboxRecord.put("id", firstNonBlank(
-                stringValue(raw, "sandboxTaskId", null),
-                stringValue(raw, "sandbox_task_id", null),
-                stringValue(record, "recordId", null),
-                java.util.UUID.randomUUID().toString()
-        ));
-        sandboxRecord.put("taskId", firstNonBlank(stringValue(raw, "sandboxTaskId", null), stringValue(raw, "sandbox_task_id", null)));
-        sandboxRecord.put("status", stringValue(record, "status", "completed"));
-        sandboxRecord.put("title", firstNonBlank(stringValue(record, "title", null), "沙箱研判结果"));
-        sandboxRecord.put("completedAt", stringValue(record, "completedAt", ""));
-        sandboxRecord.put("result", result == null ? raw : result);
-        sandboxRecord.put("raw", raw);
-        return sandboxRecord;
-    }
-
-    private List<Map<String, Object>> extractAnalysisConclusionTimeline(Map<String, Object> record, Map<String, Object> raw) {
-        List<Map<String, Object>> timeline = firstNonEmptyListOfMaps(
-                raw.get("timeline"),
-                raw.get("conclusionTimeline"),
-                raw.get("conclusion_timeline")
-        );
-        if (!timeline.isEmpty()) {
-            return normalizeAnalysisTimeline(timeline, record);
-        }
-
-        List<Map<String, Object>> generated = new ArrayList<>();
-        addAnalysisTimelineItem(generated, "analysis_target", "分析目标", firstNonBlank(
-                stringValue(raw, "analysisTarget", null),
-                stringValue(raw, "analysis_target", null)
-        ), record);
-        addAnalysisTimelineItem(generated, "analysis_process", "分析过程", firstNonBlank(
-                stringValue(raw, "analysisProcess", null),
-                stringValue(raw, "analysis_process", null),
-                stringValue(record, "content", null)
-        ), record);
-        addAnalysisTimelineItem(generated, "analysis_conclusion", "分析结论", firstNonBlank(
-                stringValue(raw, "analysisConclusion", null),
-                stringValue(raw, "analysis_conclusion", null),
-                stringValue(raw, "conclusion", null)
-        ), record);
-        Object recommendationValue = firstNonNull(raw.get("disposalSuggestion"), raw.get("disposal_suggestion"), raw.get("recommendations"));
-        addAnalysisTimelineItem(generated, "disposal_recommendation", "处置建议", timelineContent(recommendationValue), record);
-        return generated;
-    }
-
-    private List<Map<String, Object>> normalizeAnalysisTimeline(List<Map<String, Object>> timeline, Map<String, Object> record) {
-        List<Map<String, Object>> normalized = new ArrayList<>();
-        for (int i = 0; i < timeline.size(); i++) {
-            Map<String, Object> item = new LinkedHashMap<>(timeline.get(i));
-            item.putIfAbsent("id", firstNonBlank(stringValue(item, "id", null), "analysis-timeline-" + (i + 1)));
-            item.putIfAbsent("time", firstNonBlank(
-                    stringValue(item, "time", null),
-                    stringValue(item, "completedAt", null),
-                    stringValue(record, "completedAt", null),
-                    stringValue(record, "startedAt", null)
-            ));
-            item.putIfAbsent("title", "分析结论");
-            item.putIfAbsent("content", firstNonBlank(stringValue(item, "content", null), stringValue(item, "description", null)));
-            normalized.add(item);
-        }
-        return normalized;
-    }
-
-    private void addAnalysisTimelineItem(List<Map<String, Object>> timeline,
-                                         String id,
-                                         String title,
-                                         String content,
-                                         Map<String, Object> record) {
-        if (!StringUtils.hasText(content)) {
-            return;
-        }
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("id", id);
-        item.put("title", title);
-        item.put("content", content);
-        item.put("time", firstNonBlank(stringValue(record, "completedAt", null), stringValue(record, "startedAt", null)));
-        item.put("type", "success");
-        timeline.add(item);
-    }
-
-    private String timelineContent(Object value) {
-        if (value == null) {
-            return "";
+    private boolean hasCompleteAnalysisResult(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return !map.isEmpty();
         }
         if (value instanceof List<?> list) {
-            return list.stream()
-                    .map(item -> item instanceof Map<?, ?> map
-                            ? firstNonBlank(
-                                    map.get("content") == null ? "" : String.valueOf(map.get("content")),
-                                    map.get("title") == null ? "" : String.valueOf(map.get("title")),
-                                    map.get("name") == null ? "" : String.valueOf(map.get("name"))
-                            )
-                            : String.valueOf(item))
-                    .filter(StringUtils::hasText)
-                    .reduce((left, right) -> left + "\n" + right)
-                    .orElse("");
+            return !list.isEmpty();
         }
-        return String.valueOf(value);
+        if (value instanceof String text) {
+            return StringUtils.hasText(text);
+        }
+        return value != null;
+    }
+
+    private boolean hasCompleteReportTimeline(Object value) {
+        List<Map<String, Object>> timeline = listOfMaps(value);
+        if (timeline.size() != 3) {
+            return false;
+        }
+        Set<String> titles = timeline.stream()
+                .map(item -> stringValue(item, "title", ""))
+                .collect(java.util.stream.Collectors.toSet());
+        return titles.equals(Set.of("分析目标", "分析过程", "分析结论"))
+                && timeline.stream().allMatch(item -> StringUtils.hasText(stringValue(item, "content", null)));
+    }
+
+    private String defaultDataAnalysisStageTitle(String stage) {
+        return switch (StringUtils.hasText(stage) ? stage : "") {
+            case "dataset_preparation" -> "数据集准备";
+            case "service_analysis" -> "分析服务";
+            case "report_output" -> "分析报告";
+            default -> "数据分析记录";
+        };
+    }
+
+    private List<Map<String, Object>> extractDatasetRecords(Map<String, Object> raw) {
+        return listOfMaps(raw.get("datasetRecords"));
+    }
+
+    private Map<String, Object> buildServiceAnalysisResult(Map<String, Object> record, Map<String, Object> raw) {
+        Object result = raw.get("analysisResult");
+        Map<String, Object> serviceRecord = new LinkedHashMap<>();
+        serviceRecord.put("serviceTaskId", stringValue(raw, "serviceTaskId", null));
+        serviceRecord.put("status", stringValue(record, "status", "completed"));
+        serviceRecord.put("title", firstNonBlank(stringValue(record, "title", null), "分析服务结果"));
+        serviceRecord.put("completedAt", stringValue(record, "completedAt", ""));
+        serviceRecord.put("analysisResult", result);
+        return serviceRecord;
+    }
+
+    private List<Map<String, Object>> extractReportTimeline(Map<String, Object> record, Map<String, Object> raw) {
+        List<Map<String, Object>> timeline = firstNonEmptyListOfMaps(raw.get("timeline"));
+        return timeline;
     }
 
     private boolean isReportDocumentPart(ChatMessagePart part) {
@@ -1669,6 +1531,8 @@ public class DihChatApplicationService {
                 stringValue(record, "id", null),
                 stringValue(record, "documentId", null),
                 stringValue(record, "artifactId", null),
+                stringValue(record, "recordId", null),
+                stringValue(record, "serviceTaskId", null),
                 stringValue(record, "fileName", null),
                 stringValue(record, "configType", null),
                 stringValue(record, "configIndex", null),
@@ -1684,6 +1548,8 @@ public class DihChatApplicationService {
                     stringValue(item, "id", null),
                     stringValue(item, "documentId", null),
                     stringValue(item, "artifactId", null),
+                    stringValue(item, "recordId", null),
+                    stringValue(item, "serviceTaskId", null),
                     stringValue(item, "fileName", null),
                     stringValue(item, "configType", null),
                     stringValue(item, "configIndex", null),

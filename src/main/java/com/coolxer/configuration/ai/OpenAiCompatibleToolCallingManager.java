@@ -676,11 +676,11 @@ final class OpenAiCompatibleToolCallingManager implements ToolCallingManager {
         );
         String normalizedReason = defaultIfBlank(reason, "tool_execution_stopped");
         String partialReport = """
-                JMR 研判已部分完成：工具调用已被安全终止（%s）。系统保留此前已经取得的真实证据，
-                但不会继续递归调用或猜测参数。请将本次结果视为覆盖不完整；这不代表事件编号无效。
+                处理已部分完成：工具调用已被安全终止（%s）。系统保留此前已经取得的真实结果，
+                但不会继续递归调用或猜测参数。请将本次结果视为覆盖不完整。
 
-                ```zenvis:analysis-record
-                {"recordId":"jmr-runtime-partial","stage":"report_output","status":"partial","title":"JMR 研判覆盖不完整","content":"工具调用已被有界终止，未生成未经验证的结论。","evidenceCount":0,"riskLevel":"low","confidence":0,"keyFindings":[],"recommendations":["重试一次；若仍失败，请检查兼容模型的工具参数格式"],"coverage":{"truncated":true,"dataGaps":["%s"],"toolFailures":["%s"]}}
+                ```zenvis:notice
+                {"level":"warning","title":"工具执行覆盖不完整","content":"工具调用已被有界终止，未生成未经验证的结果。请重试一次；若仍失败，请检查兼容模型的工具参数格式。","details":{"truncated":true,"dataGaps":["%s"],"toolFailures":["%s"]}}
                 ```
                 """.formatted(normalizedReason, normalizedReason, normalizedReason);
         List<Message> conversationHistory = new ArrayList<>(prompt.getInstructions());

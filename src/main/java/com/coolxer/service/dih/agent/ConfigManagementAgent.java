@@ -12,15 +12,15 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 
 @Service
-public class DisposeAgent {
+public class ConfigManagementAgent {
 
-    public static final String AGENT_TYPE = "agent_dispose";
+    public static final String AGENT_TYPE = "agent_config_management";
 
     private final PromptDrivenAgentRuntime agentRuntime;
     private final PromptTemplate systemPromptTemplate;
 
-    public DisposeAgent(PromptDrivenAgentRuntime agentRuntime,
-                        @Qualifier("agentDisposeSystemPromptTemplate") PromptTemplate systemPromptTemplate) {
+    public ConfigManagementAgent(PromptDrivenAgentRuntime agentRuntime,
+                                 @Qualifier("agentConfigManagementSystemPromptTemplate") PromptTemplate systemPromptTemplate) {
         this.agentRuntime = agentRuntime;
         this.systemPromptTemplate = systemPromptTemplate;
     }

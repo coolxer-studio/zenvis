@@ -10,8 +10,8 @@ public final class BuiltinAgentSkillRegistry {
 
     public static final String AGENT_DATA_ACCESS = "agent_data_access";
     public static final String AGENT_DATA_VISUALIZATION = "agent_data_visualization";
-    public static final String AGENT_ANALYSIS = "agent_analysis";
-    public static final String AGENT_DISPOSE = "agent_dispose";
+    public static final String AGENT_DATA_ANALYSIS = "agent_data_analysis";
+    public static final String AGENT_CONFIG_MANAGEMENT = "agent_config_management";
     public static final String AGENT_REPORT = "agent_report";
 
     private static final List<BuiltinAgentSkill> AGENT_SKILLS = List.of(
@@ -30,18 +30,18 @@ public final class BuiltinAgentSkillRegistry {
                     "数据可视化智能体基于元数据实体生成临时图表、低代码页面/应用、静态 HTML、数据看板和菜单配置。"
             ),
             new BuiltinAgentSkill(
-                    "analysis-agent",
-                    AGENT_ANALYSIS,
-                    "研判分析",
+                    "data-analysis-agent",
+                    AGENT_DATA_ANALYSIS,
+                    "数据分析",
                     30,
-                    "研判分析智能体根据用户提供的告警信息，按日志聚合、沙箱研判、分析结论三阶段完成综合研判。"
+                    "数据分析智能体按数据集准备、分析服务、分析报告三个阶段完成业务数据综合分析。"
             ),
             new BuiltinAgentSkill(
-                    "dispose-agent",
-                    AGENT_DISPOSE,
-                    "策略控制",
+                    "config-management-agent",
+                    AGENT_CONFIG_MANAGEMENT,
+                    "配置管理",
                     40,
-                    "策略控制智能体按策略记录、试验场验证、正式下发三阶段生成采集、标记和处置策略配置。"
+                    "配置管理智能体按配置生成、试验场验证、正式生效三个阶段管理系统配置。"
             ),
             new BuiltinAgentSkill(
                     "report-agent",

@@ -8,7 +8,7 @@ import com.coolxer.dao.mysql.entity.Menu;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.Message;
-import com.coolxer.model.policy.dto.ConfigDto;
+import com.coolxer.model.config.dto.ConfigDto;
 import com.coolxer.model.system.dto.DashboardDto;
 import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.system.vo.DashboardVo;

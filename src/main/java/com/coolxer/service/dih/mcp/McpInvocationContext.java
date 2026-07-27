@@ -62,7 +62,7 @@ public record McpInvocationContext(
                 requesterUserId,
                 null,
                 executionId,
-                "agent_analysis",
+                "agent_data_analysis",
                 null,
                 "analysis-task:" + taskId,
                 eventConsumer,

@@ -445,11 +445,11 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     private String callAiAnalyze(AnalysisTask task, TaskExecutionControl control) {
         String model = aiBaseService.resolveChatModel(task.getModel(), false, false);
         McpToolContext mcpToolContext = agentMcpToolService.resolve(
-                "agent_analysis",
+                "agent_data_analysis",
                 task.getSkillIds() == null ? List.of() : new ArrayList<>(task.getSkillIds()));
         if (mcpToolContext.hasTools()) {
             McpInvocationContext invocationContext = control == null
-                    ? McpInvocationContext.background("agent_analysis")
+                    ? McpInvocationContext.background("agent_data_analysis")
                     : McpInvocationContext.backgroundTask(
                             task.getId(),
                             task.getExecutionId(),
@@ -529,14 +529,14 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     }
 
     private String buildAnalysisSystemPrompt() {
-        String skillPrompt = skillService.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        String skillPrompt = skillService.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
         return appendSkillPrompt(skillPrompt);
     }
 
     private String buildAnalysisSystemPrompt(AnalysisTask task) {
         List<String> selected = task.getSkillIds() == null
                 ? List.of() : new ArrayList<>(task.getSkillIds());
-        String skillPrompt = skillService.buildTaskSkillPrompt(BuiltinAgentSkillRegistry.AGENT_ANALYSIS, selected);
+        String skillPrompt = skillService.buildTaskSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS, selected);
         SkillRuntimeConfigVo runtime = skillService.resolveRuntimeConfig(selected);
         String basePrompt = runtime != null
                 && SkillRuntimeConfigVo.PROMPT_MODE_SKILL_ONLY.equalsIgnoreCase(runtime.getPromptMode())

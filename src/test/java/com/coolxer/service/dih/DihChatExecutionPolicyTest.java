@@ -26,16 +26,16 @@ class DihChatExecutionPolicyTest {
     @Test
     void builtinAgentAllowsExplicitSkillAndToolsButNoRagOrDeepThinking() {
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve(
-                BuiltinAgentSkillRegistry.AGENT_ANALYSIS
+                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS
         ).orElseThrow();
 
         assertThat(policy.mode()).isEqualTo(DihChatExecutionPolicy.Mode.AGENT);
-        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
         assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.toolsAllowed()).isTrue();
         assertThat(policy.deepThinkAllowed()).isFalse();
         assertThat(policy.effectiveDeepThink(true)).isFalse();
-        assertThat(policy.skillIds()).containsExactly("analysis-agent");
+        assertThat(policy.skillIds()).containsExactly("data-analysis-agent");
     }
 
     @Test
@@ -45,7 +45,7 @@ class DihChatExecutionPolicyTest {
                 .thenReturn(new SkillChatEntryVo(
                         "jmr-analysis",
                         "skill:jmr-analysis",
-                        BuiltinAgentSkillRegistry.AGENT_ANALYSIS,
+                        BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
                         "僵木蠕研判",
                         "说明",
                         "data-analysis",
@@ -58,7 +58,7 @@ class DihChatExecutionPolicyTest {
         ).orElseThrow();
 
         assertThat(policy.isDynamicSkill()).isTrue();
-        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_ANALYSIS);
+        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
         assertThat(policy.toolsAllowed()).isTrue();
         assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.skillIds()).containsExactly("jmr-analysis");

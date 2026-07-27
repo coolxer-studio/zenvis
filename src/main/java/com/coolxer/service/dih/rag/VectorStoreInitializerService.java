@@ -17,15 +17,15 @@
 
 package com.coolxer.service.dih.rag;
 
+import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.configuration.ai.AiEmbeddingProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
+import org.springframework.util.StringUtils;
 import org.springframework.ai.reader.markdown.MarkdownDocumentReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.ai.vectorstore.filter.Filter;
-import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -37,11 +37,17 @@ import redis.clients.jedis.search.Query;
 import redis.clients.jedis.search.SearchResult;
 
 import java.io.IOException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.net.URI;
+import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -62,6 +68,8 @@ import java.util.stream.Stream;
 @Service
 public class VectorStoreInitializerService {
 
+    private static final long EMBEDDING_UNAVAILABLE_COOLDOWN_MILLIS = 60_000L;
+
     private final Logger logger = LoggerFactory.getLogger(VectorStoreInitializerService.class);
 
     @Autowired
@@ -79,6 +87,94 @@ public class VectorStoreInitializerService {
 
     @Autowired
     private AiEmbeddingProperties embeddingProperties;
+
+    @Value("${spring.ai.openai.embedding.base-url:${spring.ai.openai.base-url:}}")
+    private String embeddingBaseUrl;
+
+    @Value("${spring.ai.openai.embedding.api-key:${spring.ai.openai.api-key:}}")
+    private String embeddingApiKey;
+
+    @Value("${spring.ai.openai.embedding.embeddings-path:/v1/embeddings}")
+    private String embeddingsPath;
+
+    @Value("${spring.ai.openai.embedding.options.model:}")
+    private String embeddingModel;
+
+    @Value("${app.ai.embedding.health-check-timeout-seconds:5}")
+    private long embeddingHealthCheckTimeoutSeconds;
+
+    private volatile long embeddingUnavailableUntil;
+
+    /**
+     * 插件操作前使用轻量、单次 HTTP 请求探测 Embedding 服务，避免进入 Spring AI
+     * 的长时间指数退避重试后一直占用插件安装/升级线程。
+     */
+    public boolean isRagAvailable() {
+        if (!embeddingProperties.isEnabled()) {
+            logger.info("RAG is disabled by app.ai.embedding.enabled=false.");
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        if (now < embeddingUnavailableUntil) {
+            logger.info("Skip Embedding health check during unavailable cooldown.");
+            return false;
+        }
+        if (!StringUtils.hasText(embeddingBaseUrl) || !StringUtils.hasText(embeddingModel)) {
+            markEmbeddingUnavailable(now);
+            logger.warn("Embedding health check skipped because base URL or model is not configured.");
+            return false;
+        }
+
+        try {
+            Duration timeout = Duration.ofSeconds(Math.max(1L, embeddingHealthCheckTimeoutSeconds));
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", embeddingModel);
+            body.put("input", List.of("zenvis-rag-health-check"));
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolveEmbeddingUri())
+                    .timeout(timeout)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            JacksonConfig.OBJECT_MAPPER.writeValueAsString(body)));
+            if (StringUtils.hasText(embeddingApiKey)) {
+                requestBuilder.header("Authorization", "Bearer " + embeddingApiKey);
+            }
+            HttpClient client = HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .connectTimeout(timeout)
+                    .build();
+            HttpResponse<Void> response = client.send(
+                    requestBuilder.build(), HttpResponse.BodyHandlers.discarding());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                embeddingUnavailableUntil = 0L;
+                return true;
+            }
+            markEmbeddingUnavailable(now);
+            logger.warn("Embedding health check failed with HTTP {}. RAG will be skipped temporarily.",
+                    response.statusCode());
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            markEmbeddingUnavailable(now);
+            logger.warn("Embedding health check was interrupted. RAG will be skipped temporarily.");
+            return false;
+        } catch (Exception e) {
+            markEmbeddingUnavailable(now);
+            logger.warn("Embedding health check failed. RAG will be skipped temporarily.", e);
+            return false;
+        }
+    }
+
+    private URI resolveEmbeddingUri() {
+        String baseUrl = embeddingBaseUrl.endsWith("/")
+                ? embeddingBaseUrl.substring(0, embeddingBaseUrl.length() - 1)
+                : embeddingBaseUrl;
+        String path = embeddingsPath.startsWith("/") ? embeddingsPath : "/" + embeddingsPath;
+        return URI.create(baseUrl + path);
+    }
+
+    private void markEmbeddingUnavailable(long now) {
+        embeddingUnavailableUntil = now + EMBEDDING_UNAVAILABLE_COOLDOWN_MILLIS;
+    }
 
     public void loadDocToRag(String docSource, Path docPath) {
         if (!embeddingProperties.isEnabled()) {
@@ -116,14 +212,8 @@ public class VectorStoreInitializerService {
             return;
         }
         logger.info("start delete data with filter");
-        FilterExpressionBuilder b = new FilterExpressionBuilder();
-        Filter.Expression expression = b.eq("source", docSource).build();
-        redisVectorStore.delete(expression);
-
-        // 解决当前库没有删除干净的问题 - 优化版本
         long total = 0;
-        String cursor = "0";
-        do {
+        while (true) {
             try {
                 Query query = new Query("@source:{%s}".formatted(docSource))
                         .limit(0, 1000)
@@ -141,23 +231,20 @@ public class VectorStoreInitializerService {
                         .toList();
 
                 if (!ids.isEmpty()) {
-                    // pipeline 批量 UNLINK
                     try (Pipeline pipe = jedisPooled.pipelined()) {
                         ids.forEach(id -> pipe.unlink(id));
                         pipe.sync();
                     }
                     total += ids.size();
+                } else {
+                    break;
                 }
-
-                // 注意：RedisSearch的cursor行为可能需要根据实际版本调整
-                // 如果使用的是较新版本的Jedis，可能需要使用其他方式获取下一页
-                cursor = "0"; // 简化处理，实际应根据API返回值判断
-
             } catch (Exception e) {
                 logger.error("Error during data deletion", e);
-                break;
+                throw new IllegalStateException("Failed to unload RAG documents for source=" + docSource, e);
             }
-        } while (!"0".equals(cursor));
+        }
+        logger.info("Unload documents from vector store successfully. Unloaded {} documents.", total);
     }
 
     private List<MarkdownDocumentReader> loadMarkdownDocuments(Path docPath) {

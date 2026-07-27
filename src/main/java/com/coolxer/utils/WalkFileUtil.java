@@ -4,7 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.text.StrPool;
 import cn.hutool.core.util.ArrayUtil;
 import com.coolxer.commons.constants.ConfigConstants;
-import com.coolxer.model.policy.vo.ConfigVo;
+import com.coolxer.model.config.vo.ConfigVo;
 
 import java.io.File;
 import java.io.IOException;

@@ -3,7 +3,7 @@ package com.coolxer.service.dih;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.Message;
-import com.coolxer.model.policy.dto.ConfigDto;
+import com.coolxer.model.config.dto.ConfigDto;
 import com.coolxer.model.system.dto.PushTaskDto;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.config.ConfigService;
@@ -556,7 +556,7 @@ public class DataAccessDemoResponseService {
             configDto.setFileName(DEMO_META_FILE);
             configDto.setText(DEMO_META_CONFIG);
             configService.modifyConfig("meta", configDto);
-            configService.applyPolicy("meta", configDto);
+            configService.applyConfig("meta", configDto);
         } catch (Exception e) {
             log.error("写入用户事件演示元数据配置失败: {}", e.getMessage(), e);
             return """

@@ -28,18 +28,18 @@ class AnalysisTaskServiceImplTest {
 
     @Test
     void buildAnalysisSystemPromptLoadsAnalysisSkillPrompt() throws Exception {
-        Path analysisSkill = skillRoot.resolve("analysis-agent");
+        Path analysisSkill = skillRoot.resolve("data-analysis-agent");
         Files.createDirectories(analysisSkill);
         Files.writeString(analysisSkill.resolve("skill.json"), """
                 {
-                  "id": "analysis-agent",
-                  "name": "研判分析",
+                  "id": "data-analysis-agent",
+                  "name": "数据分析",
                   "enabled": true,
-                  "agentTypes": ["agent_analysis"],
+                  "agentTypes": ["agent_data_analysis"],
                   "entry": "SKILL.md"
                 }
                 """);
-        Files.writeString(analysisSkill.resolve("SKILL.md"), "研判 Skill Prompt");
+        Files.writeString(analysisSkill.resolve("SKILL.md"), "数据分析 Skill Prompt");
 
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());
@@ -54,21 +54,21 @@ class AnalysisTaskServiceImplTest {
         assertThat(systemPrompt)
                 .contains("ZenVis 的 AI分析任务 Agent")
                 .contains("【已加载 Skill】")
-                .contains("研判 Skill Prompt");
+                .contains("数据分析 Skill Prompt");
     }
 
     @Test
     void taskSkillSelectionOnlyAcceptsEnabledSkillsRegardlessOfAgentType() throws Exception {
-        createSkill("enabled-any-agent", true, "agent_dispose", "已启用 Skill Prompt");
-        createSkill("disabled-skill", false, "agent_analysis", "不应加载");
-        createSkill("matching-but-not-selected", true, "agent_analysis", "同类型但未选中");
+        createSkill("enabled-any-agent", true, "agent_config_management", "已启用 Skill Prompt");
+        createSkill("disabled-skill", false, "agent_data_analysis", "不应加载");
+        createSkill("matching-but-not-selected", true, "agent_data_analysis", "同类型但未选中");
 
         SkillService skillService = createSkillService();
 
         assertThat(skillService.getEnabledOptions())
                 .extracting(option -> option.getValue())
                 .containsExactlyInAnyOrder("enabled-any-agent", "matching-but-not-selected");
-        assertThat(skillService.buildTaskSkillPrompt("agent_analysis", List.of("enabled-any-agent")))
+        assertThat(skillService.buildTaskSkillPrompt("agent_data_analysis", List.of("enabled-any-agent")))
                 .contains("已启用 Skill Prompt")
                 .doesNotContain("同类型但未选中");
         assertThatThrownBy(() -> skillService.validateEnabledSkillIds(List.of("disabled-skill")))
@@ -79,7 +79,7 @@ class AnalysisTaskServiceImplTest {
     @Test
     void callAiAnalyzeUsesGenericAgentLlmServiceAndClearsContext() {
         AnalysisTask task = new AnalysisTask()
-                .setName("每日研判")
+                .setName("每日数据分析")
                 .setDescription("关注异常波动")
                 .setModel("requested-model")
                 .setPrompt("分析最近风险");
@@ -100,11 +100,11 @@ class AnalysisTaskServiceImplTest {
 
         assertThat(result).isEqualTo("分析结果");
         assertThat(aiBaseService.requestedModel).isEqualTo("requested-model");
-        assertThat(agentMcpToolService.agentType).isEqualTo("agent_analysis");
+        assertThat(agentMcpToolService.agentType).isEqualTo("agent_data_analysis");
         assertThat(agentLlmService.model).isEqualTo("resolved-model");
         assertThat(agentLlmService.mcpToolContext).isSameAs(mcpToolContext);
         assertThat(agentLlmService.systemPrompt).contains("分析 Skill Prompt");
-        assertThat(agentLlmService.userPrompt).contains("每日研判").contains("分析最近风险");
+        assertThat(agentLlmService.userPrompt).contains("每日数据分析").contains("分析最近风险");
         assertThat(agentLlmService.modelCleared).isTrue();
         assertThat(agentLlmService.mcpContextCleared).isTrue();
     }
@@ -112,20 +112,16 @@ class AnalysisTaskServiceImplTest {
     @Test
     void detailResultUsesSharedChatMessagePartParser() {
         AnalysisTask task = new AnalysisTask()
-                .setName("每日研判")
+                .setName("每日数据分析")
                 .setResult("""
-                        # 研判结论
+                        # 分析结论
 
                         ```java
                         System.out.println("risk");
                         ```
 
-                        ```zenvis:analysis-record
-                        {"title":"异常研判","content":"发现风险"}
-                        ```
-
-                        ```zenvis:disposal-strategy-config
-                        {"name":"阻断高风险请求"}
+                        ```zenvis:data-analysis-record
+                        {"recordId":"report-001","stage":"report_output","status":"completed","title":"分析报告","timeline":[{"title":"分析目标","content":"识别趋势"},{"title":"分析过程","content":"调用统计服务"},{"title":"分析结论","content":"发现波动"}]}
                         ```
 
                         ```zenvis:visualization-chart-preview
@@ -141,7 +137,7 @@ class AnalysisTaskServiceImplTest {
         assertThat(detail).isNotNull();
         assertThat(detail.getResultParts())
                 .extracting(part -> part.getType())
-                .contains("markdown", "code", "analysis-record", "config", "visualization-chart-preview");
+                .contains("markdown", "code", "data-analysis-record", "visualization-chart-preview");
     }
 
     @Test

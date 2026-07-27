@@ -20,7 +20,7 @@ AI分析任务提交后在后台运行，关闭页面不会中断。任务可以
   "priority": 10,
   "scheduled_time": null,
   "approval_mode": "MANUAL",
-  "skill_ids": ["analysis-agent"]
+  "skill_ids": ["data-analysis-agent"]
 }
 ```
 
@@ -68,7 +68,7 @@ GET /api/v1/dih/skills/options?enabled=true
   "priority": 10,
   "approval_mode": "MANUAL",
   "execution_id": "c26a0ce0-7d4c-4a5e-bb84-d205c9c5ac31",
-  "skill_ids": ["analysis-agent"],
+  "skill_ids": ["data-analysis-agent"],
   "pending_approval_count": 1,
   "scheduled_time": null,
   "start_time": "2026-07-14T15:00:00.000+08:00",
@@ -108,7 +108,7 @@ GET /api/v1/dih/skills/options?enabled=true
 | `result_parts` 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | String | 片段标识 |
-| `type` | String | `markdown`、`code`、`thinking`、`config`、`report-document`、`analysis-record`、`policy-record`、`visualization-chart-preview` 等 DIH 卡片类型 |
+| `type` | String | `markdown`、`code`、`thinking`、`config`、`report-document`、`data-analysis-record`、`config-record`、`visualization-chart-preview` 等 DIH 卡片类型 |
 | `content` | String | 片段正文或配置内容 |
 | `language` | String | 代码、配置或报表语言 |
 | `title` | String | 卡片标题 |
@@ -172,14 +172,14 @@ Content-Type: application/json
 curl -X POST "http://localhost:11001/api/v1/system/analysis-task/add" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "每日风险分析",
+    "name": "每日指标分析",
     "description": "后台分析示例",
     "model": "auto",
-    "prompt": "分析最近24小时高风险事件并给出建议。",
+    "prompt": "分析最近24小时业务指标变化并给出结论。",
     "priority": 50,
     "scheduled_time": null,
     "approval_mode": "MANUAL",
-    "skill_ids": ["analysis-agent"]
+    "skill_ids": ["data-analysis-agent"]
   }'
 ```
 

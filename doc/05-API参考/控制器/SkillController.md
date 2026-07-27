@@ -118,10 +118,10 @@ curl "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/view"
   "msg": "请求成功",
   "data": [
     {
-      "label": "研判分析",
-      "value": "analysis-agent",
-      "description": "研判分析任务规则",
-      "agent_types": ["agent_analysis"]
+      "label": "数据分析",
+      "value": "data-analysis-agent",
+      "description": "通用数据分析任务规则",
+      "agent_types": ["agent_data_analysis"]
     }
   ]
 }
@@ -145,11 +145,11 @@ AI分析任务保存 Skill ID，并在实际执行时读取最新内容。创建
 ```json
 [
   {
-    "skill_id": "jmr-continuous-threat-analysis",
-    "chat_type": "skill:jmr-continuous-threat-analysis",
-    "agent_type": "agent_analysis",
-    "label": "僵木蠕研判",
-    "description": "对 JMR 日志执行证据化研判",
+    "skill_id": "user-event-trend-analysis",
+    "chat_type": "skill:user-event-trend-analysis",
+    "agent_type": "agent_data_analysis",
+    "label": "用户事件趋势分析",
+    "description": "分析用户事件指标变化",
     "icon": "data-analysis",
     "order": 60
   }
@@ -243,7 +243,7 @@ skill_config/
 
 AI分析任务运行时会同时加载：
 
-1. 全局启用且适用于 `agent_analysis` 的 Skill。
+1. 全局启用且适用于 `agent_data_analysis` 的 Skill。
 2. 当前任务明确选择且仍处于启用状态的 Skill。
 
 任务显式选择不受 `agent_types` 限制，但 `enabled=true` 是选择和执行的硬性条件。详细流程见 [MCP 审批与 AI分析任务快速上手](../../07-AI与数据智能/MCP审批与AI分析任务快速上手.md)。

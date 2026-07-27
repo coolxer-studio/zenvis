@@ -36,7 +36,7 @@
 - 元数据与字段确认：`retrieval_list_display_entity`、`retrieval_list_display_attribute`、`retrieval_list_entity`、`retrieval_list_attribute`、`retrieval_list_rule`、`retrieval_list_candidate`。
 - 明细查询：`retrieval_search`、`entity_list`、`entity_view`。
 - 统计分析：`entity_overview`、`entity_summary`、`entity_trend`、`entity_distribution`、`entity_value_statistics`、`entity_relations`、`entity_relation_timeline`。
-- 配置写入：`policy_config_ensure_root`、`policy_config_add`、`policy_config_apply`、`policy_config_read`。
+- 配置写入：`config_ensure_root`、`config_add`、`config_apply`、`config_read`。
 - 看板管理：`dashboard_create`、`dashboard_list`、`dashboard_view`。
 - 菜单管理：`menu_create`、`menu_list`、`menu_view`、`menu_type_options`、`menu_parent_options`。
 

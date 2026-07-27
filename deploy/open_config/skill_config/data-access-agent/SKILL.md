@@ -8,7 +8,7 @@
 - 检查不通过且需要用户补充字段、规则、样例或配置项时，只输出一个 `zenvis:info-steps` 补充信息卡；外部阻塞、错误或无需填写表单的提醒才使用 `zenvis:notice`。不要编造字段、数据源、认证或映射规则。
 - 元数据缺失使用“元数据配置检查提醒”，数据推送缺失使用“数据推送配置检查提醒”。
 - 对配置文件写入、应用、创建或启动 Vectum 任务等有副作用操作，参数完整后直接发起工具调用，由平台展示“允许本次/拒绝”审批卡；不要额外进行一轮自然语言确认。
-- 元数据写入必须在用户确认后使用 `policy_config_add`、`policy_config_apply` 和读回校验流程。
+- 元数据写入必须在用户确认后使用 `config_add`、`config_apply` 和读回校验流程。
 - 生成配置时优先给出最终文件名、配置摘要、已调用 MCP、状态结果和待用户处理的问题。
 - `zenvis:*` 只表示前端可解析的 Markdown 围栏代码块类型，不是 MCP 工具名；输出 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、`zenvis:vectum-task-record` 时，必须写成对应的三反引号围栏代码块，绝不能把它们作为工具调用。
 - Vectum 数据推送服务必须由真实 Vectum 任务承载，Vector 仅作为 Vectum 任务配置的语法和拓扑规则。
@@ -83,7 +83,7 @@
 - 表名默认等于实体英文名，完整表名固定为 `zenvis.<table_name>`。
 - 文件名默认等于实体英文名加 `.json`。
 - 如果一次元数据配置涉及多个实体，必须写入同一个 meta 配置文件；文件名按共同业务主题自动生成，例如 `<business_domain>.json`，不要拆成一个实体一个配置文件。
-- 生成前优先调用 `policy_config_tree(type="meta")` 获取已有 meta 配置文件，必要时读取现有配置中的 `entity.table_name`，避免文件名和表名冲突。
+- 生成前优先调用 `config_tree(type="meta")` 获取已有 meta 配置文件，必要时读取现有配置中的 `entity.table_name`，避免文件名和表名冲突。
 - 如果已存在同名文件或表名，自动生成不冲突名称，不要要求用户改名；优先追加能表达业务的后缀，例如 `_log`、`_event`、`_flow`，仍冲突再追加 `_1`、`_2`。
 - 命名冲突规避结果需要在配置摘要里说明。
 
@@ -162,13 +162,13 @@
 
 通过配置文件管理 MCP 对接系统：
 
-1. 收到 `apply_config` 授权后，立即使用 `policy_config_tree(type="meta")` 检查目标文件是否已存在，不要先输出说明卡等待用户。
-2. 新文件先调用 `policy_config_add(type="meta", configDto={"fileName":"xxx.json"})`，创建成功后继续下一步。
-3. 写入并生效调用 `policy_config_apply(type="meta", configDto={"fileName":"xxx.json","text":"<meta json>"})`。
-4. 应用后必须调用 `policy_config_read(type="meta", fileName="xxx.json")` 读回文件内容，确认文件存在、内容非空且与目标 meta JSON 一致；必要时再调用 `policy_config_tree(type="meta")` 确认文件出现在配置树。
-5. 更新已有文件前先读取 `policy_config_read(type="meta", fileName="xxx.json")`，说明将覆盖的实体和字段差异，并请求用户确认覆盖；用户未确认覆盖前不得调用 apply。
-6. `policy_config_add` 和 `policy_config_apply` 的参数字段使用 `fileName`，不要使用 `file_name`。
-7. 只有 `policy_config_apply` 返回成功且读回校验通过后，才允许输出 `zenvis:meta-config-record` 围栏代码块；如果任一步失败，不得输出成功记录，必须说明失败原因和修复动作。
+1. 收到 `apply_config` 授权后，立即使用 `config_tree(type="meta")` 检查目标文件是否已存在，不要先输出说明卡等待用户。
+2. 新文件先调用 `config_add(type="meta", configDto={"fileName":"xxx.json"})`，创建成功后继续下一步。
+3. 写入并生效调用 `config_apply(type="meta", configDto={"fileName":"xxx.json","text":"<meta json>"})`。
+4. 应用后必须调用 `config_read(type="meta", fileName="xxx.json")` 读回文件内容，确认文件存在、内容非空且与目标 meta JSON 一致；必要时再调用 `config_tree(type="meta")` 确认文件出现在配置树。
+5. 更新已有文件前先读取 `config_read(type="meta", fileName="xxx.json")`，说明将覆盖的实体和字段差异，并请求用户确认覆盖；用户未确认覆盖前不得调用 apply。
+6. `config_add` 和 `config_apply` 的参数字段使用 `fileName`，不要使用 `file_name`。
+7. 只有 `config_apply` 返回成功且读回校验通过后，才允许输出 `zenvis:meta-config-record` 围栏代码块；如果任一步失败，不得输出成功记录，必须说明失败原因和修复动作。
 
 ### 元数据配置记录
 

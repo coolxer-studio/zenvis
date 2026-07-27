@@ -64,7 +64,7 @@ flowchart TD
 4. 确认连接状态为成功，并能看到工具列表。
 5. 到“工具审批策略”检查新发现工具的默认策略。
 
-新工具在服务刷新后自动纳入策略管理，不需要手工建策略记录。外部工具断线后仍可维护人工策略，服务恢复后继续生效。
+新工具在服务刷新后自动纳入权限规则管理，不需要手工创建记录。外部工具断线后仍可维护人工规则，服务恢复后继续生效。
 
 ### 3.2 设置工具策略
 
@@ -182,7 +182,7 @@ PENDING / RUNNING / WAITING_APPROVAL
 
 任务运行时会组合两类 Skill：
 
-1. 全局启用且声明适用于 `agent_analysis` 的 Skill。
+1. 全局启用且声明适用于 `agent_data_analysis` 的 Skill。
 2. 当前任务显式选择且仍为启用状态的 Skill。
 
 任务只保存 Skill ID，不保存内容快照，因此执行时使用最新 `SKILL.md`。创建、编辑、重新入队和实际执行前都会校验 Skill；如果已选 Skill 被停用或删除，任务进入 `FAILED` 并在错误信息中列出具体 Skill，不会静默跳过。
@@ -225,14 +225,14 @@ GET /api/v1/dih/skills/options?enabled=true
 
 ```json
 {
-  "name": "每日风险分析",
-  "description": "汇总风险趋势并给出处置建议",
+  "name": "每日指标分析",
+  "description": "汇总业务指标趋势并识别异常波动",
   "model": "auto",
-  "prompt": "分析最近24小时的高风险事件、变化趋势和建议。",
+  "prompt": "分析最近24小时上报量、失败率和变化趋势。",
   "priority": 50,
   "scheduled_time": null,
   "approval_mode": "MANUAL",
-  "skill_ids": ["analysis-agent"]
+  "skill_ids": ["data-analysis-agent"]
 }
 ```
 
@@ -305,7 +305,7 @@ app.ai.analysis-task.dispatch-delay-ms=5000
 
 - 本地工具：确认已经注册为 Spring AI ToolCallback。
 - 外部工具：确认服务已启用、连接成功并执行过刷新。
-- 查看 `available` 和最后发现时间；断线工具仍会保留历史策略记录。
+- 查看 `available` 和最后发现时间；断线工具仍会保留历史权限规则记录。
 
 ### 聊天没有出现审批卡片
 

@@ -365,7 +365,7 @@ GET /api/v1/dih/mcp/tools/policies/list?page=1&perPage=20
 | `policy` | Enum | 按有效策略过滤 |
 | `available` | Boolean | 工具当前是否可用 |
 
-不可用工具仍保留策略记录，便于在外部服务恢复前提前维护权限。
+不可用工具仍保留权限规则记录，便于在外部服务恢复前提前维护权限。
 
 ### 更新工具策略
 

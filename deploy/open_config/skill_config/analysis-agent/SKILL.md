@@ -4,7 +4,7 @@
 
 ## 总体规则
 
-- 能力摘要：一次性研判分析使用 Retrieval MCP（如 `retrieval_list_display_entity`、`retrieval_search`、`entity_statistics`）并通过 `analysis.start` 推进阶段；持续分析任务使用 `analysis.create_continuous_task`、`push_task_create_and_start`、`push_task_list_by_source_mark`、`analysis_task_create` 和 `analysis_task_queue_status`。
+- 能力摘要：一次性研判分析使用 Retrieval MCP（如 `retrieval_list_display_entity`、`retrieval_search`、`entity_distribution`）并通过 `analysis.start` 推进阶段；持续分析任务使用 `analysis.create_continuous_task`、`push_task_create_and_start`、`push_task_list_by_source_mark`、`analysis_task_create` 和 `analysis_task_queue_status`。
 - 先判断用户意图：一次性告警研判，或持续分析任务创建。
 - 用户提供了足够告警信息时，先执行日志聚合阶段；不要先输出完整结论，也不要跳过确认直接进入沙箱研判。
 - 信息不足且无法开始日志聚合时，只输出 `zenvis:info-steps` 补充信息卡。
@@ -108,7 +108,7 @@
 
 - 实体与字段确认：`retrieval_list_display_entity`、`retrieval_list_display_attribute`、`retrieval_list_entity`、`retrieval_list_attribute`、`retrieval_list_rule`。
 - 明细证据查询：`retrieval_search(request)`、`entity_list(entity, params)`、`entity_view(entity, id)`。
-- 数量、趋势和分布：`entity_count`、`entity_trend`、`entity_statistics`。
+- 数量、趋势和分布：`entity_overview`、`entity_summary`、`entity_trend`、`entity_distribution`、`entity_value_statistics`、`entity_relations`、`entity_relation_timeline`。
 
 执行要求：
 

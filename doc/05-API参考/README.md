@@ -182,11 +182,16 @@ curl -X POST http://localhost:11001/api/v1/retrieval/do \
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/count` | 多实体累计数量 |
-| GET | `/count-increase` | 数量增量 |
-| GET | `/trend` | 时间趋势 |
-| GET | `/statistics` | 指定字段聚合 |
-| GET | `/ip-statistics` | 跨实体 IP 统计 |
+| POST | `/overview/query` | 多实体累计量、当前周期量和对比 |
+| POST | `/summary/query` | 单实体多指标汇总 |
+| POST | `/trend/query` | 单/多实体时间趋势 |
+| POST | `/distribution/query` | 任意字段分组 TopN |
+| POST | `/value-statistics/query` | 指定值跨实体、跨字段统计 |
+| POST | `/relations/query` | 任意字段关系聚合 |
+| POST | `/relation-timeline/query` | 任意字段关系时间轴 |
+
+统一统计契约和请求示例见
+[EntityAnalyticsController](控制器/EntityAnalyticsController.md)。
 
 ## 配置管理
 

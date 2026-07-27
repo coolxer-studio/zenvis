@@ -33,7 +33,6 @@ const renderChart = () => {
   if (!chart) return;
   const option: EChartsOption = {
     title: {
-      text: '实体数据上报趋势',
       top: 10,
       textStyle: { color: '#fff', fontSize: 14, fontWeight: 'normal' },
     },

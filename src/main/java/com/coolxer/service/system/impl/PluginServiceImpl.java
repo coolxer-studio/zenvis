@@ -1441,30 +1441,38 @@ public class PluginServiceImpl implements PluginService {
     }
 
     private void reconcilePluginMenus(String packageName, PluginPackTool pluginPackTool) {
-        Map<String, Menu> currentByKey = menuService.findBySource(packageName).stream()
+        reconcilePluginMenus(packageName, readMenuDefinitions(pluginPackTool));
+    }
+
+    private void reconcilePluginMenus(String packageName, List<MenuDto> definitions) {
+        List<Menu> currentMenus = new ArrayList<>(menuService.findBySource(packageName));
+        Map<String, Menu> currentByKey = currentMenus.stream()
                 .collect(java.util.stream.Collectors.toMap(
                         menu -> menuMatchKey(menu.getType(), menu.getParams(), menu.getRoute(), menu.getName()),
                         menu -> menu));
         Set<Integer> retainedIds = new HashSet<>();
-        for (MenuDto definition : readMenuDefinitions(pluginPackTool)) {
-            definition.setLevel(MenuLevel.LEVEL_1);
-            definition.setParentId(0);
+        for (MenuDto definition : definitions) {
             definition.setSource(packageName);
             String route = definition.getType() == com.coolxer.commons.enums.MenuType.BUILT_APP
                     ? definition.getRoute() : definition.getType().getRoute();
             String key = menuMatchKey(definition.getType(), definition.getParams(), route, definition.getName());
             Menu existing = currentByKey.get(key);
             if (existing == null) {
+                definition.setLevel(MenuLevel.LEVEL_1);
+                definition.setParentId(0);
                 Menu created = menuService.create(definition);
                 retainedIds.add(created.getId());
             } else {
                 definition.setRoute(route);
+                definition.setLevel(existing.getLevel());
+                definition.setParentId(existing.getParentId());
+                definition.setOrderNumber(existing.getOrderNumber());
                 existing.updateFromDto(definition);
                 menuRepository.save(existing);
                 retainedIds.add(existing.getId());
             }
         }
-        for (Menu menu : new ArrayList<>(menuService.findBySource(packageName))) {
+        for (Menu menu : currentMenus) {
             if (!retainedIds.contains(menu.getId())) {
                 rolePermissionRepository.deleteAll(rolePermissionRepository.findByPermissionId(menu.getId()));
                 menuRepository.deleteById(menu.getId());

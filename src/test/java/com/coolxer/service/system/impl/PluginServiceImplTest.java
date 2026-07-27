@@ -1,18 +1,24 @@
 package com.coolxer.service.system.impl;
 
 import com.coolxer.commons.enums.DashboardType;
+import com.coolxer.commons.enums.MenuLevel;
+import com.coolxer.commons.enums.MenuType;
 import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.dao.mysql.entity.Dashboard;
+import com.coolxer.dao.mysql.entity.Menu;
 import com.coolxer.model.system.dto.DashboardDto;
+import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.MetaData;
 import com.coolxer.dao.mysql.entity.Plugin;
 import com.coolxer.dao.mysql.repository.DashboardRepository;
+import com.coolxer.dao.mysql.repository.MenuRepository;
 import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.dao.mysql.repository.PluginRepository;
+import com.coolxer.dao.mysql.repository.RolePermissionRepository;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.rag.VectorStoreInitializerService;
 import com.coolxer.service.system.MenuService;
@@ -23,6 +29,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -422,6 +429,128 @@ class PluginServiceImplTest {
                 .doesNotThrowAnyException();
         assertThat(pluginRoot.resolve("upgrade/7/operation-1/snapshot/snapshot.json")).isRegularFile();
         assertThat(pluginRoot.resolve("upgrade/7/operation-1/snapshot/installed/index.json")).exists();
+    }
+
+    @Test
+    void upgradeMenuPreservesExistingPlacementWhileUpdatingPluginDefinition() {
+        PluginServiceImpl service = newService();
+        MenuService menuService = mock(MenuService.class);
+        MenuRepository menuRepository = mock(MenuRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+        ReflectionTestUtils.setField(service, "menuRepository", menuRepository);
+        ReflectionTestUtils.setField(service, "rolePermissionRepository", rolePermissionRepository);
+
+        String packageName = "com.acme.demo";
+        Menu existing = new Menu()
+                .setName("旧菜单名称")
+                .setType(MenuType.LOW_CODE_APP)
+                .setRoute(MenuType.LOW_CODE_APP.getRoute())
+                .setParams("com.acme.demo.app")
+                .setParentId(91)
+                .setOrderNumber(4)
+                .setLevel(MenuLevel.LEVEL_2)
+                .setSuperscript("旧角标")
+                .setSource(packageName);
+        existing.setId(10);
+        when(menuService.findBySource(packageName)).thenReturn(List.of(existing));
+
+        MenuDto definition = new MenuDto();
+        definition.setName("新菜单名称");
+        definition.setType(MenuType.LOW_CODE_APP);
+        definition.setParams("com.acme.demo.app");
+        definition.setSuperscript("新角标");
+
+        ReflectionTestUtils.invokeMethod(
+                service, "reconcilePluginMenus", packageName, List.of(definition));
+
+        assertThat(existing.getId()).isEqualTo(10);
+        assertThat(existing.getName()).isEqualTo("新菜单名称");
+        assertThat(existing.getType()).isEqualTo(MenuType.LOW_CODE_APP);
+        assertThat(existing.getRoute()).isEqualTo(MenuType.LOW_CODE_APP.getRoute());
+        assertThat(existing.getParams()).isEqualTo("com.acme.demo.app");
+        assertThat(existing.getSuperscript()).isEqualTo("新角标");
+        assertThat(existing.getSource()).isEqualTo(packageName);
+        assertThat(existing.getLevel()).isEqualTo(MenuLevel.LEVEL_2);
+        assertThat(existing.getParentId()).isEqualTo(91);
+        assertThat(existing.getOrderNumber()).isEqualTo(4);
+        verify(menuRepository).save(existing);
+        verify(menuService, never()).create(any(MenuDto.class));
+        verify(rolePermissionRepository, never()).findByPermissionId(any());
+        verify(menuRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void upgradeMenusKeepsRootPlacementCreatesNewMenuAtRootAndDeletesObsoleteMenu() {
+        PluginServiceImpl service = newService();
+        MenuService menuService = mock(MenuService.class);
+        MenuRepository menuRepository = mock(MenuRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+        ReflectionTestUtils.setField(service, "menuRepository", menuRepository);
+        ReflectionTestUtils.setField(service, "rolePermissionRepository", rolePermissionRepository);
+
+        String packageName = "com.acme.demo";
+        Menu retained = new Menu()
+                .setName("保留菜单")
+                .setType(MenuType.LOW_CODE_PAGE)
+                .setRoute(MenuType.LOW_CODE_PAGE.getRoute())
+                .setParams("com.acme.demo.retained")
+                .setParentId(0)
+                .setOrderNumber(2)
+                .setLevel(MenuLevel.LEVEL_1)
+                .setSource(packageName);
+        retained.setId(20);
+        Menu obsolete = new Menu()
+                .setName("废弃菜单")
+                .setType(MenuType.LOW_CODE_PAGE)
+                .setRoute(MenuType.LOW_CODE_PAGE.getRoute())
+                .setParams("com.acme.demo.obsolete")
+                .setParentId(0)
+                .setOrderNumber(3)
+                .setLevel(MenuLevel.LEVEL_1)
+                .setSource(packageName);
+        obsolete.setId(21);
+        when(menuService.findBySource(packageName)).thenReturn(List.of(retained, obsolete));
+        when(rolePermissionRepository.findByPermissionId(21)).thenReturn(List.of());
+        when(menuService.create(any(MenuDto.class))).thenAnswer(invocation -> {
+            Menu created = new Menu();
+            created.setId(30);
+            return created;
+        });
+
+        MenuDto retainedDefinition = new MenuDto();
+        retainedDefinition.setName("保留菜单");
+        retainedDefinition.setType(MenuType.LOW_CODE_PAGE);
+        retainedDefinition.setParams("com.acme.demo.retained");
+        MenuDto newDefinition = new MenuDto();
+        newDefinition.setName("新增菜单");
+        newDefinition.setType(MenuType.LOW_CODE_PAGE);
+        newDefinition.setParams("com.acme.demo.new");
+
+        ReflectionTestUtils.invokeMethod(
+                service,
+                "reconcilePluginMenus",
+                packageName,
+                List.of(retainedDefinition, newDefinition)
+        );
+
+        assertThat(retained.getLevel()).isEqualTo(MenuLevel.LEVEL_1);
+        assertThat(retained.getParentId()).isZero();
+        assertThat(retained.getOrderNumber()).isEqualTo(2);
+        verify(menuRepository).save(retained);
+
+        ArgumentCaptor<MenuDto> createdMenuCaptor = ArgumentCaptor.forClass(MenuDto.class);
+        verify(menuService).create(createdMenuCaptor.capture());
+        assertThat(createdMenuCaptor.getValue().getName()).isEqualTo("新增菜单");
+        assertThat(createdMenuCaptor.getValue().getLevel()).isEqualTo(MenuLevel.LEVEL_1);
+        assertThat(createdMenuCaptor.getValue().getParentId()).isZero();
+        assertThat(createdMenuCaptor.getValue().getSource()).isEqualTo(packageName);
+
+        verify(rolePermissionRepository).findByPermissionId(21);
+        verify(menuRepository).deleteById(21);
+        verify(menuRepository, never()).deleteById(20);
+        verify(menuRepository, never()).deleteById(30);
     }
 
     @Test

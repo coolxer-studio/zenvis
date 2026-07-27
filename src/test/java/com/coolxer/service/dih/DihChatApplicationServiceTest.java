@@ -29,9 +29,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +49,9 @@ import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVEN
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DihChatApplicationServiceTest {
+
+    private static final String CONTEXT_LENGTH_EXCEEDED_MESSAGE =
+            "当前对话内容过长，已超过模型可处理的上下文长度。请新建对话，或减少历史消息、附件及输入内容后重试。";
 
     @Test
     @SuppressWarnings("unchecked")
@@ -68,6 +74,128 @@ class DihChatApplicationServiceTest {
         assertThat(events).hasSize(1);
         assertThat(events.get(0)).contains("\"event\":\"error\"");
         assertThat(events.get(0)).doesNotContain("\"event\":\"done\"");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void contextLengthExceededFailureEmitsActionableEventErrorWithoutProviderDetails() {
+        DihChatApplicationService service = emptyService();
+        WebClientResponseException providerError = providerBadRequest("""
+                {
+                  "error": {
+                    "message": "This model's maximum context length is 102400 tokens. However, you requested 4096 output tokens and your prompt contains at least 98305 input tokens.",
+                    "type": "BadRequestError",
+                    "param": "input_tokens",
+                    "code": 400
+                  }
+                }
+                """);
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.error(new IllegalStateException(
+                        "400 Bad Request from POST http://model-service/v1/chat/completions",
+                        providerError)),
+                null,
+                null,
+                true,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        List<String> events = response.collectList().block();
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0))
+                .contains("\"event\":\"error\"")
+                .contains(CONTEXT_LENGTH_EXCEEDED_MESSAGE)
+                .doesNotContain("\"event\":\"done\"")
+                .doesNotContain("maximum context length")
+                .doesNotContain("102400")
+                .doesNotContain("model-service");
+    }
+
+    @Test
+    void contextLengthExceededErrorCodeIsRecognizedThroughNestedCause() {
+        DihChatApplicationService service = emptyService();
+        WebClientResponseException providerError = providerBadRequest("""
+                {"error":{"message":"request rejected","code":"context_length_exceeded"}}
+                """);
+
+        String message = ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveChatErrorMessage",
+                new IllegalStateException("wrapped provider failure", providerError)
+        );
+
+        assertThat(message).isEqualTo(CONTEXT_LENGTH_EXCEEDED_MESSAGE);
+    }
+
+    @Test
+    void unrelatedBadRequestKeepsGenericChatErrorMessage() {
+        DihChatApplicationService service = emptyService();
+        WebClientResponseException providerError = providerBadRequest("""
+                {"error":{"message":"unsupported parameter: stream_options","code":400}}
+                """);
+
+        String message = ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveChatErrorMessage",
+                providerError
+        );
+
+        assertThat(message).isEqualTo("抱歉，回复失败，请稍后重试~");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void nonEventStreamReturnsSameContextLengthExceededMessage() {
+        DihChatApplicationService service = emptyService();
+        WebClientResponseException providerError = providerBadRequest("""
+                {"error":{"message":"input_tokens exceed the context window limit"}}
+                """);
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.error(providerError),
+                null,
+                null,
+                false,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        assertThat(response.collectList().block())
+                .containsExactly(CONTEXT_LENGTH_EXCEEDED_MESSAGE);
+    }
+
+    @Test
+    void agentCapabilityErrorTakesPriorityOverNestedContextLengthError() {
+        DihChatApplicationService service = emptyService();
+        WebClientResponseException providerError = providerBadRequest("""
+                {"error":{"code":"context_length_exceeded"}}
+                """);
+
+        String message = ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveChatErrorMessage",
+                new AgentCapabilityUnavailableException("智能体能力不可用。", providerError)
+        );
+
+        assertThat(message).isEqualTo("智能体能力不可用。");
+    }
+
+    private WebClientResponseException providerBadRequest(String responseBody) {
+        return WebClientResponseException.create(
+                400,
+                "Bad Request",
+                HttpHeaders.EMPTY,
+                responseBody.getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        );
     }
 
     @Test

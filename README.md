@@ -241,6 +241,7 @@ PUSH_IMAGE=true ./build.sh
 | `spring.data.redis.port`                 | `6379`      | Redis 端口              |
 | `spring.ai.openai.base-url`              | -           | OpenAI 兼容模型服务地址；未配置不影响启动，调用 AI 功能时报错 |
 | `spring.ai.openai.api-key`               | -           | OpenAI API Key           |
+| `app.ai.openai.force-http1`              | `true`      | 强制 OpenAI 兼容请求使用 HTTP/1.1，避免明文 h2c 升级兼容问题 |
 | `app.security.api.bearer-token`          | -           | 普通 REST API Bearer Token；配置后 `/api/v1/**` 支持 `Authorization: Bearer <token>` |
 | `app.security.api.bearer-user`           | `admin@admin.com` | Bearer Token 调用映射到的系统用户邮箱，用于权限上下文和审计 |
 | `app.security.mcp.bearer-token`          | -           | MCP Server Bearer Token，未配置时 MCP 接口返回 401 |

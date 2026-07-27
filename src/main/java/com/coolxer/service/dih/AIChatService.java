@@ -119,6 +119,7 @@ public class AIChatService {
         this.ragContextService = ragContextService;
         this.chatAttachmentService = chatAttachmentService;
         this.openAiHttpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
         this.openAiBaseUrl = openAiBaseUrl;

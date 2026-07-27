@@ -37,12 +37,14 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -61,6 +63,8 @@ public class DihChatApplicationService {
     private static final String LEGACY_MCP_AGENT_TYPE = "mcp_agent";
     private static final String LEGACY_MCP_AGENT_TYPE_ALIAS = "agent_mcp";
     private static final String CHAT_ERROR_MESSAGE = "抱歉，回复失败，请稍后重试~";
+    private static final String CHAT_CONTEXT_LENGTH_EXCEEDED_MESSAGE =
+            "当前对话内容过长，已超过模型可处理的上下文长度。请新建对话，或减少历史消息、附件及输入内容后重试。";
     private static final String GENERIC_SKILL_SYSTEM_PROMPT = """
             你是 ZenVis Skill 智能体。请严格遵循下方已加载 Skill 的工作流程、能力边界和输出要求。
             只处理当前 Skill 定义的任务；信息不足时先向用户询问，不得编造系统数据、工具结果或已执行动作。
@@ -616,15 +620,78 @@ public class DihChatApplicationService {
     }
 
     private String resolveChatErrorMessage(Throwable error) {
+        String capabilityErrorMessage = findAgentCapabilityErrorMessage(error);
+        if (StringUtils.hasText(capabilityErrorMessage)) {
+            return capabilityErrorMessage;
+        }
+        if (isContextLengthExceeded(error)) {
+            return CHAT_CONTEXT_LENGTH_EXCEEDED_MESSAGE;
+        }
+        return CHAT_ERROR_MESSAGE;
+    }
+
+    private String findAgentCapabilityErrorMessage(Throwable error) {
         Throwable current = error;
-        while (current != null) {
+        int depth = 0;
+        while (current != null && depth++ < 20) {
             if (current instanceof AgentCapabilityUnavailableException
                     && StringUtils.hasText(current.getMessage())) {
                 return current.getMessage();
             }
+            if (current.getCause() == current) {
+                break;
+            }
             current = current.getCause();
         }
-        return CHAT_ERROR_MESSAGE;
+        return null;
+    }
+
+    private boolean isContextLengthExceeded(Throwable error) {
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 20) {
+            if (containsContextLengthExceededSignal(current.getMessage())) {
+                return true;
+            }
+            if (current instanceof WebClientResponseException responseException
+                    && containsContextLengthExceededSignal(responseException.getResponseBodyAsString())) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsContextLengthExceededSignal(String details) {
+        if (!StringUtils.hasText(details)) {
+            return false;
+        }
+        String normalized = details.toLowerCase(Locale.ROOT);
+        if (normalized.contains("maximum context length")
+                || normalized.contains("context_length_exceeded")
+                || normalized.contains("context length exceeded")
+                || normalized.contains("context window exceeded")) {
+            return true;
+        }
+        boolean mentionsInputTokens =
+                normalized.contains("input_tokens") || normalized.contains("input tokens");
+        boolean mentionsContextLimit =
+                normalized.contains("context length")
+                        || normalized.contains("context window")
+                        || normalized.contains("context limit")
+                        || normalized.contains("token limit")
+                        || normalized.contains("too many tokens");
+        if (mentionsInputTokens && mentionsContextLimit) {
+            return true;
+        }
+        boolean mentionsChineseContext =
+                normalized.contains("上下文长度") || normalized.contains("上下文窗口");
+        boolean mentionsChineseExceeded =
+                normalized.contains("超过") || normalized.contains("超限") || normalized.contains("过长");
+        return mentionsChineseContext && mentionsChineseExceeded;
     }
 
     private Flux<String> errorResponse(boolean eventStream, String message) {

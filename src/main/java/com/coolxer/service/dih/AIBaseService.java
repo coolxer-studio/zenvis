@@ -42,6 +42,7 @@ public class AIBaseService {
     private static final Duration MODEL_LIST_CACHE_TTL = Duration.ofSeconds(60);
 
     private final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(MODEL_LIST_TIMEOUT)
             .build();
 

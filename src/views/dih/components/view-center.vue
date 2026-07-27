@@ -31,7 +31,6 @@
                 @decide-action="handleActionDecision(message, $event)"
                 @submit-info-steps="handleInfoStepsSubmit(message, $event)"
                 @add-chart-library="handleAddChartLibrary(message, $event)"
-                @choose-analysis-decision="handleAnalysisDecision(message, $event)"
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
                 @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
                 @select-prompt-suggestion="fillPromptSuggestion"
@@ -545,12 +544,7 @@ onMounted(() => {
   void fetchModelList();
 });
 
-const {
-  addChartRecordToExtraData,
-  buildDisposeAgentPrompt,
-  openDisposeAgentSession,
-} = usePanelRecordSync({
-  router,
+const { addChartRecordToExtraData } = usePanelRecordSync({
   messages,
   chatSessionExtraData,
   chatSessionRecordId,
@@ -563,7 +557,6 @@ const {
   handleInfoStepsSubmit,
   handleActionDecision,
   handleAddChartLibrary,
-  handleAnalysisDecision,
   handleDataAccessDecision,
 } = useChatMessageActions({
   chatSessionId,
@@ -571,8 +564,6 @@ const {
   sendMessage,
   ensureChatSessionRecordId,
   addChartRecordToExtraData,
-  buildDisposeAgentPrompt,
-  openDisposeAgentSession,
 });
 
 const fetchModelList = async () => {

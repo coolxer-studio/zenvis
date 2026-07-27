@@ -1,23 +1,21 @@
 import { nextTick, onMounted, watch } from 'vue';
 import type { Ref } from 'vue';
-import type { Router } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type {
-  AnalysisRecord,
   ChatMessage,
-  PolicyRecord,
+  ConfigRecord,
+  DataAnalysisRecord,
 } from '@/types/type-dih';
-import { generateUUID } from '@/utils/util-common';
 import {
+  CONFIG_RECORD_ACTION_EVENT,
+  CONFIG_RECORD_EVENT,
+  CONFIG_RECORD_REQUEST_EVENT,
   DATA_ACCESS_RECORD_EVENT,
   DATA_ANALYSIS_RECORD_EVENT,
   DATA_ANALYSIS_RECORD_REQUEST_EVENT,
   DATA_REPORT_RECORD_EVENT,
   DATA_REPORT_RECORD_REQUEST_EVENT,
   DATA_VISUALIZATION_RECORD_EVENT,
-  POLICY_RECORD_ACTION_EVENT,
-  POLICY_RECORD_EVENT,
-  POLICY_RECORD_REQUEST_EVENT,
   REPORT_EXTRA_DATA_CHANGED_EVENT,
   REPORT_QUICK_ACTION_EVENT,
   REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
@@ -25,7 +23,7 @@ import {
   useDihEventListener,
 } from '../events';
 import type {
-  PolicyRecordActionEventDetail,
+  ConfigRecordActionEventDetail,
   ReportExtraDataChangedEventDetail,
   ReportQuickActionEventDetail,
 } from '../events';
@@ -38,7 +36,6 @@ export type DihPanelRecord = Record<string, unknown> & {
 };
 
 type UsePanelRecordSyncOptions = {
-  router: Router;
   messages: Ref<ChatMessage[]>;
   chatSessionExtraData: Ref<string>;
   chatSessionRecordId: Ref<string>;
@@ -60,11 +57,11 @@ const asRecordList = (value: unknown): DihPanelRecord[] => {
 };
 
 const upsertById = (items: DihPanelRecord[], record: DihPanelRecord) => {
-  const id = String(record.id || record.fileName || record.taskId || record.name || '');
+  const id = String(record.id || record.recordId || record.fileName || record.serviceTaskId || record.taskId || record.name || '');
   if (!id) {
     return [...items, record];
   }
-  const next = items.filter(item => String(item.id || item.fileName || item.taskId || item.name || '') !== id);
+  const next = items.filter(item => String(item.id || item.recordId || item.fileName || item.serviceTaskId || item.taskId || item.name || '') !== id);
   next.push(record);
   return next;
 };
@@ -97,12 +94,7 @@ const prettyTextValue = (value: unknown, fallback = '') => {
   }
 };
 
-const truncateText = (value: string, maxLength = 4000) => {
-  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...` : value;
-};
-
 export const usePanelRecordSync = ({
-  router,
   messages,
   chatSessionExtraData,
   chatSessionRecordId,
@@ -157,24 +149,24 @@ export const usePanelRecordSync = ({
     };
   };
 
-  const extractAnalysisRecords = () => {
-    const records: AnalysisRecord[] = [];
-    const analysis = asObject(parseSessionExtraData().analysis);
-    asRecordList(analysis.records).forEach(record => {
+  const extractDataAnalysisRecords = () => {
+    const records: DataAnalysisRecord[] = [];
+    const dataAnalysis = asObject(parseSessionExtraData().dataAnalysis);
+    asRecordList(dataAnalysis.records).forEach(record => {
       upsertInto(records as DihPanelRecord[], record);
     });
     return {
       records,
-      aggregatedLogs: asRecordList(analysis.aggregatedLogs),
-      sandboxResults: asRecordList(analysis.sandboxResults),
-      conclusionTimeline: asRecordList(analysis.conclusionTimeline),
+      datasetRecords: asRecordList(dataAnalysis.datasetRecords),
+      serviceResults: asRecordList(dataAnalysis.serviceResults),
+      reportTimeline: asRecordList(dataAnalysis.reportTimeline),
     };
   };
 
-  const extractPolicyRecords = () => {
-    const records: PolicyRecord[] = [];
-    const policy = asObject(parseSessionExtraData().policy);
-    asRecordList(policy.records).forEach(record => {
+  const extractConfigurationRecords = () => {
+    const records: ConfigRecord[] = [];
+    const configuration = asObject(parseSessionExtraData().configuration);
+    asRecordList(configuration.records).forEach(record => {
       upsertInto(records as DihPanelRecord[], record);
     });
     return { records };
@@ -200,12 +192,12 @@ export const usePanelRecordSync = ({
     emitDihEvent(DATA_VISUALIZATION_RECORD_EVENT, extractDataVisualizationRecords());
   };
 
-  const publishAnalysisRecords = () => {
-    emitDihEvent(DATA_ANALYSIS_RECORD_EVENT, extractAnalysisRecords());
+  const publishDataAnalysisRecords = () => {
+    emitDihEvent(DATA_ANALYSIS_RECORD_EVENT, extractDataAnalysisRecords());
   };
 
-  const publishPolicyRecords = () => {
-    emitDihEvent(POLICY_RECORD_EVENT, extractPolicyRecords());
+  const publishConfigurationRecords = () => {
+    emitDihEvent(CONFIG_RECORD_EVENT, extractConfigurationRecords());
   };
 
   const publishReportRecords = () => {
@@ -215,140 +207,56 @@ export const usePanelRecordSync = ({
   watch(chatSessionExtraData, () => {
     publishDataAccessRecords();
     publishDataVisualizationRecords();
-    publishAnalysisRecords();
-    publishPolicyRecords();
+    publishDataAnalysisRecords();
+    publishConfigurationRecords();
     publishReportRecords();
   });
 
-  const latestRecord = (records: Record<string, unknown>[]) => {
-    return records.length ? records[records.length - 1] : {};
+  const configRecordLabel = (record?: ConfigRecord) => {
+    return textValue(record?.fileName || record?.id || record?.recordId, '当前配置记录');
   };
 
-  const findTimelineContent = (timeline: Record<string, unknown>[], keywords: string[]) => {
-    const matched = [...timeline].reverse().find(item => {
-      const title = textValue(item.title).toLowerCase();
-      const id = textValue(item.id).toLowerCase();
-      return keywords.some(keyword => title.includes(keyword.toLowerCase()) || id.includes(keyword.toLowerCase()));
-    });
-    return prettyTextValue(matched?.content);
-  };
-
-  const findLatestDisposalStrategyConfig = () => {
-    const disposalPart = [...messages.value]
-      .reverse()
-      .flatMap(message => [...(message.parts || [])].reverse())
-      .find(part => part.type === 'config' && textValue(part.metadata?.configKind) === 'disposal-strategy');
-    return disposalPart?.content?.trim() || '';
-  };
-
-  const buildDisposeAgentPrompt = (detail?: string) => {
-    const analysisData = extractAnalysisRecords();
-    const timeline = analysisData.conclusionTimeline;
-    const reportRecord = latestRecord(
-      analysisData.records.filter(record => textValue(record.stage) === 'report_output') as Record<string, unknown>[],
-    );
-    const sandboxRecord = latestRecord(analysisData.sandboxResults);
-    const disposalSuggestion = findTimelineContent(timeline, ['处置建议', 'disposal', 'recommendation'])
-      || prettyTextValue((reportRecord.recommendations as unknown[] | undefined)?.join?.('\n'))
-      || '请基于上一轮研判结论生成处置方案。';
-    const analysisTarget = findTimelineContent(timeline, ['分析目标', 'target']);
-    const analysisProcess = findTimelineContent(timeline, ['分析过程', 'process']);
-    const analysisConclusion = findTimelineContent(timeline, ['分析结论', 'conclusion']);
-    const disposalStrategyConfig = findLatestDisposalStrategyConfig();
-    const extraDetail = detail?.trim();
-
-    return truncateText([
-      '请基于以下研判分析结果进入策略控制流程，生成可执行前需确认的处置方案。',
-      '',
-      '## 处置建议',
-      disposalSuggestion,
-      '',
-      '## 研判上下文',
-      analysisTarget ? `分析目标：${analysisTarget}` : '',
-      analysisProcess ? `分析过程：${analysisProcess}` : '',
-      analysisConclusion ? `分析结论：${analysisConclusion}` : '',
-      `聚合日志数量：${analysisData.aggregatedLogs.length}`,
-      sandboxRecord.result ? `沙箱研判结果：\n${prettyTextValue(sandboxRecord.result)}` : '',
-      disposalStrategyConfig ? `处置策略建议配置：\n${disposalStrategyConfig}` : '',
-      extraDetail ? `用户补充要求：\n${extraDetail}` : '',
-      '',
-      '## 输出要求',
-      '1. 先说明拟执行处置动作、影响范围、前置检查和回滚方案。',
-      '2. 生成策略控制智能体可确认的处置配置或策略配置。',
-      '3. 不要直接执行写入、发布、阻断、隔离等副作用动作，必须先等待用户确认。',
-    ].filter(Boolean).join('\n'));
-  };
-
-  const openDisposeAgentSession = async (prompt: string) => {
-    const nextChatSessionId = generateUUID();
-    const promptRef = generateUUID();
-    try {
-      window.sessionStorage?.setItem(`dih:prefill:${promptRef}`, prompt);
-    } catch {
-      // ignore storage failures and fall back to query string below
-    }
-    let storedPrompt = false;
-    try {
-      storedPrompt = window.sessionStorage?.getItem(`dih:prefill:${promptRef}`) === prompt;
-    } catch {
-      storedPrompt = false;
-    }
-    await router.push({
-      name: 'service-dih',
-      query: {
-        type: 'agent_dispose',
-        chatSessionId: nextChatSessionId,
-        createSession: 1,
-        ...(storedPrompt ? { msgRef: promptRef } : { msg: encodeURIComponent(prompt) }),
-      },
-    });
-  };
-
-  const policyRecordLabel = (record?: PolicyRecord) => {
-    return textValue(record?.fileName || record?.id || record?.recordId, '当前策略记录');
-  };
-
-  const policyRecordActionMessage = (action: 'trial' | 'apply', record: PolicyRecord) => {
+  const configRecordActionMessage = (action: 'trial' | 'apply', record: ConfigRecord) => {
     const recordId = textValue(record.id || record.recordId);
     const configText = prettyTextValue(record.newConfig);
     if (action === 'trial') {
-      const retry = textValue(record.id || record.recordId).includes('v2') || record.changeMode === 'modify';
-      const firstLine = retry ? '我已确认重新进入试验场验证。' : '我已确认进入试验场验证。';
       return [
-        firstLine,
-        `请基于策略记录 ${recordId || policyRecordLabel(record)} 执行试验场验证，并在验证完成后输出 zenvis:policy-record 更新验证状态。`,
+        '我已确认进入试验场验证。',
+        `请基于配置记录 ${recordId || configRecordLabel(record)} 调用 config_validate 执行格式和可用 schema 校验；如果运行效果需要专项验证，则调用对应验证 MCP。`,
+        '验证完成后输出 zenvis:config-record，准确更新 validationStatus 和 validationResult；缺少专项能力时标记 blocked，不得假定验证成功。',
         '',
         JSON.stringify({
           recordId,
-          policyType: record.policyType,
           configType: record.configType,
           fileName: record.fileName,
+          format: record.format,
           newConfig: record.newConfig,
         }, null, 2),
-        configText ? `\n策略配置：\n${configText}` : '',
+        configText ? `\n待验证配置：\n${configText}` : '',
       ].filter(Boolean).join('\n');
     }
     return [
-      '我已确认下发策略到系统正式生效。',
-      `请基于策略记录 ${recordId || policyRecordLabel(record)} 调用配置管理 MCP 写入并应用策略，成功后输出 zenvis:policy-record 将生效状态更新为 yes。`,
+      '我已确认将配置正式下发到系统生效。',
+      `请基于配置记录 ${recordId || configRecordLabel(record)}，在 validationStatus 为 success 的前提下调用 config_ensure_root、config_add 或 config_apply。`,
+      '高风险操作仍须经过平台审批；写入后调用 config_read 读回核验。只有审批成功且读回一致时，才能输出 zenvis:config-record 将 effectiveStatus 更新为 yes。',
       '',
       JSON.stringify({
         recordId,
-        policyType: record.policyType,
         configType: record.configType,
         fileName: record.fileName,
+        format: record.format,
         validationStatus: record.validationStatus,
         newConfig: record.newConfig,
       }, null, 2),
     ].join('\n');
   };
 
-  const handlePolicyRecordActionRequested = async (detail: PolicyRecordActionEventDetail) => {
+  const handleConfigRecordActionRequested = async (detail: ConfigRecordActionEventDetail) => {
     detail ||= {};
     const action = detail.action;
     const record = detail.record;
     if (!action || !record) {
-      ElMessage.warning('缺少策略记录，无法执行操作');
+      ElMessage.warning('缺少配置记录，无法执行操作');
       return;
     }
     if (isStreamingResponse.value) {
@@ -357,9 +265,9 @@ export const usePanelRecordSync = ({
     }
     await sendMessage({
       content: action === 'trial'
-        ? `我已确认将「${policyRecordLabel(record)}」推送到试验场验证。`
-        : `我已确认下发「${policyRecordLabel(record)}」到系统正式生效。`,
-      requestContent: policyRecordActionMessage(action, record),
+        ? `我已确认将「${configRecordLabel(record)}」推送到试验场验证。`
+        : `我已确认下发「${configRecordLabel(record)}」到系统正式生效。`,
+      requestContent: configRecordActionMessage(action, record),
     });
   };
 
@@ -414,32 +322,30 @@ export const usePanelRecordSync = ({
     }
   };
 
-  useDihEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, publishAnalysisRecords);
-  useDihEventListener(POLICY_RECORD_REQUEST_EVENT, publishPolicyRecords);
-  useDihEventListener(POLICY_RECORD_ACTION_EVENT, handlePolicyRecordActionRequested);
+  useDihEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, publishDataAnalysisRecords);
+  useDihEventListener(CONFIG_RECORD_REQUEST_EVENT, publishConfigurationRecords);
+  useDihEventListener(CONFIG_RECORD_ACTION_EVENT, handleConfigRecordActionRequested);
   useDihEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, publishReportRecords);
   useDihEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
   useDihEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
 
   onMounted(() => {
-    void nextTick(() => publishAnalysisRecords());
-    void nextTick(() => publishPolicyRecords());
+    void nextTick(() => publishDataAnalysisRecords());
+    void nextTick(() => publishConfigurationRecords());
     void nextTick(() => publishReportRecords());
   });
 
   return {
     addChartRecordToExtraData,
-    buildDisposeAgentPrompt,
-    openDisposeAgentSession,
     extractDataAccessRecords,
     extractDataVisualizationRecords,
-    extractAnalysisRecords,
-    extractPolicyRecords,
+    extractDataAnalysisRecords,
+    extractConfigurationRecords,
     extractReportRecords,
     publishDataAccessRecords,
     publishDataVisualizationRecords,
-    publishAnalysisRecords,
-    publishPolicyRecords,
+    publishDataAnalysisRecords,
+    publishConfigurationRecords,
     publishReportRecords,
   };
 };

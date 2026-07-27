@@ -2,9 +2,9 @@
   <div class="notice-part notice-info">
     <div class="notice-title">
       <el-icon><DataAnalysis /></el-icon>
-      <span class="card-title-text">{{ policyRecordTitle }}</span>
-      <el-tag size="small" :type="policyRecordTagType" effect="plain">
-        {{ policyRecordStatusText }}
+      <span class="card-title-text">{{ configRecordTitle }}</span>
+      <el-tag size="small" :type="configRecordTagType" effect="plain">
+        {{ configRecordStatusText }}
       </el-tag>
       <el-tooltip :content="isExpanded ? '折叠' : '展开'" placement="top">
         <el-button
@@ -17,7 +17,7 @@
       </el-tooltip>
     </div>
     <div v-if="isExpanded" class="notice-content">
-      {{ part.content || metadataText(part, 'changeDescription') || '策略记录已同步到右侧面板。' }}
+      {{ part.content || metadataText(part, 'changeDescription') || '配置记录已同步到右侧面板。' }}
     </div>
   </div>
 </template>
@@ -34,32 +34,28 @@ const props = defineProps<{
 
 const { isExpanded, toggleExpanded } = useDefaultExpanded(toRef(props, 'part'));
 
-const policyTypeText = (type: string) => {
-  if (type === 'collection') return '采集策略';
-  if (type === 'tagging') return '标记策略';
-  if (type === 'disposal') return '处置策略';
-  return '策略记录';
-};
-
-const policyRecordTitle = computed(() => {
+const configRecordTitle = computed(() => {
   return (
     props.part.title ||
     metadataText(props.part, 'title') ||
-    policyTypeText(metadataText(props.part, 'policyType'))
+    metadataText(props.part, 'configType') ||
+    '配置记录'
   );
 });
 
-const policyRecordTagType = computed(() => {
+const configRecordTagType = computed(() => {
   const status = metadataText(props.part, 'validationStatus');
   if (status === 'success') return 'success';
   if (status === 'failed') return 'danger';
+  if (status === 'blocked') return 'warning';
   return 'info';
 });
 
-const policyRecordStatusText = computed(() => {
+const configRecordStatusText = computed(() => {
   const status = metadataText(props.part, 'validationStatus');
   if (status === 'success') return '验证成功';
   if (status === 'failed') return '验证失败';
+  if (status === 'blocked') return '验证阻塞';
   return '未验证';
 });
 </script>

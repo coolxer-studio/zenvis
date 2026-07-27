@@ -1,19 +1,20 @@
 import { onMounted, onUnmounted } from 'vue';
 import type {
-  AnalysisExtraData,
+  ConfigurationExtraData,
   ChatSession,
-  PolicyRecord,
+  ConfigRecord,
+  DataAnalysisExtraData,
   ReportArtifact,
   ReportDocument,
 } from '@/types/type-dih';
 
 export const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 export const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
-export const DATA_ANALYSIS_RECORD_EVENT = 'dihAnalysisRecordsUpdated';
-export const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihAnalysisRecordsRequested';
-export const POLICY_RECORD_EVENT = 'dihPolicyRecordsUpdated';
-export const POLICY_RECORD_REQUEST_EVENT = 'dihPolicyRecordsRequested';
-export const POLICY_RECORD_ACTION_EVENT = 'dihPolicyRecordActionRequested';
+export const DATA_ANALYSIS_RECORD_EVENT = 'dihDataAnalysisRecordsUpdated';
+export const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihDataAnalysisRecordsRequested';
+export const CONFIG_RECORD_EVENT = 'dihConfigRecordsUpdated';
+export const CONFIG_RECORD_REQUEST_EVENT = 'dihConfigRecordsRequested';
+export const CONFIG_RECORD_ACTION_EVENT = 'dihConfigRecordActionRequested';
 export const DATA_REPORT_RECORD_EVENT = 'dihReportRecordsUpdated';
 export const DATA_REPORT_RECORD_REQUEST_EVENT = 'dihReportRecordsRequested';
 export const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested';
@@ -34,15 +35,13 @@ export type DataVisualizationRecordEventDetail = {
   menuConfigs?: unknown[];
 };
 
-export type AnalysisRecordEventDetail = AnalysisExtraData;
+export type DataAnalysisRecordEventDetail = DataAnalysisExtraData;
 
-export type PolicyRecordEventDetail = {
-  records?: PolicyRecord[];
-};
+export type ConfigRecordEventDetail = ConfigurationExtraData;
 
-export type PolicyRecordActionEventDetail = {
+export type ConfigRecordActionEventDetail = {
   action?: 'trial' | 'apply';
-  record?: PolicyRecord;
+  record?: ConfigRecord;
 };
 
 export type ReportRecordEventDetail = {
@@ -89,11 +88,11 @@ export type DataVisualizationChartDataEventDetail = {
 export type DihEventPayloadMap = {
   [DATA_ACCESS_RECORD_EVENT]: DataAccessRecordEventDetail;
   [DATA_VISUALIZATION_RECORD_EVENT]: DataVisualizationRecordEventDetail;
-  [DATA_ANALYSIS_RECORD_EVENT]: AnalysisRecordEventDetail;
+  [DATA_ANALYSIS_RECORD_EVENT]: DataAnalysisRecordEventDetail;
   [DATA_ANALYSIS_RECORD_REQUEST_EVENT]: undefined;
-  [POLICY_RECORD_EVENT]: PolicyRecordEventDetail;
-  [POLICY_RECORD_REQUEST_EVENT]: undefined;
-  [POLICY_RECORD_ACTION_EVENT]: PolicyRecordActionEventDetail;
+  [CONFIG_RECORD_EVENT]: ConfigRecordEventDetail;
+  [CONFIG_RECORD_REQUEST_EVENT]: undefined;
+  [CONFIG_RECORD_ACTION_EVENT]: ConfigRecordActionEventDetail;
   [DATA_REPORT_RECORD_EVENT]: ReportRecordEventDetail;
   [DATA_REPORT_RECORD_REQUEST_EVENT]: undefined;
   [REPORT_QUICK_ACTION_EVENT]: ReportQuickActionEventDetail;

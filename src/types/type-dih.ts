@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'mcp-approval' | 'info-steps' | 'analysis-record' | 'analysis-decision' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'policy-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'mcp-approval' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -122,61 +122,59 @@ export type ReportArtifact = {
   content?: string;
 };
 
-export type AnalysisStage = 'log_aggregation' | 'sandbox_analysis' | 'report_output' | string;
+export type DataAnalysisStage = 'dataset_preparation' | 'service_analysis' | 'report_output';
 
-export type AnalysisRecord = {
+export type DataAnalysisRecord = {
   id?: string;
   recordId?: string;
-  stage?: AnalysisStage;
+  stage?: DataAnalysisStage;
   status?: string;
   title?: string;
   content?: string;
   startedAt?: string;
   completedAt?: string;
-  alarm?: Record<string, unknown>;
-  evidenceCount?: number;
-  riskLevel?: string;
-  confidence?: number | string;
-  keyFindings?: unknown[];
-  recommendations?: unknown[];
-  sandboxTaskId?: string;
+  analysisTarget?: string;
+  datasetSummary?: string;
+  datasetRecords?: Array<Record<string, unknown>>;
+  serviceTaskId?: string;
+  analysisResult?: unknown;
+  timeline?: Array<Record<string, unknown>>;
   toolNames?: unknown[];
   raw?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
-export type AnalysisExtraData = {
-  records?: AnalysisRecord[];
-  aggregatedLogs?: Array<Record<string, unknown>>;
-  sandboxResults?: Array<Record<string, unknown>>;
-  conclusionTimeline?: Array<Record<string, unknown>>;
+export type DataAnalysisExtraData = {
+  records?: DataAnalysisRecord[];
+  datasetRecords?: Array<Record<string, unknown>>;
+  serviceResults?: Array<Record<string, unknown>>;
+  reportTimeline?: Array<Record<string, unknown>>;
 };
 
-export type PolicyType = 'collection' | 'tagging' | 'disposal' | string;
-export type PolicyChangeMode = 'add' | 'modify' | string;
-export type PolicyValidationStatus = 'unverified' | 'success' | 'failed' | string;
-export type PolicyEffectiveStatus = 'yes' | 'no' | string;
+export type ConfigChangeMode = 'add' | 'modify';
+export type ConfigValidationStatus = 'unverified' | 'success' | 'failed' | 'blocked';
+export type ConfigEffectiveStatus = 'yes' | 'no';
 
-export type PolicyRecord = {
+export type ConfigRecord = {
   id?: string;
   recordId?: string;
-  policyType?: PolicyType;
   changeDescription?: string;
-  changeMode?: PolicyChangeMode;
+  changeMode?: ConfigChangeMode;
   configType?: string;
   fileName?: string;
+  format?: string;
   oldConfig?: unknown;
   newConfig?: unknown;
-  validationStatus?: PolicyValidationStatus;
-  effectiveStatus?: PolicyEffectiveStatus;
-  trialResult?: unknown;
+  validationStatus?: ConfigValidationStatus;
+  effectiveStatus?: ConfigEffectiveStatus;
+  validationResult?: unknown;
   applyResult?: unknown;
   updatedAt?: string;
   [key: string]: unknown;
 };
 
-export type PolicyExtraData = {
-  records?: PolicyRecord[];
+export type ConfigurationExtraData = {
+  records?: ConfigRecord[];
 };
 
 export type ModelInfo = {
@@ -267,7 +265,7 @@ export type ChatActionDecisionParams = {
   chat_id: string;
   message_id: string;
   part_id: string;
-  decision: 'approved' | 'rejected' | 'dispose' | 'ignore' | 'continue' | 'apply_config' | 'abandon' | 'revise' | 'submitted';
+  decision: 'approved' | 'rejected' | 'apply_config' | 'abandon' | 'revise' | 'submitted';
 };
 
 export type McpApprovalDecisionParams = {

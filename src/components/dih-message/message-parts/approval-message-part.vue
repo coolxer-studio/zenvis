@@ -290,7 +290,7 @@ const mcpApprovalStatusText = computed(() => {
       succeeded: '执行成功',
       failed: '执行失败',
       rejected: '已拒绝',
-      denied: '策略禁止',
+      denied: '审批规则拒绝',
       expired: '已超时',
       cancelled: '已取消',
     }[props.part.status || 'pending'] ||
@@ -387,23 +387,20 @@ const confirmReviseLabel = computed(() => {
 const confirmRevisePlaceholder = computed(() => {
   const action = props.part.metadata?.action;
   if (
-    action === 'analysis.confirm_log_aggregation' ||
-    action === 'analysis_demo.confirm_log_aggregation'
+    action === 'analysis.confirm_dataset'
   ) {
-    return '输入需要补充的日志线索，例如：继续关联文件变更记录、补查近 10 分钟网络连接日志';
+    return '输入需要补充的数据范围、实体、字段、指标、维度或时间条件';
   }
   if (
-    action === 'analysis.confirm_sandbox_result' ||
-    action === 'analysis_demo.confirm_sandbox_result'
+    action === 'analysis.confirm_service_result'
   ) {
-    return '输入需要继续研判的重点，例如：复核文件落地时间、重点确认异常外联是否成功';
+    return '输入需要补充或调整的分析方法、参数或关注指标';
   }
   if (
-    action === 'policy.confirm_trial' ||
-    action === 'policy_demo.confirm_trial' ||
-    action === 'policy_demo.confirm_retry_trial'
+    action === 'config.confirm_trial' ||
+    action === 'config.confirm_apply'
   ) {
-    return '输入需要补充的策略调整要求，例如：增加回滚前置确认、扩大来源匹配范围、降低自动处置强度';
+    return '输入需要补充的配置调整要求，例如：修改字段值、约束条件或目标文件';
   }
   return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';
 });

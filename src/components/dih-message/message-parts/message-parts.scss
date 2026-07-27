@@ -583,7 +583,6 @@
   .confirm-part,
   .mcp-approval-part,
   .info-steps-part,
-  .analysis-decision-part,
   .data-access-decision-part,
   .visualization-chart-preview-part,
   .chart-part {
@@ -600,7 +599,6 @@
   .confirm-title,
   .mcp-approval-title,
   .info-steps-title,
-  .analysis-decision-title,
   .data-access-decision-title,
   .visualization-chart-preview-header,
   .chart-part {
@@ -653,7 +651,6 @@
   .notice-content,
   .confirm-content,
   .info-steps-content,
-  .analysis-decision-content,
   .data-access-decision-content {
     margin-top: 8px;
     color: #606266;
@@ -848,13 +845,11 @@
     margin-top: 4px;
   }
 
-  .analysis-decision-part,
   .data-access-decision-part {
     border-color: #d9ecff;
     background: #f8fbff;
   }
 
-  .analysis-decision-actions,
   .data-access-decision-actions {
     display: flex;
     flex-wrap: wrap;
@@ -862,12 +857,10 @@
     margin-top: 12px;
   }
 
-  .analysis-continue-box,
   .data-access-revise-box {
     margin-top: 12px;
   }
 
-  .analysis-continue-actions,
   .data-access-revise-actions {
     display: flex;
     gap: 8px;

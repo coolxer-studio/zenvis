@@ -22,8 +22,8 @@
           <ViewRightDataVisualization
             v-if="activeAgentType === 'agent_data_visualization'"
           />
-          <ViewRightAnalysis v-if="activeAgentType === 'agent_analysis'" />
-          <ViewRightDispose v-if="activeAgentType === 'agent_dispose'" />
+          <ViewRightDataAnalysis v-if="activeAgentType === 'agent_data_analysis'" />
+          <ViewRightConfigManagement v-if="activeAgentType === 'agent_config_management'" />
           <ViewRightDataAccess
             v-if="activeAgentType === 'agent_data_access'"
           />
@@ -43,8 +43,8 @@
 import ViewLeft from './components/view-left.vue';
 import ViewCenter from './components/view-center.vue';
 import ViewRightDataVisualization from './components/view-right-data-visualization.vue';
-import ViewRightAnalysis from './components/view-right-analysis.vue';
-import ViewRightDispose from './components/view-right-dispose.vue';
+import ViewRightDataAnalysis from './components/view-right-data-analysis.vue';
+import ViewRightConfigManagement from './components/view-right-config-management.vue';
 import ViewRightDataAccess from './components/view-right-data-access.vue';
 import ViewRightReport from './components/view-right-report.vue';
 
@@ -85,8 +85,8 @@ interface Suggestion {
 const agentIconMap: Record<string, any> = {
   agent_data_access: Connection,
   agent_data_visualization: Monitor,
-  agent_analysis: DataAnalysis,
-  agent_dispose: Operation,
+  agent_data_analysis: DataAnalysis,
+  agent_config_management: Operation,
   agent_report: Document,
 };
 

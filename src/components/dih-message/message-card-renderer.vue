@@ -29,11 +29,10 @@
         @copy-code="emit('copyCode', $event)"
         @add-chart-library="emit('addChartLibrary', $event)"
       />
-      <AnalysisMessagePart
-        v-else-if="isAnalysisPart(part)"
+      <DataAnalysisMessagePart
+        v-else-if="part.type === 'data-analysis-record'"
         :part="part"
         :interactive="interactive"
-        @choose-analysis-decision="emit('chooseAnalysisDecision', $event)"
       />
       <DataAccessMessagePart
         v-else-if="isDataAccessPart(part)"
@@ -41,7 +40,7 @@
         :interactive="interactive"
         @choose-data-access-decision="emit('chooseDataAccessDecision', $event)"
       />
-      <PolicyMessagePart v-else-if="part.type === 'policy-record'" :part="part" />
+      <ConfigRecordMessagePart v-else-if="part.type === 'config-record'" :part="part" />
       <NoticeMessagePart v-else-if="part.type === 'notice'" :part="part" />
       <TextMessagePart
         v-else
@@ -57,12 +56,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, provide } from 'vue';
 import type { ChatMessage, ChatMessagePart, McpApprovalDecision } from '@/types/type-dih';
-import AnalysisMessagePart from './message-parts/analysis-message-part.vue';
 import ApprovalMessagePart from './message-parts/approval-message-part.vue';
+import ConfigRecordMessagePart from './message-parts/config-record-message-part.vue';
 import ConfigMessagePart from './message-parts/config-message-part.vue';
+import DataAnalysisMessagePart from './message-parts/data-analysis-message-part.vue';
 import DataAccessMessagePart from './message-parts/data-access-message-part.vue';
 import NoticeMessagePart from './message-parts/notice-message-part.vue';
-import PolicyMessagePart from './message-parts/policy-message-part.vue';
 import TextMessagePart from './message-parts/text-message-part.vue';
 import VisualizationMessagePart from './message-parts/visualization-message-part.vue';
 import { createMarkdownRenderer, markdownRendererKey } from './message-parts/message-part-context';
@@ -104,14 +103,6 @@ const emit = defineEmits<{
     },
   ): void;
   (e: 'addChartLibrary', part: ChatMessagePart): void;
-  (
-    e: 'chooseAnalysisDecision',
-    payload: {
-      part: ChatMessagePart;
-      decision: 'dispose' | 'ignore' | 'continue';
-      detail?: string;
-    },
-  ): void;
   (
     e: 'chooseDataAccessDecision',
     payload: {
@@ -214,7 +205,6 @@ const VISUALIZATION_PART_TYPES = new Set([
   'menu-config-record',
   'chart',
 ]);
-const ANALYSIS_PART_TYPES = new Set(['analysis-record', 'analysis-decision']);
 const DATA_ACCESS_PART_TYPES = new Set([
   'data-access-decision',
   'metadata-config-record',
@@ -225,7 +215,6 @@ const isTextPart = (part: ChatMessagePart) => TEXT_PART_TYPES.has(part.type);
 const isApprovalPart = (part: ChatMessagePart) => APPROVAL_PART_TYPES.has(part.type);
 const isConfigPart = (part: ChatMessagePart) => CONFIG_PART_TYPES.has(part.type);
 const isVisualizationPart = (part: ChatMessagePart) => VISUALIZATION_PART_TYPES.has(part.type);
-const isAnalysisPart = (part: ChatMessagePart) => ANALYSIS_PART_TYPES.has(part.type);
 const isDataAccessPart = (part: ChatMessagePart) => DATA_ACCESS_PART_TYPES.has(part.type);
 
 onBeforeUnmount(() => {

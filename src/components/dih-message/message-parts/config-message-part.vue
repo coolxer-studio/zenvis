@@ -135,10 +135,6 @@ const configKindText = computed(() => {
   if (kind === 'html-page') return '静态 HTML';
   if (kind === 'continuous-analysis-task') return '持续分析任务';
   if (kind === 'meta-config') return '元数据配置';
-  if (kind === 'disposal-strategy') return '处置策略';
-  if (kind === 'collection-policy') return '采集策略';
-  if (kind === 'tagging-policy') return '标记评分策略';
-  if (kind === 'disposal-policy') return '处置策略';
   if (kind === 'report-document') return '报表文档';
   return kind || '配置';
 });

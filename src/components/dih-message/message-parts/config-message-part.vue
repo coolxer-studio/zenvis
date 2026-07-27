@@ -436,7 +436,9 @@ const renderChartSchemaPreview = (schema: Record<string, unknown>) => {
       <div class="amis-preview-chart-title">${escapeHtml(
         title.text || schema.title || '用户事件上报趋势',
       )}</div>
-      <div class="amis-preview-api">${escapeHtml(schema.api || '/zenvis/api/v1/entity/trend')}</div>
+      <div class="amis-preview-api">${escapeHtml(
+        schema.api || '/zenvis/api/v1/entity/trend/query',
+      )}</div>
       <div class="amis-preview-chart-canvas">
         <span class="amis-preview-bar bar-1"></span>
         <span class="amis-preview-bar bar-2"></span>

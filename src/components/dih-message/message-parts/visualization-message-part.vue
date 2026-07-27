@@ -119,7 +119,12 @@ const requestAddChartLibrary = () => {
 };
 
 const chartPreviewOption = () => {
-  const value = props.part.metadata?.echartsOption || props.part.metadata?.option;
+  const metadata = props.part.metadata as Record<string, any> | undefined;
+  const value =
+    metadata?.echarts?.option ||
+    metadata?.data?.echarts?.option ||
+    metadata?.echartsOption ||
+    metadata?.option;
   if (typeof value === 'string') {
     try {
       return JSON.parse(value);

@@ -80,6 +80,11 @@ type RawMcpApproval = Record<string, unknown> & {
   approval_scope?: string;
   approvalScope?: string;
   status?: string;
+  arguments?: string;
+  result?: string;
+  result_length?: number;
+  resultLength?: number;
+  // 兼容历史聊天消息和滚动升级期间的旧响应。
   arguments_summary?: string;
   argumentsSummary?: string;
   result_summary?: string;
@@ -203,8 +208,9 @@ const normalizeMcpApproval = (item: RawMcpApproval): McpApprovalData => ({
   policy: item?.policy || '',
   approvalScope: String(item?.approval_scope || item?.approvalScope || '').toLowerCase(),
   status: String(item?.status || 'pending').toLowerCase(),
-  argumentsSummary: item?.arguments_summary || item?.argumentsSummary || '',
-  resultSummary: item?.result_summary || item?.resultSummary || '',
+  arguments: item?.arguments ?? item?.arguments_summary ?? item?.argumentsSummary ?? '',
+  result: item?.result ?? item?.result_summary ?? item?.resultSummary ?? '',
+  resultLength: item?.result_length ?? item?.resultLength,
   errorSummary: item?.error_summary || item?.errorSummary || '',
   riskLevel: item?.risk_level || item?.riskLevel || 'warning',
   createTime: item?.create_time || item?.createTime || '',

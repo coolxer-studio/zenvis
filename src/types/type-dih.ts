@@ -61,8 +61,9 @@ export type McpApprovalData = {
   policy?: string;
   approvalScope?: McpApprovalScope;
   status?: McpApprovalStatus;
-  argumentsSummary?: string;
-  resultSummary?: string;
+  arguments?: string;
+  result?: string;
+  resultLength?: number;
   errorSummary?: string;
   riskLevel?: string;
   createTime?: string;

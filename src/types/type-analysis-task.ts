@@ -89,8 +89,9 @@ export type TMcpInvocation = {
   policy: string;
   approvalScope: string;
   status: string;
-  argumentsSummary: string;
-  resultSummary: string;
+  arguments: string;
+  result: string;
+  resultLength?: number;
   errorSummary: string;
   riskLevel: string;
   createTime: string;

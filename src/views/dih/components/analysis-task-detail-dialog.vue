@@ -82,25 +82,25 @@
                 <template #default="{ row }">{{ row.approvalScope || '无需审批' }}</template>
               </el-table-column>
               <el-table-column prop="status" label="状态" width="110" />
-              <el-table-column label="参数摘要" min-width="220">
+              <el-table-column label="参数" min-width="220">
                 <template #default="{ row }">
                   <el-popover placement="left" :width="520" trigger="click">
                     <template #reference>
                       <el-button link type="primary">查看参数</el-button>
                     </template>
-                    <pre class="json-content">{{ formatJson(row.argumentsSummary) }}</pre>
+                    <pre class="json-content">{{ formatJson(row.arguments) }}</pre>
                   </el-popover>
                 </template>
               </el-table-column>
-              <el-table-column label="结果摘要" min-width="220">
+              <el-table-column label="结果" min-width="220">
                 <template #default="{ row }">
                   <el-popover placement="left" :width="520" trigger="click">
                     <template #reference>
-                      <el-button link type="primary" :disabled="!row.resultSummary"
+                      <el-button link type="primary" :disabled="!row.result"
                         >查看结果</el-button
                       >
                     </template>
-                    <pre class="json-content">{{ formatJson(row.resultSummary) }}</pre>
+                    <pre class="json-content">{{ formatJson(row.result) }}</pre>
                   </el-popover>
                 </template>
               </el-table-column>

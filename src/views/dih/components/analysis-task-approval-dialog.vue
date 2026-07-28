@@ -44,7 +44,7 @@
             <template #reference>
               <el-button link type="primary">查看参数</el-button>
             </template>
-            <pre class="json-content">{{ formatJson(row.argumentsSummary) }}</pre>
+            <pre class="json-content">{{ formatJson(row.arguments) }}</pre>
           </el-popover>
         </template>
       </el-table-column>

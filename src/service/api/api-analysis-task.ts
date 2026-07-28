@@ -68,8 +68,16 @@ const normalizeInvocation = (data: RawData): TMcpInvocation => ({
   policy: textValue(data, 'policy'),
   approvalScope: textValue(data, 'approval_scope', 'approvalScope'),
   status: textValue(data, 'status'),
-  argumentsSummary: textValue(data, 'arguments_summary', 'argumentsSummary'),
-  resultSummary: textValue(data, 'result_summary', 'resultSummary'),
+  arguments:
+    textValue(data, 'arguments') ||
+    textValue(data, 'arguments_summary', 'argumentsSummary'),
+  result:
+    textValue(data, 'result') ||
+    textValue(data, 'result_summary', 'resultSummary'),
+  resultLength:
+    data.result_length == null && data.resultLength == null
+      ? undefined
+      : numberValue(data, 'result_length', 'resultLength'),
   errorSummary: textValue(data, 'error_summary', 'errorSummary'),
   riskLevel: textValue(data, 'risk_level', 'riskLevel'),
   createTime: textValue(data, 'create_time', 'createTime'),

@@ -289,6 +289,14 @@ class McpChatToolGrantPersistenceTest {
                     .extracting(McpApprovalVo::getToolKey)
                     .isEqualTo("local::audit_alpha_" + suffix);
 
+            McpInvocationSearchDto exactRequest = new McpInvocationSearchDto();
+            exactRequest.setRequestId(" " + invocations.get(1).getRequestId() + " ");
+            exactRequest.setPerPage(10);
+            PageRowsVo<McpApprovalVo> exactResult = approvalService.listInvocations(exactRequest, admin);
+            assertThat(exactResult.getRows()).singleElement()
+                    .extracting(McpApprovalVo::getToolKey)
+                    .isEqualTo("local::audit_beta_" + suffix);
+
             McpInvocationSearchDto paged = new McpInvocationSearchDto();
             paged.setKeyword(suffix);
             paged.setPage(1);
@@ -357,8 +365,9 @@ class McpChatToolGrantPersistenceTest {
                 .setStatus(status)
                 .setRequesterUserId(requesterUserId)
                 .setDecisionBy(decisionBy)
-                .setArgumentsSummary("{\"request\":{\"id\":1}}")
-                .setResultSummary("{\"ok\":true}")
+                .setArguments("{\"request\":{\"id\":1}}")
+                .setResult("{\"ok\":true}")
+                .setResultLength(11L)
                 .setFinishTime(new Date());
     }
 

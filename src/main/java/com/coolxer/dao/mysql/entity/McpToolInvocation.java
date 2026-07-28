@@ -84,14 +84,26 @@ public class McpToolInvocation extends BaseEntity {
     @Column(name = "mcp_client_info", length = 1000)
     private String mcpClientInfo;
 
-    @Column(name = "arguments_summary", columnDefinition = "TEXT")
-    private String argumentsSummary;
+    /**
+     * 完整调用参数。沿用历史物理列名以保留升级前数据。
+     */
+    @Column(name = "arguments_summary", columnDefinition = "LONGTEXT")
+    private String arguments;
 
     @Column(name = "arguments_digest", length = 64)
     private String argumentsDigest;
 
-    @Column(name = "result_summary", columnDefinition = "TEXT")
-    private String resultSummary;
+    /**
+     * 完整调用结果。沿用历史物理列名以保留升级前数据。
+     */
+    @Column(name = "result_summary", columnDefinition = "LONGTEXT")
+    private String result;
+
+    /**
+     * 截取前原始结果的 UTF-8 字节数。
+     */
+    @Column(name = "result_length", columnDefinition = "BIGINT")
+    private Long resultLength;
 
     @Column(name = "error_summary", columnDefinition = "TEXT")
     private String errorSummary;

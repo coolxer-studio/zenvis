@@ -1884,8 +1884,9 @@ public class DihChatApplicationService {
             metadata.put("channel", approval.getChannel());
             metadata.put("policy", approval.getPolicy());
             metadata.put("approvalScope", approval.getApprovalScope());
-            metadata.put("argumentsSummary", approval.getArgumentsSummary());
-            metadata.put("resultSummary", approval.getResultSummary());
+            metadata.put("arguments", approval.getArguments());
+            metadata.put("result", approval.getResult());
+            metadata.put("resultLength", approval.getResultLength());
             metadata.put("errorSummary", approval.getErrorSummary());
             metadata.put("riskLevel", approval.getRiskLevel());
             metadata.put("expireTime", approval.getExpireTime());

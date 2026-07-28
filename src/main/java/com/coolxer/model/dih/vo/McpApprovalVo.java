@@ -30,8 +30,9 @@ public class McpApprovalVo {
     private String agentType;
     private Integer analysisTaskId;
     private String taskExecutionId;
-    private String argumentsSummary;
-    private String resultSummary;
+    private String arguments;
+    private String result;
+    private Long resultLength;
     private String errorSummary;
     private Integer decisionBy;
     private String decisionComment;
@@ -60,8 +61,9 @@ public class McpApprovalVo {
         this.agentType = invocation.getAgentType();
         this.analysisTaskId = invocation.getAnalysisTaskId();
         this.taskExecutionId = invocation.getTaskExecutionId();
-        this.argumentsSummary = invocation.getArgumentsSummary();
-        this.resultSummary = invocation.getResultSummary();
+        this.arguments = invocation.getArguments();
+        this.result = invocation.getResult();
+        this.resultLength = invocation.getResultLength();
         this.errorSummary = invocation.getErrorSummary();
         this.decisionBy = invocation.getDecisionBy();
         this.decisionComment = invocation.getDecisionComment();

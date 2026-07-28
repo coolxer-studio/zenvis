@@ -411,7 +411,7 @@ class ChatMessagePartParserTest {
     void parseMcpApprovalFence() {
         String content = """
                 ```zenvis:mcp-approval
-                {"id":"request-1","title":"MCP 工具审批：delete","content":"删除记录","status":"succeeded","toolKey":"local::delete","approvalScope":"SESSION","argumentsSummary":"{\\"id\\":1}"}
+                {"id":"request-1","title":"MCP 工具审批：delete","content":"删除记录","status":"succeeded","toolKey":"local::delete","approvalScope":"SESSION","arguments":"{\\"id\\":1}","resultLength":11}
                 ```
                 """;
 
@@ -423,6 +423,8 @@ class ChatMessagePartParserTest {
         assertEquals("succeeded", parts.get(0).getStatus());
         assertEquals("local::delete", parts.get(0).getMetadata().get("toolKey"));
         assertEquals("SESSION", parts.get(0).getMetadata().get("approvalScope"));
+        assertEquals("{\"id\":1}", parts.get(0).getMetadata().get("arguments"));
+        assertEquals(11, parts.get(0).getMetadata().get("resultLength"));
     }
 
     @Test

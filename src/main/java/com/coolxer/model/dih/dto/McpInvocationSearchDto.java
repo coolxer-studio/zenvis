@@ -13,6 +13,9 @@ public class McpInvocationSearchDto extends PageDto {
     /** 匹配请求 ID、工具、服务、聊天 ID 和 Agent 类型。 */
     private String keyword;
 
+    /** 精确匹配请求 ID。 */
+    private String requestId;
+
     private McpInvocationChannel channel;
 
     private McpInvocationStatus status;

@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -92,9 +93,12 @@ class McpApprovalServiceTest {
 
         assertThat(result).isEqualTo("ok");
         assertThat(called).isTrue();
-        assertThat(invocations.values()).singleElement()
-                .extracting(McpToolInvocation::getStatus)
-                .isEqualTo(McpInvocationStatus.SUCCEEDED);
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.SUCCEEDED);
+            assertThat(invocation.getArguments()).isEqualTo("{\"id\":1}");
+            assertThat(invocation.getResult()).isEqualTo("ok");
+            assertThat(invocation.getResultLength()).isEqualTo(2L);
+        });
     }
 
     @Test
@@ -109,9 +113,11 @@ class McpApprovalServiceTest {
 
         assertThat(called).isFalse();
         assertThat(result).contains("denied");
-        assertThat(invocations.values()).singleElement()
-                .extracting(McpToolInvocation::getStatus)
-                .isEqualTo(McpInvocationStatus.DENIED);
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.DENIED);
+            assertThat(invocation.getResult()).isNull();
+            assertThat(invocation.getResultLength()).isNull();
+        });
     }
 
     @Test
@@ -153,18 +159,67 @@ class McpApprovalServiceTest {
     }
 
     @Test
-    void auditRedactsSensitiveResultFieldsWithoutChangingToolResult() {
+    void auditStoresSensitiveArgumentsAndResultWithoutChangingToolResult() {
         when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ALLOW);
 
-        String result = service.execute(descriptor(), "{}", context(null),
+        String arguments = "{\"token\":\"secret-argument\"}";
+        String result = service.execute(descriptor(), arguments, context(null),
                 () -> "{\"accessToken\":\"secret-result\",\"value\":1}");
 
         assertThat(result).contains("secret-result");
-        assertThat(invocations.values()).singleElement()
-                .extracting(McpToolInvocation::getResultSummary)
-                .asString()
-                .contains("***")
-                .doesNotContain("secret-result");
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getArguments()).isEqualTo(arguments);
+            assertThat(invocation.getResult()).isEqualTo(result);
+            assertThat(invocation.getResultLength())
+                    .isEqualTo((long) result.getBytes(StandardCharsets.UTF_8).length);
+        });
+    }
+
+    @Test
+    void auditKeepsPayloadsBeyondLegacySummaryLimits() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ALLOW);
+        String arguments = "{\"payload\":\"" + "a".repeat(5000) + "\"}";
+        String expectedResult = "{\"message\":\"" + "中文🙂".repeat(2500) + "\"}";
+
+        String result = service.execute(descriptor(), arguments, context(null), () -> expectedResult);
+
+        assertThat(result).isEqualTo(expectedResult);
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getArguments()).isEqualTo(arguments);
+            assertThat(invocation.getResult()).isEqualTo(expectedResult);
+            assertThat(invocation.getResult()).doesNotEndWith("...");
+            assertThat(invocation.getResultLength())
+                    .isEqualTo((long) expectedResult.getBytes(StandardCharsets.UTF_8).length);
+        });
+    }
+
+    @Test
+    void manualResultUsesFullSerializedJsonAndPreTruncationLength() throws Exception {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ALLOW);
+        Map<String, Object> result = Map.of("message", "中文🙂", "ok", true);
+        String serialized = new ObjectMapper().writeValueAsString(result);
+        McpApprovalService.ManualGate gate = service.prepareManual(
+                descriptor(), "{\"id\":1}", user(42, false), null);
+
+        service.completeManual(gate.invocation().getRequestId(), () -> result);
+
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getResult()).isEqualTo(serialized);
+            assertThat(invocation.getResultLength())
+                    .isEqualTo((long) serialized.getBytes(StandardCharsets.UTF_8).length);
+        });
+    }
+
+    @Test
+    void successfulNullResultKeepsLengthNull() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ALLOW);
+
+        assertThat(service.execute(descriptor(), "{}", context(null), () -> null)).isNull();
+
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getResult()).isNull();
+            assertThat(invocation.getResultLength()).isNull();
+        });
     }
 
     @Test
@@ -179,10 +234,10 @@ class McpApprovalServiceTest {
                 descriptor(), "{\"token\":\"secret\",\"name\":\"demo\"}", context(events), () -> {
                     called.set(true);
                     return "should-not-run";
-                }));
+        }));
 
         McpToolInvocation pending = awaitPendingInvocation();
-        assertThat(pending.getArgumentsSummary()).contains("***").doesNotContain("secret");
+        assertThat(pending.getArguments()).isEqualTo("{\"token\":\"secret\",\"name\":\"demo\"}");
         service.decide(pending.getRequestId(), "rejected", "not now", requester);
 
         assertThat(result.get(2, TimeUnit.SECONDS)).contains("rejected");
@@ -241,7 +296,7 @@ class McpApprovalServiceTest {
         assertThat(service.execute(descriptor(), "{\"id\":2}", context(events), () -> "second"))
                 .isEqualTo("second");
         assertThat(events).filteredOn(event -> "approval_required".equals(event.event())).hasSize(1);
-        assertThat(invocations.values()).filteredOn(item -> "{\"id\":2}".equals(item.getArgumentsSummary()))
+        assertThat(invocations.values()).filteredOn(item -> "{\"id\":2}".equals(item.getArguments()))
                 .singleElement()
                 .extracting(McpToolInvocation::getApprovalScope)
                 .isEqualTo(com.coolxer.commons.enums.McpApprovalScope.SESSION);

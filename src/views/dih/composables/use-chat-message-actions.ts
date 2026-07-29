@@ -175,7 +175,38 @@ const configConfirmReviseDisplayMessage = (detail?: string) => {
   return `我已补充配置调整要求：\n${focus}`;
 };
 
-const dataAccessDecisionMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
+const dataAccessDecisionKind = (part: ChatMessagePart): 'meta' | 'push_task' => {
+  const explicitKind = String(part.metadata?.configKind || '')
+    .trim()
+    .toLowerCase()
+    .replaceAll('-', '_');
+  if (explicitKind === 'meta' || explicitKind === 'meta_config') {
+    return 'meta';
+  }
+  if (['push_task', 'pushtask', 'vectum', 'vector'].includes(explicitKind)) {
+    return 'push_task';
+  }
+
+  const decisionContext = `${part.title || ''}\n${part.content || ''}`;
+  return /(数据推送|push\s*task|vectum|vector)/i.test(decisionContext) ? 'push_task' : 'meta';
+};
+
+const dataAccessDecisionMessage = (
+  part: ChatMessagePart,
+  decision: 'apply_config' | 'abandon' | 'revise',
+  detail?: string,
+) => {
+  if (dataAccessDecisionKind(part) === 'push_task') {
+    if (decision === 'apply_config') {
+      return '我已明确确认创建并启动上一轮展示的完整数据推送服务配置。当前操作对象是 PushTask/Vectum，不是 Meta；允许跳过元数据创建，禁止调用 config_tree、config_add、config_apply 或 config_read，也不得因当前会话没有 Meta 配置而停止。请直接执行数据推送状态机：调用 push_task_detect_format，按 sourceMark 检查冲突，调用 push_task_create_and_start 并接受平台 MCP 审批，审批通过后继续查询任务状态和 system 日志；仅在任务真实运行成功后输出 zenvis:vectum-task-record。';
+    }
+    if (decision === 'abandon') {
+      return '我已取消创建本次数据推送服务。不要创建或启动 PushTask，也不要转入 Meta 配置流程。';
+    }
+    const focus = detail?.trim() || '请基于上一轮完整数据推送配置继续调整。';
+    return `我需要补充信息继续更新数据推送配置。调整要求如下：\n${focus}\n请保留上一轮配置中的已确认信息，重新展示完整 PushTask/Vectum 配置并再次让我确认；不要转入 Meta 配置流程。`;
+  }
+
   if (decision === 'apply_config') {
     return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才用 Markdown 围栏代码块输出 zenvis:meta-config-record 记录；zenvis:meta-config-record 不是工具名，请不要调用它。';
   }
@@ -186,7 +217,22 @@ const dataAccessDecisionMessage = (decision: 'apply_config' | 'abandon' | 'revis
   return `我需要补充信息继续更新元数据配置。调整要求如下：\n${focus}\n请基于上一轮 meta 配置重新生成完整配置，并再次展示完整配置和后续选择。`;
 };
 
-const dataAccessDecisionDisplayMessage = (decision: 'apply_config' | 'abandon' | 'revise', detail?: string) => {
+const dataAccessDecisionDisplayMessage = (
+  part: ChatMessagePart,
+  decision: 'apply_config' | 'abandon' | 'revise',
+  detail?: string,
+) => {
+  if (dataAccessDecisionKind(part) === 'push_task') {
+    if (decision === 'apply_config') {
+      return '我已确认创建并启动数据推送服务。';
+    }
+    if (decision === 'abandon') {
+      return '我已取消创建本次数据推送服务。';
+    }
+    const focus = detail?.trim() || '继续优化数据推送配置。';
+    return `我已补充数据推送配置调整要求：\n${focus}`;
+  }
+
   if (decision === 'apply_config') {
     return '我已确认添加配置到系统。';
   }
@@ -350,7 +396,11 @@ export const useChatMessageActions = ({
 
   const handleDataAccessDecision = async (
     message: ChatMessage,
-    payload: { part: ChatMessagePart; decision: 'apply_config' | 'abandon' | 'revise'; detail?: string },
+    payload: {
+      part: ChatMessagePart;
+      decision: 'apply_config' | 'abandon' | 'revise';
+      detail?: string;
+    },
   ) => {
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning('缺少数据接入选择记录标识，无法记录操作结果');
@@ -368,16 +418,23 @@ export const useChatMessageActions = ({
       console.error('记录数据接入后续选择失败:', error);
     }
     payload.part.status = payload.decision;
-    const toastMap = {
-      apply_config: '已选择添加配置到系统',
-      abandon: '已放弃本次配置',
-      revise: '已提交配置调整要求',
-    };
+    const isPushTaskDecision = dataAccessDecisionKind(payload.part) === 'push_task';
+    const toastMap = isPushTaskDecision
+      ? {
+          apply_config: '已确认创建数据推送服务',
+          abandon: '已取消创建数据推送服务',
+          revise: '已提交数据推送配置调整要求',
+        }
+      : {
+          apply_config: '已选择添加配置到系统',
+          abandon: '已放弃本次配置',
+          revise: '已提交配置调整要求',
+        };
     ElMessage.success(toastMap[payload.decision]);
     await nextTick();
     await sendMessage({
-      content: dataAccessDecisionDisplayMessage(payload.decision, payload.detail),
-      requestContent: dataAccessDecisionMessage(payload.decision, payload.detail),
+      content: dataAccessDecisionDisplayMessage(payload.part, payload.decision, payload.detail),
+      requestContent: dataAccessDecisionMessage(payload.part, payload.decision, payload.detail),
     });
   };
 

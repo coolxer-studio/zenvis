@@ -20,7 +20,7 @@ AI分析任务提交后在后台运行，关闭页面不会中断。任务可以
   "priority": 10,
   "scheduled_time": null,
   "approval_mode": "MANUAL",
-  "skill_ids": ["data-analysis-agent"]
+  "skill_ids": ["jmr-continuous-threat-analysis"]
 }
 ```
 
@@ -68,7 +68,7 @@ GET /api/v1/dih/skills/options?enabled=true
   "priority": 10,
   "approval_mode": "MANUAL",
   "execution_id": "c26a0ce0-7d4c-4a5e-bb84-d205c9c5ac31",
-  "skill_ids": ["data-analysis-agent"],
+  "skill_ids": ["jmr-continuous-threat-analysis"],
   "pending_approval_count": 1,
   "scheduled_time": null,
   "start_time": "2026-07-14T15:00:00.000+08:00",
@@ -179,7 +179,7 @@ curl -X POST "http://localhost:11001/api/v1/system/analysis-task/add" \
     "priority": 50,
     "scheduled_time": null,
     "approval_mode": "MANUAL",
-    "skill_ids": ["data-analysis-agent"]
+    "skill_ids": ["jmr-continuous-threat-analysis"]
   }'
 ```
 

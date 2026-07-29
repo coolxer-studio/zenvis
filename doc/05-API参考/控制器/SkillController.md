@@ -118,10 +118,10 @@ curl "http://localhost:11001/api/v1/dih/skills/data-visualization-agent/view"
   "msg": "请求成功",
   "data": [
     {
-      "label": "数据分析",
-      "value": "data-analysis-agent",
-      "description": "通用数据分析任务规则",
-      "agent_types": ["agent_data_analysis"]
+      "label": "僵木蠕持续安全研判",
+      "value": "jmr-continuous-threat-analysis",
+      "description": "JMR 专项研判流程",
+      "agent_types": ["agent_skill"]
     }
   ]
 }
@@ -147,7 +147,7 @@ AI分析任务保存 Skill ID，并在实际执行时读取最新内容。创建
   {
     "skill_id": "user-event-trend-analysis",
     "chat_type": "skill:user-event-trend-analysis",
-    "agent_type": "agent_data_analysis",
+    "agent_type": "agent_skill",
     "label": "用户事件趋势分析",
     "description": "分析用户事件指标变化",
     "icon": "data-analysis",
@@ -235,15 +235,13 @@ skill_config/
 
 - `chat.enabled=true` 才会展示；Skill 停用后入口同步消失。
 - `label` 默认使用 Skill 名称，`icon` 默认 `magic-stick`，`order` 默认 `1000`。
-- `agentType` 未填写时，若 `agentTypes` 只有一个受支持业务 Agent，则自动继承；否则使用无 RAG、无 MCP 的 `agent_skill`。
-- 动态会话只加载当前选中的 Skill。关联业务 Agent 时，仅继承该 Agent 已授权的 Prompt、右侧面板和 MCP scope，不会扩大工具权限。
+- `agentType` 未填写时，若 `agentTypes` 只有一个受支持业务 Agent，则自动继承；否则使用无 RAG 的 `agent_skill`。
+- 动态会话只加载当前选中的 Skill。`agent_skill` 仅在 manifest 显式声明 `runtime.tools` 时加载对应工具白名单；未声明时不提供 MCP 工具。关联业务 Agent 时，仅继承该 Agent 已授权的 Prompt、右侧面板和 MCP scope，不会扩大工具权限。
 - 显式选择的 Skill 提示词上限由 `app.ai.skill.max-selected-prompt-chars` 控制，默认 `32000` 字符；超限会明确失败，不做静默截断。
 
 ## AI分析任务加载规则
 
-AI分析任务运行时会同时加载：
-
-1. 全局启用且适用于 `agent_data_analysis` 的 Skill。
-2. 当前任务明确选择且仍处于启用状态的 Skill。
-
-任务显式选择不受 `agent_types` 限制，但 `enabled=true` 是选择和执行的硬性条件。详细流程见 [MCP 审批与 AI分析任务快速上手](../../07-AI与数据智能/MCP审批与AI分析任务快速上手.md)。
+AI分析任务运行时只加载当前任务明确选择且仍处于启用状态的 Skill。任务使用独立的
+`agent_analysis_task` 工具上下文，不依赖 DIH 内置 Agent；显式选择不受 `agent_types`
+限制，但 `enabled=true` 是选择和执行的硬性条件。详细流程见
+[MCP 审批与 AI分析任务快速上手](../../07-AI与数据智能/MCP审批与AI分析任务快速上手.md)。

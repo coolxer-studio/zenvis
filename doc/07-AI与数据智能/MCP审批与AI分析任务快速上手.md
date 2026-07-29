@@ -180,10 +180,8 @@ PENDING / RUNNING / WAITING_APPROVAL
 
 ## 6. Skill 在 AI分析任务中的行为
 
-任务运行时会组合两类 Skill：
-
-1. 全局启用且声明适用于 `agent_data_analysis` 的 Skill。
-2. 当前任务显式选择且仍为启用状态的 Skill。
+任务运行时只加载当前任务显式选择且仍为启用状态的 Skill。后台任务使用独立的
+`agent_analysis_task` 工具上下文，不依赖任何 DIH 内置业务 Agent。
 
 任务只保存 Skill ID，不保存内容快照，因此执行时使用最新 `SKILL.md`。创建、编辑、重新入队和实际执行前都会校验 Skill；如果已选 Skill 被停用或删除，任务进入 `FAILED` 并在错误信息中列出具体 Skill，不会静默跳过。
 
@@ -232,7 +230,7 @@ GET /api/v1/dih/skills/options?enabled=true
   "priority": 50,
   "scheduled_time": null,
   "approval_mode": "MANUAL",
-  "skill_ids": ["data-analysis-agent"]
+  "skill_ids": ["jmr-continuous-threat-analysis"]
 }
 ```
 

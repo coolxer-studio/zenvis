@@ -367,6 +367,6 @@ curl -X GET "http://localhost:11001/api/v1/dih/chat-session/chat-001/session?typ
 ## 🔐 注意事项
 
 1. **认证授权**: 需要登录认证
-2. **会话类型**: 支持多种会话类型（ask/agent_data_access/agent_data_visualization/agent_data_analysis/agent_config_management/agent_report）
+2. **会话类型**: 支持普通问答、内置 Agent（agent_data_access/agent_data_visualization/agent_report）以及 `skill:<skillId>` 动态 Skill 会话
 3. **默认问候语**: 根据会话类型返回不同的默认问候语
 4. **批量操作**: 支持批量删除会话

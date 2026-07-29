@@ -88,12 +88,12 @@ Flux<String> 模型输出
 
 Controller 会做几类前置检查：
 
-- `type` 如果以 `agent` 开头，只允许已注册且已启用的内置 agent 类型，例如 `agent_data_access`、`agent_data_visualization`、`agent_data_analysis`、`agent_config_management`、`agent_report`。
+- `type` 如果以 `agent` 开头，只允许已注册且已启用的内置 agent 类型：`agent_data_access`、`agent_data_visualization`、`agent_report`。
 - 模型列表来自 `AIBaseService.getModels()`，综合默认模型与 OpenAI 兼容 `/v1/models` 返回，并总是提供 `auto`。
 - `model` 为空、`auto` 或历史自动值时，由 `AIBaseService.resolveChatModel` 按当前可用目录选择模型。
 - 用户消息为空但有附件时，会自动使用“请分析上传的附件内容。”作为本轮消息。
 - 消息和附件都为空时直接返回错误。
-- `agent_data_analysis`、`agent_config_management` 和 `agent_report` 的固定演示提示词会在模型校验前命中对应的内置响应服务，直接返回预置结果；这些链路不会请求后台模型，也不会调用标题模型。
+- `agent_report` 的固定演示提示词会在模型校验前命中内置响应服务，直接返回预置结果；该链路不会请求后台模型，也不会调用标题模型。
 
 ### 3. 附件上下文拼接
 
@@ -199,18 +199,12 @@ MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpT
 
 白名单包括 Retrieval/实体查询，以及 `config_*`、`dashboard_*`、`menu_*` 中明确允许的读取、创建和应用操作；不包含实体更新、删除或任意外部 MCP。配置新增/应用、看板创建和菜单创建等写入动作通过 `@McpToolApproval(ASK, HIGH)` 进入审批。Agent 仍不直接访问数据库，也不生成任意 SQL。
 
-### 数据分析与配置管理 Agent
+### 动态专项 Skill
 
-`type=agent_data_analysis` 和 `type=agent_config_management` 的普通请求分别由 `DataAnalysisAgent`、`ConfigManagementAgent` 处理，并继续执行各自的真实三阶段流程。
-
-两个开场白示例采用与其他演示智能体一致的前置固定响应机制：
-
-- 数据分析示例由 `DataAnalysisDemoResponseService` 依次返回内置数据集、统计分析结果和报告。
-- 配置管理示例由 `ConfigManagementDemoResponseService` 依次返回内置配置记录、试验场验证结果和演示范围内的模拟生效结果；不会写入实际系统配置。
-- 命中条件是对应完整示例提示词的精确匹配，后续阶段通过演示标题、记录 ID 和会话消息继续识别，不拦截其他新会话请求。
-- `DihChatApplicationService.chat` 在模型支持校验、模型解析、MCP 解析和 Agent 调用之前完成示例分流。
-- `ChatTitleService` 直接返回固定演示标题，避免标题生成调用模型。
-- 非示例请求仍进入真实 Agent；数据分析缺少分析服务时停止并提示能力缺失，配置管理的真实生效仍要求验证、用户确认、审批和读回一致。
+插件或自定义 Skill 使用 `type=skill:<skillId>` 的动态入口。未绑定内置业务 Agent 的入口由
+`agent_skill` 通用运行时执行，只加载当前 Skill；manifest 未声明 `runtime.tools` 时不提供
+MCP，显式声明后仅注入对应的本地与外部工具白名单。`promptMode=skill_only` 时，专项 Skill
+是业务流程和输出契约的唯一依据，不叠加其他内置 Agent Prompt。
 
 ### 报表制作 Agent
 

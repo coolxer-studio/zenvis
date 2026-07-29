@@ -53,44 +53,6 @@
     },
     {
       "type": "button",
-      "label": "数据分析 Prompt",
-      "icon": "fa fa-file-text-o",
-      "actionType": "dialog",
-      "dialog": {
-        "title": "数据分析智能体 Skill Prompt",
-        "size": "lg",
-        "body": {
-          "type": "service",
-          "api": "/zenvis/api/v1/dih/skills/agent/agent_data_analysis/prompt",
-          "body": {
-            "type": "code",
-            "language": "markdown",
-            "value": "${value|default:'暂无已启用 Skill'}"
-          }
-        }
-      }
-    },
-    {
-      "type": "button",
-      "label": "配置管理 Prompt",
-      "icon": "fa fa-file-text-o",
-      "actionType": "dialog",
-      "dialog": {
-        "title": "配置管理智能体 Skill Prompt",
-        "size": "lg",
-        "body": {
-          "type": "service",
-          "api": "/zenvis/api/v1/dih/skills/agent/agent_config_management/prompt",
-          "body": {
-            "type": "code",
-            "language": "markdown",
-            "value": "${value|default:'暂无已启用 Skill'}"
-          }
-        }
-      }
-    },
-    {
-      "type": "button",
       "label": "报表 Prompt",
       "icon": "fa fa-file-text-o",
       "actionType": "dialog",
@@ -151,14 +113,6 @@
               {
                 "label": "数据可视化智能体",
                 "value": "agent_data_visualization"
-              },
-              {
-                "label": "数据分析智能体",
-                "value": "agent_data_analysis"
-              },
-              {
-                "label": "配置管理智能体",
-                "value": "agent_config_management"
               },
               {
                 "label": "报表制作智能体",

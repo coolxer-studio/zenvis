@@ -77,9 +77,9 @@ POST /api/v1/dih/chat
 
 所有业务 Agent 都不检索公共 RAG；请求中的 `deep_think=true` 对 Agent 会被忽略。只有 `type=ask` 允许 RAG 和深度思考，且始终不获得 MCP 工具或 Skill。
 
-### 数据分析与配置管理
+### 专项 Skill
 
-数据分析 Agent 按数据集准备、外部分析服务和分析报告三个阶段工作；缺少适用分析 MCP 时明确阻塞，不生成结论。配置管理 Agent 按配置生成、试验场验证和正式生效三个阶段工作，写入前必须确认并通过 MCP 审批，写入后还要读回核验。
+插件或自定义 Skill 可通过独立的 `skill:<skillId>` 会话入口执行专项任务。通用 Skill 只有在 manifest 中显式声明 `runtime.tools` 时才获得对应的本地或外部 MCP 工具，并始终受工具策略、审批和调用预算约束。
 
 ### 报表制作
 

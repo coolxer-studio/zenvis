@@ -186,23 +186,77 @@ public class DihChatApplicationService {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
         ChatSession existingChatSession = chatSessionService.getChatSessionBySessionId(chatId, currentUser);
-        Optional<Flux<String>> builtinDemoResponse = findBuiltinDemoResponse(
-                chatType,
-                chatId,
-                userMessage,
-                currentUser,
-                existingChatSession
-        );
+        McpToolLogStream builtinDemoToolStream = McpToolLogStream.disabled();
+        String builtinDemoTurnId = null;
+        Optional<Flux<String>> builtinDemoResponse;
+        if (DataAccessAgent.AGENT_TYPE.equals(chatType) && dataAccessDemoResponseService != null) {
+            McpToolContext demoToolContext = agentMcpToolService == null
+                    ? McpToolContext.empty()
+                    : agentMcpToolService.resolve(executionPolicy.agentType(), executionPolicy.skillIds());
+            if (demoToolContext.hasTools()) {
+                builtinDemoToolStream = McpToolLogStream.create();
+                builtinDemoTurnId = UUID.randomUUID().toString();
+                demoToolContext = demoToolContext.withInvocationContext(new McpInvocationContext(
+                        McpInvocationChannel.CHAT_AGENT,
+                        currentUser == null ? null : currentUser.getId(),
+                        chatId,
+                        builtinDemoTurnId,
+                        executionPolicy.agentType(),
+                        null,
+                        "builtin-data-access-demo",
+                        builtinDemoToolStream::emitApproval
+                ));
+                demoToolContext = demoToolContext.withToolCallbackProvider(
+                        new McpToolCallLoggingProvider(
+                                demoToolContext.toolCallbackProvider(),
+                                builtinDemoToolStream::emit)
+                );
+            }
+            builtinDemoResponse = dataAccessDemoResponseService.findResponse(
+                    existingChatSession,
+                    chatId,
+                    userMessage,
+                    currentUser,
+                    demoToolContext
+            );
+        } else {
+            builtinDemoResponse = findBuiltinDemoResponse(
+                    chatType,
+                    chatId,
+                    userMessage,
+                    currentUser,
+                    existingChatSession
+            );
+        }
         if (builtinDemoResponse.isPresent()) {
             ChatSession chatSession = appendUserMessage(
                     chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
+            Flux<String> response = builtinDemoResponse.get();
+            if (builtinDemoToolStream.enabled()) {
+                McpToolLogStream finalDemoToolStream = builtinDemoToolStream;
+                String finalDemoTurnId = builtinDemoTurnId;
+                response = Flux.merge(
+                        finalDemoToolStream.flux(),
+                        response.doFinally(signalType -> {
+                            if (signalType == reactor.core.publisher.SignalType.CANCEL
+                                    && mcpApprovalService != null
+                                    && finalDemoTurnId != null) {
+                                mcpApprovalService.cancelTurn(
+                                        finalDemoTurnId,
+                                        currentUser == null ? null : currentUser.getId());
+                            }
+                            finalDemoToolStream.complete();
+                        })
+                );
+            }
             return emitAndSaveTextResponse(
-                    builtinDemoResponse.get(),
+                    response,
                     chatSession,
                     currentUser,
                     eventStream,
                     new AtomicReference<>(MessageType.TEXT),
-                    effectiveDeepThink
+                    effectiveDeepThink,
+                    builtinDemoToolStream
             );
         }
         if (!baseService.isModelSupported(model)) {
@@ -301,17 +355,6 @@ public class DihChatApplicationService {
         boolean allowBuiltinDemo = !executionPolicy.isDynamicSkill();
         if (DataAccessAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
-            if (allowBuiltinDemo) {
-                Optional<Flux<String>> demoResponse = dataAccessDemoResponseService.findResponse(
-                        chatSession,
-                        chatId,
-                        prompt,
-                        currentUser
-                );
-                if (demoResponse.isPresent()) {
-                    return demoResponse.get();
-                }
-            }
             return dataAccessAgent.chat(
                     chatId,
                     model,

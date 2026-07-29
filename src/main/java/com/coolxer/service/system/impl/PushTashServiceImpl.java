@@ -8,6 +8,8 @@ import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.system.dto.PushTaskDto;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.system.PushTaskService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -98,6 +100,11 @@ public class PushTashServiceImpl implements PushTaskService {
     }
 
     @Override
+    public boolean updateAndStart(Integer id, PushTaskDto pushTaskDto) {
+        return update(id, pushTaskDto) && toggle(id);
+    }
+
+    @Override
     public boolean update(Integer id, PushTaskDto pushTaskDto) {
         ResponseModel response = restTemplate.exchange(
                 customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/{id}",
@@ -149,6 +156,27 @@ public class PushTashServiceImpl implements PushTaskService {
     }
 
     @Override
+    public PushTaskVo findById(Integer id) {
+        if (id == null) {
+            throw new IllegalArgumentException("数据推送任务 ID 不能为空");
+        }
+        ResponseModel response = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl() + "/vectum/api/v1/task/{id}/view",
+                HttpMethod.GET,
+                new HttpEntity<>(createVectumHeaders()),
+                ResponseModel.class,
+                id
+        ).getBody();
+        if (response != null && response.succeed() && response.getData() != null) {
+            return JacksonConfig.OBJECT_MAPPER.convertValue(response.getData(), PushTaskVo.class);
+        }
+        String message = response == null || !StringUtils.hasText(response.getMsg())
+                ? "查询数据推送任务详情失败"
+                : response.getMsg();
+        throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), message);
+    }
+
+    @Override
     public List<PushTaskVo> findBySourceMark(String sourceMark) {
         return findAll().stream()
                 .filter(pushTaskVo -> "SYSTEM".equals(pushTaskVo.getSource()))
@@ -164,6 +192,58 @@ public class PushTashServiceImpl implements PushTaskService {
             succeeded = delete(pushTask.getId()) && succeeded;
         }
         return succeeded;
+    }
+
+    @Override
+    public String getLog(Integer id, String logType) {
+        if (id == null) {
+            throw new IllegalArgumentException("数据推送任务 ID 不能为空");
+        }
+        if (!"console".equals(logType) && !"system".equals(logType)) {
+            throw new IllegalArgumentException("日志类型仅支持 console 或 system");
+        }
+        String responseBody = restTemplate.exchange(
+                customWebConfig.getDataServiceUrl()
+                        + "/vectum/api/v1/task/{id}/log?log_type={logType}",
+                HttpMethod.GET,
+                new HttpEntity<>(createVectumHeaders()),
+                String.class,
+                id,
+                logType
+        ).getBody();
+        if (responseBody == null) {
+            throw new ApiException(
+                    ResultCodeEnum.UNKNOWN_ERROR.getCode(),
+                    "Vectum 未返回数据推送任务日志"
+            );
+        }
+        return unwrapLogResponse(responseBody);
+    }
+
+    private String unwrapLogResponse(String responseBody) {
+        try {
+            JsonNode payload = JacksonConfig.OBJECT_MAPPER.readTree(responseBody);
+            if (payload == null || !payload.isObject() || !payload.has("status")) {
+                return responseBody;
+            }
+            if (payload.path("status").asInt(Integer.MIN_VALUE) != 0) {
+                String message = payload.path("msg").asText();
+                throw new ApiException(
+                        ResultCodeEnum.UNKNOWN_ERROR.getCode(),
+                        StringUtils.hasText(message) ? message : "获取数据推送任务日志失败"
+                );
+            }
+            JsonNode data = payload.get("data");
+            if (data == null || data.isNull()) {
+                throw new ApiException(
+                        ResultCodeEnum.UNKNOWN_ERROR.getCode(),
+                        "Vectum 未返回数据推送任务日志"
+                );
+            }
+            return data.isTextual() ? data.asText() : data.toString();
+        } catch (JsonProcessingException ignored) {
+            return responseBody;
+        }
     }
 
     private HttpHeaders createVectumHeaders() {

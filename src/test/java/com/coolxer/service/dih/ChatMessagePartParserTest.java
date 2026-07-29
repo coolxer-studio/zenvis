@@ -11,6 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChatMessagePartParserTest {
 
@@ -404,6 +405,34 @@ class ChatMessagePartParserTest {
         assertEquals("同步 IP 情报数据", parts.get(0).getContent());
         assertEquals("task-001", parts.get(0).getMetadata().get("taskId"));
         assertEquals("running", parts.get(0).getMetadata().get("status"));
+    }
+
+    @Test
+    @DisplayName("数据推送失败、日志和原因围栏应解析为三张独立提示卡")
+    void parsePushTaskDiagnosticNoticeCards() {
+        String content = """
+                ```zenvis:notice
+                {"title":"数据推送任务运行失败（第 1/5 轮）","content":"任务 ID：12\\nsourceMark：data-access:chat:service-log\\n状态：error\\n失败阶段：运行检查","level":"error"}
+                ```
+                ```zenvis:notice
+                {"title":"数据推送任务日志（第 1/5 轮）","content":"日志类型：system\\n最新相关日志：unknown field","level":"warning"}
+                ```
+                ```zenvis:notice
+                {"title":"失败原因与配置修改（第 1/5 轮）","content":"分类：配置错误\\n日志证据：unknown field codec\\n失败原因：codec 字段值无效\\n修改内容：\\n1. 配置路径：sinks.out.encoding.codec；旧值：text；新值：json；依据：unknown field codec\\n下一步：修复并重启","level":"warning"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(3, parts.size());
+        assertEquals(List.of("notice", "notice", "notice"),
+                parts.stream().map(ChatMessagePart::getType).toList());
+        assertEquals("数据推送任务运行失败（第 1/5 轮）", parts.get(0).getTitle());
+        assertEquals("error", parts.get(0).getLevel());
+        assertEquals("数据推送任务日志（第 1/5 轮）", parts.get(1).getTitle());
+        assertEquals("失败原因与配置修改（第 1/5 轮）", parts.get(2).getTitle());
+        assertTrue(parts.get(2).getContent().contains("失败原因：codec 字段值无效"));
+        assertTrue(parts.get(2).getContent().contains("旧值：text；新值：json"));
     }
 
     @Test

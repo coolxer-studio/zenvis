@@ -2,28 +2,38 @@ package com.coolxer.service.dih;
 
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
+import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.model.dih.Message;
-import com.coolxer.model.config.dto.ConfigDto;
-import com.coolxer.model.system.dto.PushTaskDto;
 import com.coolxer.model.system.vo.PushTaskVo;
-import com.coolxer.service.config.ConfigService;
-import com.coolxer.service.system.PushTaskService;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.utils.JacksonUtil;
+import com.coolxer.configuration.JacksonConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 
 @Slf4j
 @Service
 public class DataAccessDemoResponseService {
 
+    private static final String VECTUM_RUN_LOG_MARKER_PREFIX = "=== Vectum run ";
     public static final String USER_EVENT_DEMO_TITLE = "用户事件数据接入演示";
 
     private static final String DEMO_META_FILE = "user_event.json";
@@ -32,7 +42,8 @@ public class DataAccessDemoResponseService {
     private static final String DEMO_TABLE_NAME = "zenvis.msg_user_event";
     private static final String DEMO_PUSH_MARK_PREFIX = "data-access-demo:user-event:";
     private static final String DEMO_PUSH_NAME = "用户事件数据推送服务";
-    private static final String DEMO_PUSH_DESCRIPTION = "定时生成用户事件 JSON demo 日志并写入 ZenVis ClickHouse msg_user_event 表";
+    private static final String DEMO_PUSH_DESCRIPTION =
+            "定时生成用户事件 JSON demo 日志并写入 ZenVis ClickHouse msg_user_event 表";
     private static final String GENERATE_DEMO_PUSH_CONFIG_ACTION = "data_access.generate_demo_push_config";
     private static final String CREATE_DEMO_PUSH_TASK_ACTION = "data_access.create_demo_push_task";
     private static final int DEMO_STREAM_CHUNK_SIZE = 18;
@@ -267,7 +278,7 @@ public class DataAccessDemoResponseService {
               table = "msg_user_event"
               auth.strategy = "basic"
               auth.user = "default"
-              auth.password = "SFGEfSVVMcUHCBCjKmzJ"
+              auth.password = "${CLICKHOUSE_PASSWORD}"
               skip_unknown_fields = true
 
             [sinks.console]
@@ -276,15 +287,11 @@ public class DataAccessDemoResponseService {
               encoding.codec = "json"
             """;
 
-    private final ConfigService configService;
-    private final PushTaskService pushTaskService;
-
-    public DataAccessDemoResponseService(ConfigService configService, PushTaskService pushTaskService) {
-        this.configService = configService;
-        this.pushTaskService = pushTaskService;
-    }
-
-    public Optional<Flux<String>> findResponse(ChatSession chatSession, String chatId, String prompt, User user) {
+    public Optional<Flux<String>> findResponse(ChatSession chatSession,
+                                               String chatId,
+                                               String prompt,
+                                               User user,
+                                               McpToolContext mcpToolContext) {
         if (!StringUtils.hasText(prompt)) {
             return Optional.empty();
         }
@@ -300,8 +307,14 @@ public class DataAccessDemoResponseService {
         if (isDemoSession(chatSession) && isReviseMetaConfigPrompt(prompt)) {
             return Optional.of(streamResponse(buildRevisedMetadataConfigResponse()));
         }
+        if (isDemoSession(chatSession) && isCancelCreatePushTaskPrompt(prompt)) {
+            return Optional.of(streamResponse(cancelCreatePushTaskResponse()));
+        }
+        if (isDemoSession(chatSession) && isCreatePushTaskPrompt(prompt)) {
+            return Optional.of(streamAction(() -> createPushTaskResponse(chatId, mcpToolContext)));
+        }
         if (isDemoSession(chatSession) && isApplyMetaConfigPrompt(prompt)) {
-            return Optional.of(streamResponse(applyMetaConfigResponse()));
+            return Optional.of(streamAction(() -> applyMetaConfigResponse(mcpToolContext)));
         }
         if (isDemoSession(chatSession) && isCancelGeneratePushConfigPrompt(prompt)) {
             return Optional.of(streamResponse(cancelGeneratePushConfigResponse()));
@@ -309,13 +322,13 @@ public class DataAccessDemoResponseService {
         if (isDemoSession(chatSession) && isGeneratePushConfigPrompt(prompt)) {
             return Optional.of(streamResponse(buildPushConfigResponse()));
         }
-        if (isDemoSession(chatSession) && isCancelCreatePushTaskPrompt(prompt)) {
-            return Optional.of(streamResponse(cancelCreatePushTaskResponse()));
-        }
-        if (isDemoSession(chatSession) && isCreatePushTaskPrompt(prompt)) {
-            return Optional.of(streamResponse(createPushTaskResponse(chatId)));
-        }
         return Optional.empty();
+    }
+
+    private Flux<String> streamAction(Callable<String> action) {
+        return Mono.fromCallable(action)
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMapMany(this::streamResponse);
     }
 
     private Flux<String> streamResponse(String response) {
@@ -354,8 +367,7 @@ public class DataAccessDemoResponseService {
     }
 
     private boolean isApplyMetaConfigPrompt(String prompt) {
-        return prompt.contains("已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统")
-                || prompt.contains("已确认添加配置到系统");
+        return prompt.contains("已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统");
     }
 
     private boolean isAbandonMetaConfigPrompt(String prompt) {
@@ -509,7 +521,7 @@ public class DataAccessDemoResponseService {
                 ```
 
                 ```zenvis:data-access-decision
-                {"title":"元数据配置已生成，请选择后续处理","content":"可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。","actions":["apply_config","abandon","revise"]}
+                {"title":"元数据配置已生成，请选择后续处理","content":"可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。添加时仍需分别通过 config_add 和 config_apply 的 MCP 审批。","fileName":"user_event.json","configKind":"meta","overwrite":false,"actions":["apply_config","abandon","revise"]}
                 ```
                 """.formatted(DEMO_META_CONFIG.trim());
     }
@@ -541,33 +553,58 @@ public class DataAccessDemoResponseService {
                 ```
 
                 ```zenvis:data-access-decision
-                {"title":"元数据配置已更新，请选择后续处理","content":"可以添加更新后的配置到系统、放弃本次配置，或继续补充调整要求。","actions":["apply_config","abandon","revise"]}
+                {"title":"元数据配置已更新，请选择后续处理","content":"可以添加更新后的配置到系统、放弃本次配置，或继续补充调整要求。添加时仍需分别通过 config_add 和 config_apply 的 MCP 审批。","fileName":"user_event.json","configKind":"meta","overwrite":false,"actions":["apply_config","abandon","revise"]}
                 ```
                 """.formatted(DEMO_META_CONFIG.trim());
     }
 
-    private String applyMetaConfigResponse() {
+    private String applyMetaConfigResponse(McpToolContext mcpToolContext) {
         try {
-            configService.ensureRootPath("meta");
-            if (!configService.fileExistsInConfigPath("meta", DEMO_META_FILE)) {
-                configService.addFile("meta", DEMO_META_FILE);
+            String treeResult = callTool(
+                    mcpToolContext,
+                    "config_tree",
+                    Map.of("type", "meta"));
+            List<ConfigVo> tree = JacksonConfig.OBJECT_MAPPER.readValue(
+                    treeResult,
+                    new TypeReference<List<ConfigVo>>() {
+                    });
+            if (!containsConfigFile(tree, DEMO_META_FILE)) {
+                String addResult = callTool(
+                        mcpToolContext,
+                        "config_add",
+                        Map.of(
+                                "type", "meta",
+                                "configDto", Map.of("fileName", DEMO_META_FILE)));
+                requireTrueResult("config_add", addResult);
             }
-            ConfigDto configDto = new ConfigDto();
-            configDto.setFileName(DEMO_META_FILE);
-            configDto.setText(DEMO_META_CONFIG);
-            configService.modifyConfig("meta", configDto);
-            configService.applyConfig("meta", configDto);
+
+            String applyResult = callTool(
+                    mcpToolContext,
+                    "config_apply",
+                    Map.of(
+                            "type", "meta",
+                            "configDto", Map.of(
+                                    "fileName", DEMO_META_FILE,
+                                    "text", DEMO_META_CONFIG)));
+            requireTrueResult("config_apply", applyResult);
+
+            String readResult = callTool(
+                    mcpToolContext,
+                    "config_read",
+                    Map.of("type", "meta", "fileName", DEMO_META_FILE));
+            String readBack = decodeStringResult(readResult);
+            if (!jsonEquivalent(DEMO_META_CONFIG, readBack)) {
+                return metaFailureResponse(
+                        "config_read",
+                        "配置应用后读回内容与演示目标配置不一致，已停止后续流程。");
+            }
         } catch (Exception e) {
-            log.error("写入用户事件演示元数据配置失败: {}", e.getMessage(), e);
-            return """
-                    ```zenvis:notice
-                    {"title":"元数据配置写入失败","content":"元数据配置写入或应用失败，请检查配置目录、ClickHouse 连接和后端日志后重试。","level":"error"}
-                    ```
-                    """;
+            log.error("执行用户事件演示元数据 MCP 流程失败: {}", e.getMessage(), e);
+            return metaFailureResponse("MCP 工具执行", safeError(e));
         }
 
         return """
-                元数据配置已添加并应用，读回校验通过。现在可以继续生成数据推送服务配置。
+                元数据配置已通过 MCP 审批完成写入、应用和读回校验。现在可以继续生成数据推送服务配置。
 
                 ```zenvis:meta-config-record
                 {
@@ -582,7 +619,7 @@ public class DataAccessDemoResponseService {
                 ```
 
                 ```zenvis:confirm
-                {"title":"是否生成数据推送服务配置","content":"确认后将基于已确认的数据来源、解析清洗映射规则和推送规则，生成用户事件数据推送服务配置；此步骤不会写入系统。","action":"%s"}
+                {"title":"是否生成数据推送服务配置","content":"确认后将基于演示数据来源、解析清洗映射规则和推送规则生成固定配置；此步骤不会写入系统，也不调用 AI 模型。","action":"%s"}
                 ```
                 """.formatted(
                 DEMO_META_FILE,
@@ -592,6 +629,14 @@ public class DataAccessDemoResponseService {
                 DEMO_META_CONFIG.trim(),
                 GENERATE_DEMO_PUSH_CONFIG_ACTION
         );
+    }
+
+    private String metaFailureResponse(String stage, String error) {
+        return """
+                ```zenvis:notice
+                {"title":"元数据配置写入失败","content":"失败阶段：%s\\n真实错误：%s\\n演示流程已停止，未生成成功记录。","level":"error"}
+                ```
+                """.formatted(escapeJson(stage), escapeJson(error));
     }
 
     private String buildPushConfigResponse() {
@@ -610,7 +655,7 @@ public class DataAccessDemoResponseService {
                 ```
 
                 ```zenvis:confirm
-                {"title":"数据推送配置已生成，请确认添加到系统","content":"确认后才会创建并启动用户事件数据推送服务；取消则不会写入系统。","action":"%s"}
+                {"title":"数据推送配置已生成，请确认添加到系统","content":"确认后将调用 push_task_create_and_start，并由平台弹出 MCP 审批；批准后才会创建并启动用户事件数据推送服务。取消则不会写入系统。","action":"%s"}
                 ```
                 """.formatted(
                 DEMO_PUSH_CONFIG.trim(),
@@ -638,78 +683,312 @@ public class DataAccessDemoResponseService {
                 """;
     }
 
-    private String createPushTaskResponse(String chatId) {
+    private String createPushTaskResponse(String chatId, McpToolContext mcpToolContext) {
         String sourceMark = DEMO_PUSH_MARK_PREFIX + (StringUtils.hasText(chatId) ? chatId : "default");
-        PushTaskVo task = findExistingTask(sourceMark);
-        if (task == null) {
-            PushTaskDto pushTaskDto = new PushTaskDto();
-            pushTaskDto.setName(DEMO_PUSH_NAME);
-            pushTaskDto.setDescription(DEMO_PUSH_DESCRIPTION);
-            pushTaskDto.setConfig(DEMO_PUSH_CONFIG);
-            pushTaskDto.setSource("SYSTEM");
-            pushTaskDto.setMark(sourceMark);
-            try {
-                boolean created = pushTaskService.createAndStart(pushTaskDto);
-                if (created) {
-                    task = findExistingTask(sourceMark);
-                }
-            } catch (Exception e) {
-                log.error("创建用户事件演示数据推送服务失败: {}", e.getMessage(), e);
+        String createResult = null;
+        try {
+            callTool(
+                    mcpToolContext,
+                    "push_task_detect_format",
+                    Map.of("content", DEMO_PUSH_CONFIG));
+
+            List<PushTaskVo> tasks = listPushTasks(mcpToolContext, sourceMark);
+            if (tasks.size() > 1) {
+                return runtimeFailureResponse(
+                        DEMO_PUSH_CONFIG,
+                        "未取得",
+                        sourceMark,
+                        "conflict",
+                        "创建前冲突检查",
+                        null,
+                        "同一 sourceMark 存在多个任务，确定性演示不会自动删除冲突任务。");
             }
-        }
 
-        if (task == null) {
+            if (tasks.isEmpty()) {
+                createResult = callTool(
+                        mcpToolContext,
+                        "push_task_create_and_start",
+                        Map.of("request", Map.of(
+                                "name", DEMO_PUSH_NAME,
+                                "description", DEMO_PUSH_DESCRIPTION,
+                                "config", DEMO_PUSH_CONFIG,
+                                "source", "SYSTEM",
+                                "mark", sourceMark)));
+            }
+
+            tasks = listPushTasks(mcpToolContext, sourceMark);
+            if (tasks.size() != 1) {
+                return runtimeFailureResponse(
+                        DEMO_PUSH_CONFIG,
+                        "未取得",
+                        sourceMark,
+                        "unknown",
+                        "创建后查询",
+                        null,
+                        createResult == null
+                                ? "未查询到唯一的演示数据推送任务。"
+                                : "创建工具结果：" + describeToolResult(createResult)
+                                + "；创建后未查询到唯一任务。");
+            }
+
+            PushTaskVo task = tasks.get(0);
+            String taskId = task.getId() == null ? "" : String.valueOf(task.getId());
+            String config = StringUtils.hasText(task.getConfig()) ? task.getConfig() : DEMO_PUSH_CONFIG;
+            Map<String, Object> logResult = readLog(mcpToolContext, task, sourceMark);
+            String status = String.valueOf(logResult.getOrDefault(
+                    "taskStatus",
+                    StringUtils.hasText(task.getStatus()) ? task.getStatus() : "unknown"));
+            String systemLog = String.valueOf(logResult.getOrDefault("content", ""));
+            boolean truncated = Boolean.parseBoolean(String.valueOf(
+                    logResult.getOrDefault("truncated", false)));
+
+            if (!"running".equalsIgnoreCase(status) || containsRuntimeError(systemLog)) {
+                return runtimeFailureResponse(
+                        config,
+                        taskId,
+                        sourceMark,
+                        status,
+                        "启动或运行检查",
+                        systemLog,
+                        truncated,
+                        "任务状态不是 running，或最新 system 日志仍包含本轮错误。");
+            }
+
             return """
-                    数据推送配置已生成，但创建或启动服务失败，请检查 Vectum 服务状态后重试。
+                    数据推送服务已通过 MCP 审批创建，并完成状态与 system 日志检查。
 
-                    ```toml
-                    %s
+                    ```zenvis:vectum-task-record
+                    {
+                      "title": "数据推送服务已创建",
+                      "taskId": "%s",
+                      "sourceMark": "%s",
+                      "name": "%s",
+                      "description": "%s",
+                      "status": "running",
+                      "config": %s
+                    }
                     ```
-
-                    ```zenvis:notice
-                    {"title":"数据推送服务创建失败","content":"未能创建或查询到用户事件数据推送服务，请确认 Vectum 服务可用。","level":"error"}
-                    ```
-                    """.formatted(DEMO_PUSH_CONFIG.trim());
+                    """.formatted(
+                    escapeJson(taskId),
+                    escapeJson(sourceMark),
+                    escapeJson(StringUtils.hasText(task.getName()) ? task.getName() : DEMO_PUSH_NAME),
+                    escapeJson(StringUtils.hasText(task.getDescription())
+                            ? task.getDescription() : DEMO_PUSH_DESCRIPTION),
+                    JacksonUtil.toJson(config)
+            );
+        } catch (Exception e) {
+            log.error("执行用户事件演示数据推送 MCP 流程失败: {}", e.getMessage(), e);
+            return runtimeFailureResponse(
+                    DEMO_PUSH_CONFIG,
+                    "未取得",
+                    sourceMark,
+                    "unknown",
+                    "MCP 工具执行",
+                    null,
+                    createResult == null ? safeError(e)
+                            : describeToolResult(createResult) + "；" + safeError(e));
         }
-
-        String taskId = task.getId() == null ? "" : String.valueOf(task.getId());
-        String status = StringUtils.hasText(task.getStatus()) ? task.getStatus() : "running";
-        String config = StringUtils.hasText(task.getConfig()) ? task.getConfig() : DEMO_PUSH_CONFIG;
-
-        return """
-                数据推送服务已创建并校验通过。
-
-                ```zenvis:vectum-task-record
-                {
-                  "title": "数据推送服务已创建",
-                  "taskId": "%s",
-                  "sourceMark": "%s",
-                  "name": "%s",
-                  "description": "%s",
-                  "status": "%s",
-                  "config": %s
-                }
-                ```
-                """.formatted(
-                escapeJson(taskId),
-                escapeJson(sourceMark),
-                escapeJson(StringUtils.hasText(task.getName()) ? task.getName() : DEMO_PUSH_NAME),
-                escapeJson(StringUtils.hasText(task.getDescription()) ? task.getDescription() : DEMO_PUSH_DESCRIPTION),
-                escapeJson(status),
-                JacksonUtil.toJson(config)
-        );
     }
 
-    private PushTaskVo findExistingTask(String sourceMark) {
-        try {
-            List<PushTaskVo> tasks = pushTaskService.findBySourceMark(sourceMark);
-            if (tasks != null && !tasks.isEmpty()) {
-                return tasks.get(0);
-            }
-        } catch (Exception e) {
-            log.warn("查询用户事件演示数据推送服务失败: {}", e.getMessage(), e);
+    private List<PushTaskVo> listPushTasks(McpToolContext mcpToolContext, String sourceMark) throws Exception {
+        String result = callTool(
+                mcpToolContext,
+                "push_task_list_by_source_mark",
+                Map.of("sourceMark", sourceMark));
+        return JacksonConfig.OBJECT_MAPPER.readValue(
+                result,
+                new TypeReference<List<PushTaskVo>>() {
+                });
+    }
+
+    private Map<String, Object> readLog(McpToolContext mcpToolContext,
+                                        PushTaskVo task,
+                                        String sourceMark) throws Exception {
+        String result = callTool(
+                mcpToolContext,
+                "push_task_get_log",
+                Map.of(
+                        "taskId", task.getId(),
+                        "sourceMark", sourceMark,
+                        "logType", "system"));
+        return JacksonConfig.OBJECT_MAPPER.readValue(
+                result,
+                new TypeReference<Map<String, Object>>() {
+                });
+    }
+
+    private String runtimeFailureResponse(String config,
+                                          String taskId,
+                                          String sourceMark,
+                                          String status,
+                                          String stage,
+                                          String systemLog,
+                                          String reason) {
+        return runtimeFailureResponse(
+                config,
+                taskId,
+                sourceMark,
+                status,
+                stage,
+                systemLog,
+                systemLog != null && systemLog.length() > 2_000,
+                reason);
+    }
+
+    private String runtimeFailureResponse(String config,
+                                          String taskId,
+                                          String sourceMark,
+                                          String status,
+                                          String stage,
+                                          String systemLog,
+                                          boolean truncated,
+                                          String reason) {
+        String sanitizedLog = StringUtils.hasText(systemLog)
+                ? sanitizeSystemLog(systemLog)
+                : "任务日志不可取得";
+        return """
+                数据推送服务未确认成功。
+
+                ```toml
+                %s
+                ```
+
+                ```zenvis:notice
+                {"title":"数据推送任务运行失败","content":"任务 ID：%s\\nsourceMark：%s\\n状态：%s\\n失败阶段：%s","level":"error"}
+                ```
+
+                ```zenvis:notice
+                {"title":"数据推送任务日志","content":"日志类型：system\\n是否截断：%s\\n最新相关日志：\\n%s","level":"warning"}
+                ```
+
+                ```zenvis:notice
+                {"title":"失败原因与下一步","content":"分类：确定性演示执行失败\\n失败原因：%s\\n配置修改：无\\n下一步：保留固定演示配置并停止，不调用 AI 模型猜测或修改。","level":"warning"}
+                ```
+                """.formatted(
+                config.trim(),
+                escapeJson(taskId),
+                escapeJson(sourceMark),
+                escapeJson(status),
+                escapeJson(stage),
+                truncated,
+                escapeJson(sanitizedLog),
+                escapeJson(reason));
+    }
+
+    private String callTool(McpToolContext mcpToolContext,
+                            String toolName,
+                            Map<String, Object> arguments) {
+        if (mcpToolContext == null
+                || mcpToolContext.toolCallbackProvider() == null
+                || mcpToolContext.toolCallbackProvider().getToolCallbacks() == null) {
+            throw new IllegalStateException("演示所需 MCP 工具上下文不可用");
         }
-        return null;
+        ToolCallback callback = Arrays.stream(mcpToolContext.toolCallbackProvider().getToolCallbacks())
+                .filter(tool -> tool != null
+                        && tool.getToolDefinition() != null
+                        && toolName.equals(tool.getToolDefinition().name()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("演示所需 MCP 工具不可用：" + toolName));
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        McpInvocationContext invocationContext = mcpToolContext.invocationContext();
+        if (invocationContext != null) {
+            context.put(McpInvocationContext.TOOL_CONTEXT_KEY, invocationContext);
+        }
+        ToolRuntimeContext runtimeContext = mcpToolContext.toolRuntimeContext();
+        if (runtimeContext != null) {
+            context.put(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext);
+        }
+        return callback.call(JacksonUtil.toJson(arguments), new ToolContext(context));
+    }
+
+    private void requireTrueResult(String toolName, String result) throws Exception {
+        JsonNode node = JacksonConfig.OBJECT_MAPPER.readTree(result);
+        if (node != null && (node.isBoolean() && node.booleanValue()
+                || node.isTextual() && Boolean.parseBoolean(node.textValue()))) {
+            return;
+        }
+        throw new IllegalStateException(toolName + " 未成功：" + describeToolResult(result));
+    }
+
+    private String decodeStringResult(String result) throws Exception {
+        JsonNode node = JacksonConfig.OBJECT_MAPPER.readTree(result);
+        return node != null && node.isTextual() ? node.textValue() : result;
+    }
+
+    private boolean jsonEquivalent(String expected, String actual) throws Exception {
+        return JacksonConfig.OBJECT_MAPPER.readTree(expected)
+                .equals(JacksonConfig.OBJECT_MAPPER.readTree(actual));
+    }
+
+    private boolean containsConfigFile(List<ConfigVo> nodes, String fileName) {
+        if (nodes == null) {
+            return false;
+        }
+        for (ConfigVo node : nodes) {
+            if (node == null) {
+                continue;
+            }
+            if (fileName.equals(node.getFileName()) || containsConfigFile(node.getNodes(), fileName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String describeToolResult(String result) {
+        if (!StringUtils.hasText(result)) {
+            return "工具未返回结果";
+        }
+        try {
+            JsonNode node = JacksonConfig.OBJECT_MAPPER.readTree(result);
+            if (node != null && node.isObject()) {
+                String status = node.path("status").asText("");
+                String message = node.path("message").asText("");
+                if (StringUtils.hasText(status) || StringUtils.hasText(message)) {
+                    return "status=" + status + (StringUtils.hasText(message) ? "，" + message : "");
+                }
+            }
+        } catch (Exception ignored) {
+            // 使用受限的纯文本摘要。
+        }
+        return result.length() <= 500 ? result : result.substring(0, 500) + "...";
+    }
+
+    private boolean containsRuntimeError(String logContent) {
+        if (!StringUtils.hasText(logContent)) {
+            return false;
+        }
+        int markerIndex = logContent.lastIndexOf(VECTUM_RUN_LOG_MARKER_PREFIX);
+        String currentRunLog = markerIndex >= 0
+                ? logContent.substring(markerIndex + VECTUM_RUN_LOG_MARKER_PREFIX.length())
+                : logContent;
+        String normalized = currentRunLog.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("error")
+                || normalized.contains("failed")
+                || normalized.contains("fatal")
+                || normalized.contains("panic");
+    }
+
+    private String sanitizeSystemLog(String logContent) {
+        String sanitized = StringUtils.trimWhitespace(
+                StringUtils.hasText(logContent) ? logContent : "空日志");
+        sanitized = sanitized.replaceAll(
+                "(?i)\\bBearer\\s+[^\\s,;]+",
+                "Bearer ***");
+        sanitized = sanitized.replaceAll(
+                "(?i)([\"']?(?:password|passwd|token|secret|api[_-]?key|access[_-]?key|authorization)"
+                        + "[\"']?\\s*[:=]\\s*[\"']?)([^\\s,;\"']+)",
+                "$1***");
+        if (sanitized.length() > 2_000) {
+            return sanitized.substring(sanitized.length() - 2_000);
+        }
+        return sanitized;
+    }
+
+    private String safeError(Exception exception) {
+        String message = exception == null ? null : exception.getMessage();
+        return StringUtils.hasText(message) ? sanitizeSystemLog(message) : "未知错误";
     }
 
     private String escapeJson(String value) {
@@ -722,4 +1001,5 @@ public class DataAccessDemoResponseService {
                 .replace("\r", "\\r")
                 .replace("\n", "\\n");
     }
+
 }

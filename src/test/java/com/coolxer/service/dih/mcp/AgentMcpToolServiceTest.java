@@ -53,6 +53,7 @@ class AgentMcpToolServiceTest {
         assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(8);
         assertThat(context.toolRuntimeContext().maxRepeatedFailures()).isEqualTo(2);
         assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(24_000);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(12_000);
     }
 
     @Test
@@ -60,7 +61,8 @@ class AgentMcpToolServiceTest {
         Environment environment = new MockEnvironment()
                 .withProperty("app.ai.dih.agent.default-limits.max-tool-calls", "5")
                 .withProperty("app.ai.dih.agent.default-limits.max-tool-result-chars", "4000")
-                .withProperty("app.ai.dih.agent.default-limits.max-accumulated-tool-result-chars", "10000");
+                .withProperty("app.ai.dih.agent.default-limits.max-accumulated-tool-result-chars", "10000")
+                .withProperty("app.ai.dih.agent.default-limits.max-accumulated-tool-result-tokens", "3000");
         AgentMcpToolService service = new AgentMcpToolService(
                 new EmptyMcpClientService(),
                 environment,
@@ -72,6 +74,7 @@ class AgentMcpToolServiceTest {
         assertThat(context.toolRuntimeContext()).isNotNull();
         assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(5);
         assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(10_000);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(3_000);
     }
 
     @Test
@@ -196,7 +199,7 @@ class AgentMcpToolServiceTest {
                                 "payload_decode_base64",
                                 "ioc_lookup"))
                 ),
-                new SkillRuntimeLimitsVo(16, 2, 12000, 48000)
+                new SkillRuntimeLimitsVo(16, 2, 12000, 48000, 12000)
         );
         when(skillService.resolveRuntimeConfig(List.of("jmr-continuous-threat-analysis")))
                 .thenReturn(runtime);
@@ -242,6 +245,71 @@ class AgentMcpToolServiceTest {
                         "jmr_dictionary_lookup",
                         "jmr_payload_decode_base64",
                         "jmr_ioc_lookup");
+    }
+
+    @Test
+    void resolveDataAccessSkillExposesOnlyConfiguredWorkflowTools() {
+        List<String> allowedTools = List.of(
+                "config_tree",
+                "config_add",
+                "config_apply",
+                "config_read",
+                "push_task_detect_format",
+                "push_task_list_by_source_mark",
+                "push_task_create_and_start",
+                "push_task_get_log",
+                "push_task_repair_and_restart",
+                "push_task_delete_by_source_mark"
+        );
+        SkillService skillService = mock(SkillService.class);
+        SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
+                null,
+                new SkillRuntimeToolsVo(allowedTools, Map.of()),
+                new SkillRuntimeLimitsVo(32, 2, 8000, 64000, 48000)
+        );
+        when(skillService.resolveRuntimeConfig(List.of("data-access-agent"))).thenReturn(runtime);
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入")),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("config_tree", "配置树"),
+                        new FakeToolCallback("config_add", "新增配置"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("config_read", "读取配置"),
+                        new FakeToolCallback("push_task_detect_format", "检测格式"),
+                        new FakeToolCallback("push_task_list_by_source_mark", "查询推送任务"),
+                        new FakeToolCallback("push_task_create_and_start", "创建并启动推送任务"),
+                        new FakeToolCallback("push_task_get_log", "读取推送任务日志"),
+                        new FakeToolCallback("push_task_repair_and_restart", "修复并重启推送任务"),
+                        new FakeToolCallback("push_task_delete_by_source_mark", "删除推送任务"),
+                        new FakeToolCallback("entity_update", "更新实体"),
+                        new FakeToolCallback("menu_create", "创建菜单")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_data_access",
+                List.of("data-access-agent")
+        );
+
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactlyElementsOf(allowedTools);
+        assertThat(context.systemPrompt())
+                .contains(allowedTools.toArray(String[]::new))
+                .doesNotContain(
+                        "push_task_vector_capabilities",
+                        "push_task_vector_component_schema",
+                        "push_task_generate_config",
+                        "push_task_validate_config",
+                        "entity_update",
+                        "menu_create",
+                        "external_write");
+        assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(32);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(64_000);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(48_000);
     }
 
     private record FakeToolCallback(String name, String description) implements ToolCallback {

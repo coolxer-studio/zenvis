@@ -75,7 +75,7 @@ class McpApprovalToolCallbackProviderTest {
                 policyService
         );
         ToolRuntimeContext runtimeContext = new ToolRuntimeContext(
-                new SkillRuntimeLimitsVo(16, 2, 12_000, 48_000));
+                new SkillRuntimeLimitsVo(16, 2, 12_000, 48_000, 12_000));
         ToolContext internalContext = new ToolContext(Map.of(
                 ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext,
                 McpInvocationContext.TOOL_CONTEXT_KEY,

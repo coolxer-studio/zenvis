@@ -44,6 +44,8 @@ public class AgentMcpToolService {
 
     private static final int DEFAULT_MAX_ACCUMULATED_TOOL_RESULT_CHARS = 24_000;
 
+    private static final int DEFAULT_MAX_ACCUMULATED_TOOL_RESULT_TOKENS = 12_000;
+
     private static final String DEFAULT_LIMITS_PREFIX = "app.ai.dih.agent.default-limits.";
 
     private static final Set<String> DATA_VISUALIZATION_ALLOWED_TOOLS = Set.of(
@@ -392,6 +394,11 @@ public class AgentMcpToolService {
                 DEFAULT_LIMITS_PREFIX + "max-accumulated-tool-result-chars",
                 DEFAULT_MAX_ACCUMULATED_TOOL_RESULT_CHARS
         );
+        int maxAccumulatedToolResultTokens = positiveOrDefault(
+                current == null ? null : current.getMaxAccumulatedToolResultTokens(),
+                DEFAULT_LIMITS_PREFIX + "max-accumulated-tool-result-tokens",
+                DEFAULT_MAX_ACCUMULATED_TOOL_RESULT_TOKENS
+        );
 
         if (runtime != null
                 && current != null
@@ -401,7 +408,9 @@ public class AgentMcpToolService {
                 && current.getMaxToolResultChars() != null
                 && current.getMaxToolResultChars() == maxToolResultChars
                 && current.getMaxAccumulatedToolResultChars() != null
-                && current.getMaxAccumulatedToolResultChars() == maxAccumulatedToolResultChars) {
+                && current.getMaxAccumulatedToolResultChars() == maxAccumulatedToolResultChars
+                && current.getMaxAccumulatedToolResultTokens() != null
+                && current.getMaxAccumulatedToolResultTokens() == maxAccumulatedToolResultTokens) {
             return runtime;
         }
 
@@ -412,7 +421,8 @@ public class AgentMcpToolService {
                         maxToolCalls,
                         maxRepeatedFailures,
                         maxToolResultChars,
-                        maxAccumulatedToolResultChars
+                        maxAccumulatedToolResultChars,
+                        maxAccumulatedToolResultTokens
                 )
         );
     }

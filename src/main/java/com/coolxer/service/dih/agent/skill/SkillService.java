@@ -404,6 +404,8 @@ public class SkillService {
                 runtime.getLimits() == null ? null : runtime.getLimits().getMaxToolResultChars()));
         limits.setMaxAccumulatedToolResultChars(minPositive(runtimes, runtime ->
                 runtime.getLimits() == null ? null : runtime.getLimits().getMaxAccumulatedToolResultChars()));
+        limits.setMaxAccumulatedToolResultTokens(minPositive(runtimes, runtime ->
+                runtime.getLimits() == null ? null : runtime.getLimits().getMaxAccumulatedToolResultTokens()));
         merged.setLimits(limits);
         return merged;
     }

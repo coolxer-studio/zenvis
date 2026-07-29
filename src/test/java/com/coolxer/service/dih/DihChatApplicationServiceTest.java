@@ -548,6 +548,57 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
+    void dataAccessExampleStartsWithoutConfiguredModelOrAgent() {
+        FakeChatSessionService sessionService = new FakeChatSessionService();
+        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
+        ThrowingChatModel titleModel = new ThrowingChatModel();
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                baseService,
+                sessionService,
+                new DataAccessDemoResponseService(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new ChatMessagePartParser(),
+                null,
+                new ChatTitleService(titleModel),
+                null,
+                new EnabledSkillService(),
+                null,
+                null,
+                null,
+                null
+        );
+        ChatDto chatDto = new ChatDto();
+        chatDto.setType(DataAccessAgent.AGENT_TYPE);
+        chatDto.setChatId("data-access-demo-chat");
+        chatDto.setModel("unsupported-model-should-not-be-checked");
+        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+        chatDto.setMessage("""
+                # 用户事件数据接入
+                表：msg_user_event
+                数据源：demo_logs
+                字段：event_type、server_time、reliability
+                """);
+
+        String response = String.join("", service.chat(chatDto, null).collectList().block());
+
+        assertThat(response).contains("zenvis:info-steps", "用户事件数据接入元数据确认");
+        assertThat(baseService.isModelSupportedCalls.get()).isZero();
+        assertThat(baseService.resolveChatModelCalls.get()).isZero();
+        assertThat(titleModel.calls.get()).isZero();
+        assertThat(sessionService.session.getTitle())
+                .isEqualTo(DataAccessDemoResponseService.USER_EVENT_DEMO_TITLE);
+    }
+
+    @Test
     void dataAnalysisExampleUsesBuiltinThreeStageResultsWithoutModelOrAgent() {
         FakeChatSessionService sessionService = new FakeChatSessionService();
         ThrowingAIBaseService baseService = new ThrowingAIBaseService();

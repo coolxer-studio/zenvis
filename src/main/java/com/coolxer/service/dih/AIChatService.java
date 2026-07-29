@@ -739,14 +739,32 @@ public class AIChatService {
         int toolDefinitionTokens = estimateToolDefinitionTokens(toolCallbackProvider);
         int toolResultReserveTokens = toolRuntimeContext == null
                 ? 0
-                : Math.max(toolRuntimeContext.maxAccumulatedToolResultChars(), 0);
+                : Math.max(toolRuntimeContext.maxAccumulatedToolResultTokens(), 0);
         int fixedTokens =
                 systemTokens + toolDefinitionTokens + toolResultReserveTokens + 128;
         int promptBudget = maxInputTokens - fixedTokens;
         if (promptBudget < MIN_CURRENT_PROMPT_TOKENS) {
             chatMemory.clearHistoryTokenBudget(chatId);
+            log.warn(
+                    "DIH固定上下文预算不足: chatId={}, maxInputTokens={}, fixedTokens={}, "
+                            + "systemTokens={}, toolDefinitionTokens={}, toolResultReserveTokens={}, "
+                            + "requiredPromptTokens={}",
+                    chatId,
+                    maxInputTokens,
+                    fixedTokens,
+                    systemTokens,
+                    toolDefinitionTokens,
+                    toolResultReserveTokens,
+                    MIN_CURRENT_PROMPT_TOKENS
+            );
             throw new AgentCapabilityUnavailableException(
-                    "固定系统提示词和工具定义已接近模型上下文上限，请减少当前 Skill 内容或可用工具数量。"
+                    "智能体固定上下文预算不足：最大输入 " + maxInputTokens
+                            + " Token，固定占用 " + fixedTokens
+                            + " Token（系统提示词 " + systemTokens
+                            + "、工具定义 " + toolDefinitionTokens
+                            + "、工具结果预留 " + toolResultReserveTokens
+                            + "）。请降低 Skill 的 maxAccumulatedToolResultTokens，"
+                            + "或精简 Skill/工具定义；不要通过增大字符预算替代 Token 预算。"
             );
         }
 

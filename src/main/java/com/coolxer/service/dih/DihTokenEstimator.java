@@ -9,12 +9,12 @@ import org.springframework.util.StringUtils;
  * content is estimated at four characters per token. The estimate deliberately
  * leaves model-specific variance to the configured safety margin.</p>
  */
-final class DihTokenEstimator {
+public final class DihTokenEstimator {
 
     private static final String TRUNCATION_MARKER =
             "\n\n[内容已按模型上下文预算截断，省略部分不得推断]\n\n";
 
-    int estimate(String text) {
+    public int estimate(String text) {
         if (!StringUtils.hasText(text)) {
             return 0;
         }
@@ -29,10 +29,11 @@ final class DihTokenEstimator {
             }
             offset += Character.charCount(codePoint);
         }
-        return nonAscii + Math.max(1, (ascii + 3) / 4);
+        int asciiTokens = ascii == 0 ? 0 : (ascii + 3) / 4;
+        return nonAscii + asciiTokens;
     }
 
-    String truncate(String text, int maxTokens) {
+    public String truncate(String text, int maxTokens) {
         if (!StringUtils.hasText(text) || maxTokens <= 0) {
             return "";
         }

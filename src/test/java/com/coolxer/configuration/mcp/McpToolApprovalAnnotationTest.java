@@ -42,7 +42,7 @@ class McpToolApprovalAnnotationTest {
                 .filter(method -> method.isAnnotationPresent(Tool.class))
                 .toList();
 
-        assertThat(methods).hasSize(66);
+        assertThat(methods).hasSize(68);
         assertThat(methods).allSatisfy(method -> {
             McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
             assertThat(approval)
@@ -84,5 +84,50 @@ class McpToolApprovalAnnotationTest {
                 assertThat(approval.risk()).isEqualTo(HIGH);
             }
         });
+    }
+
+    @Test
+    void pushTaskDiagnosticAndRepairToolsUseExpectedApprovalPolicies() {
+        Map<String, Method> tools = List.of(PushTaskMcpTool.class.getDeclaredMethods()).stream()
+                .filter(method -> method.isAnnotationPresent(Tool.class))
+                .collect(Collectors.toMap(
+                        method -> method.getAnnotation(Tool.class).name(),
+                        method -> method
+                ));
+
+        assertThat(tools.get("push_task_get_log").getAnnotation(McpToolApproval.class)).satisfies(approval -> {
+            assertThat(approval.value()).isEqualTo(ALLOW);
+            assertThat(approval.risk()).isEqualTo(LOW);
+        });
+        assertThat(tools).containsOnlyKeys(
+                "push_task_create_and_start",
+                "push_task_list_by_source_mark",
+                "push_task_delete_by_source_mark",
+                "push_task_get_log",
+                "push_task_repair_and_restart",
+                "push_task_detect_format");
+        for (String toolName : List.of(
+                "push_task_list_by_source_mark",
+                "push_task_get_log",
+                "push_task_detect_format")) {
+            assertThat(tools.get(toolName).getAnnotation(McpToolApproval.class))
+                    .satisfies(approval -> {
+                        assertThat(approval.value()).isEqualTo(ALLOW);
+                        assertThat(approval.risk()).isEqualTo(LOW);
+                    });
+        }
+        for (String toolName : List.of(
+                "push_task_create_and_start",
+                "push_task_delete_by_source_mark",
+                "push_task_repair_and_restart")) {
+            assertThat(tools.get(toolName).getAnnotation(McpToolApproval.class))
+                    .satisfies(approval -> {
+                        assertThat(approval.value()).isEqualTo(ASK);
+                        assertThat(approval.risk()).isEqualTo(HIGH);
+                    });
+        }
+        Method repairTool = tools.get("push_task_repair_and_restart");
+        assertThat(repairTool.getAnnotation(Tool.class).description())
+                .contains("真实日志证据", "具体失败原因", "逐项配置旧值/新值");
     }
 }

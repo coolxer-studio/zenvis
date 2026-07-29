@@ -200,7 +200,7 @@ final class OpenAiCompatibleToolCallingManager implements ToolCallingManager {
             runtimeContext.registerFailure(failureSignature(response.name(), data));
         }
         ToolRuntimeContext.ResultAllowance allowance =
-                runtimeContext.reserveResultChars(data.length());
+                runtimeContext.reserveResult(data);
         String constrained = allowance.truncated()
                 ? truncatedResult(data, allowance)
                 : data;
@@ -238,6 +238,8 @@ final class OpenAiCompatibleToolCallingManager implements ToolCallingManager {
         envelope.put("truncated", true);
         envelope.put("originalChars", allowance.requestedChars());
         envelope.put("returnedChars", previewLength);
+        envelope.put("originalTokens", allowance.requestedTokens());
+        envelope.put("returnedTokens", allowance.allowedTokens());
         envelope.put("contentPreview", data.substring(0, previewLength));
         copyPaginationMetadata(data, envelope);
         envelope.put("instruction", "结果已按 Skill 预算截断；不得推断被截断部分。");

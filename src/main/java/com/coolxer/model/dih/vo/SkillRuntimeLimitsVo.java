@@ -26,4 +26,7 @@ public class SkillRuntimeLimitsVo implements Serializable {
 
     @JsonAlias("maxAccumulatedToolResultChars")
     private Integer maxAccumulatedToolResultChars;
+
+    @JsonAlias("maxAccumulatedToolResultTokens")
+    private Integer maxAccumulatedToolResultTokens;
 }

@@ -1,6 +1,7 @@
 package com.coolxer.configuration.ai;
 
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
+import com.coolxer.service.dih.DihTokenEstimator;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -549,7 +550,7 @@ class OpenAiCompatibleToolCallingManagerTest {
         ToolCallingManager delegate = mock(ToolCallingManager.class);
         ToolCallingChatOptions options = ToolCallingChatOptions.builder().build();
         ToolRuntimeContext runtimeContext = new ToolRuntimeContext(
-                new SkillRuntimeLimitsVo(1, 2, 12, 12));
+                new SkillRuntimeLimitsVo(1, 2, 12, 12, 1_000));
         options.setToolContext(Map.of(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext));
         Prompt prompt = new Prompt("test", options);
         ChatResponse response = responseWithToolCalls(
@@ -592,11 +593,55 @@ class OpenAiCompatibleToolCallingManagerTest {
     }
 
     @Test
+    void truncatesNonAsciiToolResultAtTokenBudgetAndReportsTokenCounts() {
+        ToolCallingManager delegate = mock(ToolCallingManager.class);
+        ToolCallingChatOptions options = ToolCallingChatOptions.builder().build();
+        ToolRuntimeContext runtimeContext = new ToolRuntimeContext(
+                new SkillRuntimeLimitsVo(2, 2, 1_000, 2_000, 512));
+        options.setToolContext(Map.of(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext));
+        Prompt prompt = new Prompt("test", options);
+        ChatResponse response = responseWithToolCalls(
+                new AssistantMessage.ToolCall("call-1", "function", "retrieval_search", "{}")
+        );
+        ToolExecutionResult delegateResult = ToolExecutionResult.builder()
+                .conversationHistory(List.of(
+                        response.getResult().getOutput(),
+                        ToolResponseMessage.builder()
+                                .responses(List.of(new ToolResponseMessage.ToolResponse(
+                                        "call-1",
+                                        "retrieval_search",
+                                        "错".repeat(600)
+                                )))
+                                .build()
+                ))
+                .returnDirect(false)
+                .build();
+        when(delegate.executeToolCalls(same(prompt), same(response))).thenReturn(delegateResult);
+
+        ToolExecutionResult result =
+                new OpenAiCompatibleToolCallingManager(delegate).executeToolCalls(prompt, response);
+        String responseData = ((ToolResponseMessage) result.conversationHistory().get(1))
+                .getResponses().get(0).responseData();
+
+        assertThat(responseData)
+                .contains(
+                        "\"truncated\":true",
+                        "\"originalTokens\":600",
+                        "\"returnedTokens\":256",
+                        "tool_result_budget_exhausted"
+                );
+        assertThat(new DihTokenEstimator().estimate(responseData)).isLessThanOrEqualTo(512);
+        assertThat(runtimeContext.accumulatedToolResultChars()).isEqualTo(256);
+        assertThat(runtimeContext.accumulatedToolResultTokens()).isEqualTo(512);
+        assertThat(runtimeContext.stopReason()).isEqualTo("tool_result_budget_exhausted");
+    }
+
+    @Test
     void accumulatedResultBudgetCountsOnlyTheLatestToolResponse() {
         ToolCallingManager delegate = mock(ToolCallingManager.class);
         ToolCallingChatOptions options = ToolCallingChatOptions.builder().build();
         ToolRuntimeContext runtimeContext = new ToolRuntimeContext(
-                new SkillRuntimeLimitsVo(4, 2, 20, 25));
+                new SkillRuntimeLimitsVo(4, 2, 20, 25, 1_000));
         options.setToolContext(Map.of(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext));
         Prompt prompt = new Prompt("test", options);
         ChatResponse firstCall = responseWithToolCalls(
@@ -645,7 +690,7 @@ class OpenAiCompatibleToolCallingManagerTest {
         ToolCallingManager delegate = mock(ToolCallingManager.class);
         ToolCallingChatOptions options = ToolCallingChatOptions.builder().build();
         ToolRuntimeContext runtimeContext = new ToolRuntimeContext(
-                new SkillRuntimeLimitsVo(16, 2, 12_000, 48_000));
+                new SkillRuntimeLimitsVo(16, 2, 12_000, 48_000, 12_000));
         options.setToolContext(Map.of(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext));
         Prompt prompt = new Prompt("test", options);
         ChatResponse firstCall = responseWithToolCalls(
@@ -739,14 +784,25 @@ class OpenAiCompatibleToolCallingManagerTest {
     }
 
     private ToolExecutionResult toolFailure(ChatResponse response, String message) {
+        return toolResult(
+                response,
+                "retrieval_search",
+                "{\"status\":\"failed\",\"message\":\"" + message + "\"}");
+    }
+
+    private ToolExecutionResult toolResult(
+            ChatResponse response,
+            String toolName,
+            String responseData
+    ) {
         return ToolExecutionResult.builder()
                 .conversationHistory(List.of(
                         response.getResult().getOutput(),
                         ToolResponseMessage.builder()
                                 .responses(List.of(new ToolResponseMessage.ToolResponse(
                                         response.getResult().getOutput().getToolCalls().get(0).id(),
-                                        "retrieval_search",
-                                        "{\"status\":\"failed\",\"message\":\"" + message + "\"}"
+                                        toolName,
+                                        responseData
                                 )))
                                 .build()
                 ))

@@ -562,7 +562,7 @@ class OpenAiCompatibleToolCallingManagerTest {
                                 .responses(List.of(new ToolResponseMessage.ToolResponse(
                                         "call-1",
                                         "retrieval_search",
-                                        "{\"rows\":[\"abcdefghijklmnopqrstuvwxyz\"]}"
+                                        "{\"total\":128,\"hasMore\":true,\"rows\":[\"abcdefghijklmnopqrstuvwxyz\"]}"
                                 )))
                                 .build()
                 ))
@@ -576,7 +576,12 @@ class OpenAiCompatibleToolCallingManagerTest {
         ToolResponseMessage firstToolResponse =
                 (ToolResponseMessage) first.conversationHistory().get(1);
         assertThat(firstToolResponse.getResponses().get(0).responseData())
-                .contains("\"truncated\":true", "\"stop\":true", "tool_call_budget_exhausted");
+                .contains(
+                        "\"truncated\":true",
+                        "\"pagination\":{\"total\":128,\"hasMore\":true}",
+                        "\"stop\":true",
+                        "tool_call_budget_exhausted"
+                );
 
         ToolExecutionResult second = manager.executeToolCalls(prompt, response);
         assertThat(second.returnDirect()).isTrue();

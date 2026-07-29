@@ -25,10 +25,13 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
@@ -57,11 +60,19 @@ public class AIChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AIChatService.class);
 
-    /**
-     * Tool sessions can otherwise spend an unbounded amount of time producing a
-     * verbose final report after all evidence has already been collected.
-     */
-    private static final int TOOL_CALL_MAX_TOKENS = 4096;
+    private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 102_400;
+
+    private static final int DEFAULT_OUTPUT_RESERVE_TOKENS = 4_096;
+
+    private static final int DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS = 4_096;
+
+    private static final int DEFAULT_MAX_HISTORY_TOKENS = 24_000;
+
+    private static final int DEFAULT_SUMMARY_TOKENS = 2_048;
+
+    private static final int DEFAULT_RECENT_TURNS = 6;
+
+    private static final int MIN_CURRENT_PROMPT_TOKENS = 512;
 
     private static final String QWEN_NATIVE_DEEP_THINK_SYSTEM_PROMPT = """
             You are a thoughtful AI assistant. Use the enabled reasoning mode to think before answering.
@@ -72,7 +83,9 @@ public class AIChatService {
 
     private final ChatClient systemPromptChatClient;
 
-    private final ChatMemory chatMemory;
+    private final ContextWindowChatMemory chatMemory;
+
+    private final DihTokenEstimator tokenEstimator;
 
     private final PromptTemplate deepThinkPromptTemplate;
 
@@ -92,6 +105,15 @@ public class AIChatService {
 
     private final String defaultChatModel;
 
+    private final int contextWindowTokens;
+
+    private final int outputReserveTokens;
+
+    private final int contextSafetyMarginTokens;
+
+    private final int maxHistoryTokens;
+
+    @Autowired
     public AIChatService(
             @Qualifier("springAiChatMemoryRepository") ChatMemoryRepository chatMemoryRepository,
             ChatModel chatModel,
@@ -101,16 +123,31 @@ public class AIChatService {
             ChatAttachmentService chatAttachmentService,
             @Value("${spring.ai.openai.base-url:}") String openAiBaseUrl,
             @Value("${spring.ai.openai.api-key:}") String openAiApiKey,
-            @Value("${spring.ai.openai.chat.options.model:}") String defaultChatModel
+            @Value("${spring.ai.openai.chat.options.model:}") String defaultChatModel,
+            @Value("${app.ai.dih.context.window-tokens:102400}") int contextWindowTokens,
+            @Value("${app.ai.dih.context.output-reserve-tokens:4096}") int outputReserveTokens,
+            @Value("${app.ai.dih.context.safety-margin-tokens:4096}") int contextSafetyMarginTokens,
+            @Value("${app.ai.dih.context.max-history-tokens:24000}") int maxHistoryTokens,
+            @Value("${app.ai.dih.context.summary-tokens:2048}") int maxSummaryTokens,
+            @Value("${app.ai.dih.context.recent-turns:6}") int recentTurns
     ) {
-        ChatMemory chatMemory = MessageWindowChatMemory.builder()
+        ChatMemory windowMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(chatMemoryRepository)
+                .maxMessages(Math.max(40, Math.max(recentTurns, 1) * 4))
                 .build();
-        this.chatMemory = chatMemory;
+        this.tokenEstimator = new DihTokenEstimator();
+        this.chatMemory = new ContextWindowChatMemory(
+                windowMemory,
+                chatMemoryRepository,
+                tokenEstimator,
+                positiveOrDefault(maxHistoryTokens, DEFAULT_MAX_HISTORY_TOKENS),
+                positiveOrDefault(maxSummaryTokens, DEFAULT_SUMMARY_TOKENS),
+                positiveOrDefault(recentTurns, DEFAULT_RECENT_TURNS)
+        );
 
         this.systemPromptChatClient = ChatClient.builder(chatModel)
                 .defaultAdvisors(new SimpleLoggerAdvisor())
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(this.chatMemory).build())
                 .build();
 
         this.askSystemPromptTemplate = systemPromptTemplate;
@@ -125,6 +162,43 @@ public class AIChatService {
         this.openAiBaseUrl = openAiBaseUrl;
         this.openAiApiKey = openAiApiKey;
         this.defaultChatModel = defaultChatModel;
+        this.contextWindowTokens = positiveOrDefault(
+                contextWindowTokens, DEFAULT_CONTEXT_WINDOW_TOKENS);
+        this.outputReserveTokens = positiveOrDefault(
+                outputReserveTokens, DEFAULT_OUTPUT_RESERVE_TOKENS);
+        this.contextSafetyMarginTokens = positiveOrDefault(
+                contextSafetyMarginTokens, DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS);
+        this.maxHistoryTokens = positiveOrDefault(maxHistoryTokens, DEFAULT_MAX_HISTORY_TOKENS);
+    }
+
+    public AIChatService(
+            ChatMemoryRepository chatMemoryRepository,
+            ChatModel chatModel,
+            PromptTemplate systemPromptTemplate,
+            PromptTemplate deepThinkPromptTemplate,
+            RagContextService ragContextService,
+            ChatAttachmentService chatAttachmentService,
+            String openAiBaseUrl,
+            String openAiApiKey,
+            String defaultChatModel
+    ) {
+        this(
+                chatMemoryRepository,
+                chatModel,
+                systemPromptTemplate,
+                deepThinkPromptTemplate,
+                ragContextService,
+                chatAttachmentService,
+                openAiBaseUrl,
+                openAiApiKey,
+                defaultChatModel,
+                DEFAULT_CONTEXT_WINDOW_TOKENS,
+                DEFAULT_OUTPUT_RESERVE_TOKENS,
+                DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
+                DEFAULT_MAX_HISTORY_TOKENS,
+                DEFAULT_SUMMARY_TOKENS,
+                DEFAULT_RECENT_TURNS
+        );
     }
 
     public Flux<String> chat(String chatId, String model, String prompt) {
@@ -147,12 +221,14 @@ public class AIChatService {
         String mode = deepThinking ? "deep_think" : "ask";
         RagContext ragContext = ragContextService.retrieve(prompt, mode);
         String systemPrompt = buildQaSystemPrompt(model, deepThinking, ragContext.systemPrompt());
+        PreparedChatInput preparedInput = prepareChatInput(
+                chatId, systemPrompt, prompt, null, null);
 
         if (canUseNativeQaStream(model, attachments, deepThinking)) {
-            return nativeOpenAiChat(
+            return finalizeModelMemory(nativeOpenAiChat(
                     chatId,
                     model,
-                    prompt,
+                    preparedInput.prompt(),
                     attachments,
                     user,
                     deepThinking,
@@ -160,7 +236,7 @@ public class AIChatService {
                     deepThinking
                             ? "AIChatService.qaChat.deepThink.native"
                             : "AIChatService.qaChat.native"
-            );
+            ), chatId, preparedInput.prompt(), attachments);
         }
 
         String scene = deepThinking ? "AIChatService.qaChat.deepThink" : "AIChatService.qaChat";
@@ -170,7 +246,7 @@ public class AIChatService {
                 buildChatLogRequest(
                         chatId,
                         model,
-                        prompt,
+                        preparedInput.prompt(),
                         attachments,
                         deepThinking,
                         ragContext.requested(),
@@ -183,7 +259,7 @@ public class AIChatService {
         var promptSpec = systemPromptChatClient.prompt()
                 .options(buildRuntimeOptions(model, false))
                 .system(systemPrompt)
-                .user(prompt)
+                .user(preparedInput.prompt())
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 );
@@ -192,7 +268,13 @@ public class AIChatService {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);
         }
 
-        return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
+        return finalizeModelMemory(
+                LlmLogHelper.logStringStream(
+                        log, requestId, scene, promptSpec.stream().content(), startedAtNanos),
+                chatId,
+                preparedInput.prompt(),
+                attachments
+        );
     }
 
     /**
@@ -214,33 +296,44 @@ public class AIChatService {
         McpToolContext resolvedMcpToolContext = mcpToolContext == null
                 ? McpToolContext.empty()
                 : mcpToolContext;
+        PreparedChatInput preparedInput = prepareChatInput(
+                chatId,
+                systemPrompt,
+                prompt,
+                resolvedMcpToolContext.hasTools()
+                        ? resolvedMcpToolContext.toolCallbackProvider()
+                        : null,
+                resolvedMcpToolContext.hasTools()
+                        ? resolvedMcpToolContext.toolRuntimeContext()
+                        : null
+        );
         if (!resolvedMcpToolContext.hasTools()
                 && chatAttachmentService.hasImageAttachment(attachments)
                 && canUseNativeOpenAiStream()) {
-            return nativeOpenAiChat(
+            return finalizeModelMemory(nativeOpenAiChat(
                     chatId,
                     model,
-                    prompt,
+                    preparedInput.prompt(),
                     attachments,
                     user,
                     false,
                     systemPrompt,
                     "AIChatService.agentChat.native"
-            );
+            ), chatId, preparedInput.prompt(), attachments);
         }
 
         String scene = "AIChatService.agentChat";
         String requestId = LlmLogHelper.newRequestId();
         long startedAtNanos = System.nanoTime();
         LlmLogHelper.logRequest(log, requestId, scene,
-                buildChatLogRequest(chatId, model, prompt, attachments, false,
+                buildChatLogRequest(chatId, model, preparedInput.prompt(), attachments, false,
                         false, false, 0, systemPrompt,
                         resolvedMcpToolContext.hasTools()));
 
         var promptSpec = systemPromptChatClient.prompt()
                 .options(buildRuntimeOptions(model, resolvedMcpToolContext.hasTools()))
                 .system(systemPrompt)
-                .user(prompt)
+                .user(preparedInput.prompt())
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 );
@@ -268,7 +361,13 @@ public class AIChatService {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);
         }
 
-        return LlmLogHelper.logStringStream(log, requestId, scene, promptSpec.stream().content(), startedAtNanos);
+        return finalizeModelMemory(
+                LlmLogHelper.logStringStream(
+                        log, requestId, scene, promptSpec.stream().content(), startedAtNanos),
+                chatId,
+                preparedInput.prompt(),
+                attachments
+        );
     }
 
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt) {
@@ -403,9 +502,9 @@ public class AIChatService {
         requestBody.put("messages", messages);
         requestBody.put("temperature", toolCalling ? 0.1 : 0.8);
         requestBody.put("stream", true);
+        requestBody.put("max_tokens", outputReserveTokens);
         if (toolCalling) {
             requestBody.put("parallel_tool_calls", false);
-            requestBody.put("max_tokens", TOOL_CALL_MAX_TOKENS);
         }
 
         request.put("url", openAiChatCompletionsUrl());
@@ -472,6 +571,7 @@ public class AIChatService {
         request.put("model", StringUtils.hasText(model) ? model : defaultChatModel);
         request.put("stream", true);
         request.put("temperature", 0.8);
+        request.put("max_tokens", outputReserveTokens);
         if (deepThinking && supportsQwenReasoningStream(model)) {
             request.put("chat_template_kwargs", Map.of("enable_thinking", true));
         }
@@ -615,15 +715,128 @@ public class AIChatService {
 
     private OpenAiChatOptions buildRuntimeOptions(String model, boolean toolCalling) {
         var builder = OpenAiChatOptions.builder()
-                .temperature(toolCalling ? 0.1 : 0.8);
+                .temperature(toolCalling ? 0.1 : 0.8)
+                .maxTokens(outputReserveTokens);
         if (toolCalling) {
-            builder.parallelToolCalls(false)
-                    .maxTokens(TOOL_CALL_MAX_TOKENS);
+            builder.parallelToolCalls(false);
         }
         if (StringUtils.hasText(model)) {
             builder.model(model);
         }
         return builder.build();
+    }
+
+    private PreparedChatInput prepareChatInput(String chatId,
+                                               String systemPrompt,
+                                               String prompt,
+                                               ToolCallbackProvider toolCallbackProvider,
+                                               ToolRuntimeContext toolRuntimeContext) {
+        int maxInputTokens = Math.max(
+                contextWindowTokens - outputReserveTokens - contextSafetyMarginTokens,
+                MIN_CURRENT_PROMPT_TOKENS
+        );
+        int systemTokens = tokenEstimator.estimate(systemPrompt);
+        int toolDefinitionTokens = estimateToolDefinitionTokens(toolCallbackProvider);
+        int toolResultReserveTokens = toolRuntimeContext == null
+                ? 0
+                : Math.max(toolRuntimeContext.maxAccumulatedToolResultChars(), 0);
+        int fixedTokens =
+                systemTokens + toolDefinitionTokens + toolResultReserveTokens + 128;
+        int promptBudget = maxInputTokens - fixedTokens;
+        if (promptBudget < MIN_CURRENT_PROMPT_TOKENS) {
+            chatMemory.clearHistoryTokenBudget(chatId);
+            throw new AgentCapabilityUnavailableException(
+                    "固定系统提示词和工具定义已接近模型上下文上限，请减少当前 Skill 内容或可用工具数量。"
+            );
+        }
+
+        String boundedPrompt = tokenEstimator.truncate(prompt, promptBudget);
+        int promptTokens = tokenEstimator.estimate(boundedPrompt);
+        int historyBudget = Math.min(
+                maxHistoryTokens,
+                Math.max(maxInputTokens - fixedTokens - promptTokens, 0)
+        );
+        chatMemory.setHistoryTokenBudget(chatId, historyBudget);
+
+        int historyTokens = StringUtils.hasText(chatId)
+                ? chatMemory.estimateHistoryTokens(chatId)
+                : 0;
+        int estimatedInputTokens =
+                fixedTokens + promptTokens + Math.min(historyTokens, historyBudget);
+        if (!boundedPrompt.equals(prompt) || historyTokens >= historyBudget) {
+            log.info(
+                    "DIH上下文预算已应用: chatId={}, estimatedInputTokens={}, maxInputTokens={}, "
+                            + "systemTokens={}, toolDefinitionTokens={}, toolResultReserveTokens={}, "
+                            + "promptTokens={}, historyBudget={}, promptTruncated={}",
+                    chatId,
+                    estimatedInputTokens,
+                    maxInputTokens,
+                    systemTokens,
+                    toolDefinitionTokens,
+                    toolResultReserveTokens,
+                    promptTokens,
+                    historyBudget,
+                    !boundedPrompt.equals(prompt)
+            );
+        } else {
+            log.debug(
+                    "DIH上下文预算: chatId={}, estimatedInputTokens={}, maxInputTokens={}, "
+                            + "systemTokens={}, toolDefinitionTokens={}, toolResultReserveTokens={}, "
+                            + "promptTokens={}, historyTokens={}",
+                    chatId,
+                    estimatedInputTokens,
+                    maxInputTokens,
+                    systemTokens,
+                    toolDefinitionTokens,
+                    toolResultReserveTokens,
+                    promptTokens,
+                    historyTokens
+            );
+        }
+        return new PreparedChatInput(boundedPrompt, historyBudget, estimatedInputTokens);
+    }
+
+    private int estimateToolDefinitionTokens(ToolCallbackProvider provider) {
+        if (provider == null || provider.getToolCallbacks() == null) {
+            return 0;
+        }
+        int tokens = 0;
+        for (ToolCallback callback : provider.getToolCallbacks()) {
+            if (callback == null || callback.getToolDefinition() == null) {
+                continue;
+            }
+            tokens += 24;
+            tokens += tokenEstimator.estimate(callback.getToolDefinition().name());
+            tokens += tokenEstimator.estimate(callback.getToolDefinition().description());
+            tokens += tokenEstimator.estimate(callback.getToolDefinition().inputSchema());
+        }
+        return tokens;
+    }
+
+    private Flux<String> finalizeModelMemory(Flux<String> source,
+                                             String chatId,
+                                             String sentPrompt,
+                                             List<ChatAttachment> attachments) {
+        String compactPrompt = chatAttachmentService.compactPromptForMemory(
+                sentPrompt, attachments);
+        compactPrompt = tokenEstimator.truncate(
+                compactPrompt, Math.max(Math.min(maxHistoryTokens / 2, 4_000), 512));
+        String finalCompactPrompt = compactPrompt;
+        chatMemory.registerPromptReplacement(chatId, sentPrompt, finalCompactPrompt);
+        return source.doFinally(signalType -> {
+            try {
+                chatMemory.replaceLatestUserPrompt(chatId, sentPrompt, finalCompactPrompt);
+            } catch (Exception e) {
+                log.warn("压缩附件会话记忆失败: chatId={}, error={}", chatId, e.getMessage());
+            } finally {
+                chatMemory.clearPromptReplacement(chatId);
+                chatMemory.clearHistoryTokenBudget(chatId);
+            }
+        });
+    }
+
+    private int positiveOrDefault(int value, int fallback) {
+        return value > 0 ? value : fallback;
     }
 
     private String appendSystemPrompt(String systemPrompt, String additionalSystemPrompt) {
@@ -654,5 +867,12 @@ public class AIChatService {
 
     private boolean canUseNativeOpenAiStream() {
         return StringUtils.hasText(openAiBaseUrl) && StringUtils.hasText(openAiApiKey);
+    }
+
+    private record PreparedChatInput(
+            String prompt,
+            int historyTokenBudget,
+            int estimatedInputTokens
+    ) {
     }
 }

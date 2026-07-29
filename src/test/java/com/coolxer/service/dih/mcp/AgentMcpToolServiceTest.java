@@ -49,6 +49,29 @@ class AgentMcpToolServiceTest {
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
                 .contains("config_tree");
+        assertThat(context.toolRuntimeContext()).isNotNull();
+        assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(8);
+        assertThat(context.toolRuntimeContext().maxRepeatedFailures()).isEqualTo(2);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(24_000);
+    }
+
+    @Test
+    void resolveUsesConfiguredPlatformLimitsWhenSkillDoesNotDeclareRuntime() {
+        Environment environment = new MockEnvironment()
+                .withProperty("app.ai.dih.agent.default-limits.max-tool-calls", "5")
+                .withProperty("app.ai.dih.agent.default-limits.max-tool-result-chars", "4000")
+                .withProperty("app.ai.dih.agent.default-limits.max-accumulated-tool-result-chars", "10000");
+        AgentMcpToolService service = new AgentMcpToolService(
+                new EmptyMcpClientService(),
+                environment,
+                ToolCallbackProvider.from(new FakeToolCallback("retrieval_search", "检索"))
+        );
+
+        McpToolContext context = service.resolve("agent_data_access");
+
+        assertThat(context.toolRuntimeContext()).isNotNull();
+        assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(5);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(10_000);
     }
 
     @Test

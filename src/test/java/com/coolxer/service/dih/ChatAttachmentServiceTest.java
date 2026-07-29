@@ -10,6 +10,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,6 +59,24 @@ class ChatAttachmentServiceTest {
         assertThat(fakeSvg.getKind()).isNotEqualTo("image");
         assertThat(png.getKind()).isEqualTo("image");
         assertThat(png.getContentType()).isEqualTo("image/png");
+    }
+
+    @Test
+    void attachmentBodyIsNotRetainedInCompactMemoryPrompt() {
+        ChatAttachmentService service = newService();
+        ChatAttachment attachment = ChatAttachment.builder()
+                .fileId("3ab0c6d7-2907-45a3-bd8f-8f9754b386dd")
+                .fileName("evidence.log")
+                .fileSize(2048L)
+                .build();
+        String expanded = "请分析日志\n\n---\n以下是用户本轮消息上传的附件内容，请结合这些附件回答。"
+                + "\n```log\nSECRET_RAW_ATTACHMENT_BODY\n```";
+
+        String compact = service.compactPromptForMemory(expanded, List.of(attachment));
+
+        assertThat(compact)
+                .contains("请分析日志", "evidence.log", attachment.getFileId())
+                .doesNotContain("SECRET_RAW_ATTACHMENT_BODY");
     }
 
     private ChatAttachmentService newService() {

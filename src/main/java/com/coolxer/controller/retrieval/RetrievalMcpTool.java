@@ -28,6 +28,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,6 +44,10 @@ import static com.coolxer.commons.enums.McpToolRiskLevel.LOW;
 @Service
 public class RetrievalMcpTool {
 
+    private static final int DEFAULT_MCP_PAGE_SIZE = 20;
+
+    private static final int MAX_MCP_PAGE_SIZE = 50;
+
     @Autowired
     private EntityCoreService entityCoreService;
 
@@ -56,8 +61,11 @@ public class RetrievalMcpTool {
      * 数据检索
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_search", description = "根据条件检索数据，返回符合条件的列表数据")
+    @Tool(name = "retrieval_search", description = "根据条件检索数据，返回符合条件的列表数据；默认20条，单次最多50条")
     public DataListVo searchByCriteria(@ToolParam(description = "检索请求参数，包含实体、查询条件、显示字段等") RetrievalRequestDto request) {
+        if (request != null) {
+            request.setSize(boundedPageSize(request.getSize()));
+        }
         return retrievalService.retrievalByCriteria(request);
     }
 
@@ -252,10 +260,16 @@ public class RetrievalMcpTool {
      * 获取实体列表（分页）
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "entity_list", description = "获取指定实体的分页列表数据")
+    @Tool(name = "entity_list", description = "获取指定实体的分页列表数据；默认20条，单次最多50条")
     public PageRowsVo<Map<String, Object>> entityList(@ToolParam(description = "实体名称") String entity,
                                                        @ToolParam(description = "查询参数，Map形式") Map<String, Object> params) {
-        return entityCoreService.getPageList(entity, params);
+        Map<String, Object> boundedParams =
+                params == null ? new LinkedHashMap<>() : new LinkedHashMap<>(params);
+        Object requestedSize = boundedParams.containsKey("perPage")
+                ? boundedParams.get("perPage")
+                : boundedParams.get("per_page");
+        boundedParams.put("perPage", boundedPageSize(requestedSize));
+        return entityCoreService.getPageList(entity, boundedParams);
     }
 
     /**
@@ -271,5 +285,22 @@ public class RetrievalMcpTool {
     private Integer currentUserId() {
         McpInvocationContext context = McpInvocationContextHolder.current();
         return context == null ? null : context.requesterUserId();
+    }
+
+    private int boundedPageSize(Integer requestedSize) {
+        return requestedSize == null
+                ? DEFAULT_MCP_PAGE_SIZE
+                : Math.max(1, Math.min(requestedSize, MAX_MCP_PAGE_SIZE));
+    }
+
+    private int boundedPageSize(Object requestedSize) {
+        if (requestedSize == null) {
+            return DEFAULT_MCP_PAGE_SIZE;
+        }
+        try {
+            return boundedPageSize(Integer.parseInt(requestedSize.toString()));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MCP_PAGE_SIZE;
+        }
     }
 }

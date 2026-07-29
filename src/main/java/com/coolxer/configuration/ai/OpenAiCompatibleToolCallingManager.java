@@ -239,8 +239,32 @@ final class OpenAiCompatibleToolCallingManager implements ToolCallingManager {
         envelope.put("originalChars", allowance.requestedChars());
         envelope.put("returnedChars", previewLength);
         envelope.put("contentPreview", data.substring(0, previewLength));
+        copyPaginationMetadata(data, envelope);
         envelope.put("instruction", "结果已按 Skill 预算截断；不得推断被截断部分。");
         return envelope.toString();
+    }
+
+    private void copyPaginationMetadata(String data, ObjectNode envelope) {
+        try {
+            JsonNode root = JacksonConfig.OBJECT_MAPPER.readTree(data);
+            if (root == null || !root.isObject()) {
+                return;
+            }
+            ObjectNode metadata = envelope.putObject("pagination");
+            for (String key : List.of(
+                    "total", "hasMore", "has_more", "nextCursor", "next_cursor",
+                    "cursor", "token", "page", "size", "perPage", "per_page")) {
+                JsonNode value = root.get(key);
+                if (value != null && !value.isContainerNode()) {
+                    metadata.set(key, value);
+                }
+            }
+            if (metadata.isEmpty()) {
+                envelope.remove("pagination");
+            }
+        } catch (JsonProcessingException ignored) {
+            // The generic preview remains available for non-JSON tool results.
+        }
     }
 
     private String appendStopInstruction(String data, String reason) {

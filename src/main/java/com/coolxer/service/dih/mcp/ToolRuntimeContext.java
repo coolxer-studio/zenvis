@@ -126,6 +126,10 @@ public final class ToolRuntimeContext {
         return maxRepeatedFailures;
     }
 
+    public int maxAccumulatedToolResultChars() {
+        return maxAccumulatedToolResultChars;
+    }
+
     private static int positive(Integer value) {
         return value == null || value <= 0 ? 0 : value;
     }

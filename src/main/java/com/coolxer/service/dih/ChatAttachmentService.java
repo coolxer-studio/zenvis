@@ -4,6 +4,8 @@ import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.utils.ImageDataUriUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,8 +35,10 @@ import java.util.regex.Pattern;
 public class ChatAttachmentService {
 
     private static final long MAX_UPLOAD_BYTES = 30L * 1024L * 1024L;
-    private static final int MAX_CONTEXT_CHARS_PER_FILE = 80_000;
-    private static final int MAX_CONTEXT_CHARS_TOTAL = 160_000;
+    private static final int DEFAULT_MAX_CONTEXT_CHARS_PER_FILE = 12_000;
+    private static final int DEFAULT_MAX_CONTEXT_CHARS_TOTAL = 24_000;
+    private static final String ATTACHMENT_CONTEXT_HEADER =
+            "\n\n---\n以下是用户本轮消息上传的附件内容，请结合这些附件回答。";
     private static final String KIND_IMAGE = "image";
     private static final String KIND_TEXT = "text";
     private static final String KIND_FILE = "file";
@@ -54,8 +58,31 @@ public class ChatAttachmentService {
 
     private final CustomWebConfig customWebConfig;
 
-    public ChatAttachmentService(CustomWebConfig customWebConfig) {
+    private final int maxContextCharsPerFile;
+
+    private final int maxContextCharsTotal;
+
+    @Autowired
+    public ChatAttachmentService(
+            CustomWebConfig customWebConfig,
+            @Value("${app.ai.dih.context.max-attachment-chars-per-file:12000}")
+            int maxContextCharsPerFile,
+            @Value("${app.ai.dih.context.max-attachment-chars:24000}")
+            int maxContextCharsTotal
+    ) {
         this.customWebConfig = customWebConfig;
+        this.maxContextCharsPerFile = positiveOrDefault(
+                maxContextCharsPerFile, DEFAULT_MAX_CONTEXT_CHARS_PER_FILE);
+        this.maxContextCharsTotal = positiveOrDefault(
+                maxContextCharsTotal, DEFAULT_MAX_CONTEXT_CHARS_TOTAL);
+    }
+
+    public ChatAttachmentService(CustomWebConfig customWebConfig) {
+        this(
+                customWebConfig,
+                DEFAULT_MAX_CONTEXT_CHARS_PER_FILE,
+                DEFAULT_MAX_CONTEXT_CHARS_TOTAL
+        );
     }
 
     public ChatAttachment upload(MultipartFile file, User user) throws IOException {
@@ -99,10 +126,10 @@ public class ChatAttachmentService {
 
         StringBuilder builder = new StringBuilder();
         builder.append(StringUtils.hasText(message) ? message : "请分析我上传的附件内容。");
-        builder.append("\n\n---\n以下是用户本轮消息上传的附件内容，请结合这些附件回答。");
+        builder.append(ATTACHMENT_CONTEXT_HEADER);
 
         int index = 1;
-        int remainingContextChars = MAX_CONTEXT_CHARS_TOTAL;
+        int remainingContextChars = maxContextCharsTotal;
         for (ChatAttachment attachment : attachments) {
             builder.append("\n\n[附件 ").append(index++).append("] ")
                     .append(safeText(attachment.getFileName(), "未命名文件"));
@@ -114,11 +141,16 @@ public class ChatAttachmentService {
             }
 
             if (remainingContextChars <= 0) {
-                builder.append("\n附件文本总长度已超过 ").append(MAX_CONTEXT_CHARS_TOTAL).append(" 个字符，后续附件内容未写入模型上下文。");
+                builder.append("\n附件文本总长度已超过 ").append(maxContextCharsTotal)
+                        .append(" 个字符，后续附件内容未写入模型上下文。");
                 continue;
             }
 
-            String textContent = readAttachmentText(attachment, user, Math.min(MAX_CONTEXT_CHARS_PER_FILE, remainingContextChars));
+            String textContent = readAttachmentText(
+                    attachment,
+                    user,
+                    Math.min(maxContextCharsPerFile, remainingContextChars)
+            );
             if (StringUtils.hasText(textContent)) {
                 remainingContextChars -= Math.min(textContent.length(), remainingContextChars);
                 builder.append("\n```").append(extensionOf(attachment.getFileName())).append("\n")
@@ -132,6 +164,44 @@ public class ChatAttachmentService {
             }
         }
         return builder.toString();
+    }
+
+    /**
+     * Keep stable attachment references in chat memory without retaining the raw
+     * attachment body injected for the current model call.
+     */
+    public String compactPromptForMemory(String expandedPrompt, List<ChatAttachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return expandedPrompt;
+        }
+        String prompt = expandedPrompt == null ? "" : expandedPrompt;
+        int attachmentOffset = prompt.indexOf(ATTACHMENT_CONTEXT_HEADER);
+        String userText;
+        if (attachmentOffset >= 0) {
+            userText = prompt.substring(0, attachmentOffset);
+        } else {
+            int delimiterOffset = prompt.indexOf("\n\n---\n");
+            userText = delimiterOffset >= 0
+                    ? prompt.substring(0, delimiterOffset)
+                    : prompt.substring(0, Math.min(prompt.length(), 4_000));
+        }
+
+        StringBuilder compact = new StringBuilder(userText);
+        compact.append("\n\n[本轮附件引用，正文未写入长期模型记忆]");
+        for (ChatAttachment attachment : attachments) {
+            if (attachment == null) {
+                continue;
+            }
+            compact.append("\n- ")
+                    .append(safeText(attachment.getFileName(), "未命名文件"));
+            if (StringUtils.hasText(attachment.getFileId())) {
+                compact.append(" (fileId=").append(attachment.getFileId()).append(")");
+            }
+            if (attachment.getFileSize() != null) {
+                compact.append("，").append(attachment.getFileSize()).append(" bytes");
+            }
+        }
+        return compact.toString();
     }
 
     public boolean hasImageAttachment(List<ChatAttachment> attachments) {
@@ -342,6 +412,10 @@ public class ChatAttachmentService {
 
     private String safeText(String value, String fallback) {
         return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private int positiveOrDefault(int value, int fallback) {
+        return value > 0 ? value : fallback;
     }
 
     private boolean isValidFileId(String fileId) {

@@ -1,6 +1,7 @@
 package com.coolxer.service.dih.mcp;
 
 import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
+import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
 import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import org.apache.commons.lang3.StringUtils;
@@ -34,6 +35,16 @@ public class AgentMcpToolService {
     private static final String ALL_SCOPE = "*";
 
     private static final String DATA_VISUALIZATION_AGENT_TYPE = "agent_data_visualization";
+
+    private static final int DEFAULT_MAX_TOOL_CALLS = 8;
+
+    private static final int DEFAULT_MAX_REPEATED_FAILURES = 2;
+
+    private static final int DEFAULT_MAX_TOOL_RESULT_CHARS = 8_000;
+
+    private static final int DEFAULT_MAX_ACCUMULATED_TOOL_RESULT_CHARS = 24_000;
+
+    private static final String DEFAULT_LIMITS_PREFIX = "app.ai.dih.agent.default-limits.";
 
     private static final Set<String> DATA_VISUALIZATION_ALLOWED_TOOLS = Set.of(
             "retrieval_search",
@@ -138,6 +149,7 @@ public class AgentMcpToolService {
         SkillRuntimeConfigVo runtime = skillService == null
                 ? null
                 : skillService.resolveRuntimeConfig(selectedSkillIds);
+        runtime = withDefaultLimits(runtime);
         Scope scope = resolveScope(agentType, runtime);
         if (!scope.enabled()) {
             return McpToolContext.empty(runtime);
@@ -202,10 +214,7 @@ public class AgentMcpToolService {
             }
             toolCallbacks.add(callback);
             added = true;
-            String description = StringUtils.defaultIfBlank(callback.getToolDefinition().description(), toolName);
             localPrompt.append("- ").append(toolName)
-                    .append("：")
-                    .append(description)
                     .append(policy == com.coolxer.commons.enums.McpApprovalPolicy.ASK ? "（调用前需要用户审批）" : "")
                     .append("\n");
         }
@@ -255,9 +264,6 @@ public class AgentMcpToolService {
             toolCallbacks.add(callback);
             added = true;
             externalPrompt.append("- ").append(toolName)
-                    .append("：")
-                    .append(StringUtils.defaultIfBlank(
-                            callback.getToolDefinition().description(), toolName))
                     .append(policy == com.coolxer.commons.enums.McpApprovalPolicy.ASK
                             ? "（调用前需要用户审批）" : "")
                     .append("\n");
@@ -358,6 +364,65 @@ public class AgentMcpToolService {
 
     private String normalizeAgentType(String agentType) {
         return StringUtils.defaultIfBlank(agentType, DEFAULT_AGENT_TYPE);
+    }
+
+    /**
+     * Every MCP-enabled Agent gets a bounded tool runtime. Skill-specific positive
+     * values win; missing values inherit the platform defaults.
+     */
+    private SkillRuntimeConfigVo withDefaultLimits(SkillRuntimeConfigVo runtime) {
+        SkillRuntimeLimitsVo current = runtime == null ? null : runtime.getLimits();
+        int maxToolCalls = positiveOrDefault(
+                current == null ? null : current.getMaxToolCalls(),
+                DEFAULT_LIMITS_PREFIX + "max-tool-calls",
+                DEFAULT_MAX_TOOL_CALLS
+        );
+        int maxRepeatedFailures = positiveOrDefault(
+                current == null ? null : current.getMaxRepeatedFailures(),
+                DEFAULT_LIMITS_PREFIX + "max-repeated-failures",
+                DEFAULT_MAX_REPEATED_FAILURES
+        );
+        int maxToolResultChars = positiveOrDefault(
+                current == null ? null : current.getMaxToolResultChars(),
+                DEFAULT_LIMITS_PREFIX + "max-tool-result-chars",
+                DEFAULT_MAX_TOOL_RESULT_CHARS
+        );
+        int maxAccumulatedToolResultChars = positiveOrDefault(
+                current == null ? null : current.getMaxAccumulatedToolResultChars(),
+                DEFAULT_LIMITS_PREFIX + "max-accumulated-tool-result-chars",
+                DEFAULT_MAX_ACCUMULATED_TOOL_RESULT_CHARS
+        );
+
+        if (runtime != null
+                && current != null
+                && current.getMaxToolCalls() != null && current.getMaxToolCalls() == maxToolCalls
+                && current.getMaxRepeatedFailures() != null
+                && current.getMaxRepeatedFailures() == maxRepeatedFailures
+                && current.getMaxToolResultChars() != null
+                && current.getMaxToolResultChars() == maxToolResultChars
+                && current.getMaxAccumulatedToolResultChars() != null
+                && current.getMaxAccumulatedToolResultChars() == maxAccumulatedToolResultChars) {
+            return runtime;
+        }
+
+        return new SkillRuntimeConfigVo(
+                runtime == null ? null : runtime.getPromptMode(),
+                runtime == null ? null : runtime.getTools(),
+                new SkillRuntimeLimitsVo(
+                        maxToolCalls,
+                        maxRepeatedFailures,
+                        maxToolResultChars,
+                        maxAccumulatedToolResultChars
+                )
+        );
+    }
+
+    private int positiveOrDefault(Integer configuredValue, String propertyName, int fallback) {
+        if (configuredValue != null && configuredValue > 0) {
+            return configuredValue;
+        }
+        Integer platformValue = environment.getProperty(propertyName, Integer.class);
+        return platformValue != null && platformValue > 0 ? platformValue : fallback;
     }
 
     private record Scope(boolean enabled, List<String> serverCodes) {

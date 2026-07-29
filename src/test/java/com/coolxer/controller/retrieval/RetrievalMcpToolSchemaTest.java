@@ -2,15 +2,24 @@ package com.coolxer.controller.retrieval;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
+import com.coolxer.service.retrieval.EntityCoreService;
+import com.coolxer.service.retrieval.RetrievalService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class RetrievalMcpToolSchemaTest {
 
@@ -68,6 +77,28 @@ class RetrievalMcpToolSchemaTest {
                 "entity_distribution", "entity_value_statistics",
                 "entity_relations", "entity_relation_timeline");
         assertThat(names).doesNotContain("entity_count", "entity_statistics");
+    }
+
+    @Test
+    void listToolsBoundOversizedMcpPageRequests() {
+        RetrievalMcpTool tool = new RetrievalMcpTool();
+        RetrievalService retrievalService = mock(RetrievalService.class);
+        EntityCoreService entityCoreService = mock(EntityCoreService.class);
+        ReflectionTestUtils.setField(tool, "retrievalService", retrievalService);
+        ReflectionTestUtils.setField(tool, "entityCoreService", entityCoreService);
+
+        RetrievalRequestDto retrievalRequest = new RetrievalRequestDto();
+        retrievalRequest.setSize(500);
+        tool.searchByCriteria(retrievalRequest);
+        tool.entityList("event", new LinkedHashMap<>(Map.of("per_page", 500)));
+
+        assertThat(retrievalRequest.getSize()).isEqualTo(50);
+        verify(retrievalService).retrievalByCriteria(retrievalRequest);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> captor =
+                org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(entityCoreService).getPageList(eq("event"), captor.capture());
+        assertThat(captor.getValue()).containsEntry("perPage", 50);
     }
 
     private ToolCallback findTool(String name) {

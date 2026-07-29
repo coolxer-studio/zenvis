@@ -312,6 +312,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       VECTUM_AUTH_TOKEN: "${VECTUM_AUTH_TOKEN:-sk-vectum-token}"
+      VECTUM_VECTOR_ALLOWED_ENV: "CLICKHOUSE_PASSWORD"
+      CLICKHOUSE_PASSWORD: "SFGEfSVVMcUHCBCjKmzJ"
     restart: unless-stopped
     networks:
       - zenvis-network

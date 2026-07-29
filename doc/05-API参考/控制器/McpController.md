@@ -350,7 +350,7 @@ curl -X POST "http://localhost:11001/api/v1/dih/mcp/tools/call" \
 }
 ```
 
-服务端校验规范化参数摘要，并通过条件更新保证最多执行一次。
+服务端校验规范化参数的 SHA-256 校验值，并通过条件更新保证最多执行一次。
 
 ### 查询工具审批策略
 
@@ -418,6 +418,7 @@ GET /api/v1/dih/mcp/invocations/list?page=1&perPage=20
 | 参数 | 类型 | 说明 |
 |---|---|---|
 | `keyword` | String | 匹配 requestId、工具、服务、chatId、Agent |
+| `requestId` | String | 精确匹配完整请求 ID |
 | `channel` | Enum | `CHAT_AGENT`、`BACKGROUND_AGENT`、`MCP_SERVER`、`MANUAL` |
 | `status` | Enum | 调用状态 |
 | `policy` | Enum | 策略快照 |
@@ -427,7 +428,16 @@ GET /api/v1/dih/mcp/invocations/list?page=1&perPage=20
 | `analysisTaskId` | Integer | AI分析任务 ID |
 | `executionId` | String | AI分析任务 executionId |
 
-参数、结果和错误摘要均会递归脱敏并截断。普通用户只能查看自己的调用记录，超级管理员可以查看全量记录。
+审计行中的载荷字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `arguments` | String | 完整调用参数，不脱敏；仅超过 MySQL `LONGTEXT` 容量时按 UTF-8 字节边界截取 |
+| `result` | String | 完整调用结果，不脱敏；仅超过 MySQL `LONGTEXT` 容量时按 UTF-8 字节边界截取 |
+| `result_length` | Long | 截取前原始结果的 UTF-8 字节数；无结果时为空，响应可能省略该字段 |
+| `error_summary` | String | 失败信息摘要，沿用递归脱敏和截断策略 |
+
+普通用户只能查看自己的调用记录，超级管理员可以查看全量记录。历史版本已经截断的内容无法恢复，历史记录的 `result_length` 可能为空。
 
 ### 查看业务 Agent MCP 工具提示词
 

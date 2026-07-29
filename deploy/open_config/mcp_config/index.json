@@ -382,7 +382,14 @@
                 "type": "input-text",
                 "name": "keyword",
                 "clearable": true,
-                "placeholder": "请求 ID、工具、服务、会话或 Agent"
+                "placeholder": "工具、服务、会话或 Agent"
+              },
+              {
+                "label": "请求 ID",
+                "type": "input-text",
+                "name": "requestId",
+                "clearable": true,
+                "placeholder": "请输入完整请求 ID"
               },
               {
                 "label": "渠道",
@@ -438,19 +445,19 @@
               },
               {
                 "label": "发起用户 ID",
-                "type": "input-number",
+                "type": "input-text",
                 "name": "requesterUserId",
                 "clearable": true
               },
               {
                 "label": "审批人 ID",
-                "type": "input-number",
+                "type": "input-text",
                 "name": "decisionBy",
                 "clearable": true
               },
               {
                 "label": "AI分析任务 ID",
-                "type": "input-number",
+                "type": "input-text",
                 "name": "analysisTaskId",
                 "clearable": true
               },
@@ -468,6 +475,7 @@
           },
           "columns": [
             { "name": "request_id", "label": "请求 ID", "type": "text" },
+            { "name": "requester_user_id", "label": "发起用户 ID", "type": "text", "placeholder": "-" },
             { "name": "tool_key", "label": "工具", "type": "text" },
             { "name": "analysis_task_id", "label": "AI分析任务", "type": "text", "placeholder": "-" },
             { "name": "task_execution_id", "label": "Execution ID", "type": "text", "placeholder": "-", "toggled": false },
@@ -477,8 +485,9 @@
             { "name": "status", "label": "状态", "type": "text" },
             { "name": "decision_by", "label": "审批人", "type": "text" },
             { "name": "duration_millis", "label": "耗时(ms)", "type": "text" },
-            { "name": "arguments_summary", "label": "参数摘要", "type": "json" },
-            { "name": "result_summary", "label": "结果摘要", "type": "json" },
+            { "name": "arguments", "label": "参数", "type": "json" },
+            { "name": "result_length", "label": "结果长度(byte)", "type": "text", "placeholder": "-" },
+            { "name": "result", "label": "结果", "type": "json" },
             { "name": "error_summary", "label": "错误摘要", "type": "text" },
             { "name": "create_time", "label": "创建时间", "type": "datetime" }
           ]

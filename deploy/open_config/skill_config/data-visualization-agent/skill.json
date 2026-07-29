@@ -20,6 +20,14 @@
     "icon": "monitor",
     "order": 20
   },
+  "runtime": {
+    "limits": {
+      "maxToolCalls": 8,
+      "maxRepeatedFailures": 2,
+      "maxToolResultChars": 8000,
+      "maxAccumulatedToolResultChars": 24000
+    }
+  },
   "enabled": true,
   "entry": "SKILL.md"
 }

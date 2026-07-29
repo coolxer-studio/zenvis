@@ -82,7 +82,7 @@ curl -N -X POST "http://localhost:11001/api/v1/dih/chat" \
     "server_name": "ZenVis 内置工具",
     "risk_level": "high",
     "description": "创建一个新的看板",
-    "arguments_summary": "{\"request\":{...}}",
+    "arguments": "{\"request\":{...}}",
     "status": "PENDING",
     "expire_time": "2026-07-14T15:05:00.000+08:00"
   }

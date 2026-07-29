@@ -77,13 +77,15 @@ McpClientServiceImpl
 | 表名 | 说明 |
 |------|------|
 | `t_ai_mcp_tool_policy` | 工具发现信息、默认策略、人工覆盖、可用状态和最后发现时间 |
-| `t_ai_mcp_invocation` | 参数摘要及校验值、策略快照、审批人、调用状态、结果摘要和耗时审计 |
+| `t_ai_mcp_invocation` | 完整参数及校验值、策略快照、审批人、调用状态、完整结果、原始结果字节数和耗时审计 |
 | `t_ai_mcp_chat_tool_grant` | DIH Chat 内按用户、chatId 和 toolKey 持久化的会话授权 |
 | `t_ai_mcp_task_tool_grant` | 按 AI分析任务 executionId 和 toolKey 持久化的任务授权 |
 
 AI分析任务另通过 `t_ai_analysis_task_skill` 保存任务与 Skill ID 的关联。任务只保存 ID，运行时读取最新 Skill 内容。
 
-工具唯一键固定为 `local::<toolName>` 或 `external::<serverId>::<originalToolName>`。参数、结果和错误在落库前递归打码并截断；参数另存 SHA-256 摘要，用于两阶段调用重试时防止替换参数。
+工具唯一键固定为 `local::<toolName>` 或 `external::<serverId>::<originalToolName>`。参数和结果不脱敏且默认完整写入 `LONGTEXT`，仅超过数据库类型容量时按 UTF-8 字节边界截取；`result_length` 始终记录截取前原始结果的 UTF-8 字节数。错误摘要仍在落库前递归打码并截断。参数另存 SHA-256 校验值，用于两阶段调用重试时防止替换参数。
+
+公开模型使用 `arguments` 和 `result`。为保留升级前历史记录，数据库继续沿用 `arguments_summary`、`result_summary` 物理列名，但列类型扩展为 `LONGTEXT`。
 
 ### 字段说明
 
@@ -233,7 +235,7 @@ AI 工具名: risk_system_query_user
 }
 ```
 
-`/tools/call` 命中 `ASK` 时采用两阶段协议：首次返回 `requestId` 且不执行；批准后使用相同 `requestId` 和原参数重试。服务端校验参数摘要并以条件更新保证最多执行一次。
+`/tools/call` 命中 `ASK` 时采用两阶段协议：首次返回 `requestId` 且不执行；批准后使用相同 `requestId` 和原参数重试。服务端校验参数 SHA-256 校验值并以条件更新保证最多执行一次。
 
 ---
 

@@ -283,7 +283,7 @@ curl -X POST http://localhost:11001/api/v1/retrieval/do \
 - `/invocations/list`：调用审计；
 - `/agent/prompt`：查看 Agent 工具提示片段。
 
-测试调用命中 `ASK` 时先返回 request ID；批准后必须用相同 request ID 和原参数重试，服务端校验参数摘要并保证最多执行一次。
+测试调用命中 `ASK` 时先返回 request ID；批准后必须用相同 request ID 和原参数重试，服务端校验参数 SHA-256 校验值并保证最多执行一次。
 
 ## Skill 与向量文档
 

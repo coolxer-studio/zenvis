@@ -136,7 +136,7 @@ external::<serverId>::<originalToolName>
 
 调用状态包括 `pending`、`approved`、`running`、`succeeded`、`failed`、`rejected`、`denied`、`expired` 和 `cancelled`。条件更新保证审批和执行最多生效一次。
 
-参数、结果和错误在入库前递归脱敏、截断；参数另存 SHA-256，用于两阶段调用校验。
+参数和结果不脱敏并默认完整写入 `LONGTEXT`，仅超过数据库类型容量时按 UTF-8 字节边界截取；结果长度保存截取前的 UTF-8 字节数。错误摘要仍会递归脱敏、截断；参数另存 SHA-256，用于两阶段调用校验。
 
 ## Chat 内联审批
 

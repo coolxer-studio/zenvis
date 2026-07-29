@@ -21,6 +21,7 @@ public record McpInvocationContext(
         BooleanSupplier cancelled
 ) {
     public static final String TOOL_CONTEXT_KEY = "zenvis_mcp_invocation_context";
+    public static final String ANALYSIS_TASK_AGENT_TYPE = "agent_analysis_task";
 
     public McpInvocationContext(McpInvocationChannel channel,
                                 Integer requesterUserId,
@@ -62,7 +63,7 @@ public record McpInvocationContext(
                 requesterUserId,
                 null,
                 executionId,
-                "agent_data_analysis",
+                ANALYSIS_TASK_AGENT_TYPE,
                 null,
                 "analysis-task:" + taskId,
                 eventConsumer,

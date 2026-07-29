@@ -3,6 +3,7 @@ package com.coolxer.service.dih;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.model.dih.vo.SkillChatEntryVo;
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 
 import java.util.List;
 import java.util.Optional;
@@ -53,12 +54,14 @@ public record DihChatExecutionPolicy(
         }
         SkillChatEntryVo entry = skillService.requireEnabledChatEntry(chatType);
         boolean genericSkill = SkillService.GENERIC_SKILL_AGENT_TYPE.equals(entry.getAgentType());
+        SkillRuntimeConfigVo runtime = skillService.resolveRuntimeConfig(List.of(entry.getSkillId()));
+        boolean toolsAllowed = !genericSkill || (runtime != null && runtime.getTools() != null);
         return Optional.of(new DihChatExecutionPolicy(
                 entry.getChatType(),
                 entry.getAgentType(),
                 Mode.AGENT,
                 false,
-                !genericSkill,
+                toolsAllowed,
                 false,
                 List.of(entry.getSkillId())
         ));

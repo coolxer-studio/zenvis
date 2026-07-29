@@ -5,16 +5,20 @@ import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.vo.SkillChatEntryVo;
-import com.coolxer.service.dih.agent.DataAnalysisAgent;
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
+import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
+import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,33 +60,33 @@ class DihChatExecutionBoundaryTest {
     void agentIgnoresDeepThinkingAndOnlyResolvesAgentMcp() {
         Fixture fixture = fixture();
         when(fixture.skillService.isBuiltinAgentEnabled(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
         )).thenReturn(true);
         when(fixture.agentMcpToolService.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
-                List.of("data-analysis-agent")
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                List.of("data-visualization-agent")
         )).thenReturn(McpToolContext.empty());
-        when(fixture.analysisAgent.chat(
+        when(fixture.visualizationAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
         )).thenReturn(Flux.just("智能体回答"));
 
         List<String> response = fixture.service.chat(
-                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS, true),
+                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION, true),
                 null
         ).collectList().block();
 
         assertThat(response).containsExactly("智能体回答");
         verify(fixture.agentMcpToolService).resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
-                List.of("data-analysis-agent")
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                List.of("data-visualization-agent")
         );
-        verify(fixture.analysisAgent).chat(
+        verify(fixture.visualizationAgent).chat(
                 eq("chat-1"),
                 eq("model-1"),
                 eq("问题"),
                 eq(List.of()),
                 isNull(),
-                eq(List.of("data-analysis-agent")),
+                eq(List.of("data-visualization-agent")),
                 eq(McpToolContext.empty())
         );
         verify(fixture.baseService).resolveChatModel("model-1", false, false);
@@ -100,18 +104,18 @@ class DihChatExecutionBoundaryTest {
                 .thenReturn(new SkillChatEntryVo(
                         "jmr-analysis",
                         chatType,
-                        BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
+                        BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
                         "僵木蠕研判",
                         "说明",
                         "data-analysis",
                         60
                 ));
         when(fixture.agentMcpToolService.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
                 List.of("jmr-analysis")
         ))
                 .thenReturn(McpToolContext.empty());
-        when(fixture.analysisAgent.chat(
+        when(fixture.visualizationAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
         )).thenReturn(Flux.just("专项研判回答"));
 
@@ -119,10 +123,10 @@ class DihChatExecutionBoundaryTest {
 
         assertThat(response).containsExactly("专项研判回答");
         verify(fixture.agentMcpToolService).resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
                 List.of("jmr-analysis")
         );
-        verify(fixture.analysisAgent).chat(
+        verify(fixture.visualizationAgent).chat(
                 eq("chat-1"),
                 eq("model-1"),
                 eq("问题"),
@@ -177,6 +181,63 @@ class DihChatExecutionBoundaryTest {
     }
 
     @Test
+    void genericDynamicSkillUsesOnlyItsExplicitRuntimeTools() {
+        Fixture fixture = fixture();
+        String chatType = "skill:jmr-analysis";
+        when(fixture.skillService.requireEnabledChatEntry(chatType))
+                .thenReturn(new SkillChatEntryVo(
+                        "jmr-analysis",
+                        chatType,
+                        SkillService.GENERIC_SKILL_AGENT_TYPE,
+                        "僵木蠕研判",
+                        null,
+                        "data-analysis",
+                        60
+                ));
+        SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
+                "skill_only",
+                new SkillRuntimeToolsVo(List.of("retrieval_search"), Map.of()),
+                null
+        );
+        when(fixture.skillService.resolveRuntimeConfig(List.of("jmr-analysis"))).thenReturn(runtime);
+        when(fixture.skillService.buildAgentSkillPrompt(
+                SkillService.GENERIC_SKILL_AGENT_TYPE,
+                List.of("jmr-analysis")
+        )).thenReturn("JMR 专项提示词");
+        McpToolContext toolContext = new McpToolContext(
+                mock(ToolCallbackProvider.class),
+                "仅允许 retrieval_search",
+                runtime
+        );
+        when(fixture.agentMcpToolService.resolve(
+                SkillService.GENERIC_SKILL_AGENT_TYPE,
+                List.of("jmr-analysis")
+        )).thenReturn(toolContext);
+        when(fixture.chatService.agentChat(
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+        )).thenReturn(Flux.just("专项回答"));
+
+        List<String> response = fixture.service.chat(chatDto(chatType, false), null).collectList().block();
+
+        assertThat(response).containsExactly("专项回答");
+        verify(fixture.agentMcpToolService).resolve(
+                SkillService.GENERIC_SKILL_AGENT_TYPE,
+                List.of("jmr-analysis")
+        );
+        verify(fixture.chatService).agentChat(
+                eq("chat-1"),
+                eq("model-1"),
+                org.mockito.ArgumentMatchers.argThat(prompt ->
+                        prompt.contains("JMR 专项提示词")
+                                && prompt.contains("仅允许 retrieval_search")),
+                eq("问题"),
+                eq(List.of()),
+                isNull(),
+                any(McpToolContext.class)
+        );
+    }
+
+    @Test
     void legacyMcpAgentBecomesAskWithoutTools() {
         Fixture fixture = fixture();
         when(fixture.chatService.qaChat(
@@ -214,16 +275,16 @@ class DihChatExecutionBoundaryTest {
     void disabledBuiltinSkillReturnsExplicitCapabilityError() {
         Fixture fixture = fixture();
         when(fixture.skillService.isBuiltinAgentEnabled(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
         )).thenReturn(false);
 
         List<String> response = fixture.service.chat(
-                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS, false),
+                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION, false),
                 null
         ).collectList().block();
 
         assertThat(response).containsExactly(
-                "智能体能力不可用：以下 Skill 不存在或未启用: data-analysis-agent"
+                "智能体能力不可用：以下 Skill 不存在或未启用: data-visualization-agent"
         );
         verifyNoInteractions(fixture.agentMcpToolService);
         verify(fixture.baseService, never()).isModelSupported(any());
@@ -273,7 +334,9 @@ class DihChatExecutionBoundaryTest {
         ChatTitleService titleService = mock(ChatTitleService.class);
         AgentMcpToolService agentMcpToolService = mock(AgentMcpToolService.class);
         SkillService skillService = mock(SkillService.class);
-        DataAnalysisAgent analysisAgent = mock(DataAnalysisAgent.class);
+        DataVisualizationDemoResponseService visualizationDemoResponseService =
+                mock(DataVisualizationDemoResponseService.class);
+        DataVisualizationAgent visualizationAgent = mock(DataVisualizationAgent.class);
         ChatSession chatSession = mock(ChatSession.class);
 
         when(baseService.isModelSupported("model-1")).thenReturn(true);
@@ -295,15 +358,11 @@ class DihChatExecutionBoundaryTest {
                 baseService,
                 chatSessionService,
                 null,
+                visualizationDemoResponseService,
                 null,
                 null,
                 null,
-                null,
-                analysisAgent,
-                null,
-                null,
-                null,
-                null,
+                visualizationAgent,
                 null,
                 attachmentService,
                 titleService,
@@ -321,7 +380,7 @@ class DihChatExecutionBoundaryTest {
                 chatSessionService,
                 agentMcpToolService,
                 skillService,
-                analysisAgent
+                visualizationAgent
         );
     }
 
@@ -332,7 +391,7 @@ class DihChatExecutionBoundaryTest {
             ChatSessionService chatSessionService,
             AgentMcpToolService agentMcpToolService,
             SkillService skillService,
-            DataAnalysisAgent analysisAgent
+            DataVisualizationAgent visualizationAgent
     ) {
     }
 }

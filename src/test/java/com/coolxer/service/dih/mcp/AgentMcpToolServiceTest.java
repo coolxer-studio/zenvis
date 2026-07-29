@@ -223,7 +223,7 @@ class AgentMcpToolServiceTest {
         );
 
         McpToolContext context = service.resolve(
-                "agent_data_analysis",
+                "agent_skill",
                 List.of("jmr-continuous-threat-analysis"));
 
         assertThat(context.hasTools()).isTrue();

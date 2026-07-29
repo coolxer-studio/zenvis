@@ -327,7 +327,7 @@ public class DataInitiator {
     /**
      * 默认创建超级管理员
      */
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
     public void initDefaultSuperAdminUser() {
         Role role = findOrCreateSuperAdminRole();
         User user = findOrCreateSuperAdminUser();

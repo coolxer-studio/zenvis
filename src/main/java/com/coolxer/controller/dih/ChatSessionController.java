@@ -15,8 +15,6 @@ import com.coolxer.model.dih.vo.SkillChatConfigVo;
 import com.coolxer.model.dih.vo.SkillChatPromptSuggestionVo;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.service.dih.ChatSessionService;
-import com.coolxer.service.dih.ConfigManagementDemoResponseService;
-import com.coolxer.service.dih.DataAnalysisDemoResponseService;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.utils.JacksonUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -234,18 +232,6 @@ public class ChatSessionController extends BaseController {
     private static final String DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT = "请根据用户事件数据生成一个单页面应用。";
     private static final String DATA_VISUALIZATION_APP_EXAMPLE_PROMPT = "请生成一个带侧边栏的用户事件数据应用。";
     private static final String DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT = "请生成一个用户事件数据看板。";
-    private static final String PROLOGUE_AGENT_DATA_ANALYSIS = "我是数据分析智能体，面向用户提供的业务需求完成综合数据分析并输出分析结果。\n" +
-            "我会按三个阶段工作：先准备并确认系统内相关实体数据集，再通过 MCP 提交给独立分析服务，最后形成包含分析目标、分析过程和分析结论的报告。\n" +
-            "如果需求或数据范围不明确，我会先补充询问必要字段；如果缺少分析服务 MCP 能力，我会明确说明缺失项，不伪造分析结果。";
-    private static final String PROLOGUE_AGENT_DATA_ANALYSIS_EXAMPLE_INTRO = "可以点击下面的示例快速填入数据分析需求。";
-    private static final String DATA_ANALYSIS_EXAMPLE_PROMPT =
-            DataAnalysisDemoResponseService.DATA_ANALYSIS_EXAMPLE_PROMPT;
-    private static final String PROLOGUE_AGENT_CONFIG_MANAGEMENT = "我是配置管理智能体，负责根据用户需求生成符合系统要求的配置。\n" +
-            "我会按三个阶段工作：先生成配置并记录到右侧配置记录，再按需进入试验场验证，验证成功且你认可后再下发到系统正式生效。\n" +
-            "所有正式生效动作都会先确认，并经过平台 MCP 审批和写后读回校验。";
-    private static final String PROLOGUE_AGENT_CONFIG_MANAGEMENT_EXAMPLE_INTRO = "可以点击下面的示例快速填入配置管理需求。";
-    private static final String CONFIG_MANAGEMENT_EXAMPLE_PROMPT =
-            ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_EXAMPLE_PROMPT;
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\n" +
             " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
@@ -331,64 +317,6 @@ public class ChatSessionController extends BaseController {
                                             Map.of("label", "单页面应用", "prompt", DATA_VISUALIZATION_PAGE_EXAMPLE_PROMPT),
                                             Map.of("label", "带侧边栏应用", "prompt", DATA_VISUALIZATION_APP_EXAMPLE_PROMPT),
                                             Map.of("label", "数据看板", "prompt", DATA_VISUALIZATION_DASHBOARD_EXAMPLE_PROMPT)
-                                    )
-                            ))
-                            .build()
-            ));
-            return message;
-        }
-        if ("agent_data_analysis".equals(normalizeType(type))) {
-            String content = PROLOGUE_AGENT_DATA_ANALYSIS
-                    + "\n\n"
-                    + PROLOGUE_AGENT_DATA_ANALYSIS_EXAMPLE_INTRO
-                    + "\n\n"
-                    + "用户事件异常波动分析";
-            Message message = new Message("ai", content);
-            message.setParts(List.of(
-                    ChatMessagePart.builder()
-                            .type("markdown")
-                            .content(PROLOGUE_AGENT_DATA_ANALYSIS)
-                            .build(),
-                    ChatMessagePart.builder()
-                            .type("markdown")
-                            .content(PROLOGUE_AGENT_DATA_ANALYSIS_EXAMPLE_INTRO)
-                            .build(),
-                    ChatMessagePart.builder()
-                            .type("prompt-suggestions")
-                            .title("数据分析示例")
-                            .metadata(Map.of(
-                                    "examples",
-                                    List.of(
-                                            Map.of("label", "用户事件异常波动分析", "prompt", DATA_ANALYSIS_EXAMPLE_PROMPT)
-                                    )
-                            ))
-                            .build()
-            ));
-            return message;
-        }
-        if ("agent_config_management".equals(normalizeType(type))) {
-            String content = PROLOGUE_AGENT_CONFIG_MANAGEMENT
-                    + "\n\n"
-                    + PROLOGUE_AGENT_CONFIG_MANAGEMENT_EXAMPLE_INTRO
-                    + "\n\n"
-                    + "系统信息展示配置调整";
-            Message message = new Message("ai", content);
-            message.setParts(List.of(
-                    ChatMessagePart.builder()
-                            .type("markdown")
-                            .content(PROLOGUE_AGENT_CONFIG_MANAGEMENT)
-                            .build(),
-                    ChatMessagePart.builder()
-                            .type("markdown")
-                            .content(PROLOGUE_AGENT_CONFIG_MANAGEMENT_EXAMPLE_INTRO)
-                            .build(),
-                    ChatMessagePart.builder()
-                            .type("prompt-suggestions")
-                            .title("配置管理示例")
-                            .metadata(Map.of(
-                                    "examples",
-                                    List.of(
-                                            Map.of("label", "系统信息展示配置调整", "prompt", CONFIG_MANAGEMENT_EXAMPLE_PROMPT)
                                     )
                             ))
                             .build()
@@ -484,8 +412,6 @@ public class ChatSessionController extends BaseController {
         return switch (normalizeType(type)) {
             case "agent_data_access" -> PROLOGUE_AGENT_DATA_ACCESS;
             case "agent_data_visualization" -> PROLOGUE_AGENT_DATA_VISUALIZATION;
-            case "agent_data_analysis" -> PROLOGUE_AGENT_DATA_ANALYSIS;
-            case "agent_config_management" -> PROLOGUE_AGENT_CONFIG_MANAGEMENT;
             case "agent_report" -> PROLOGUE_AGENT_REPORT;
             default -> PROLOGUE_DEFAULT;
         };

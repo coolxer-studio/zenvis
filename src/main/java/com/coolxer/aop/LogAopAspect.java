@@ -1,17 +1,21 @@
 package com.coolxer.aop;
 
+import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.utils.JacksonUtil;
 import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleConfigDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleDeleteDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleUpdateDto;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
+import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.annotation.Pointcut;
@@ -23,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Objects;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -36,7 +41,7 @@ public class LogAopAspect {
     /**
      * 统计请求处理时间
      */
-    ThreadLocal<Long> startTime = new ThreadLocal<>();
+    private final ThreadLocal<Long> startTime = new ThreadLocal<>();
 
     @Pointcut("execution(public * com.coolxer.controller..*.*(..))")
     private void controllerAspect() {
@@ -52,7 +57,6 @@ public class LogAopAspect {
     @Before("logAspect()")
     public void doBefore(JoinPoint joinPoint) throws Throwable {
 
-        log.info("=== 开始 ===");
         startTime.set(System.currentTimeMillis());
         HttpServletRequest request = currentHttpRequest();
         if (request == null) {
@@ -62,11 +66,6 @@ public class LogAopAspect {
             return;
         }
 
-        log.info("请求地址: {} {}", request.getRequestURL().toString(), request.getMethod());
-        log.info("类名方法: {}.{}", joinPoint.getSignature().getDeclaringTypeName(),
-                joinPoint.getSignature().getName());
-        log.info("远程地址: {}", request.getRemoteAddr());
-        // 打印请求参数
         Object[] args = joinPoint.getArgs();
         boolean retrievalEndpoint = request.getRequestURI().startsWith("/api/v1/retrieval");
 
@@ -89,14 +88,68 @@ public class LogAopAspect {
             } else if (retrievalEndpoint && "listCandidateValue".equals(joinPoint.getSignature().getName()) && i == 3) {
                 arguments[i] = args[i] == null ? null : "***";
             } else {
-                arguments[i] = args[i];
+                arguments[i] = sanitizeArgument(args[i]);
             }
 
         }
 
         if (log.isInfoEnabled()) {
-            log.info("请求的参数: {}", JacksonUtil.toJson(arguments));
+            log.info("HTTP请求开始 method={} uri={} handler={}.{} remote={} args={}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    joinPoint.getSignature().getDeclaringTypeName(),
+                    joinPoint.getSignature().getName(),
+                    request.getRemoteAddr(),
+                    JacksonUtil.toJson(arguments));
         }
+    }
+
+    private Object sanitizeArgument(Object argument) {
+        if (argument == null) {
+            return null;
+        }
+        try {
+            JsonNode node = JacksonConfig.OBJECT_MAPPER.valueToTree(argument);
+            redactSensitiveValues(node);
+            return node;
+        } catch (IllegalArgumentException ex) {
+            return argument.getClass().getSimpleName();
+        }
+    }
+
+    private void redactSensitiveValues(JsonNode node) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject()) {
+            ObjectNode object = (ObjectNode) node;
+            object.properties().forEach(entry -> {
+                if (isSensitiveName(entry.getKey())) {
+                    object.put(entry.getKey(), "***");
+                } else {
+                    redactSensitiveValues(entry.getValue());
+                }
+            });
+        } else if (node.isArray()) {
+            node.forEach(this::redactSensitiveValues);
+        }
+    }
+
+    private boolean isSensitiveName(String name) {
+        String normalized = name == null ? ""
+                : name.replace("_", "").replace("-", "").toLowerCase(Locale.ROOT);
+        return normalized.contains("password")
+                || normalized.contains("passwd")
+                || normalized.contains("secret")
+                || normalized.contains("token")
+                || normalized.contains("authcode")
+                || normalized.contains("authorization")
+                || normalized.contains("apikey")
+                || normalized.contains("privatekey")
+                || normalized.contains("accesskey")
+                || normalized.contains("credential")
+                || normalized.contains("sessionid")
+                || normalized.contains("cookie");
     }
 
     private Map<String, Object> sanitizeRetrievalRequest(RetrievalRequestDto request) {
@@ -148,24 +201,41 @@ public class LogAopAspect {
             return;
         }
 
-        // 接口耗时(ms)
         long timeConsuming = System.currentTimeMillis() - startedAt;
+        HttpServletRequest request = currentHttpRequest();
 
-        // 接口耗时大于等于2s时打印日志
         if (timeConsuming >= 2000) {
-            HttpServletRequest request1 = currentHttpRequest();
-            if (Objects.isNull(request1)) {
-                startTime.remove();
-                return;
+            if (request != null) {
+                log.warn("HTTP慢请求 method={} uri={} params={} durationMs={}",
+                        request.getMethod(),
+                        request.getRequestURI(),
+                        JacksonUtil.toJson(sanitizeRequestParameters(request)),
+                        timeConsuming);
             }
-
-            log.warn("URL [{}]，Filter condition [{}]，Time consuming [{}]ms!!!",
-                    request1.getRequestURL().toString(), JacksonUtil.toJson(sanitizeRequestParameters(request1)),
-                    timeConsuming);
         }
 
         startTime.remove();
-        log.info("=== 结束 ===");
+        if (request != null) {
+            log.info("HTTP请求完成 method={} uri={} durationMs={}",
+                    request.getMethod(), request.getRequestURI(), timeConsuming);
+        }
+    }
+
+    @AfterThrowing(pointcut = "logAspect()", throwing = "throwable")
+    public void doAfterThrowing(Throwable throwable) {
+        Long startedAt = startTime.get();
+        startTime.remove();
+        if (startedAt == null) {
+            return;
+        }
+        HttpServletRequest request = currentHttpRequest();
+        if (request != null) {
+            log.warn("HTTP请求异常 method={} uri={} durationMs={} error={}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    System.currentTimeMillis() - startedAt,
+                    throwable.getClass().getSimpleName());
+        }
     }
 
     private HttpServletRequest currentHttpRequest() {
@@ -180,11 +250,11 @@ public class LogAopAspect {
         Map<String, Object> safe = new LinkedHashMap<>();
         boolean retrievalEndpoint = request.getRequestURI().startsWith("/api/v1/retrieval");
         request.getParameterMap().forEach((name, values) -> {
-            String lowerName = name.toLowerCase(java.util.Locale.ROOT);
-            boolean sensitive = retrievalEndpoint && (lowerName.contains("sql")
-                    || lowerName.contains("token")
+            String lowerName = name.toLowerCase(Locale.ROOT);
+            boolean sensitive = isSensitiveName(name)
+                    || (retrievalEndpoint && (lowerName.contains("sql")
                     || lowerName.contains("value")
-                    || lowerName.equals("text"));
+                    || lowerName.equals("text")));
             safe.put(name, sensitive ? "***" : values);
         });
         return safe;

@@ -30,7 +30,7 @@ class McpTaskToolGrantServiceTest {
     @Test
     void ordinaryBackgroundInvocationCannotUseTaskGrant() {
         assertThat(service.isGranted(
-                McpInvocationContext.background("agent_data_analysis"), "local::write_demo"
+                McpInvocationContext.background(McpInvocationContext.ANALYSIS_TASK_AGENT_TYPE), "local::write_demo"
         )).isFalse();
 
         verify(repository, never()).existsById(org.mockito.ArgumentMatchers.any());

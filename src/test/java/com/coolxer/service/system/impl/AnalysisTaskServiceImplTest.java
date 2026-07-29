@@ -9,6 +9,7 @@ import com.coolxer.service.dih.AgentLlmService;
 import com.coolxer.service.dih.ChatMessagePartParser;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -17,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,18 +30,18 @@ class AnalysisTaskServiceImplTest {
 
     @Test
     void buildAnalysisSystemPromptLoadsAnalysisSkillPrompt() throws Exception {
-        Path analysisSkill = skillRoot.resolve("data-analysis-agent");
+        Path analysisSkill = skillRoot.resolve("analysis-task-skill");
         Files.createDirectories(analysisSkill);
         Files.writeString(analysisSkill.resolve("skill.json"), """
                 {
-                  "id": "data-analysis-agent",
-                  "name": "数据分析",
+                  "id": "analysis-task-skill",
+                  "name": "后台分析",
                   "enabled": true,
-                  "agentTypes": ["agent_data_analysis"],
+                  "agentTypes": ["agent_analysis_task"],
                   "entry": "SKILL.md"
                 }
                 """);
-        Files.writeString(analysisSkill.resolve("SKILL.md"), "数据分析 Skill Prompt");
+        Files.writeString(analysisSkill.resolve("SKILL.md"), "后台分析 Skill Prompt");
 
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "skillPath", skillRoot.toString());
@@ -48,27 +50,30 @@ class AnalysisTaskServiceImplTest {
 
         AnalysisTaskServiceImpl service = new AnalysisTaskServiceImpl();
         ReflectionTestUtils.setField(service, "skillService", skillService);
+        AnalysisTask task = new AnalysisTask().setSkillIds(Set.of("analysis-task-skill"));
 
-        String systemPrompt = ReflectionTestUtils.invokeMethod(service, "buildAnalysisSystemPrompt");
+        String systemPrompt = ReflectionTestUtils.invokeMethod(service, "buildAnalysisSystemPrompt", task);
 
         assertThat(systemPrompt)
                 .contains("ZenVis 的 AI分析任务 Agent")
                 .contains("【已加载 Skill】")
-                .contains("数据分析 Skill Prompt");
+                .contains("后台分析 Skill Prompt");
     }
 
     @Test
     void taskSkillSelectionOnlyAcceptsEnabledSkillsRegardlessOfAgentType() throws Exception {
-        createSkill("enabled-any-agent", true, "agent_config_management", "已启用 Skill Prompt");
-        createSkill("disabled-skill", false, "agent_data_analysis", "不应加载");
-        createSkill("matching-but-not-selected", true, "agent_data_analysis", "同类型但未选中");
+        createSkill("enabled-any-agent", true, "agent_report", "已启用 Skill Prompt");
+        createSkill("disabled-skill", false, "agent_data_access", "不应加载");
+        createSkill("matching-but-not-selected", true, "agent_analysis_task", "同类型但未选中");
 
         SkillService skillService = createSkillService();
 
         assertThat(skillService.getEnabledOptions())
                 .extracting(option -> option.getValue())
                 .containsExactlyInAnyOrder("enabled-any-agent", "matching-but-not-selected");
-        assertThat(skillService.buildTaskSkillPrompt("agent_data_analysis", List.of("enabled-any-agent")))
+        assertThat(skillService.buildTaskSkillPrompt(
+                McpInvocationContext.ANALYSIS_TASK_AGENT_TYPE,
+                List.of("enabled-any-agent")))
                 .contains("已启用 Skill Prompt")
                 .doesNotContain("同类型但未选中");
         assertThatThrownBy(() -> skillService.validateEnabledSkillIds(List.of("disabled-skill")))
@@ -82,7 +87,8 @@ class AnalysisTaskServiceImplTest {
                 .setName("每日数据分析")
                 .setDescription("关注异常波动")
                 .setModel("requested-model")
-                .setPrompt("分析最近风险");
+                .setPrompt("分析最近风险")
+                .setSkillIds(Set.of("example-analysis-skill"));
 
         McpToolContext mcpToolContext = McpToolContext.empty();
         FakeAIBaseService aiBaseService = new FakeAIBaseService();
@@ -100,7 +106,7 @@ class AnalysisTaskServiceImplTest {
 
         assertThat(result).isEqualTo("分析结果");
         assertThat(aiBaseService.requestedModel).isEqualTo("requested-model");
-        assertThat(agentMcpToolService.agentType).isEqualTo("agent_data_analysis");
+        assertThat(agentMcpToolService.agentType).isEqualTo(McpInvocationContext.ANALYSIS_TASK_AGENT_TYPE);
         assertThat(agentLlmService.model).isEqualTo("resolved-model");
         assertThat(agentLlmService.mcpToolContext).isSameAs(mcpToolContext);
         assertThat(agentLlmService.systemPrompt).contains("分析 Skill Prompt");
@@ -264,7 +270,7 @@ class AnalysisTaskServiceImplTest {
         }
 
         @Override
-        public String buildEnabledSkillPrompt(String agentType) {
+        public String buildTaskSkillPrompt(String agentType, List<String> selectedSkillIds) {
             return "分析 Skill Prompt";
         }
     }

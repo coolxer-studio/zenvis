@@ -79,7 +79,7 @@ class McpApprovalToolCallbackProviderTest {
         ToolContext internalContext = new ToolContext(Map.of(
                 ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext,
                 McpInvocationContext.TOOL_CONTEXT_KEY,
-                McpInvocationContext.background("agent_data_analysis")
+                McpInvocationContext.background(McpInvocationContext.ANALYSIS_TASK_AGENT_TYPE)
         ));
 
         String result = provider.getToolCallbacks()[0].call("{}", internalContext);

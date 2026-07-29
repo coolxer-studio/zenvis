@@ -2,6 +2,8 @@ package com.coolxer.aop;
 
 import com.coolxer.model.retrieval.dto.RequestCriteriaDto;
 import com.coolxer.model.retrieval.dto.RetrievalRuleCreateDto;
+import com.coolxer.model.system.dto.LoginDto;
+import com.coolxer.utils.JacksonUtil;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.Signature;
 import org.aspectj.lang.reflect.SourceLocation;
@@ -52,6 +54,22 @@ class LogAopAspectTest {
 
         assertThat(safe).containsEntry("sql", "***").containsEntry("criteria_count", 1);
         assertThat(safe.toString()).doesNotContain("secret SQL value", "secret condition value");
+    }
+
+    @Test
+    void genericArgumentSanitizerRedactsLoginCredentials() {
+        LoginDto request = new LoginDto();
+        request.setUserName("super@admin.com");
+        request.setPassword("encrypted-password-payload");
+        request.setAuthCode("b882");
+
+        Object safe = ReflectionTestUtils.invokeMethod(
+                new LogAopAspect(), "sanitizeArgument", request);
+        String json = JacksonUtil.toJson(safe);
+
+        assertThat(json)
+                .contains("super@admin.com", "\"password\":\"***\"", "\"auth_code\":\"***\"")
+                .doesNotContain("encrypted-password-payload", "b882");
     }
 
     private static class TestJoinPoint implements JoinPoint {

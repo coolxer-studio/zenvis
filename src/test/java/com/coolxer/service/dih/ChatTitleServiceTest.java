@@ -24,18 +24,6 @@ class ChatTitleServiceTest {
         assertThat(chatModel.calls.get()).isZero();
     }
 
-    @Test
-    void dataAnalysisAndConfigManagementDemoPromptsUseLocalTitlesWithoutCallingModel() {
-        ThrowingChatModel chatModel = new ThrowingChatModel();
-        ChatTitleService service = new ChatTitleService(chatModel);
-
-        assertThat(service.generateTitle(DataAnalysisDemoResponseService.DATA_ANALYSIS_EXAMPLE_PROMPT))
-                .isEqualTo(DataAnalysisDemoResponseService.DATA_ANALYSIS_DEMO_TITLE);
-        assertThat(service.generateTitle(ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_EXAMPLE_PROMPT))
-                .isEqualTo(ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_DEMO_TITLE);
-        assertThat(chatModel.calls.get()).isZero();
-    }
-
     private static class ThrowingChatModel implements ChatModel {
         private final AtomicInteger calls = new AtomicInteger();
 

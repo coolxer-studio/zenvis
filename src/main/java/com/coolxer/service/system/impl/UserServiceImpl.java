@@ -135,7 +135,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
     public User create(UserDto userDto) {
         // 必填项校验
         checkCreate(userDto);
@@ -292,7 +292,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
     public void delete(Long id) {
         if (Objects.isNull(id)) {
             throw new ApiException(ResultCodeEnum.ERROR_USER_ID_MUST_NOT_NULL);

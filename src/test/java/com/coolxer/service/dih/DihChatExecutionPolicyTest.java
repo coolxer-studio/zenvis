@@ -3,7 +3,12 @@ package com.coolxer.service.dih;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.model.dih.vo.SkillChatEntryVo;
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
+import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -26,31 +31,37 @@ class DihChatExecutionPolicyTest {
     @Test
     void builtinAgentAllowsExplicitSkillAndToolsButNoRagOrDeepThinking() {
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
         ).orElseThrow();
 
         assertThat(policy.mode()).isEqualTo(DihChatExecutionPolicy.Mode.AGENT);
-        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
+        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
         assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.toolsAllowed()).isTrue();
         assertThat(policy.deepThinkAllowed()).isFalse();
         assertThat(policy.effectiveDeepThink(true)).isFalse();
-        assertThat(policy.skillIds()).containsExactly("data-analysis-agent");
+        assertThat(policy.skillIds()).containsExactly("data-visualization-agent");
     }
 
     @Test
-    void dynamicSkillUsesSelectedSkillAndInheritedAgentTools() {
+    void genericDynamicSkillUsesSelectedSkillAndExplicitRuntimeTools() {
         SkillService skillService = mock(SkillService.class);
         when(skillService.requireEnabledChatEntry("skill:jmr-analysis"))
                 .thenReturn(new SkillChatEntryVo(
                         "jmr-analysis",
                         "skill:jmr-analysis",
-                        BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
+                        SkillService.GENERIC_SKILL_AGENT_TYPE,
                         "僵木蠕研判",
                         "说明",
                         "data-analysis",
                         60
                 ));
+        SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
+                "skill_only",
+                new SkillRuntimeToolsVo(List.of("retrieval_search"), Map.of()),
+                null
+        );
+        when(skillService.resolveRuntimeConfig(List.of("jmr-analysis"))).thenReturn(runtime);
 
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve(
                 "skill:jmr-analysis",
@@ -58,7 +69,7 @@ class DihChatExecutionPolicyTest {
         ).orElseThrow();
 
         assertThat(policy.isDynamicSkill()).isTrue();
-        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
+        assertThat(policy.agentType()).isEqualTo(SkillService.GENERIC_SKILL_AGENT_TYPE);
         assertThat(policy.toolsAllowed()).isTrue();
         assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.skillIds()).containsExactly("jmr-analysis");

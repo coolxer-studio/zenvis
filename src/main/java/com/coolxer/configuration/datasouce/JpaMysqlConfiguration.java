@@ -10,6 +10,7 @@ import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
@@ -82,6 +83,7 @@ public class JpaMysqlConfiguration {
     }
 
     @Bean(name = {"mysqlTransactionManager", "pluginMysqlTransactionManager"})
+    @Primary
     public JpaTransactionManager mysqlTransactionManager(EntityManagerFactoryBuilder builder) {
 
         JpaTransactionManager jpaTransactionManager = new JpaTransactionManager();

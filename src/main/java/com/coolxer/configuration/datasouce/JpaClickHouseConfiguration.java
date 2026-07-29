@@ -74,7 +74,6 @@ public class JpaClickHouseConfiguration {
     }
 
     @Bean
-    @Primary
     public JpaTransactionManager clickHouseTransactionManager(EntityManagerFactoryBuilder builder) {
         JpaTransactionManager jpaTransactionManager = new JpaTransactionManager();
         jpaTransactionManager.setEntityManagerFactory(clickHouseEntityManagerFactoryBean(builder).getObject());

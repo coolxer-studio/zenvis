@@ -63,7 +63,7 @@ class SkillServiceTest {
                           "id": "selected-skill",
                           "name": "指定能力",
                           "enabled": true,
-                          "agentTypes": ["agent_data_analysis"],
+                          "agentTypes": ["agent_report"],
                           "entry": "SKILL.md"
                         }
                         """,
@@ -76,7 +76,7 @@ class SkillServiceTest {
                           "id": "matching-but-not-selected",
                           "name": "同类型附加能力",
                           "enabled": true,
-                          "agentTypes": ["agent_data_analysis"],
+                          "agentTypes": ["agent_report"],
                           "entry": "SKILL.md"
                         }
                         """,
@@ -86,7 +86,7 @@ class SkillServiceTest {
         SkillService service = newSkillService();
         service.reload();
 
-        String prompt = service.buildAgentSkillPrompt("agent_data_analysis", List.of("selected-skill"));
+        String prompt = service.buildAgentSkillPrompt("agent_report", List.of("selected-skill"));
 
         assertThat(prompt)
                 .contains("只应加载的提示词")
@@ -158,13 +158,13 @@ class SkillServiceTest {
     @Test
     void taskSelectionLoadsOnlySelectedSkillEvenWhenMatchingSkillExceedsPromptBudget() throws Exception {
         writeSkill(
-                skillRoot.resolve("data-analysis-agent"),
+                skillRoot.resolve("default-analysis-skill"),
                 """
                         {
-                          "id": "data-analysis-agent",
+                          "id": "default-analysis-skill",
                           "name": "通用研判",
                           "enabled": true,
-                          "agentTypes": ["agent_data_analysis"],
+                          "agentTypes": ["agent_analysis_task"],
                           "entry": "SKILL.md"
                         }
                         """,
@@ -177,7 +177,7 @@ class SkillServiceTest {
                           "id": "jmr-continuous-threat-analysis",
                           "name": "僵木蠕持续安全研判",
                           "enabled": true,
-                          "agentTypes": ["agent_data_analysis"],
+                          "agentTypes": ["agent_skill"],
                           "entry": "SKILL.md"
                         }
                         """,
@@ -188,7 +188,7 @@ class SkillServiceTest {
         service.reload();
 
         String prompt = service.buildTaskSkillPrompt(
-                "agent_data_analysis",
+                "agent_analysis_task",
                 List.of("jmr-continuous-threat-analysis")
         );
 
@@ -206,7 +206,7 @@ class SkillServiceTest {
                           "id": "disabled-skill",
                           "name": "停用能力",
                           "enabled": false,
-                          "agentTypes": ["agent_data_analysis"],
+                          "agentTypes": ["agent_report"],
                           "entry": "SKILL.md"
                         }
                         """,
@@ -217,7 +217,7 @@ class SkillServiceTest {
         service.reload();
 
         assertThatThrownBy(() -> service.buildAgentSkillPrompt(
-                "agent_data_analysis",
+                "agent_report",
                 List.of("disabled-skill", "missing-skill")
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -235,7 +235,7 @@ class SkillServiceTest {
                           "name": "专项研判",
                           "description": "专项研判说明",
                           "enabled": true,
-                          "agentTypes": ["agent_data_analysis"],
+                          "agentTypes": ["agent_report"],
                           "chat": {
                             "enabled": true,
                             "icon": "data-analysis",
@@ -305,7 +305,7 @@ class SkillServiceTest {
         assertThat(service.getChatEntries(true).get(1))
                 .satisfies(entry -> {
                     assertThat(entry.getChatType()).isEqualTo("skill:analysis-chat-skill");
-                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
+                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_REPORT);
                     assertThat(entry.getLabel()).isEqualTo("专项研判");
                 });
         assertThat(service.requireEnabledChatEntry("skill:analysis-chat-skill").getSkillId())
@@ -316,9 +316,9 @@ class SkillServiceTest {
 
     @Test
     void builtinChatSkillKeepsBuiltinAgentType() throws Exception {
-        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-analysis-agent");
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-visualization-agent");
         writeSkill(
-                skillRoot.resolve("data-analysis-agent"),
+                skillRoot.resolve("data-visualization-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
                 Files.readString(repoSkill.resolve("SKILL.md"))
         );
@@ -329,8 +329,8 @@ class SkillServiceTest {
         assertThat(service.getChatEntries(true))
                 .singleElement()
                 .satisfies(entry -> {
-                    assertThat(entry.getChatType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
-                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
+                    assertThat(entry.getChatType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
+                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
                 });
     }
 
@@ -356,7 +356,7 @@ class SkillServiceTest {
                 .satisfies(entry -> {
                     assertThat(entry.getSkillId()).isEqualTo("jmr-continuous-threat-analysis");
                     assertThat(entry.getChatType()).isEqualTo("skill:jmr-continuous-threat-analysis");
-                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
+                    assertThat(entry.getAgentType()).isEqualTo(SkillService.GENERIC_SKILL_AGENT_TYPE);
                     assertThat(entry.getLabel()).isEqualTo("僵木蠕研判");
                 });
     }
@@ -417,14 +417,12 @@ class SkillServiceTest {
     }
 
     @Test
-    void allFiveBuiltinAgentTypesAreRecognized() {
+    void allThreeBuiltinAgentTypesAreRecognized() {
         SkillService service = newSkillService();
 
         assertThat(List.of(
                 BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS,
                 BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
-                BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS,
-                BuiltinAgentSkillRegistry.AGENT_CONFIG_MANAGEMENT,
                 BuiltinAgentSkillRegistry.AGENT_REPORT
         )).allSatisfy(agentType -> assertThat(service.isBuiltinAgentType(agentType)).isTrue());
     }
@@ -597,66 +595,6 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinDataAnalysisSkillDocumentsThreeStageAndContinuousWorkflow() throws Exception {
-        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-analysis-agent");
-        writeSkill(
-                skillRoot.resolve("data-analysis-agent"),
-                Files.readString(repoSkill.resolve("skill.json")),
-                Files.readString(repoSkill.resolve("SKILL.md"))
-        );
-
-        SkillService service = newSkillService();
-        service.reload();
-
-        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
-
-        assertThat(prompt)
-                .contains("数据集准备")
-                .contains("分析服务")
-                .contains("分析报告")
-                .contains("持续分析任务")
-                .contains("Retrieval/Entity MCP")
-                .contains("analysis.confirm_dataset")
-                .contains("analysis.confirm_service_result")
-                .contains("analysis.create_continuous_task")
-                .contains("zenvis:data-analysis-record")
-                .contains("zenvis:notice")
-                .contains("不得生成分析结论");
-    }
-
-    @Test
-    void builtinConfigManagementSkillDocumentsGenericConfigurationWorkflow() throws Exception {
-        Path repoSkill = Path.of("../deploy/open_config/skill_config/config-management-agent");
-        writeSkill(
-                skillRoot.resolve("config-management-agent"),
-                Files.readString(repoSkill.resolve("skill.json")),
-                Files.readString(repoSkill.resolve("SKILL.md"))
-        );
-
-        SkillService service = newSkillService();
-        service.reload();
-
-        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_CONFIG_MANAGEMENT);
-
-        assertThat(prompt)
-                .contains("配置生成")
-                .contains("试验场验证")
-                .contains("正式生效")
-                .contains("config_schema")
-                .contains("config_tree")
-                .contains("config_read")
-                .contains("config_validate")
-                .contains("config_ensure_root")
-                .contains("config_add")
-                .contains("config_apply")
-                .contains("zenvis:config-record")
-                .contains("config.confirm_trial")
-                .contains("config.confirm_apply")
-                .contains("blocked")
-                .contains("读回核验");
-    }
-
-    @Test
     void builtinReportSkillDocumentsReportDraftAndEditingWorkflow() throws Exception {
         Path repoSkill = Path.of("../deploy/open_config/skill_config/report-agent");
         writeSkill(
@@ -674,7 +612,7 @@ class SkillServiceTest {
                 .contains("报表制作智能体")
                 .contains("新建报表")
                 .contains("修改报表")
-                .contains("汇总多智能体结果")
+                .contains("汇总多来源结果")
                 .contains("retrieval_search")
                 .contains("entity_trend")
                 .contains("analysis_task_view")

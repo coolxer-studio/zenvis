@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -232,6 +233,16 @@ class BusinessServiceRegistryServiceImplTest {
         InOrder order = inOrder(eventRepository, instanceRepository);
         order.verify(eventRepository).deleteExpiredEvents(eq(cutoff));
         order.verify(instanceRepository).deleteStaleInstances(eq(cutoff));
+    }
+
+    @Test
+    void cleanupUsesMysqlTransactionManager() throws NoSuchMethodException {
+        Transactional transactional = BusinessServiceRegistryServiceImpl.class
+                .getMethod("cleanupExpiredData")
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.transactionManager()).isEqualTo("mysqlTransactionManager");
     }
 
     private BusinessServiceHeartbeatDto heartbeat(String serviceCode, String instanceId,

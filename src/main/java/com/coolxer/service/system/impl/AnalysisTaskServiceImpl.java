@@ -18,7 +18,6 @@ import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AgentLlmService;
 import com.coolxer.service.dih.ChatMessagePartParser;
-import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -66,6 +65,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 @Service
 public class AnalysisTaskServiceImpl implements AnalysisTaskService {
+    private static final String ANALYSIS_TASK_AGENT_TYPE = McpInvocationContext.ANALYSIS_TASK_AGENT_TYPE;
 
     private static final String ANALYSIS_SYSTEM_PROMPT = """
             你是 ZenVis 的 AI分析任务 Agent。请基于用户提供的任务提示词完成分析，输出结构清晰、结论明确的中文结果。
@@ -445,11 +445,11 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     private String callAiAnalyze(AnalysisTask task, TaskExecutionControl control) {
         String model = aiBaseService.resolveChatModel(task.getModel(), false, false);
         McpToolContext mcpToolContext = agentMcpToolService.resolve(
-                "agent_data_analysis",
+                ANALYSIS_TASK_AGENT_TYPE,
                 task.getSkillIds() == null ? List.of() : new ArrayList<>(task.getSkillIds()));
         if (mcpToolContext.hasTools()) {
             McpInvocationContext invocationContext = control == null
-                    ? McpInvocationContext.background("agent_data_analysis")
+                    ? McpInvocationContext.background(ANALYSIS_TASK_AGENT_TYPE)
                     : McpInvocationContext.backgroundTask(
                             task.getId(),
                             task.getExecutionId(),
@@ -528,25 +528,18 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         }
     }
 
-    private String buildAnalysisSystemPrompt() {
-        String skillPrompt = skillService.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS);
-        return appendSkillPrompt(skillPrompt);
-    }
-
     private String buildAnalysisSystemPrompt(AnalysisTask task) {
         List<String> selected = task.getSkillIds() == null
                 ? List.of() : new ArrayList<>(task.getSkillIds());
-        String skillPrompt = skillService.buildTaskSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ANALYSIS, selected);
+        String skillPrompt = selected.isEmpty()
+                ? ""
+                : skillService.buildTaskSkillPrompt(ANALYSIS_TASK_AGENT_TYPE, selected);
         SkillRuntimeConfigVo runtime = skillService.resolveRuntimeConfig(selected);
         String basePrompt = runtime != null
                 && SkillRuntimeConfigVo.PROMPT_MODE_SKILL_ONLY.equalsIgnoreCase(runtime.getPromptMode())
                 ? SKILL_ONLY_ANALYSIS_SYSTEM_PROMPT
                 : ANALYSIS_SYSTEM_PROMPT;
         return appendSkillPrompt(basePrompt, skillPrompt);
-    }
-
-    private String appendSkillPrompt(String skillPrompt) {
-        return appendSkillPrompt(ANALYSIS_SYSTEM_PROMPT, skillPrompt);
     }
 
     private String appendSkillPrompt(String basePrompt, String skillPrompt) {

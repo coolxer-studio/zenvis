@@ -12,10 +12,10 @@ class ChatControllerTest {
     void implementedBuiltinAgentsDoNotUsePlaceholderRoute() {
         ChatController controller = new ChatController();
 
-        Boolean disposePlaceholder = ReflectionTestUtils.invokeMethod(
+        Boolean visualizationPlaceholder = ReflectionTestUtils.invokeMethod(
                 controller,
                 "isPlaceholderBuiltinAgent",
-                BuiltinAgentSkillRegistry.AGENT_CONFIG_MANAGEMENT
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
         );
         Boolean reportPlaceholder = ReflectionTestUtils.invokeMethod(
                 controller,
@@ -23,7 +23,7 @@ class ChatControllerTest {
                 BuiltinAgentSkillRegistry.AGENT_REPORT
         );
 
-        assertThat(disposePlaceholder).isFalse();
+        assertThat(visualizationPlaceholder).isFalse();
         assertThat(reportPlaceholder).isFalse();
     }
 }

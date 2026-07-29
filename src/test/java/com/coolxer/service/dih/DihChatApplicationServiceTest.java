@@ -11,10 +11,8 @@ import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
-import com.coolxer.service.dih.agent.DataAnalysisAgent;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
-import com.coolxer.service.dih.agent.ConfigManagementAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -256,30 +254,7 @@ class DihChatApplicationServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void buildStructuredExtraDataPatchIncludesDataVisualizationChartLibrary() {
-        DihChatApplicationService service = new DihChatApplicationService(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                (DataAnalysisAgent) null,
-                (ConfigManagementAgent) null,
-                (ReportAgent) null,
-                (DataAccessAgent) null,
-                (DataVisualizationAgent) null,
-                null,
-                null,
-                null,
-                (AgentMcpToolService) null,
-                (SkillService) null,
-                null,
-                (PushTaskService) null,
-                (DashboardService) null,
-                (MenuService) null
-        );
+        DihChatApplicationService service = emptyService();
 
         ChatMessagePart part = ChatMessagePart.builder()
                 .type("visualization-chart-record")
@@ -313,9 +288,8 @@ class DihChatApplicationServiceTest {
 
     private DihChatApplicationService emptyService() {
         return new DihChatApplicationService(
-                null, null, null, null, null, null, null, null,
-                (DataAnalysisAgent) null, (ConfigManagementAgent) null, (ReportAgent) null,
-                (DataAccessAgent) null, (DataVisualizationAgent) null,
+                null, null, null, null, null, null,
+                (ReportAgent) null, (DataAccessAgent) null, (DataVisualizationAgent) null,
                 null, null, null, (AgentMcpToolService) null, (SkillService) null,
                 null, (PushTaskService) null, (DashboardService) null, (MenuService) null
         );
@@ -324,30 +298,7 @@ class DihChatApplicationServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void buildStructuredExtraDataPatchIncludesConfigurationRecords() {
-        DihChatApplicationService service = new DihChatApplicationService(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                (DataAnalysisAgent) null,
-                (ConfigManagementAgent) null,
-                (ReportAgent) null,
-                (DataAccessAgent) null,
-                (DataVisualizationAgent) null,
-                null,
-                null,
-                null,
-                (AgentMcpToolService) null,
-                (SkillService) null,
-                null,
-                (PushTaskService) null,
-                (DashboardService) null,
-                (MenuService) null
-        );
+        DihChatApplicationService service = emptyService();
 
         ChatMessagePart part = ChatMessagePart.builder()
                 .type("config-record")
@@ -562,10 +513,6 @@ class DihChatApplicationServiceTest {
                 null,
                 null,
                 null,
-                null,
-                null,
-                null,
-                null,
                 new ChatMessagePartParser(),
                 null,
                 new ChatTitleService(titleModel),
@@ -599,123 +546,6 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
-    void dataAnalysisExampleUsesBuiltinThreeStageResultsWithoutModelOrAgent() {
-        FakeChatSessionService sessionService = new FakeChatSessionService();
-        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
-        CountingDataAnalysisAgent dataAnalysisAgent = new CountingDataAnalysisAgent();
-        ThrowingChatModel titleModel = new ThrowingChatModel();
-        DihChatApplicationService service = new DihChatApplicationService(
-                null,
-                baseService,
-                sessionService,
-                null,
-                null,
-                new DataAnalysisDemoResponseService(),
-                null,
-                null,
-                dataAnalysisAgent,
-                null,
-                null,
-                null,
-                null,
-                new ChatMessagePartParser(),
-                null,
-                new ChatTitleService(titleModel),
-                null,
-                new EnabledSkillService(),
-                null,
-                null,
-                null,
-                null
-        );
-        ChatDto chatDto = new ChatDto();
-        chatDto.setType(DataAnalysisAgent.AGENT_TYPE);
-        chatDto.setChatId("data-analysis-demo-chat");
-        chatDto.setModel("unsupported-model-should-not-be-checked");
-        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
-
-        chatDto.setMessage(DataAnalysisDemoResponseService.DATA_ANALYSIS_EXAMPLE_PROMPT);
-        String dataset = String.join("", service.chat(chatDto, null).collectList().block());
-        chatDto.setMessage("我已确认当前数据集。请继续分析。");
-        String analysis = String.join("", service.chat(chatDto, null).collectList().block());
-        chatDto.setMessage("我已确认分析服务结果。请生成报告。");
-        String report = String.join("", service.chat(chatDto, null).collectList().block());
-
-        assertThat(dataset).contains("dataset_preparation", "analysis.confirm_dataset");
-        assertThat(analysis).contains("service_analysis", "builtin-demo-analysis-001");
-        assertThat(report).contains("report_output", "zenvis:report-document-config");
-        assertThat(dataAnalysisAgent.calls.get()).isZero();
-        assertThat(baseService.isModelSupportedCalls.get()).isZero();
-        assertThat(baseService.resolveChatModelCalls.get()).isZero();
-        assertThat(titleModel.calls.get()).isZero();
-        assertThat(sessionService.session.getTitle())
-                .isEqualTo(DataAnalysisDemoResponseService.DATA_ANALYSIS_DEMO_TITLE);
-        assertThat(sessionService.session.getExtraData())
-                .contains("\"dataAnalysis\"")
-                .contains("demo-analysis-dataset-001")
-                .contains("demo-analysis-service-001")
-                .contains("demo-analysis-report-001");
-    }
-
-    @Test
-    void configManagementExampleUsesBuiltinThreeStageResultsWithoutModelOrAgent() {
-        FakeChatSessionService sessionService = new FakeChatSessionService();
-        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
-        CountingConfigManagementAgent configManagementAgent = new CountingConfigManagementAgent();
-        ThrowingChatModel titleModel = new ThrowingChatModel();
-        DihChatApplicationService service = new DihChatApplicationService(
-                null,
-                baseService,
-                sessionService,
-                null,
-                null,
-                null,
-                new ConfigManagementDemoResponseService(),
-                null,
-                null,
-                configManagementAgent,
-                null,
-                null,
-                null,
-                new ChatMessagePartParser(),
-                null,
-                new ChatTitleService(titleModel),
-                null,
-                new EnabledSkillService(),
-                null,
-                null,
-                null,
-                null
-        );
-        ChatDto chatDto = new ChatDto();
-        chatDto.setType(ConfigManagementAgent.AGENT_TYPE);
-        chatDto.setChatId("config-management-demo-chat");
-        chatDto.setModel("unsupported-model-should-not-be-checked");
-        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
-
-        chatDto.setMessage(ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_EXAMPLE_PROMPT);
-        String generated = String.join("", service.chat(chatDto, null).collectList().block());
-        chatDto.setMessage("我已确认进入试验场验证。");
-        String validated = String.join("", service.chat(chatDto, null).collectList().block());
-        chatDto.setMessage("我已确认将验证成功的配置正式下发。");
-        String applied = String.join("", service.chat(chatDto, null).collectList().block());
-
-        assertThat(generated).contains("demo-config-system-info-001", "config.confirm_trial");
-        assertThat(validated).contains("validationStatus", "success", "config.confirm_apply");
-        assertThat(applied).contains("effectiveStatus", "yes", "actualSystemChanged");
-        assertThat(configManagementAgent.calls.get()).isZero();
-        assertThat(baseService.isModelSupportedCalls.get()).isZero();
-        assertThat(baseService.resolveChatModelCalls.get()).isZero();
-        assertThat(titleModel.calls.get()).isZero();
-        assertThat(sessionService.session.getTitle())
-                .isEqualTo(ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_DEMO_TITLE);
-        assertThat(sessionService.session.getExtraData())
-                .contains("\"configuration\"")
-                .contains("demo-config-system-info-001")
-                .contains("\"effectiveStatus\":\"yes\"");
-    }
-
-    @Test
     void reportDemoChatUsesTemplateWithoutCallingModelAgent() {
         FakeChatSessionService sessionService = new FakeChatSessionService();
         ThrowingAIBaseService baseService = new ThrowingAIBaseService();
@@ -728,11 +558,7 @@ class DihChatApplicationServiceTest {
                 sessionService,
                 null,
                 null,
-                null,
-                null,
                 new ReportDemoResponseService(),
-                (DataAnalysisAgent) null,
-                (ConfigManagementAgent) null,
                 reportAgent,
                 (DataAccessAgent) null,
                 (DataVisualizationAgent) null,
@@ -801,46 +627,6 @@ class DihChatApplicationServiceTest {
                                  McpToolContext mcpToolContext) {
             calls.incrementAndGet();
             throw new AssertionError("报表示例不应调用 ReportAgent");
-        }
-    }
-
-    private static class CountingDataAnalysisAgent extends DataAnalysisAgent {
-        private final AtomicInteger calls = new AtomicInteger();
-
-        private CountingDataAnalysisAgent() {
-            super(null, null);
-        }
-
-        @Override
-        public Flux<String> chat(String chatId,
-                                 String model,
-                                 String prompt,
-                                 List<ChatAttachment> attachments,
-                                 User user,
-                                 List<String> skillIds,
-                                 McpToolContext mcpToolContext) {
-            calls.incrementAndGet();
-            throw new AssertionError("数据分析示例不应调用 DataAnalysisAgent");
-        }
-    }
-
-    private static class CountingConfigManagementAgent extends ConfigManagementAgent {
-        private final AtomicInteger calls = new AtomicInteger();
-
-        private CountingConfigManagementAgent() {
-            super(null, null);
-        }
-
-        @Override
-        public Flux<String> chat(String chatId,
-                                 String model,
-                                 String prompt,
-                                 List<ChatAttachment> attachments,
-                                 User user,
-                                 List<String> skillIds,
-                                 McpToolContext mcpToolContext) {
-            calls.incrementAndGet();
-            throw new AssertionError("配置管理示例不应调用 ConfigManagementAgent");
         }
     }
 

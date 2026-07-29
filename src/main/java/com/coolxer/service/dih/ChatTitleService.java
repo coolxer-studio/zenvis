@@ -33,12 +33,6 @@ public class ChatTitleService {
         if (DataVisualizationDemoResponseService.isUserEventVisualizationDemoPrompt(userMessage)) {
             return DataVisualizationDemoResponseService.USER_EVENT_VISUALIZATION_DEMO_TITLE;
         }
-        if (DataAnalysisDemoResponseService.isDataAnalysisDemoPrompt(userMessage)) {
-            return DataAnalysisDemoResponseService.DATA_ANALYSIS_DEMO_TITLE;
-        }
-        if (ConfigManagementDemoResponseService.isConfigManagementDemoPrompt(userMessage)) {
-            return ConfigManagementDemoResponseService.CONFIG_MANAGEMENT_DEMO_TITLE;
-        }
         if (ReportDemoResponseService.isReportDemoPrompt(userMessage)) {
             return ReportDemoResponseService.REPORT_DEMO_TITLE;
         }

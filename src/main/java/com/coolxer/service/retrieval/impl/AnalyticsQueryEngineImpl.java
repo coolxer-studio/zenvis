@@ -11,7 +11,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.ZoneId;
@@ -38,7 +37,6 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
     private EntityManager entityManager;
 
     @Override
-    @Transactional
     public Number aggregate(QuerySource source, Metric metric, TimeWindow window) {
         String operation = normalizeOperation(metric.operation());
         String expression = switch (operation) {
@@ -59,7 +57,6 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
     }
 
     @Override
-    @Transactional
     public List<Map<String, Object>> trend(QuerySource source, Metric metric, TimeWindow window,
                                            String granularity) {
         if (window == null || window.allTime()) {
@@ -96,7 +93,6 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
     }
 
     @Override
-    @Transactional
     public List<Map<String, Object>> distribution(DistributionSource source, TimeWindow window,
                                                   int limit, boolean includeNull) {
         requireTopLimit(limit);
@@ -123,7 +119,6 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
     }
 
     @Override
-    @Transactional
     public long countAnyOf(QuerySource source, List<String> columns, String focusValue,
                            TimeWindow window) {
         if (CollectionUtils.isEmpty(columns)) {
@@ -143,7 +138,6 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
     }
 
     @Override
-    @Transactional
     public Map<String, Object> relations(List<RelationSource> sources, String focusValue,
                                          TimeWindow window, int limit) {
         requireTopLimit(limit);
@@ -230,7 +224,6 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
     }
 
     @Override
-    @Transactional
     public List<Map<String, Object>> relationTimeline(List<TimelineSource> sources,
                                                       String focusValue, TimeWindow window,
                                                       String granularity, int categoryLimit) {

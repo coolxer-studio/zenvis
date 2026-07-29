@@ -226,7 +226,7 @@ public class BusinessServiceRegistryServiceImpl implements BusinessServiceRegist
     }
 
     @Override
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public void cleanupExpiredData() {
         Instant instant = clock.instant();
         Date eventCutoff = Date.from(instant.minus(Math.max(eventRetentionDays, 1), ChronoUnit.DAYS));

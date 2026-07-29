@@ -11,6 +11,7 @@ import jakarta.persistence.Query;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -27,6 +28,20 @@ import static org.mockito.Mockito.times;
 import static org.mockito.ArgumentMatchers.anyString;
 
 class QueryEngineImplTest {
+
+    @Test
+    void readQueriesDoNotOpenUnsupportedClickHouseTransactions() throws NoSuchMethodException {
+        assertThat(QueryEngineImpl.class.getMethod(
+                "countByTimeRange",
+                String.class, String.class, String.class, String.class,
+                Date.class, Date.class, boolean.class).getAnnotation(Transactional.class))
+                .isNull();
+
+        Transactional writeTransaction = QueryEngineImpl.class.getMethod(
+                "save", String.class, List.class, List.class).getAnnotation(Transactional.class);
+        assertThat(writeTransaction).isNotNull();
+        assertThat(writeTransaction.transactionManager()).isEqualTo("clickHouseTransactionManager");
+    }
 
     @Test
     void findByIdUsesValidatedPlatformKeyColumn() {

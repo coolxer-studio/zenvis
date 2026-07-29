@@ -10,10 +10,8 @@ import com.coolxer.model.dih.ChatStreamEvent;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
-import com.coolxer.service.dih.agent.DataAnalysisAgent;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
-import com.coolxer.service.dih.agent.ConfigManagementAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -76,11 +74,7 @@ public class DihChatApplicationService {
     private final ChatSessionService chatSessionService;
     private final DataAccessDemoResponseService dataAccessDemoResponseService;
     private final DataVisualizationDemoResponseService dataVisualizationDemoResponseService;
-    private final DataAnalysisDemoResponseService dataAnalysisDemoResponseService;
-    private final ConfigManagementDemoResponseService configManagementDemoResponseService;
     private final ReportDemoResponseService reportDemoResponseService;
-    private final DataAnalysisAgent dataAnalysisAgent;
-    private final ConfigManagementAgent configManagementAgent;
     private final ReportAgent reportAgent;
     private final DataAccessAgent dataAccessAgent;
     private final DataVisualizationAgent dataVisualizationAgent;
@@ -102,11 +96,7 @@ public class DihChatApplicationService {
                                      ChatSessionService chatSessionService,
                                      DataAccessDemoResponseService dataAccessDemoResponseService,
                                      DataVisualizationDemoResponseService dataVisualizationDemoResponseService,
-                                     DataAnalysisDemoResponseService dataAnalysisDemoResponseService,
-                                     ConfigManagementDemoResponseService configManagementDemoResponseService,
                                      ReportDemoResponseService reportDemoResponseService,
-                                     DataAnalysisAgent dataAnalysisAgent,
-                                     ConfigManagementAgent configManagementAgent,
                                      ReportAgent reportAgent,
                                      DataAccessAgent dataAccessAgent,
                                      DataVisualizationAgent dataVisualizationAgent,
@@ -124,11 +114,7 @@ public class DihChatApplicationService {
         this.chatSessionService = chatSessionService;
         this.dataAccessDemoResponseService = dataAccessDemoResponseService;
         this.dataVisualizationDemoResponseService = dataVisualizationDemoResponseService;
-        this.dataAnalysisDemoResponseService = dataAnalysisDemoResponseService;
-        this.configManagementDemoResponseService = configManagementDemoResponseService;
         this.reportDemoResponseService = reportDemoResponseService;
-        this.dataAnalysisAgent = dataAnalysisAgent;
-        this.configManagementAgent = configManagementAgent;
         this.reportAgent = reportAgent;
         this.dataAccessAgent = dataAccessAgent;
         this.dataVisualizationAgent = dataVisualizationAgent;
@@ -365,52 +351,6 @@ public class DihChatApplicationService {
                     mcpToolContext
             );
         }
-        if (DataAnalysisAgent.AGENT_TYPE.equals(agentType)) {
-            messageType.set(MessageType.TEXT);
-            if (allowBuiltinDemo && dataAnalysisDemoResponseService != null) {
-                Optional<Flux<String>> demoResponse = dataAnalysisDemoResponseService.findResponse(
-                        chatSession,
-                        chatId,
-                        prompt,
-                        currentUser
-                );
-                if (demoResponse.isPresent()) {
-                    return demoResponse.get();
-                }
-            }
-            return dataAnalysisAgent.chat(
-                    chatId,
-                    model,
-                    prompt,
-                    chatDto.getAttachments(),
-                    currentUser,
-                    executionPolicy.skillIds(),
-                    mcpToolContext
-            );
-        }
-        if (ConfigManagementAgent.AGENT_TYPE.equals(agentType)) {
-            messageType.set(MessageType.TEXT);
-            if (allowBuiltinDemo && configManagementDemoResponseService != null) {
-                Optional<Flux<String>> demoResponse = configManagementDemoResponseService.findResponse(
-                        chatSession,
-                        chatId,
-                        prompt,
-                        currentUser
-                );
-                if (demoResponse.isPresent()) {
-                    return demoResponse.get();
-                }
-            }
-            return configManagementAgent.chat(
-                    chatId,
-                    model,
-                    prompt,
-                    chatDto.getAttachments(),
-                    currentUser,
-                    executionPolicy.skillIds(),
-                    mcpToolContext
-            );
-        }
         if (ReportAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
             if (allowBuiltinDemo) {
@@ -462,14 +402,18 @@ public class DihChatApplicationService {
             messageType.set(MessageType.TEXT);
             try {
                 String skillPrompt = skillService.buildAgentSkillPrompt(agentType, executionPolicy.skillIds());
+                String systemPrompt = GENERIC_SKILL_SYSTEM_PROMPT + "\n\n【已加载 Skill】\n" + skillPrompt;
+                if (mcpToolContext != null && mcpToolContext.hasTools()) {
+                    systemPrompt = systemPrompt + "\n\n" + mcpToolContext.systemPrompt();
+                }
                 return chatService.agentChat(
                         chatId,
                         model,
-                        GENERIC_SKILL_SYSTEM_PROMPT + "\n\n【已加载 Skill】\n" + skillPrompt,
+                        systemPrompt,
                         prompt,
                         chatDto.getAttachments(),
                         currentUser,
-                        McpToolContext.empty()
+                        mcpToolContext
                 );
             } catch (IllegalArgumentException e) {
                 return Flux.error(new AgentCapabilityUnavailableException(
@@ -508,12 +452,6 @@ public class DihChatApplicationService {
                                                            String prompt,
                                                            User currentUser,
                                                            ChatSession chatSession) {
-        if (DataAnalysisAgent.AGENT_TYPE.equals(chatType) && dataAnalysisDemoResponseService != null) {
-            return dataAnalysisDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
-        }
-        if (ConfigManagementAgent.AGENT_TYPE.equals(chatType) && configManagementDemoResponseService != null) {
-            return configManagementDemoResponseService.findResponse(chatSession, chatId, prompt, currentUser);
-        }
         return findReportDemoResponse(chatType, chatId, prompt, currentUser, chatSession);
     }
 

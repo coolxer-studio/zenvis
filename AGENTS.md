@@ -31,7 +31,8 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 
 ### 其他业务 Agent
 
-- 研判、接入、配置等 Agent 通过各自类型接入 `PromptDrivenAgentRuntime`
+- 数据接入和报表 Agent 通过各自类型接入 `PromptDrivenAgentRuntime`
+- 动态 `agent_skill` 会话仅在 Skill manifest 显式声明 `runtime.tools` 时获得对应工具白名单
 - MCP 工具由 `AgentMcpToolService` 按 agent 类型解析
 - Skill 由 `SkillService` 加载后拼入 system prompt
 

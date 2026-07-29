@@ -26,7 +26,7 @@ public class McpToolPolicyService {
         this.repository = repository;
     }
 
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public synchronized McpToolPolicyConfig register(McpToolDescriptor descriptor) {
         McpToolPolicyConfig config = repository.findByToolKey(descriptor.toolKey())
                 .orElseGet(McpToolPolicyConfig::new);
@@ -59,7 +59,7 @@ public class McpToolPolicyService {
                 .orElse(fallback == null ? McpApprovalPolicy.ASK : fallback);
     }
 
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public McpToolPolicyVo update(String toolKey, McpApprovalPolicy configuredPolicy) {
         McpToolPolicyConfig config = repository.findByToolKey(toolKey)
                 .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "MCP工具不存在"));
@@ -67,7 +67,7 @@ public class McpToolPolicyService {
         return new McpToolPolicyVo(repository.save(config));
     }
 
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public List<McpToolPolicyVo> bulkUpdate(List<String> toolKeys, McpApprovalPolicy configuredPolicy) {
         if (toolKeys == null || toolKeys.isEmpty()) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
@@ -103,7 +103,7 @@ public class McpToolPolicyService {
         return new PageRowsVo<>(rows.subList(from, to), rows.size());
     }
 
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public void markServerUnavailable(Integer serverId) {
         if (serverId == null) {
             return;
@@ -114,7 +114,7 @@ public class McpToolPolicyService {
         });
     }
 
-    @Transactional
+    @Transactional(transactionManager = "mysqlTransactionManager")
     public void deleteServerPolicies(Integer serverId) {
         if (serverId != null) {
             repository.deleteAll(repository.findByServerId(serverId));

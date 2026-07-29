@@ -56,7 +56,7 @@ public class QueryEngineImpl implements QueryEngine {
     @PersistenceContext(unitName = "clickhouse", type = PersistenceContextType.TRANSACTION)
     private EntityManager entityManager;
 
-    @Transactional
+    @Transactional(transactionManager = "clickHouseTransactionManager")
     public void save(String tableName, List<String> columnList, List<String> valueList) {
         String safeTableName = requireIdentifier(tableName, "表名");
         List<String> safeColumnList = columnList.stream()
@@ -68,7 +68,7 @@ public class QueryEngineImpl implements QueryEngine {
         query.executeUpdate();
     }
 
-    @Transactional
+    @Transactional(transactionManager = "clickHouseTransactionManager")
     public void update(String tableName, Map<String, String> mapData, String keyColumn, String keyValue) {
         String safeTableName = requireIdentifier(tableName, "表名");
         String safeKeyColumn = requireIdentifier(keyColumn, "字段名");
@@ -86,7 +86,7 @@ public class QueryEngineImpl implements QueryEngine {
         query.executeUpdate();
     }
 
-    @Transactional
+    @Transactional(transactionManager = "clickHouseTransactionManager")
     public void delete(String tableName, String keyColumn, String keyValue) {
         String deleteSql = "delete from " + requireIdentifier(tableName, "表名") +
                 " where " + requireIdentifier(keyColumn, "字段名") + " = " + quote(keyValue);
@@ -94,7 +94,7 @@ public class QueryEngineImpl implements QueryEngine {
         query.executeUpdate();
     }
 
-    @Transactional
+    @Transactional(transactionManager = "clickHouseTransactionManager")
     public void deleteIn(String tableName, String keyColumn, List<String> keyValueList) {
         if (CollectionUtils.isEmpty(keyValueList)) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "删除ID不能为空");
@@ -106,7 +106,6 @@ public class QueryEngineImpl implements QueryEngine {
         query.executeUpdate();
     }
 
-    @Transactional
     public Map<String, Object> findById(String tableName, String keyColumn, String id,
                                         List<DataAttribute> dataAttributes) {
         List<DisplayColumn> displayColumnList = dataAttributes.stream().map(attribute -> new DisplayColumn().fromDisplayColumn(attribute)).toList();
@@ -133,7 +132,6 @@ public class QueryEngineImpl implements QueryEngine {
         }
     }
 
-    @Transactional
     public BigDecimal count(String tableName, Map<String, Object> searchMap) {
         String whereClause = " where 1=1";
         if (MapUtils.isNotEmpty(searchMap)) {
@@ -145,7 +143,6 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     @Override
-    @Transactional
     public BigDecimal countAnyOf(String tableName, List<String> fields, String value) {
         if (CollectionUtils.isEmpty(fields)) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "统计字段不能为空");
@@ -167,7 +164,6 @@ public class QueryEngineImpl implements QueryEngine {
         return result.isEmpty() ? BigDecimal.ZERO : result.get(0);
     }
 
-    @Transactional
     public BigDecimal countToday(String tableName, Map<String, Object> searchMap) {
         String whereClause = " where 1=1";
         if (MapUtils.isNotEmpty(searchMap)) {
@@ -181,7 +177,6 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     @Override
-    @Transactional
     public Map<String, Object> countByDateOfWeek(String tableName, String timeField) {
         String safeTimeField = requireIdentifier(timeField, "字段名");
         String countSql = "SELECT toStartOfDay(" + safeTimeField + ") AS group_key, COUNT(*) AS count FROM " +
@@ -201,7 +196,6 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     @Override
-    @Transactional
     public Map<String, Long> countByTimeRange(String tableName,
                                               String timeField,
                                               String columnType,
@@ -288,7 +282,6 @@ public class QueryEngineImpl implements QueryEngine {
     }
 
     @Override
-    @Transactional
     public Map<String, Object> countByField(String tableName, String field) {
         String safeField = requireIdentifier(field, "字段名");
         String countSql = "select " + safeField + " as group_key, count(*) as count from " +
@@ -343,7 +336,6 @@ public class QueryEngineImpl implements QueryEngine {
         return resultMap;
     }
 
-    @Transactional
     public List<String> getDistinct(String tableName, String attribute) {
         String selectSql = "select DISTINCT " + requireIdentifier(attribute, "字段名") + " from " +
                 requireIdentifier(tableName, "表名") + " limit 50";
@@ -357,7 +349,6 @@ public class QueryEngineImpl implements QueryEngine {
         return resultList;
     }
 
-    @Transactional
     public List<String> getDistinctForArray(String tableName, String attribute) {
         String safeAttribute = requireIdentifier(attribute, "字段名");
         String selectSql = "select DISTINCT arrayJoin(%s) from %s WHERE %s IS NOT NULL AND %s != [] limit 50"
@@ -372,7 +363,6 @@ public class QueryEngineImpl implements QueryEngine {
         return resultList;
     }
 
-    @Transactional
     public List<String> getLike(String tableName, String attribute, String searchTerm) {
         String safeAttribute = requireIdentifier(attribute, "字段名");
         String selectSql = "select DISTINCT " + safeAttribute + " from " + requireIdentifier(tableName, "表名") +
@@ -417,7 +407,6 @@ public class QueryEngineImpl implements QueryEngine {
         return resultMap;
     }
 
-    @Transactional
     private BigDecimal queryCount(String tableName, String whereClause) {
         String countSql = "select count(*) from " + requireIdentifier(tableName, "表名") + whereClause;
         BigDecimal total = BigDecimal.valueOf(0);
@@ -677,7 +666,6 @@ public class QueryEngineImpl implements QueryEngine {
                 .replace("_", "\\_");
     }
 
-    @Transactional
     private List<Map<String, Object>> queryResultList(String sql, List<DisplayColumn> columnList) {
         List<Map<String, Object>> resultMapList = new ArrayList<>();
         Query query = entityManager.createNativeQuery(sql);

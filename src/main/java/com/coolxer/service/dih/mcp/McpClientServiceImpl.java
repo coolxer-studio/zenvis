@@ -20,7 +20,6 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -117,33 +116,13 @@ public class McpClientServiceImpl implements McpClientService {
         this.allowPrivateServerUrls = allowPrivateServerUrls;
     }
 
-    @PostConstruct
-    public void init() {
-        refreshEnabledServers();
-    }
-
     /**
-     * A plugin may expose its MCP SSE endpoint from this same web application.
-     * The initial {@link PostConstruct} refresh necessarily runs before Tomcat is
-     * listening, so those loopback clients cannot initialize yet. Retry only the
-     * still-unavailable servers after the application has become ready.
+     * A plugin may expose its MCP SSE endpoint from this same web application, so
+     * clients must not initialize until Tomcat is listening.
      */
     @EventListener(ApplicationReadyEvent.class)
-    public void reconnectUnavailableServersAfterStartup() {
-        try {
-            List<McpServerConfig> unavailable = mcpServerConfigRepository
-                    .findByEnabledTrueOrderByIdAsc()
-                    .stream()
-                    .filter(config -> !clients.containsKey(config.getId()))
-                    .toList();
-            unavailable.forEach(config -> refresh(config.getId()));
-            if (!unavailable.isEmpty()) {
-                log.info("应用就绪后重连 MCP 服务完成，重试数: {}, 可用服务数: {}",
-                        unavailable.size(), clients.size());
-            }
-        } catch (Exception e) {
-            log.warn("应用就绪后重连 MCP 服务失败，后端将继续运行: {}", e.getMessage(), e);
-        }
+    public void initializeEnabledServersAfterStartup() {
+        refreshEnabledServers();
     }
 
     @PreDestroy

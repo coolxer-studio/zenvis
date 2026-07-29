@@ -6,12 +6,17 @@ import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.model.dih.dto.McpServerDto;
 import com.coolxer.model.dih.vo.McpServerVo;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.Map;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -103,7 +108,7 @@ class McpClientServiceImplTest {
     }
 
     @Test
-    void retriesUnavailableLoopbackMcpServersAfterApplicationIsReady() {
+    void initializesEnabledMcpServersOnlyAfterApplicationIsReady() throws NoSuchMethodException {
         McpServerConfigRepository repository = mock(McpServerConfigRepository.class);
         McpServerConfig config = new McpServerConfig()
                 .setCode("jmr")
@@ -120,8 +125,15 @@ class McpClientServiceImplTest {
         ));
         doReturn(new McpServerVo(config, 3)).when(service).refresh(52);
 
-        service.reconnectUnavailableServersAfterStartup();
+        service.initializeEnabledServersAfterStartup();
 
         verify(service).refresh(52);
+
+        Method initializer = McpClientServiceImpl.class
+                .getDeclaredMethod("initializeEnabledServersAfterStartup");
+        assertThat(initializer.getAnnotation(EventListener.class).value())
+                .containsExactly(ApplicationReadyEvent.class);
+        assertThat(Arrays.stream(McpClientServiceImpl.class.getDeclaredMethods()))
+                .noneMatch(method -> method.isAnnotationPresent(PostConstruct.class));
     }
 }

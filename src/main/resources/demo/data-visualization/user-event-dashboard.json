@@ -1,0 +1,328 @@
+{
+  "type": "page",
+  "title": "用户事件数据看板",
+  "remark": "真实数据 · 自动读取 user_event · 时间字段 server_time",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "刷新看板",
+      "icon": "fa fa-refresh",
+      "actionType": "reload",
+      "target": "user-event-dashboard-body"
+    }
+  ],
+  "body": [
+    {
+      "type": "service",
+      "name": "user-event-dashboard-body",
+      "interval": 60000,
+      "silentPolling": true,
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "user_event"
+          ],
+          "time_range": {
+            "preset": "TODAY"
+          },
+          "time_field": "server_time",
+          "comparison": "PREVIOUS_PERIOD",
+          "criteria_list": [],
+          "criteria_logic": "and"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{};var r=d.result&&d.result.rows&&d.result.rows[0]?d.result.rows[0]:{};return {status:0,msg:'',data:{all_time_count:r.all_time_count||0,today_count:r.current_value||0,previous_count:r.previous_value||0,delta_rate:r.delta_rate}};"
+      },
+      "body": [
+        {
+          "type": "grid",
+          "columns": [
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "累计事件",
+                "body": "<div style='font-size:34px;font-weight:800;color:#2563eb'>${all_time_count}</div><div class='text-muted'>user_event 全量记录</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "今日事件",
+                "body": "<div style='font-size:34px;font-weight:800;color:#059669'>${today_count}</div><div class='text-muted'>按 server_time 统计</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "上一周期",
+                "body": "<div style='font-size:34px;font-weight:800;color:#7c3aed'>${previous_count}</div><div class='text-muted'>今日对比基线</div>"
+              }
+            }
+          ]
+        },
+        {
+          "type": "service",
+          "api": {
+            "method": "post",
+            "url": "/zenvis/api/v1/entity/summary/query",
+            "data": {
+              "entity": "user_event",
+              "metrics": [
+                {
+                  "name": "active_users",
+                  "operation": "DISTINCT_COUNT",
+                  "field": "user",
+                  "label": "活跃用户"
+                },
+                {
+                  "name": "average_reliability",
+                  "operation": "AVG",
+                  "field": "reliability",
+                  "label": "平均可信度"
+                },
+                {
+                  "name": "event_types",
+                  "operation": "DISTINCT_COUNT",
+                  "field": "event_type",
+                  "label": "事件类型"
+                }
+              ],
+              "time_range": {
+                "preset": "LAST_24_HOURS"
+              },
+              "time_field": "server_time",
+              "comparison": "NONE",
+              "criteria_list": [],
+              "criteria_logic": "and"
+            },
+            "adaptor": "var d=payload&&payload.data?payload.data:{};var rows=d.result&&d.result.rows?d.result.rows:[];var x={};rows.forEach(function(r){x[r.metric]=r.value});return {status:0,msg:'',data:{active_users:x.active_users||0,average_reliability:Number(x.average_reliability||0).toFixed(2),event_types:x.event_types||0}};"
+          },
+          "body": {
+            "type": "grid",
+            "columns": [
+              {
+                "md": 4,
+                "body": {
+                  "type": "panel",
+                  "title": "近 24 小时活跃用户",
+                  "body": "<div style='font-size:30px;font-weight:700'>${active_users}</div>"
+                }
+              },
+              {
+                "md": 4,
+                "body": {
+                  "type": "panel",
+                  "title": "平均可信度",
+                  "body": "<div style='font-size:30px;font-weight:700'>${average_reliability}</div>"
+                }
+              },
+              {
+                "md": 4,
+                "body": {
+                  "type": "panel",
+                  "title": "事件类型数",
+                  "body": "<div style='font-size:30px;font-weight:700'>${event_types}</div>"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "grid",
+          "columns": [
+            {
+              "md": 8,
+              "body": {
+                "type": "chart",
+                "height": 360,
+                "api": {
+                  "method": "post",
+                  "url": "/zenvis/api/v1/entity/aggregate/query",
+                  "data": {
+                    "entity": "user_event",
+                    "dimensions": [
+                      {
+                        "name": "event_time",
+                        "field": "server_time",
+                        "label": "时间",
+                        "kind": "TIME",
+                        "granularity": "HOUR",
+                        "include_null": false
+                      },
+                      {
+                        "name": "event_type",
+                        "field": "event_type",
+                        "label": "事件类型",
+                        "kind": "FIELD",
+                        "include_null": false
+                      }
+                    ],
+                    "metrics": [
+                      {
+                        "name": "event_count",
+                        "operation": "COUNT",
+                        "label": "事件数"
+                      }
+                    ],
+                    "time_range": {
+                      "preset": "LAST_24_HOURS"
+                    },
+                    "time_field": "server_time",
+                    "criteria_list": [],
+                    "criteria_logic": "and",
+                    "order_by": {
+                      "field": "event_time",
+                      "direction": "asc"
+                    },
+                    "limit": 100,
+                    "chart_hint": "LINE"
+                  },
+                  "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:o.series||[]}};"
+                },
+                "config": {
+                  "title": {
+                    "text": "近 24 小时分类型趋势"
+                  },
+                  "tooltip": {
+                    "trigger": "axis"
+                  },
+                  "legend": {
+                    "top": 28
+                  },
+                  "grid": {
+                    "top": 72,
+                    "left": 50,
+                    "right": 24,
+                    "bottom": 42
+                  },
+                  "dataset": "${dataset}",
+                  "xAxis": {
+                    "type": "category"
+                  },
+                  "yAxis": {
+                    "type": "value",
+                    "minInterval": 1
+                  },
+                  "series": "${series}"
+                }
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "chart",
+                "height": 360,
+                "api": {
+                  "method": "post",
+                  "url": "/zenvis/api/v1/entity/distribution/query",
+                  "data": {
+                    "entity": "user_event",
+                    "dimension": "event_type",
+                    "time_range": {
+                      "preset": "LAST_24_HOURS"
+                    },
+                    "time_field": "server_time",
+                    "criteria_list": [],
+                    "criteria_logic": "and",
+                    "limit": 10,
+                    "include_null": false
+                  },
+                  "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:o.series||[]}};"
+                },
+                "config": {
+                  "title": {
+                    "text": "事件类型分布"
+                  },
+                  "tooltip": {
+                    "trigger": "item"
+                  },
+                  "dataset": "${dataset}",
+                  "series": "${series}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": [
+            {
+              "md": 5,
+              "body": {
+                "type": "chart",
+                "height": 320,
+                "api": {
+                  "method": "post",
+                  "url": "/zenvis/api/v1/entity/histogram/query",
+                  "data": {
+                    "entity": "user_event",
+                    "field": "reliability",
+                    "bins": 10,
+                    "time_range": {
+                      "preset": "LAST_24_HOURS"
+                    },
+                    "time_field": "server_time",
+                    "criteria_list": [],
+                    "criteria_logic": "and"
+                  },
+                  "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:o.series||[]}};"
+                },
+                "config": {
+                  "title": {
+                    "text": "可信度分布"
+                  },
+                  "tooltip": {
+                    "trigger": "axis"
+                  },
+                  "dataset": "${dataset}",
+                  "xAxis": {
+                    "type": "category"
+                  },
+                  "yAxis": {
+                    "type": "value",
+                    "minInterval": 1
+                  },
+                  "series": "${series}"
+                }
+              }
+            },
+            {
+              "md": 7,
+              "body": {
+                "type": "crud",
+                "title": "最新用户事件",
+                "api": "/zenvis/api/v1/entity/user_event/list?page=1&perPage=8&orderBy=server_time&orderDir=desc",
+                "syncLocation": false,
+                "perPage": 8,
+                "placeholder": "当前 user_event 实体暂无数据",
+                "columns": [
+                  {
+                    "name": "server_time",
+                    "label": "时间",
+                    "type": "datetime"
+                  },
+                  {
+                    "name": "event_type",
+                    "label": "类型"
+                  },
+                  {
+                    "name": "user",
+                    "label": "用户"
+                  },
+                  {
+                    "name": "reliability",
+                    "label": "可信度"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

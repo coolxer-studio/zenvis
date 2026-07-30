@@ -25,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/entity")
 public class EntityAnalyticsController extends BaseController {
 
+    private static final String TIME_RANGE_DESCRIPTION =
+            "时间范围支持 TODAY、YESTERDAY、LAST_24_HOURS、LAST_7_DAYS、"
+                    + "LAST_30_DAYS、THIS_MONTH、CUSTOM；部分接口另支持 ALL_TIME。";
+
     private final EntityAnalyticsService analyticsService;
 
     public EntityAnalyticsController(EntityAnalyticsService analyticsService) {
@@ -33,42 +37,48 @@ public class EntityAnalyticsController extends BaseController {
 
     @PostMapping("/overview/query")
     @Operation(summary = "多实体数据概览",
-            description = "统计多个实体的累计量、当前周期量以及可选的对比周期。")
+            description = "统计多个实体的累计量、当前周期量以及可选的对比周期。"
+                    + TIME_RANGE_DESCRIPTION)
     public ResponseWrap<?> overview(@RequestBody OverviewQueryRequest request) {
         return ResponseWrap.success(analyticsService.overview(request));
     }
 
     @PostMapping("/summary/query")
     @Operation(summary = "实体指标汇总",
-            description = "对单个实体执行COUNT、DISTINCT_COUNT、SUM、AVG、MIN、MAX指标。")
+            description = "对单个实体执行COUNT、DISTINCT_COUNT、SUM、AVG、MIN、MAX指标。"
+                    + TIME_RANGE_DESCRIPTION)
     public ResponseWrap<?> summary(@RequestBody SummaryQueryRequest request) {
         return ResponseWrap.success(analyticsService.summary(request));
     }
 
     @PostMapping("/trend/query")
     @Operation(summary = "实体时间趋势",
-            description = "按小时、天、周或月统计一个或多个实体指标的趋势。")
+            description = "按小时、天、周或月统计一个或多个实体指标的趋势。"
+                    + TIME_RANGE_DESCRIPTION)
     public ResponseWrap<?> trend(@RequestBody TrendQueryRequest request) {
         return ResponseWrap.success(analyticsService.trend(request));
     }
 
     @PostMapping("/distribution/query")
     @Operation(summary = "任意字段分组统计",
-            description = "按一个或多个实体的任意兼容标量字段统计TopN分布，TopN最大100。")
+            description = "按一个或多个实体的任意兼容标量字段统计TopN分布，TopN最大100。"
+                    + TIME_RANGE_DESCRIPTION)
     public ResponseWrap<?> distribution(@RequestBody DistributionQueryRequest request) {
         return ResponseWrap.success(analyticsService.distribution(request));
     }
 
     @PostMapping("/aggregate/query")
     @Operation(summary = "单实体多维聚合",
-            description = "使用Meta逻辑字段执行最多两个维度、二十个指标的受控聚合查询。")
+            description = "使用Meta逻辑字段执行最多两个维度、二十个指标的受控聚合查询。"
+                    + TIME_RANGE_DESCRIPTION)
     public ResponseWrap<?> aggregate(@RequestBody AggregateQueryRequest request) {
         return ResponseWrap.success(analyticsService.aggregate(request));
     }
 
     @PostMapping("/histogram/query")
     @Operation(summary = "数值字段直方图",
-            description = "对一个Meta数值字段执行5到100个受控区间的直方图统计。")
+            description = "对一个Meta数值字段执行5到100个受控区间的直方图统计。"
+                    + TIME_RANGE_DESCRIPTION)
     public ResponseWrap<?> histogram(@RequestBody HistogramQueryRequest request) {
         return ResponseWrap.success(analyticsService.histogram(request));
     }

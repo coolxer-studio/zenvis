@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户事件数据管理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f6fb;
+      --panel: #fff;
+      --text: #162033;
+      --muted: #667085;
+      --line: #e4e9f2;
+      --primary: #2f6bff;
+      --danger: #d92d20;
+      --shadow: 0 16px 36px rgba(38, 53, 86, .08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(circle at 10% 0, #e9f0ff 0, transparent 34%), var(--bg);
+      color: var(--text);
+    }
+    button, input, select, textarea { font: inherit; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 15px;
+      background: var(--primary);
+      color: #fff;
+      cursor: pointer;
+    }
+    button.secondary { background: #eef3ff; color: #2455cc; }
+    button.danger { background: transparent; color: var(--danger); padding: 6px 9px; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    .shell { width: min(1500px, 100%); margin: 0 auto; padding: 24px; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 5px; font-size: 26px; letter-spacing: -.5px; }
+    .subtitle, .status { color: var(--muted); font-size: 13px; }
+    .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+    .card {
+      border: 1px solid rgba(218, 226, 239, .9);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .92);
+      box-shadow: var(--shadow);
+    }
+    .kpi { padding: 18px; }
+    .kpi-label { color: var(--muted); font-size: 13px; }
+    .kpi-value { margin-top: 8px; font-size: 30px; font-weight: 760; }
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(160px, .7fr) auto auto;
+      gap: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid #d8deea;
+      border-radius: 8px;
+      background: #fff;
+      padding: 9px 11px;
+      color: var(--text);
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47, 107, 255, .1); }
+    .table-wrap { overflow: auto; min-height: 310px; }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+    th { position: sticky; top: 0; background: #f9fbff; color: #475467; font-weight: 650; }
+    tbody tr:hover { background: #f8faff; }
+    .tag { display: inline-flex; padding: 3px 8px; border-radius: 999px; background: #eef3ff; color: #2455cc; margin: 2px; }
+    .type { display: inline-flex; padding: 4px 9px; border-radius: 6px; background: #ecfdf3; color: #027a48; font-weight: 600; }
+    .empty, .loading { padding: 70px 20px; text-align: center; color: var(--muted); }
+    .error {
+      display: none;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border: 1px solid #fecdca;
+      border-radius: 10px;
+      background: #fef3f2;
+      color: #b42318;
+    }
+    .error.visible { display: block; }
+    .pagination { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; color: var(--muted); font-size: 13px; }
+    dialog {
+      width: min(700px, calc(100vw - 36px));
+      border: 0;
+      border-radius: 14px;
+      padding: 0;
+      box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+    }
+    dialog::backdrop { background: rgba(15, 23, 42, .46); backdrop-filter: blur(2px); }
+    .dialog-head, .dialog-foot { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+    .dialog-foot { border: 0; border-top: 1px solid var(--line); justify-content: flex-end; gap: 9px; }
+    .dialog-body { padding: 20px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    label { display: grid; gap: 6px; color: #475467; font-size: 13px; }
+    label.full { grid-column: 1 / -1; }
+    pre {
+      margin: 0;
+      padding: 15px;
+      min-height: 180px;
+      overflow: auto;
+      border-radius: 10px;
+      background: #101828;
+      color: #d1e9ff;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    @media (max-width: 800px) {
+      .shell { padding: 16px; }
+      .header { align-items: flex-start; flex-direction: column; }
+      .kpis { grid-template-columns: 1fr; }
+      .toolbar { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+      label.full { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div>
+        <h1>用户事件数据管理</h1>
+        <div class="subtitle">实时读取数据接入智能体生成的 user_event 数据</div>
+      </div>
+      <div class="status" id="updatedAt">尚未刷新</div>
+    </header>
+
+    <section class="kpis">
+      <article class="card kpi"><div class="kpi-label">累计事件</div><div class="kpi-value" id="allTimeCount">—</div></article>
+      <article class="card kpi"><div class="kpi-label">今日事件</div><div class="kpi-value" id="todayCount">—</div></article>
+      <article class="card kpi"><div class="kpi-label">上一周期</div><div class="kpi-value" id="previousCount">—</div></article>
+    </section>
+
+    <div class="error" id="errorBar"></div>
+    <section class="card toolbar">
+      <input id="userFilter" placeholder="按用户筛选">
+      <select id="typeFilter">
+        <option value="">全部事件类型</option>
+        <option value="login">登录</option>
+        <option value="click">点击</option>
+        <option value="view">浏览</option>
+        <option value="delete">删除</option>
+        <option value="modify">修改</option>
+      </select>
+      <button id="searchButton">查询</button>
+      <button id="createButton" class="secondary">新建事件</button>
+    </section>
+
+    <section class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>事件ID</th><th>用户</th><th>类型</th><th>进程id</th><th>可信度</th><th>标记</th><th>入库时间</th><th>操作</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="8"><div class="loading">正在加载真实数据…</div></td></tr></tbody>
+        </table>
+      </div>
+      <footer class="pagination">
+        <span id="totalText">共 0 条</span>
+        <span><button id="prevButton" class="secondary">上一页</button> <button id="nextButton" class="secondary">下一页</button></span>
+      </footer>
+    </section>
+  </main>
+
+  <dialog id="createDialog">
+    <form id="createForm">
+      <div class="dialog-head"><strong>新建用户事件</strong><button type="button" class="secondary" data-close="createDialog">关闭</button></div>
+      <div class="dialog-body form-grid">
+        <label>事件ID<input name="event_id" required></label>
+        <label>进程id<input name="procid" type="number" min="0" required></label>
+        <label>用户<input name="user" required></label>
+        <label>事件类型<select name="event_type" required><option value="login">登录</option><option value="click">点击</option><option value="view">浏览</option><option value="delete">删除</option><option value="modify">修改</option></select></label>
+        <label>可信度<input name="reliability" type="number" min="0" max="10" step=".001" required></label>
+        <label>标记（逗号分隔）<input name="tags"></label>
+        <label class="full">入库时间<input name="server_time" required></label>
+        <label class="full">数据详情 JSON<textarea name="detail" rows="6" required>{}</textarea></label>
+      </div>
+      <div class="dialog-foot"><button type="button" class="secondary" data-close="createDialog">取消</button><button type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="detailDialog">
+    <div class="dialog-head"><strong>事件 JSON 详情</strong><button type="button" class="secondary" data-close="detailDialog">关闭</button></div>
+    <div class="dialog-body"><pre id="detailJson">{}</pre></div>
+  </dialog>
+
+  <script>
+    (() => {
+      const API_BASES = ['/zenvis/api/v1', '/api/v1'];
+      const PAGE_SIZE = 20;
+      let apiBase = API_BASES[0];
+      let page = 1;
+      let total = 0;
+      let loading = false;
+      let currentRows = [];
+
+      const element = id => document.getElementById(id);
+      const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
+      const unwrap = value => value && Object.prototype.hasOwnProperty.call(value, 'data') ? value.data : value;
+      const formatNumber = value => Number(value || 0).toLocaleString('zh-CN');
+      const normalizeTags = value => (Array.isArray(value) ? value : String(value ?? '').split(','))
+        .map(item => String(item).trim())
+        .filter(Boolean);
+
+      async function request(path, options = {}) {
+        let lastError;
+        for (const base of [apiBase, ...API_BASES.filter(item => item !== apiBase)]) {
+          try {
+            const response = await fetch(`${base}${path}`, {credentials: 'same-origin', ...options});
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const json = await response.json();
+            if (json && json.code !== undefined && ![0, 200].includes(Number(json.code))) {
+              throw new Error(json.message || json.msg || `接口返回 ${json.code}`);
+            }
+            apiBase = base;
+            return unwrap(json);
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError || new Error('接口请求失败');
+      }
+
+      const post = body => ({method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+      const timeRange = preset => ({preset, start_time: null, end_time: null});
+
+      function showError(error) {
+        element('errorBar').textContent = `数据请求失败：${error && error.message ? error.message : String(error)}`;
+        element('errorBar').classList.add('visible');
+      }
+      function clearError() { element('errorBar').classList.remove('visible'); }
+
+      async function loadOverview() {
+        const data = await request('/entity/overview/query', post({
+          entities: ['user_event'],
+          time_range: timeRange('TODAY'),
+          time_field: 'server_time',
+          comparison: 'PREVIOUS_PERIOD',
+          criteria_list: [],
+          criteria_logic: 'and'
+        }));
+        const row = data && data.result && Array.isArray(data.result.rows) ? data.result.rows[0] || {} : {};
+        element('allTimeCount').textContent = formatNumber(row.all_time_count);
+        element('todayCount').textContent = formatNumber(row.current_value);
+        element('previousCount').textContent = formatNumber(row.comparison_value);
+      }
+
+      async function loadRows() {
+        if (loading) return;
+        loading = true;
+        clearError();
+        element('rows').innerHTML = '<tr><td colspan="8"><div class="loading">正在加载真实数据…</div></td></tr>';
+        try {
+          const params = new URLSearchParams({page: String(page), perPage: String(PAGE_SIZE), orderBy: 'server_time', orderDir: 'desc'});
+          const user = element('userFilter').value.trim();
+          const eventType = element('typeFilter').value;
+          if (user) params.set('user', user);
+          if (eventType) params.set('event_type', eventType);
+          const data = await request(`/entity/user_event/list?${params}`);
+          currentRows = data && Array.isArray(data.rows) ? data.rows : [];
+          total = Number(data && data.total || 0);
+          renderRows();
+          element('totalText').textContent = `共 ${formatNumber(total)} 条 · 第 ${page} 页`;
+          element('prevButton').disabled = page <= 1;
+          element('nextButton').disabled = page * PAGE_SIZE >= total;
+          element('updatedAt').textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN', {hour12: false})}`;
+        } catch (error) {
+          currentRows = [];
+          renderRows();
+          showError(error);
+        } finally {
+          loading = false;
+        }
+      }
+
+      function renderRows() {
+        if (!currentRows.length) {
+          element('rows').innerHTML = '<tr><td colspan="8"><div class="empty">当前 user_event 实体暂无数据</div></td></tr>';
+          return;
+        }
+        element('rows').innerHTML = currentRows.map((row, index) => `
+          <tr>
+            <td title="${escapeHtml(row.event_id)}">${escapeHtml(String(row.event_id || '').slice(0, 20))}</td>
+            <td>${escapeHtml(row.user || '—')}</td>
+            <td><span class="type">${escapeHtml(row.event_type || '—')}</span></td>
+            <td>${escapeHtml(row.procid ?? '—')}</td>
+            <td>${row.reliability === null || row.reliability === undefined ? '—' : Number(row.reliability).toFixed(2)}</td>
+            <td>${normalizeTags(row.tags).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('') || '—'}</td>
+            <td>${escapeHtml(row.server_time || '—')}</td>
+            <td><button class="secondary" data-detail="${index}">详情</button><button class="danger" data-delete="${escapeHtml(row.zenvis_id || '')}">删除</button></td>
+          </tr>
+        `).join('');
+      }
+
+      async function refresh() {
+        try {
+          await Promise.all([loadOverview(), loadRows()]);
+        } catch (error) {
+          showError(error);
+        }
+      }
+
+      element('searchButton').addEventListener('click', () => { page = 1; refresh(); });
+      element('createButton').addEventListener('click', () => {
+        const form = element('createForm');
+        form.reset();
+        form.elements.event_id.value = crypto.randomUUID();
+        form.elements.server_time.value = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        form.elements.detail.value = '{}';
+        element('createDialog').showModal();
+      });
+      element('createForm').addEventListener('submit', async event => {
+        event.preventDefault();
+        clearError();
+        try {
+          const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+          values.procid = Number(values.procid);
+          values.reliability = Number(values.reliability);
+          values.tags = String(values.tags || '').split(',').map(item => item.trim()).filter(Boolean);
+          values.detail = JSON.parse(String(values.detail || '{}'));
+          await request('/entity/user_event/add', post(values));
+          element('createDialog').close();
+          page = 1;
+          await refresh();
+        } catch (error) {
+          showError(error);
+        }
+      });
+      element('rows').addEventListener('click', async event => {
+        const detailIndex = event.target.dataset.detail;
+        if (detailIndex !== undefined) {
+          const row = currentRows[Number(detailIndex)] || {};
+          const detail = typeof row.detail === 'string' ? (() => { try { return JSON.parse(row.detail); } catch (_) { return row.detail; } })() : row.detail;
+          element('detailJson').textContent = JSON.stringify(detail ?? {}, null, 2);
+          element('detailDialog').showModal();
+          return;
+        }
+        const id = event.target.dataset.delete;
+        if (!id || !window.confirm('确认删除该事件？')) return;
+        try {
+          await request(`/entity/user_event/${encodeURIComponent(id)}`, {method: 'DELETE'});
+          await refresh();
+        } catch (error) {
+          showError(error);
+        }
+      });
+      element('prevButton').addEventListener('click', () => { if (page > 1) { page -= 1; loadRows(); } });
+      element('nextButton').addEventListener('click', () => { if (page * PAGE_SIZE < total) { page += 1; loadRows(); } });
+      document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => element(button.dataset.close).close()));
+
+      refresh();
+    })();
+  </script>
+</body>
+</html>

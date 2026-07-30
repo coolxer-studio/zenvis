@@ -31,6 +31,9 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -215,6 +218,29 @@ class EntityAnalyticsServiceImplTest {
         List<Map<String, Object>> rows =
                 (List<Map<String, Object>>) response.result().get("rows");
         assertThat(rows).hasSize(10);
+    }
+
+    @Test
+    void lastTwentyFourHoursUsesRollingTwentyFourHourWindow() {
+        when(queryEngine.trend(any(), any(), any(), eq("HOUR")))
+                .thenReturn(List.of());
+
+        AnalyticsResponse response = service.trend(new TrendQueryRequest(
+                List.of("traffic"), null,
+                new AnalyticsTimeRange("LAST_24_HOURS", null, null),
+                "HOUR", "NONE", List.of(), "and"));
+
+        ArgumentCaptor<AnalyticsQueryEngine.TimeWindow> window =
+                ArgumentCaptor.forClass(AnalyticsQueryEngine.TimeWindow.class);
+        verify(queryEngine).trend(any(), any(), window.capture(), eq("HOUR"));
+        DateTimeFormatter formatter =
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss[.SSS]");
+        LocalDateTime start =
+                LocalDateTime.parse(window.getValue().startTime(), formatter);
+        LocalDateTime end =
+                LocalDateTime.parse(window.getValue().endTime(), formatter);
+        assertThat(Duration.between(start, end)).isEqualTo(Duration.ofHours(24));
+        assertThat(response.meta()).containsEntry("preset", "LAST_24_HOURS");
     }
 
     @Test

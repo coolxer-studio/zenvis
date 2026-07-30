@@ -1,0 +1,40 @@
+[sources.generator_demo_logs]
+  type = "demo_logs"
+  format = "shuffle"
+  lines = [
+    "{\"event_type\":\"login\",\"tags\":[\"登录\",\"认证\"]}",
+    "{\"event_type\":\"click\",\"tags\":[]}",
+    "{\"event_type\":\"view\",\"tags\":[]}",
+    "{\"event_type\":\"delete\",\"tags\":[\"已认证\"]}",
+    "{\"event_type\":\"modify\",\"tags\":[\"重要\",\"有风险\"]}"
+  ]
+  interval = 5
+
+[transforms.parse_json]
+  inputs = ["generator_demo_logs"]
+  type = "remap"
+  source = '''
+    . = parse_json!(string!(.message))
+    .event_id = uuid_v4()
+    .user = encode_base64(random_bytes(16))
+    .procid = random_int(100, 110)
+    .reliability = round(random_float(0.0, 10.0), precision: 2)
+    .detail = parse_json!("{\"method\":\"POST\",\"path\":\"/v1/orders\",\"query\":\"dry_run=false\"}")
+    .server_time = format_timestamp!(now(),format: "%Y-%m-%d %H:%M:%S",timezone: "Asia/Shanghai")
+  '''
+
+[sinks.my_clickhouse_sink]
+  type = "clickhouse"
+  inputs = ["parse_json"]
+  endpoint = "http://clickhouse-service:8123"
+  database = "zenvis"
+  table = "msg_user_event"
+  auth.strategy = "basic"
+  auth.user = "default"
+  auth.password = "${CLICKHOUSE_PASSWORD}"
+  skip_unknown_fields = true
+
+[sinks.console]
+  inputs = ["parse_json"]
+  type = "console"
+  encoding.codec = "json"

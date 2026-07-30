@@ -86,45 +86,62 @@ class DataVisualizationDemoResponseServiceTest {
     }
 
     @Test
-    void chartInfoSubmittedReturnsPreviewWithToolbarAction() {
+    void chartInfoSubmittedUsesRealAggregateOptionAndFullProtocol() {
+        List<String> calls = new ArrayList<>();
+        McpToolContext context = realDataContext(calls);
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
-                {"title":"用户事件临时图表信息确认"}
-                """, null));
+                {"title":"用户事件临时图表信息确认","answers":[{"value":"查看近 24 小时用户事件上报情况"},{"value":"使用曲线图并按 event_type 分组展示"}]}
+                """, null, context));
 
         assertThat(response)
                 .contains("zenvis:visualization-chart-preview")
-                .contains("\"echarts\"")
-                .contains("\"option\"")
-                .contains("amisConfig")
-                .contains("/zenvis/api/v1/entity/trend/query")
-                .contains("\"method\": \"post\"")
-                .contains("\"dataset\"")
-                .doesNotContain("legend_data")
-                .doesNotContain("xaxis_data")
-                .doesNotContain("series_data_")
-                .contains("\"action\": \"data_visualization.add_chart_library\"")
-                .doesNotContain("```zenvis:confirm")
-                .doesNotContain("是否加入图表库");
-        assertThat(new ChatMessagePartParser().parse(response, MessageType.TEXT))
-                .extracting("type")
-                .contains("visualization-chart-preview");
+                .contains("\"planId\"")
+                .contains("\"entities\":[\"user_event\"]")
+                .contains("\"tool\":\"entity_aggregate\"")
+                .contains("\"preset\":\"LAST_24_HOURS\"")
+                .contains("\"event_type\"")
+                .contains("\"queryMeta\"")
+                .contains("\"echartsOption\"")
+                .contains("\"sentinel\":987654321")
+                .contains("\"validationStatus\":\"success\"")
+                .contains("\"action\":\"data_visualization.add_chart_library\"")
+                .doesNotContain("12,18,46")
+                .doesNotContain("示例数据");
+        assertThat(calls).containsExactly(
+                "retrieval_list_display_entity",
+                "retrieval_list_display_attribute",
+                "entity_aggregate");
     }
 
     @Test
-    void addChartLibraryPromptReturnsReusableDemoChartRecord() {
-        String response = responseOf(service.findResponse(null, "chat-1",
-                "我已确认把上一轮临时图表加入图表库。", null));
+    void addChartLibraryCopiesLatestRealPreviewWithoutRequery() {
+        String preview = responseOf(service.findResponse(
+                null,
+                "chat-1",
+                """
+                        {"title":"用户事件临时图表信息确认","answers":[{"value":"查看近 24 小时用户事件上报情况"}]}
+                        """,
+                null,
+                realDataContext(new ArrayList<>())));
+        ChatSession session = new ChatSession();
+        session.setMessages(JacksonUtil.toJson(List.of(
+                new Message("ai", preview)
+        )));
+
+        String response = responseOf(service.findResponse(
+                session,
+                "chat-1",
+                "我已确认把上一轮临时图表加入图表库。",
+                null));
 
         assertThat(response)
-                .contains("已加入本次会话图表库")
+                .contains("未重新查询或替换数据")
                 .contains("zenvis:visualization-chart-record")
-                .contains("\"id\": \"demo-user-event-report-trend\"")
-                .contains("\"name\": \"用户事件上报趋势图\"")
-                .contains("\"echartsOption\"")
-                .contains("\"series\"")
-                .contains("\"amisConfig\"")
-                .contains("\"config\"");
+                .contains("\"sentinel\":987654321")
+                .contains("\"validationStatus\":\"success\"")
+                .contains("\"status\":\"temporary\"")
+                .doesNotContain("12,18,46");
         List<ChatMessagePart> parts =
                 new ChatMessagePartParser().parse(response, MessageType.TEXT);
         assertThat(parts)
@@ -140,12 +157,42 @@ class DataVisualizationDemoResponseServiceTest {
     }
 
     @Test
+    void chartGenerationBlocksWhenMetaIsMissing() {
+        McpToolContext context = toolContext(
+                callback("retrieval_list_display_entity",
+                        new ArrayList<>(), ignored -> """
+                                {"entityList":[]}
+                                """)
+        );
+
+        String response = responseOf(service.findResponse(
+                null,
+                "chat-1",
+                "{\"title\":\"用户事件临时图表信息确认\"}",
+                null,
+                context));
+
+        assertThat(response)
+                .contains("用户事件真实数据演示已阻止")
+                .contains("不存在 user_event 实体")
+                .doesNotContain("visualization-chart-preview");
+    }
+
+    @Test
     void menuExampleQueriesMcpCapabilitiesBeforeShowingConfirmation() {
         List<String> calls = new ArrayList<>();
         McpToolContext context = toolContext(
+                metaEntityCallback(calls),
+                metaAttributeCallback(calls),
+                callback("config_tree", calls, arguments ->
+                        arguments.contains("user-event-page")
+                                ? "[{\"fileName\":\"index.json\"}]"
+                                : "[]"),
+                callback("config_read", calls, ignored ->
+                        JacksonUtil.toJson(
+                                "{\"api\":\"/zenvis/api/v1/entity/user_event/list\"}")),
                 callback("menu_type_options", calls, ignored -> """
                         {"options":[
-                          {"label":"外联应用","value":"EXTERNAL_APP"},
                           {"label":"低代码页面","value":"LOW_CODE_PAGE"}]}
                         """),
                 callback("menu_parent_options", calls, ignored -> """
@@ -157,7 +204,7 @@ class DataVisualizationDemoResponseServiceTest {
         );
 
         String response = ReflectionTestUtils.invokeMethod(
-                service, "buildMenuConfirmationResponse", context);
+                service, "buildMenuConfirmationResponse", null, context);
 
         assertThat(response)
                 .contains("menu_type_options")
@@ -165,7 +212,10 @@ class DataVisualizationDemoResponseServiceTest {
                 .contains("menu_list")
                 .contains("\"demoScenario\":\"menu\"")
                 .contains("\"action\":\"data_visualization.apply_config\"")
-                .contains("\"type\":\"EXTERNAL_APP\"")
+                .contains("\"type\":\"LOW_CODE_PAGE\"")
+                .contains("\"params\":\"user-event-page\"")
+                .doesNotContain("example.com")
+                .doesNotContain("EXTERNAL_APP")
                 .contains("menu_create")
                 .contains("MCP 审批")
                 .contains("menu_view");
@@ -173,6 +223,11 @@ class DataVisualizationDemoResponseServiceTest {
                 .extracting("type")
                 .contains("confirm");
         assertThat(calls).containsExactly(
+                "retrieval_list_display_entity",
+                "retrieval_list_display_attribute",
+                "config_tree",
+                "config_tree",
+                "config_read",
                 "menu_type_options",
                 "menu_parent_options",
                 "menu_list");
@@ -182,21 +237,28 @@ class DataVisualizationDemoResponseServiceTest {
     void menuCreationUsesApprovalToolThenReadBackAndReturnsRecord() {
         List<String> calls = new ArrayList<>();
         String menu = """
-                {"id":21,"name":"用户事件外部看板","type":"EXTERNAL_APP",
-                 "route":"external-app",
-                 "params":"https://example.com/user-event-dashboard",
+                {"id":21,"name":"用户事件数据入口","type":"LOW_CODE_PAGE",
+                 "route":"low-code-page",
+                 "params":"user-event-page",
                  "parentId":0,"level":"LEVEL_1","superscript":"演示",
-                 "source":"data-visualization-demo:user-event:menu-external-dashboard"}
+                 "source":"data-visualization-demo:user-event:menu-single-page-entry"}
                 """;
         McpToolContext context = toolContext(
+                callback("config_tree", calls, arguments ->
+                        arguments.contains("user-event-page")
+                                ? "[{\"fileName\":\"index.json\"}]"
+                                : "[]"),
+                callback("config_read", calls, ignored ->
+                        JacksonUtil.toJson(
+                                "{\"api\":\"/zenvis/api/v1/entity/user_event/list\"}")),
                 callback("menu_list", calls, ignored -> """
                         {"rows":[],"total":0}
                         """),
                 callback("menu_create", calls, arguments -> {
                     assertThat(arguments)
                             .contains("\"request\"")
-                            .contains("\"name\":\"用户事件外部看板\"")
-                            .contains("\"type\":\"EXTERNAL_APP\"");
+                            .contains("\"name\":\"用户事件数据入口\"")
+                            .contains("\"type\":\"LOW_CODE_PAGE\"");
                     return menu;
                 }),
                 callback("menu_view", calls, arguments -> {
@@ -206,18 +268,21 @@ class DataVisualizationDemoResponseServiceTest {
         );
 
         String response = ReflectionTestUtils.invokeMethod(
-                service, "applyMenuDemo", context);
+                service, "applyMenuDemo", null, context);
 
         assertThat(response)
                 .contains("菜单已通过 MCP 审批创建")
                 .contains("menu_list → menu_create（已审批） → menu_view")
                 .contains("zenvis:menu-config-record")
                 .contains("\"menuId\": \"21\"")
-                .contains("\"source\": \"data-visualization-demo:user-event:menu-external-dashboard\"");
+                .contains("\"source\": \"data-visualization-demo:user-event:menu-single-page-entry\"");
         assertThat(new ChatMessagePartParser().parse(response, MessageType.TEXT))
                 .extracting("type")
                 .contains("menu-config-record");
         assertThat(calls).containsExactly(
+                "config_tree",
+                "config_tree",
+                "config_read",
                 "menu_list",
                 "menu_create",
                 "menu_view");
@@ -227,6 +292,13 @@ class DataVisualizationDemoResponseServiceTest {
     void rejectedMenuApprovalStopsBeforeReadBackAndDoesNotCreateRecord() {
         List<String> calls = new ArrayList<>();
         McpToolContext context = toolContext(
+                callback("config_tree", calls, arguments ->
+                        arguments.contains("user-event-page")
+                                ? "[{\"fileName\":\"index.json\"}]"
+                                : "[]"),
+                callback("config_read", calls, ignored ->
+                        JacksonUtil.toJson(
+                                "{\"api\":\"/zenvis/api/v1/entity/user_event/list\"}")),
                 callback("menu_list", calls, ignored -> """
                         {"rows":[],"total":0}
                         """),
@@ -237,14 +309,42 @@ class DataVisualizationDemoResponseServiceTest {
         );
 
         String response = ReflectionTestUtils.invokeMethod(
-                service, "applyMenuDemo", context);
+                service, "applyMenuDemo", null, context);
 
         assertThat(response)
                 .contains("添加菜单演示失败")
                 .contains("status=rejected")
                 .contains("未生成菜单成功记录")
                 .doesNotContain("zenvis:menu-config-record");
-        assertThat(calls).containsExactly("menu_list", "menu_create");
+        assertThat(calls).containsExactly(
+                "config_tree",
+                "config_tree",
+                "config_read",
+                "menu_list",
+                "menu_create");
+    }
+
+    @Test
+    void menuExampleBlocksWhenSinglePageWasNotApplied() {
+        List<String> calls = new ArrayList<>();
+        McpToolContext context = toolContext(
+                metaEntityCallback(calls),
+                metaAttributeCallback(calls),
+                callback("config_tree", calls, ignored -> "[]")
+        );
+
+        String response = ReflectionTestUtils.invokeMethod(
+                service, "buildMenuConfirmationResponse", null, context);
+
+        assertThat(response)
+                .contains("添加菜单演示失败")
+                .contains("先运行并应用“单页面应用”演示")
+                .doesNotContain("zenvis:confirm");
+        assertThat(calls).containsExactly(
+                "retrieval_list_display_entity",
+                "retrieval_list_display_attribute",
+                "config_tree",
+                "config_tree");
     }
 
     @Test
@@ -252,7 +352,7 @@ class DataVisualizationDemoResponseServiceTest {
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
                 {"title":"用户事件单页面应用实现方式确认","content":"请选择用低代码 amis 还是静态 HTML 实现用户事件增删改查单页面。","answers":[{"id":"implementation","title":"实现方式","value":"使用低代码 amis 方式实现单页面 CRUD 应用"}]}
-                """, null));
+                """, null, realDataContext(new ArrayList<>())));
 
         assertThat(response)
                 .contains("zenvis:low-code-page-config")
@@ -272,7 +372,7 @@ class DataVisualizationDemoResponseServiceTest {
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
                 {"title":"用户事件单页面应用实现方式确认","content":"请选择用低代码 amis 还是静态 HTML 实现用户事件增删改查单页面。","answers":[{"id":"implementation","title":"实现方式","value":"使用静态 HTML 单页面直接调用实体 REST API"}]}
-                """, null));
+                """, null, realDataContext(new ArrayList<>())));
 
         assertThat(response)
                 .contains("zenvis:html-page-config")
@@ -290,7 +390,7 @@ class DataVisualizationDemoResponseServiceTest {
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
                 {"title":"用户事件侧边栏应用信息确认","answers":[{"id":"scope","title":"应用范围","value":"生成用户事件侧边栏应用"}]}
-                """, null));
+                """, null, realDataContext(new ArrayList<>())));
 
         assertThat(response)
                 .contains("zenvis:low-code-app-config")
@@ -308,7 +408,7 @@ class DataVisualizationDemoResponseServiceTest {
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
                 {"title":"用户事件数据看板信息确认","content":"请选择低代码、静态 HTML 或外链接方式。","answers":[{"id":"implementation","title":"实现方式","value":"使用低代码 amis 页面实现数据看板"}]}
-                """, null));
+                """, null, realDataContext(new ArrayList<>())));
 
         assertThat(response)
                 .contains("zenvis:low-code-page-config")
@@ -328,11 +428,11 @@ class DataVisualizationDemoResponseServiceTest {
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
                 {"title":"用户事件数据看板信息确认","content":"请选择低代码、静态 HTML 或外链接方式。","answers":[{"id":"implementation","title":"实现方式","value":"使用静态 HTML 页面实现数据看板"}]}
-                """, null));
+                """, null, realDataContext(new ArrayList<>())));
 
         assertThat(response)
                 .contains("zenvis:html-page-config")
-                .contains("<title>用户事件数据看板</title>")
+                .contains("<title>用户事件数据态势看板</title>")
                 .contains("\"actions\":[\"apply_config\",\"abandon\",\"revise\"]")
                 .contains("\"dashboardType\":\"html\"")
                 .contains("config_read")
@@ -343,34 +443,36 @@ class DataVisualizationDemoResponseServiceTest {
     }
 
     @Test
-    void dashboardLinkWithoutUrlAsksForUrl() {
-        String response = responseOf(service.findResponse(null, "chat-1", """
-                我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
-                {"title":"用户事件数据看板信息确认","answers":[{"value":"使用外链接方式接入已有看板"}]}
-                """, null));
+    void dashboardInfoDoesNotOfferExternalLink() {
+        String response = responseOf(service.findResponse(
+                null,
+                "chat-1",
+                DataVisualizationDemoResponseService.DASHBOARD_EXAMPLE_PROMPT,
+                null));
 
         assertThat(response)
-                .contains("用户事件外链看板地址确认")
-                .contains("https://");
+                .contains("低代码看板")
+                .contains("静态 HTML 看板")
+                .doesNotContain("外链接看板")
+                .doesNotContain("example.com");
     }
 
     @Test
-    void dashboardLinkUrlSelectionReturnsLinkDashboardConfirm() {
+    void dashboardConfigContainsOnlyRealUserEventApis() {
         String response = responseOf(service.findResponse(null, "chat-1", """
                 我已根据上一条补充信息卡片提交以下结构化补充内容，请基于这些信息继续处理，不要重复询问已补充项。
-                {"title":"用户事件外链看板地址确认","answers":[{"id":"url","title":"外链接地址","value":"https://example.com/user-event-dashboard"}]}
-                """, null));
+                {"title":"用户事件数据看板信息确认","answers":[{"value":"使用低代码 amis 页面实现数据看板"}]}
+                """, null, realDataContext(new ArrayList<>())));
 
         assertThat(response)
-                .contains("是否创建用户事件外链看板")
-                .contains("\"actions\":[\"apply_config\",\"abandon\",\"revise\"]")
-                .contains("\"dashboardType\":\"link\"")
-                .contains("\"url\":\"https://example.com/user-event-dashboard\"")
-                .contains("dashboard_list")
-                .contains("dashboard_create（高风险 MCP 审批）")
-                .contains("dashboard_view")
-                .doesNotContain("zenvis:low-code-page-config")
-                .doesNotContain("zenvis:html-page-config");
+                .contains("/zenvis/api/v1/entity/overview/query")
+                .contains("/zenvis/api/v1/entity/summary/query")
+                .contains("/zenvis/api/v1/entity/aggregate/query")
+                .contains("/zenvis/api/v1/entity/histogram/query")
+                .contains("/zenvis/api/v1/entity/user_event/list")
+                .contains("LAST_24_HOURS")
+                .doesNotContain("/entity/user-event/")
+                .doesNotContain("example.com");
     }
 
     @Test
@@ -571,6 +673,63 @@ class DataVisualizationDemoResponseServiceTest {
                 "config_add",
                 "config_apply",
                 "config_read");
+    }
+
+    private McpToolContext realDataContext(List<String> calls) {
+        return toolContext(
+                metaEntityCallback(calls),
+                metaAttributeCallback(calls),
+                callback("entity_overview", calls, ignored -> """
+                        {
+                          "meta":{"query_type":"overview"},
+                          "result":{"rows":[],"total":0},
+                          "echarts":{"chart_type":"bar","option":{"series":[]}}
+                        }
+                        """),
+                callback("entity_aggregate", calls, arguments -> {
+                    assertThat(arguments)
+                            .contains("\"entity\":\"user_event\"")
+                            .contains("\"time_field\":\"server_time\"");
+                    return """
+                            {
+                              "meta":{"query_type":"aggregate","result_count":1,"truncated":false},
+                              "result":{"rows":[{"event_time":"2026-07-30 10:00:00","event_count":4}]},
+                              "echarts":{
+                                "chart_type":"line",
+                                "option":{
+                                  "sentinel":987654321,
+                                  "dataset":{"source":[["event_time","event_count"],["2026-07-30 10:00:00",4]]},
+                                  "xAxis":{"type":"category"},
+                                  "yAxis":{"type":"value"},
+                                  "series":[{"type":"line"}]
+                                }
+                              }
+                            }
+                            """;
+                })
+        );
+    }
+
+    private ToolCallback metaEntityCallback(List<String> calls) {
+        return callback("retrieval_list_display_entity", calls, ignored -> """
+                {"entityList":[{"name":"user_event","label":"用户事件数据"}]}
+                """);
+    }
+
+    private ToolCallback metaAttributeCallback(List<String> calls) {
+        return callback("retrieval_list_display_attribute", calls, arguments -> {
+            assertThat(arguments).contains("\"entity\":\"user_event\"");
+            return """
+                    {
+                      "entity":"user_event",
+                      "attributeList":[
+                        {"name":"event_id"},{"name":"procid"},{"name":"user"},
+                        {"name":"event_type"},{"name":"reliability"},{"name":"detail"},
+                        {"name":"tags"},{"name":"server_time"}
+                      ]
+                    }
+                    """;
+        });
     }
 
     private McpToolContext visualizationWriteContext(

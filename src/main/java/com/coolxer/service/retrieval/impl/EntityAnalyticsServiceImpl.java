@@ -1255,6 +1255,10 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
                 end = LocalDate.now(zone).atStartOfDay();
                 start = end.minusDays(1);
             }
+            case "LAST_24_HOURS" -> {
+                end = now;
+                start = now.minusHours(24);
+            }
             case "LAST_7_DAYS" -> {
                 end = now;
                 start = now.minusDays(7);

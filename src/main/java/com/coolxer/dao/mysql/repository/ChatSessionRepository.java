@@ -4,9 +4,11 @@ import com.coolxer.dao.mysql.constant.MysqlFinalTableName;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +41,20 @@ public interface ChatSessionRepository extends BaseRepository<ChatSession, Integ
      * @return 会话对象
      */
     Optional<ChatSession> findBySessionIdAndCreateBy(String sessionId, Integer createBy);
+
+    /**
+     * 报表素材选择器只读取当前用户最近的会话，避免跨用户暴露智能体产物。
+     */
+    List<ChatSession> findTop50ByCreateByOrderByUpdateTimeDesc(Integer createBy);
+
+    /**
+     * 报表写操作先锁定会话，保证首次建文档、保存和归档不会并发覆盖。
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select session from ChatSession session where session.id = :id and session.createBy = :createBy")
+    Optional<ChatSession> findOwnedByIdForUpdate(
+            @Param("id") Integer id,
+            @Param("createBy") Integer createBy);
 
     /**
      * 查询用户置顶的会话

@@ -15,6 +15,7 @@ import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
+import com.coolxer.model.dih.dto.ReportActionDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.service.dih.agent.DataAccessAgent;
@@ -58,6 +59,70 @@ class DihChatApplicationServiceTest {
 
     private static final String CONTEXT_LENGTH_EXCEEDED_MESSAGE =
             "当前对话内容过长，已超过模型可处理的上下文长度。请新建对话，或减少历史消息、附件及输入内容后重试。";
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void selectionRewriteIsReturnedAsFragmentAndNeverAsFullDocument() {
+        DihChatApplicationService service = emptyService();
+        ReportActionDto action = new ReportActionDto();
+        action.setType(ReportActionDto.SELECTION_REWRITE);
+        action.setDocumentId("doc-1");
+        action.setBaseRevision(3L);
+        action.setSelectionId("selection-1");
+        action.setSelectionHash("before-hash");
+        ChatMessagePart generated = ChatMessagePart.builder()
+                .type("report-document")
+                .content("改写后的片段")
+                .metadata(Map.of("format", "markdown"))
+                .build();
+
+        List<ChatMessagePart> parts = ReflectionTestUtils.invokeMethod(
+                service,
+                "applyReportProtocol",
+                List.of(generated),
+                "改写后的片段",
+                action,
+                List.of(Map.of("type", "attachment", "id", "file-1")),
+                "message-1",
+                null
+        );
+
+        assertThat(parts).isNotNull();
+        assertThat(parts).extracting(ChatMessagePart::getType)
+                .containsExactly("report-fragment");
+        assertThat(parts.get(0).getMetadata())
+                .containsEntry("documentId", "doc-1")
+                .containsEntry("baseRevision", 3L)
+                .containsEntry("selectionHash", "before-hash");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void duplicateFullReportsAreRejectedInsteadOfSilentlyOverwriting() {
+        DihChatApplicationService service = emptyService();
+        ReportActionDto action = new ReportActionDto();
+        action.setType(ReportActionDto.FULL_REWRITE);
+        List<ChatMessagePart> source = List.of(
+                ChatMessagePart.builder().type("report-document").content("# A").build(),
+                ChatMessagePart.builder().type("report-document").content("# B").build());
+
+        List<ChatMessagePart> parts = ReflectionTestUtils.invokeMethod(
+                service,
+                "applyReportProtocol",
+                source,
+                "",
+                action,
+                List.of(),
+                "message-1",
+                null
+        );
+
+        assertThat(parts).isNotNull();
+        assertThat(parts.stream().filter(part -> "report-document".equals(part.getType())))
+                .allMatch(part -> "failed".equals(part.getStatus()));
+        assertThat(parts).anyMatch(part ->
+                "notice".equals(part.getType()) && part.getContent().contains("重复"));
+    }
 
     @Test
     @SuppressWarnings("unchecked")

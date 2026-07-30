@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
@@ -207,6 +208,40 @@ public class AIChatService {
 
     public Flux<String> chat(String chatId, String model, String prompt, List<ChatAttachment> attachments, User user) {
         return qaChat(chatId, model, prompt, attachments, user, false);
+    }
+
+    /**
+     * 工具调用与图片输入不能在当前 Provider 请求中安全共存时，先独立提取图片事实，
+     * 再把结果交给带工具的 Agent。该阶段不写入聊天记忆，也不替代最终回答。
+     */
+    public Mono<String> analyzeImageAttachments(
+            String chatId,
+            String model,
+            String prompt,
+            List<ChatAttachment> attachments,
+            User user) {
+        if (!chatAttachmentService.hasImageAttachment(attachments)) {
+            return Mono.just("");
+        }
+        if (!canUseNativeOpenAiStream()) {
+            return Mono.error(new AgentCapabilityUnavailableException(
+                    "当前模型服务不支持图片与 MCP 查询的分阶段执行。"));
+        }
+        String systemPrompt = """
+                你是报表任务的图片取证阶段。只提取图片中可直接观察到的文字、数值、图表趋势、
+                时间范围和不确定项，不生成最终报告，不编造图片之外的事实。
+                输出简洁的结构化中文要点，并明确标记无法识别、截断或存在歧义的内容。
+                """;
+        return nativeOpenAiChat(
+                chatId + ":image-evidence",
+                model,
+                prompt,
+                attachments,
+                user,
+                false,
+                systemPrompt,
+                "AIChatService.agentChat.imageEvidence"
+        ).collectList().map(parts -> String.join("", parts));
     }
 
     /**

@@ -362,6 +362,81 @@ class AgentMcpToolServiceTest {
         assertThat(context.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(48_000);
     }
 
+    @Test
+    void resolveSelectedSkillWithoutToolBoundaryFailsClosed() {
+        SkillService skillService = mock(SkillService.class);
+        when(skillService.resolveRuntimeConfig(List.of("legacy-skill")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        null,
+                        new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(
+                        new FakeToolCallback("external_write", "外部写入工具")),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("retrieval_search", "查询"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("entity_delete", "删除实体"),
+                        new FakeToolCallback("analysis_task_delete", "删除任务")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_report", List.of("legacy-skill"));
+
+        assertThat(context.hasTools()).isFalse();
+        assertThat(context.toolCallbackProvider()).isNull();
+    }
+
+    @Test
+    void resolveReportSkillExposesOnlyDeclaredReadOnlyTools() {
+        SkillService skillService = mock(SkillService.class);
+        List<String> readOnlyTools = List.of(
+                "retrieval_search",
+                "entity_summary",
+                "analysis_task_list",
+                "analysis_task_view"
+        );
+        when(skillService.resolveRuntimeConfig(List.of("report-agent")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        new SkillRuntimeToolsVo(readOnlyTools, Map.of()),
+                        new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(
+                        new FakeToolCallback("external_write", "外部写入工具")),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("retrieval_search", "查询"),
+                        new FakeToolCallback("entity_summary", "汇总"),
+                        new FakeToolCallback("analysis_task_list", "任务列表"),
+                        new FakeToolCallback("analysis_task_view", "任务详情"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("entity_delete", "删除实体"),
+                        new FakeToolCallback("analysis_task_delete", "删除任务")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_report", List.of("report-agent"));
+
+        assertThat(context.hasTools()).isTrue();
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactlyElementsOf(readOnlyTools);
+        assertThat(context.systemPrompt())
+                .doesNotContain(
+                        "config_apply",
+                        "entity_delete",
+                        "analysis_task_delete",
+                        "external_write");
+    }
+
     private record FakeToolCallback(String name, String description) implements ToolCallback {
 
         @Override

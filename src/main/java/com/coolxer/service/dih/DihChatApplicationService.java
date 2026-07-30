@@ -10,6 +10,7 @@ import com.coolxer.model.dih.ChatStreamEvent;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
+import com.coolxer.model.dih.dto.ReportActionDto;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
@@ -61,6 +62,9 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 /**
  * DIH 聊天应用编排服务。
@@ -126,6 +130,9 @@ public class DihChatApplicationService {
 
     @Autowired(required = false)
     private AgentDemoStateStore agentDemoStateStore;
+
+    @Autowired(required = false)
+    private ReportDocumentService reportDocumentService;
 
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
@@ -314,7 +321,8 @@ public class DihChatApplicationService {
                     new AtomicReference<>(MessageType.TEXT),
                     effectiveDeepThink,
                     builtinDemoToolStream,
-                    builtinDemoId
+                    builtinDemoId,
+                    chatDto.getReportAction()
             );
         }
         if (!baseService.isModelSupported(model)) {
@@ -327,7 +335,7 @@ public class DihChatApplicationService {
                 effectiveDeepThink,
                 hasImageAttachment
         );
-        McpToolContext mcpToolContext = executionPolicy.toolsAllowed() && !hasImageAttachment
+        McpToolContext mcpToolContext = executionPolicy.toolsAllowed()
                 ? agentMcpToolService.resolve(executionPolicy.agentType(), executionPolicy.skillIds())
                 : McpToolContext.empty();
         McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
@@ -349,9 +357,21 @@ public class DihChatApplicationService {
             );
         }
 
-        String prompt = chatAttachmentService.appendAttachmentContext(userMessage, chatDto.getAttachments(), currentUser);
+        String attachmentPrompt = chatAttachmentService.appendAttachmentContext(
+                userMessage, chatDto.getAttachments(), currentUser);
         ChatSession chatSession = appendUserMessage(
                 chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
+        if (reportDocumentService != null
+                && chatDto.getReportAction() != null
+                && chatDto.getReportAction().getSourceRefs() != null) {
+            chatDto.getReportAction().setSourceRefs(
+                    reportDocumentService.validateSourceRefs(
+                            (long) chatSession.getId(),
+                            chatDto.getReportAction().getSourceRefs(),
+                            currentUser));
+        }
+        String prompt = appendReportSourceContext(
+                attachmentPrompt, chatDto.getReportAction());
 
         AtomicReference<MessageType> messageType = new AtomicReference<>(MessageType.TEXT);
 
@@ -360,6 +380,31 @@ public class DihChatApplicationService {
         Flux<String> fluxResponse = Flux.defer(() -> {
             String dispatchPrompt = bootstrapVisualizationWorkflow(
                     executionPolicy, resolvedMcpToolContext, prompt, chatSession);
+            if (hasImageAttachment && resolvedMcpToolContext.hasTools()) {
+                return chatService.analyzeImageAttachments(
+                                chatId,
+                                resolvedModel,
+                                userMessage,
+                                chatDto.getAttachments(),
+                                currentUser)
+                        .flatMapMany(imageEvidence -> dispatchChat(
+                                chatType,
+                                chatId,
+                                resolvedModel,
+                                dispatchPrompt + """
+
+                                        【平台图片取证阶段结果】
+                                        以下内容来自同一轮任务的图片识别阶段。它不是最终结论；需要系统数据时继续调用获准的只读 MCP 工具，
+                                        并在来源清单中同时保留附件和工具审计。
+                                        """ + imageEvidence,
+                                chatDto,
+                                currentUser,
+                                resolvedMcpToolContext,
+                                executionPolicy,
+                                effectiveDeepThink,
+                                messageType
+                        ));
+            }
             return dispatchChat(
                     chatType,
                     chatId,
@@ -393,7 +438,9 @@ public class DihChatApplicationService {
                 eventStream,
                 messageType,
                 effectiveDeepThink,
-                mcpToolLogStream
+                mcpToolLogStream,
+                null,
+                chatDto.getReportAction()
         );
     }
 
@@ -1870,7 +1917,7 @@ public class DihChatApplicationService {
                                                  AtomicReference<MessageType> messageType,
                                                  boolean deepThinkRequested) {
         return emitAndSaveTextResponse(fluxResponse, chatSession, currentUser, eventStream,
-                messageType, deepThinkRequested, McpToolLogStream.disabled(), null);
+                messageType, deepThinkRequested, McpToolLogStream.disabled(), null, null);
     }
 
     private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
@@ -1888,6 +1935,7 @@ public class DihChatApplicationService {
                 messageType,
                 deepThinkRequested,
                 toolActivityStream,
+                null,
                 null);
     }
 
@@ -1899,6 +1947,27 @@ public class DihChatApplicationService {
                                                  boolean deepThinkRequested,
                                                  McpToolLogStream toolActivityStream,
                                                  String demoId) {
+        return emitAndSaveTextResponse(
+                fluxResponse,
+                chatSession,
+                currentUser,
+                eventStream,
+                messageType,
+                deepThinkRequested,
+                toolActivityStream,
+                demoId,
+                null);
+    }
+
+    private Flux<String> emitAndSaveTextResponse(Flux<String> fluxResponse,
+                                                 ChatSession chatSession,
+                                                 User currentUser,
+                                                 boolean eventStream,
+                                                 AtomicReference<MessageType> messageType,
+                                                 boolean deepThinkRequested,
+                                                 McpToolLogStream toolActivityStream,
+                                                 String demoId,
+                                                 ReportActionDto reportAction) {
         StringBuilder modelResponse = new StringBuilder();
         if (eventStream) {
             return fluxResponse
@@ -1925,7 +1994,8 @@ public class DihChatApplicationService {
                                 deepThinkRequested,
                                 toolActivityStream.approvalParts(),
                                 toolActivityStream,
-                                demoId
+                                demoId,
+                                reportAction
                         );
                         return Flux.just(toNdjson(ChatStreamEvent.done(aiMessage)));
                     }))
@@ -1941,7 +2011,7 @@ public class DihChatApplicationService {
                 .doOnNext(modelResponse::append)
                 .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(),
                         messageType.get(), false, false, toolActivityStream.approvalParts(),
-                        toolActivityStream, demoId))
+                        toolActivityStream, demoId, reportAction))
                 .onErrorResume(e -> {
                     log.error("聊天返回失败: {}", e.getMessage(), e);
                     String errorMessage = resolveChatErrorMessage(e);
@@ -2122,6 +2192,7 @@ public class DihChatApplicationService {
                 deepThinkRequested,
                 supplementalParts,
                 toolActivityStream,
+                null,
                 null);
     }
 
@@ -2134,12 +2205,38 @@ public class DihChatApplicationService {
                                    List<ChatMessagePart> supplementalParts,
                                    McpToolLogStream toolActivityStream,
                                    String demoId) {
+        return saveAiResponse(
+                chatSession,
+                currentUser,
+                content,
+                type,
+                withParts,
+                deepThinkRequested,
+                supplementalParts,
+                toolActivityStream,
+                demoId,
+                null);
+    }
+
+    private Message saveAiResponse(ChatSession chatSession,
+                                   User currentUser,
+                                   String content,
+                                   MessageType type,
+                                   boolean withParts,
+                                   boolean deepThinkRequested,
+                                   List<ChatMessagePart> supplementalParts,
+                                   McpToolLogStream toolActivityStream,
+                                   String demoId,
+                                   ReportActionDto reportAction) {
         Message aiMessage = new Message("ai", content, type);
         List<ChatMessagePart> parts = List.of();
+        List<Map<String, Object>> reportEvidenceRefs = List.of();
         if (withParts) {
             String parsableContent = insertSupplementalMarkers(content, supplementalParts);
             parts = new ArrayList<>(chatMessagePartParser.parse(parsableContent, type));
             parts = mergeSupplementalParts(content, parts, supplementalParts);
+            reportEvidenceRefs = buildReportEvidenceRefs(
+                    chatSession, toolActivityStream, reportAction, aiMessage.getId());
             if (StringUtils.hasText(demoId)) {
                 decorateDemoParts(parts, demoId);
             } else {
@@ -2147,19 +2244,17 @@ public class DihChatApplicationService {
                         chatSession, parts, toolActivityStream);
                 validateDataVisualizationParts(chatSession, parts, toolActivityStream);
                 if (workflowOrchestrator != null) {
-                    List<Map<String, Object>> evidenceRefs = workflowEvidenceService == null
-                            ? toolActivityStream.evidenceRefs()
-                            : workflowEvidenceService.succeededForTurn(
-                                    toolActivityStream.turnId(),
-                                    chatSession == null ? null : chatSession.getSessionId(),
-                                    currentUser == null ? null : currentUser.getId());
-                    if (evidenceRefs.isEmpty()) {
-                        evidenceRefs = toolActivityStream.evidenceRefs();
-                    }
                     workflowOrchestrator.prepareVisualizationParts(
-                            chatSession, parts, evidenceRefs, aiMessage.getId());
+                            chatSession, parts, reportEvidenceRefs, aiMessage.getId());
                 }
             }
+            parts = applyReportProtocol(
+                    parts,
+                    content,
+                    reportAction,
+                    reportEvidenceRefs,
+                    aiMessage.getId(),
+                    demoId);
             if (deepThinkRequested && parts.stream().noneMatch(part -> "thinking".equals(part.getType()))) {
                 parts.add(0, ChatMessagePart.builder()
                         .id(java.util.UUID.randomUUID().toString())
@@ -2169,12 +2264,21 @@ public class DihChatApplicationService {
                         .status("completed")
                         .build());
             }
+            if (parts.stream().anyMatch(this::isReportDocumentPart)) {
+                aiMessage.setContent(stripReportDocumentFence(content));
+            }
             aiMessage.setParts(parts);
         }
         if (chatSession == null) {
             return aiMessage;
         }
         try {
+            persistGeneratedReport(
+                    chatSession,
+                    parts,
+                    reportAction,
+                    reportEvidenceRefs,
+                    currentUser);
             ChatSession savedSession = chatSessionService.appendMessage(chatSession, aiMessage, currentUser);
             mergeStructuredExtraData(savedSession, parts, currentUser);
             log.info("保存AI响应到会话，消息类型: {}, 富消息片段: {}", aiMessage.getType(), withParts);
@@ -2182,6 +2286,296 @@ public class DihChatApplicationService {
             log.error("保存模型响应到会话失败: {}", e.getMessage(), e);
         }
         return aiMessage;
+    }
+
+    private List<Map<String, Object>> buildReportEvidenceRefs(
+            ChatSession chatSession,
+            McpToolLogStream toolActivityStream,
+            ReportActionDto reportAction,
+            String aiMessageId) {
+        List<Map<String, Object>> refs = new ArrayList<>();
+        if (reportAction != null && reportAction.getSourceRefs() != null) {
+            refs.addAll(reportAction.getSourceRefs());
+        }
+        if (toolActivityStream != null) {
+            List<Map<String, Object>> toolRefs = workflowEvidenceService == null
+                    ? toolActivityStream.evidenceRefs()
+                    : workflowEvidenceService.succeededForTurn(
+                            toolActivityStream.turnId(),
+                            chatSession == null ? null : chatSession.getSessionId(),
+                            chatSession == null ? null : chatSession.getCreateBy());
+            refs.addAll(toolRefs.isEmpty() ? toolActivityStream.evidenceRefs() : toolRefs);
+        }
+        if (chatSession != null && StringUtils.hasText(chatSession.getMessages())) {
+            try {
+                List<Message> messages = JacksonUtil.toList(
+                        chatSession.getMessages(),
+                        new TypeReference<List<Message>>() {});
+                for (int index = messages.size() - 1; index >= 0; index--) {
+                    Message message = messages.get(index);
+                    if (!"user".equals(message.getSender())) {
+                        continue;
+                    }
+                    Map<String, Object> messageRef = new LinkedHashMap<>();
+                    messageRef.put("type", "message");
+                    messageRef.put("id", message.getId());
+                    messageRef.put("messageId", message.getId());
+                    messageRef.put("status", "available");
+                    refs.add(messageRef);
+                    if (message.getAttachments() != null) {
+                        for (ChatAttachment attachment : message.getAttachments()) {
+                            Map<String, Object> attachmentRef = new LinkedHashMap<>();
+                            attachmentRef.put("type", "attachment");
+                            attachmentRef.put("id", attachment.getFileId());
+                            attachmentRef.put("attachmentId", attachment.getFileId());
+                            attachmentRef.put("name", attachment.getFileName());
+                            attachmentRef.put("contentType", attachment.getContentType());
+                            attachmentRef.put("parseStatus", attachment.getParseStatus());
+                            attachmentRef.put("truncated",
+                                    attachment.getMessage() != null
+                                            && attachment.getMessage().contains("截断"));
+                            attachmentRef.put("status", firstNonBlank(
+                                    attachment.getParseStatus(), "uploaded"));
+                            refs.add(attachmentRef);
+                        }
+                    }
+                    break;
+                }
+            } catch (Exception e) {
+                log.warn("提取报表附件证据失败：{}", e.getMessage());
+            }
+        }
+        if (StringUtils.hasText(aiMessageId)) {
+            Map<String, Object> responseRef = new LinkedHashMap<>();
+            responseRef.put("type", "message");
+            responseRef.put("id", aiMessageId);
+            responseRef.put("messageId", aiMessageId);
+            responseRef.put("role", "ai");
+            refs.add(responseRef);
+        }
+        Map<String, Map<String, Object>> unique = new LinkedHashMap<>();
+        for (Map<String, Object> ref : refs) {
+            if (ref == null || ref.isEmpty()) {
+                continue;
+            }
+            String key = firstNonBlank(
+                    stringValue(ref, "evidenceId", null),
+                    stringValue(ref, "id", null),
+                    stringValue(ref, "auditId", null),
+                    reportContentHash(JacksonUtil.toJson(ref)));
+            unique.putIfAbsent(key, new LinkedHashMap<>(ref));
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    private List<ChatMessagePart> applyReportProtocol(
+            List<ChatMessagePart> sourceParts,
+            String rawContent,
+            ReportActionDto action,
+            List<Map<String, Object>> sourceRefs,
+            String messageId,
+            String demoId) {
+        List<ChatMessagePart> parts = new ArrayList<>(sourceParts == null ? List.of() : sourceParts);
+        if (action != null && action.isSelectionRewrite()) {
+            String fragmentContent = parts.stream()
+                    .filter(this::isReportDocumentPart)
+                    .map(ChatMessagePart::getContent)
+                    .filter(StringUtils::hasText)
+                    .findFirst()
+                    .orElseGet(() -> parts.stream()
+                            .filter(part -> "code".equals(part.getType()))
+                            .map(ChatMessagePart::getContent)
+                            .filter(StringUtils::hasText)
+                            .findFirst()
+                            .orElse(stripSingleOuterFence(rawContent)));
+            parts.removeIf(part -> isReportDocumentPart(part)
+                    || "markdown".equals(part.getType())
+                    || "code".equals(part.getType()));
+            if (!StringUtils.hasText(fragmentContent)
+                    || fragmentContent.length() > ReportDocumentService.MAX_REPORT_CONTENT_CHARS) {
+                parts.add(reportNotice(
+                        "选区改写失败",
+                        "模型没有返回有效片段，原文未被修改。",
+                        "failed"));
+                return parts;
+            }
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("documentId", action.getDocumentId());
+            metadata.put("baseRevision", action.getBaseRevision());
+            metadata.put("selectionId", action.getSelectionId());
+            metadata.put("selectionHash", action.getSelectionHash());
+            metadata.put("contentHash", reportContentHash(fragmentContent));
+            metadata.put("sourceRefs", sourceRefs);
+            metadata.put("messageId", messageId);
+            parts.add(ChatMessagePart.builder()
+                    .id(UUID.randomUUID().toString())
+                    .type("report-fragment")
+                    .title("选区改写")
+                    .content(fragmentContent)
+                    .status("completed")
+                    .metadata(metadata)
+                    .build());
+            return parts;
+        }
+
+        List<ChatMessagePart> reportParts = parts.stream()
+                .filter(this::isReportDocumentPart)
+                .toList();
+        boolean expectedFullDocument = action != null && action.isFullDocumentAction();
+        if (expectedFullDocument && reportParts.size() != 1) {
+            reportParts.forEach(part -> part.setStatus("failed"));
+            parts.add(reportNotice(
+                    "报表生成失败",
+                    reportParts.isEmpty()
+                            ? "模型未返回完整的 zenvis:report-document-config 文档。"
+                            : "模型返回了重复的完整报表，系统已拒绝覆盖当前文档。",
+                    "failed"));
+            return parts;
+        }
+        for (ChatMessagePart part : reportParts) {
+            if (!StringUtils.hasText(part.getContent())
+                    || part.getContent().length() > ReportDocumentService.MAX_REPORT_CONTENT_CHARS) {
+                part.setStatus("failed");
+                parts.add(reportNotice(
+                        "报表格式无效",
+                        "报表正文为空或超过长度限制，当前文档未更新。",
+                        "failed"));
+                continue;
+            }
+            Map<String, Object> metadata = part.getMetadata() == null
+                    ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(part.getMetadata());
+            if (action != null) {
+                metadata.put("reportAction", action.getType());
+                metadata.put("documentId", action.getDocumentId());
+                metadata.put("baseRevision", action.getBaseRevision());
+            }
+            metadata.put("sourceRefs", sourceRefs);
+            metadata.put("sourceAttachments", sourceRefs.stream()
+                    .filter(ref -> "attachment".equals(stringValue(ref, "type", "")))
+                    .toList());
+            metadata.put("messageId", messageId);
+            metadata.put("contentHash", reportContentHash(part.getContent()));
+            if (StringUtils.hasText(demoId)) {
+                metadata.put("demo", true);
+                metadata.put("source", "demo");
+            }
+            part.setStatus("generated");
+            part.setMetadata(metadata);
+        }
+        return parts;
+    }
+
+    private void persistGeneratedReport(
+            ChatSession chatSession,
+            List<ChatMessagePart> parts,
+            ReportActionDto action,
+            List<Map<String, Object>> sourceRefs,
+            User currentUser) {
+        if (reportDocumentService == null
+                || (action != null && action.isSelectionRewrite())
+                || parts == null) {
+            return;
+        }
+        List<ChatMessagePart> documents = parts.stream()
+                .filter(this::isReportDocumentPart)
+                .filter(part -> !"failed".equals(part.getStatus()))
+                .toList();
+        if (documents.size() != 1) {
+            return;
+        }
+        ChatMessagePart documentPart = documents.get(0);
+        try {
+            Map<String, Object> currentDocument = reportDocumentService.saveGenerated(
+                    chatSession, documentPart, action, sourceRefs, currentUser)
+                    .getCurrentDocument();
+            Map<String, Object> metadata = documentPart.getMetadata() == null
+                    ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(documentPart.getMetadata());
+            metadata.putAll(currentDocument);
+            metadata.put("contentStored", true);
+            documentPart.setMetadata(metadata);
+            // 成功写入独立文档/修订表后，消息 part 只保留引用，避免正文再复制到会话 JSON。
+            documentPart.setContent("");
+            documentPart.setStatus("saved");
+        } catch (ReportRevisionConflictException e) {
+            documentPart.setStatus("conflict");
+            Map<String, Object> metadata = documentPart.getMetadata() == null
+                    ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(documentPart.getMetadata());
+            metadata.put("conflict", true);
+            metadata.put("currentDocument", e.getCurrentDocument());
+            documentPart.setMetadata(metadata);
+            parts.add(reportNotice(
+                    "报表版本冲突",
+                    e.getMessage() + " AI 结果已保留为预览，没有覆盖当前文档。",
+                    "warning"));
+        } catch (Exception e) {
+            documentPart.setStatus("failed");
+            parts.add(reportNotice(
+                    "报表保存失败",
+                    firstNonBlank(e.getMessage(), "生成结果未写入当前文档。"),
+                    "failed"));
+            log.error("保存生成报表失败：{}", e.getMessage(), e);
+        }
+    }
+
+    private ChatMessagePart reportNotice(String title, String content, String status) {
+        return ChatMessagePart.builder()
+                .id(UUID.randomUUID().toString())
+                .type("notice")
+                .title(title)
+                .content(content)
+                .level("failed".equals(status) ? "error" : "warning")
+                .status(status)
+                .metadata(Map.of("source", "platform"))
+                .build();
+    }
+
+    private String stripSingleOuterFence(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "";
+        }
+        return content.trim().replaceFirst(
+                "(?s)^```[^\\r\\n]*\\R([\\s\\S]*?)\\R?```$",
+                "$1").trim();
+    }
+
+    private String stripReportDocumentFence(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "报表已更新至编辑器。";
+        }
+        String visible = content.replaceAll(
+                "(?s)```zenvis:report-document-config\\s*.*?```",
+                "").trim();
+        return StringUtils.hasText(visible) ? visible : "报表已更新至编辑器。";
+    }
+
+    private String reportContentHash(String content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest((content == null ? "" : content).getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            return Integer.toHexString(Objects.hashCode(content));
+        }
+    }
+
+    private String appendReportSourceContext(String prompt, ReportActionDto action) {
+        if (action == null || action.getSourceRefs() == null || action.getSourceRefs().isEmpty()) {
+            return prompt;
+        }
+        String sourceJson = JacksonUtil.toJson(action.getSourceRefs());
+        int maxChars = 16_000;
+        boolean truncated = sourceJson.length() > maxChars;
+        String bounded = truncated ? sourceJson.substring(0, maxChars) : sourceJson;
+        return (prompt == null ? "" : prompt) + """
+
+                【用户选定的报表素材】
+                以下 JSON 是用户有权访问并主动选择的来源引用、摘要或内容节选。只可据此形成可追溯结论；
+                缺失、冲突、失败或截断的来源必须标记“待确认”，不得补造事实。
+                """ + bounded + (truncated
+                ? "\n【素材清单因长度限制已截断，超出部分不可作为事实依据。】"
+                : "");
     }
 
     private void decorateDemoParts(List<ChatMessagePart> parts, String demoId) {
@@ -3224,9 +3618,13 @@ public class DihChatApplicationService {
         if (dataVisualizationPatch != null && !dataVisualizationPatch.isEmpty()) {
             patch.putAll(dataVisualizationPatch);
         }
-        Map<String, Object> reportPatch = buildReportExtraDataPatch(parts);
-        if (reportPatch != null && !reportPatch.isEmpty()) {
-            patch.putAll(reportPatch);
+        // 仅供未装配独立报表存储的兼容性/测试环境使用；生产运行由
+        // ReportDocumentService 写入独立文档、修订和归档表。
+        if (reportDocumentService == null) {
+            Map<String, Object> reportPatch = buildReportExtraDataPatch(parts);
+            if (reportPatch != null && !reportPatch.isEmpty()) {
+                patch.putAll(reportPatch);
+            }
         }
         Map<String, Object> dataAnalysisPatch = buildDataAnalysisExtraDataPatch(parts);
         if (dataAnalysisPatch != null && !dataAnalysisPatch.isEmpty()) {
@@ -3459,7 +3857,6 @@ public class DihChatApplicationService {
 
     private Map<String, Object> buildReportExtraDataPatch(List<ChatMessagePart> parts) {
         List<Map<String, Object>> documents = new ArrayList<>();
-        List<Map<String, Object>> artifacts = new ArrayList<>();
         Map<String, Object> currentDocument = null;
 
         for (ChatMessagePart part : parts) {
@@ -3467,12 +3864,14 @@ public class DihChatApplicationService {
                 continue;
             }
             Map<String, Object> document = buildReportDocumentRecord(part);
-            documents.add(document);
-            artifacts.add(buildReportArtifactRecord(document));
             currentDocument = document;
+            Map<String, Object> summary = new LinkedHashMap<>(document);
+            summary.remove("content");
+            summary.remove("raw");
+            documents.add(summary);
         }
 
-        if (documents.isEmpty() && artifacts.isEmpty() && currentDocument == null) {
+        if (documents.isEmpty() && currentDocument == null) {
             return null;
         }
 
@@ -3482,9 +3881,6 @@ public class DihChatApplicationService {
         }
         if (!documents.isEmpty()) {
             report.put("documents", documents);
-        }
-        if (!artifacts.isEmpty()) {
-            report.put("artifacts", artifacts);
         }
 
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -3621,7 +4017,9 @@ public class DihChatApplicationService {
                 extractMarkdownTitle(part.getContent()),
                 "报表文档"
         );
-        String version = firstNonBlank(stringValue(raw, "version", null), "v1.0.0");
+        long parsedRevision = longValue(raw.get("revision"));
+        long revision = parsedRevision > 0 ? parsedRevision : 1L;
+        String version = firstNonBlank(stringValue(raw, "version", null), "v" + revision);
         String updatedAt = firstNonBlank(stringValue(raw, "updatedAt", null), java.time.OffsetDateTime.now().toString());
         String id = firstNonBlank(
                 stringValue(raw, "documentId", null),
@@ -3637,6 +4035,7 @@ public class DihChatApplicationService {
         record.put("title", title);
         record.put("name", title);
         record.put("format", format);
+        record.put("revision", revision);
         record.put("version", version);
         record.put("status", stringValue(raw, "status", "generated"));
         record.put("source", "agent_report");
@@ -3644,28 +4043,9 @@ public class DihChatApplicationService {
         record.put("content", part.getContent());
         record.put("outline", raw.getOrDefault("outline", List.of()));
         record.put("sourceAttachments", raw.getOrDefault("sourceAttachments", List.of()));
-        record.put("raw", raw);
+        record.put("sourceRefs", raw.getOrDefault("sourceRefs", List.of()));
+        record.put("contentHash", stringValue(raw, "contentHash", reportContentHash(part.getContent())));
         return record;
-    }
-
-    private Map<String, Object> buildReportArtifactRecord(Map<String, Object> document) {
-        Map<String, Object> artifact = new LinkedHashMap<>();
-        String id = firstNonBlank(
-                stringValue(document, "artifactId", null),
-                stringValue(document, "id", null),
-                java.util.UUID.randomUUID().toString()
-        );
-        artifact.put("id", id);
-        artifact.put("artifactId", id);
-        artifact.put("documentId", stringValue(document, "documentId", id));
-        artifact.put("name", stringValue(document, "title", "报表文档"));
-        artifact.put("title", stringValue(document, "title", "报表文档"));
-        artifact.put("format", stringValue(document, "format", "markdown"));
-        artifact.put("version", stringValue(document, "version", "v1.0.0"));
-        artifact.put("status", "generated");
-        artifact.put("createdAt", stringValue(document, "updatedAt", java.time.OffsetDateTime.now().toString()));
-        artifact.put("content", stringValue(document, "content", ""));
-        return artifact;
     }
 
     private Map<String, Object> buildVisualizationChartRecord(ChatMessagePart part) {

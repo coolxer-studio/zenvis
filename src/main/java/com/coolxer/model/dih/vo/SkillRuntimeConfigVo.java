@@ -10,7 +10,8 @@ import java.io.Serializable;
 /**
  * Skill 在 DIH 中的运行时能力边界。
  *
- * <p>该配置为可选项；旧 Skill 未声明时继续继承 Agent 的现有提示词和工具范围。</p>
+ * <p>该配置为可选项；没有选择 Skill 时继续继承 Agent 的现有工具范围。
+ * 已选择 Skill 但未声明 tools 时采用 fail-closed，不向模型暴露工具。</p>
  */
 @Data
 @AllArgsConstructor

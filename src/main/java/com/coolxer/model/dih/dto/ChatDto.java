@@ -48,4 +48,9 @@ public class ChatDto {
      */
     private String responseFormat;
 
+    /**
+     * 报表生成、全文改写或选区改写协议。
+     */
+    private ReportActionDto reportAction;
+
 }

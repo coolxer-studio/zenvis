@@ -20,8 +20,8 @@
         <proguard-maven-plugin.version>2.5.3</proguard-maven-plugin.version>
         <kaptcha.version>2.3.2</kaptcha.version>
         <springdoc.version>2.3.0</springdoc.version>
-        <commons-io.version>2.11.0</commons-io.version>
-        <commons-lang3.version>3.12.0</commons-lang3.version>
+        <commons-io.version>2.21.0</commons-io.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
         <mysql-connector-java.version>8.0.28</mysql-connector-java.version>
         <collections.version>4.4</collections.version>
         <flyway-core.version>4.2.0</flyway-core.version>
@@ -30,12 +30,16 @@
         <spring-ai.version>1.1.0-M4</spring-ai.version>
         <lombok.version>1.18.38</lombok.version>
         <jackson.version>2.19.4</jackson.version>
-        <commons-compress.version>1.20</commons-compress.version>
+        <commons-compress.version>1.28.0</commons-compress.version>
         <commons-codec.version>1.15</commons-codec.version>
         <guava.version>30.1.1-jre</guava.version>
         <clickhouse-jdbc.version>0.4.6</clickhouse-jdbc.version>
         <classgraph.version>4.8.174</classgraph.version>
         <proguard-base.version>7.1.0</proguard-base.version>
+        <poi.version>5.5.1</poi.version>
+        <commonmark.version>0.28.0</commonmark.version>
+        <jsoup.version>1.22.2</jsoup.version>
+        <openhtmltopdf.version>1.1.37</openhtmltopdf.version>
     </properties>
 
     <profiles>
@@ -94,6 +98,32 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>${commonmark.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-gfm-tables</artifactId>
+            <version>${commonmark.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>${openhtmltopdf.version}</version>
         </dependency>
 
         <dependency>

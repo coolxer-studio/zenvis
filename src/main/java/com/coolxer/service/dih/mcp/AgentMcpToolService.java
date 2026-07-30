@@ -132,10 +132,14 @@ public class AgentMcpToolService {
         String normalizedAgentType = normalizeAgentType(agentType);
         boolean dataVisualizationAgent = DATA_VISUALIZATION_AGENT_TYPE.equals(normalizedAgentType);
         SkillRuntimeToolsVo runtimeTools = runtime == null ? null : runtime.getTools();
+        boolean selectedSkillMissingToolBoundary =
+                selectedSkillIds != null && !selectedSkillIds.isEmpty() && runtimeTools == null;
         Set<String> localAllowlist = runtimeTools == null
-                ? (dataVisualizationAgent ? Set.of() : null)
+                ? (dataVisualizationAgent || selectedSkillMissingToolBoundary ? Set.of() : null)
                 : normalizeToolNames(runtimeTools.getLocal());
-        Map<String, Set<String>> externalAllowlist = normalizeExternalToolNames(runtimeTools);
+        Map<String, Set<String>> externalAllowlist = selectedSkillMissingToolBoundary
+                ? Map.of()
+                : normalizeExternalToolNames(runtimeTools);
 
         List<ToolCallback> toolCallbacks = new ArrayList<>();
         Set<String> addedToolNames = new LinkedHashSet<>();
@@ -144,7 +148,7 @@ public class AgentMcpToolService {
                 dataVisualizationAgent);
         if (runtimeTools != null) {
             appendExternalTools(scope, toolCallbacks, addedToolNames, mcpPrompt, externalAllowlist);
-        } else if (!dataVisualizationAgent) {
+        } else if (!dataVisualizationAgent && !selectedSkillMissingToolBoundary) {
             appendExternalTools(scope, toolCallbacks, addedToolNames, mcpPrompt, null);
         }
 

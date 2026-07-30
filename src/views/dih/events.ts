@@ -10,6 +10,7 @@ import type {
 
 export const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
 export const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
+export const DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT = 'dihDataVisualizationExtraDataChanged';
 export const DATA_ANALYSIS_RECORD_EVENT = 'dihDataAnalysisRecordsUpdated';
 export const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihDataAnalysisRecordsRequested';
 export const CONFIG_RECORD_EVENT = 'dihConfigRecordsUpdated';
@@ -33,6 +34,12 @@ export type DataVisualizationRecordEventDetail = {
   visualizationConfigs?: unknown[];
   dashboardConfigs?: unknown[];
   menuConfigs?: unknown[];
+  extraData?: string;
+  sessionRecordId?: string;
+};
+
+export type DataVisualizationExtraDataChangedEventDetail = {
+  extraData?: string;
 };
 
 export type DataAnalysisRecordEventDetail = DataAnalysisExtraData;
@@ -88,6 +95,7 @@ export type DataVisualizationChartDataEventDetail = {
 export type DihEventPayloadMap = {
   [DATA_ACCESS_RECORD_EVENT]: DataAccessRecordEventDetail;
   [DATA_VISUALIZATION_RECORD_EVENT]: DataVisualizationRecordEventDetail;
+  [DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT]: DataVisualizationExtraDataChangedEventDetail;
   [DATA_ANALYSIS_RECORD_EVENT]: DataAnalysisRecordEventDetail;
   [DATA_ANALYSIS_RECORD_REQUEST_EVENT]: undefined;
   [CONFIG_RECORD_EVENT]: ConfigRecordEventDetail;

@@ -47,6 +47,7 @@
           允许本次
         </el-button>
         <el-button
+          v-if="mcpApprovalSessionAllowed"
           size="small"
           type="success"
           plain
@@ -88,9 +89,13 @@
       </el-tooltip>
     </div>
     <template v-if="isExpanded">
+      <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
       <div class="confirm-content">{{ part.content }}</div>
+      <div v-if="isConfirmBlocked" class="confirm-validation-error">
+        {{ confirmValidationMessage }}
+      </div>
       <div
-        v-if="interactive && (!part.status || part.status === 'pending')"
+        v-if="interactive && isConfirmPending"
         class="confirm-actions"
       >
         <el-button size="small" type="primary" @click="requestDecision('approved')">
@@ -107,9 +112,14 @@
           {{ confirmReviseLabel }}
         </el-button>
       </div>
+      <div v-else-if="interactive && isConfirmBlocked" class="confirm-actions">
+        <el-button size="small" type="primary" @click="requestBlockedPlanRetry">
+          {{ blockedRetryLabel }}
+        </el-button>
+      </div>
       <div
         v-if="
-          interactive && confirmReviseInputVisible && (!part.status || part.status === 'pending')
+          interactive && confirmReviseInputVisible && isConfirmPending
         "
         class="confirm-revise-box"
       >
@@ -147,6 +157,7 @@
       </el-tooltip>
     </div>
     <template v-if="isExpanded">
+      <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
       <div v-if="part.content" class="info-steps-content">{{ part.content }}</div>
       <div class="info-steps-list">
         <div
@@ -161,7 +172,7 @@
               <el-tag v-if="step.required" size="small" type="danger" effect="plain">必填</el-tag>
             </div>
             <div v-if="step.description" class="info-step-description">{{ step.description }}</div>
-            <div v-if="interactive" class="info-step-suggestions">
+            <div v-if="interactive && stepSuggestions(step).length" class="info-step-suggestions">
               <el-button
                 v-for="(suggestion, suggestionIndex) in stepSuggestions(step)"
                 :key="suggestionIndex"
@@ -176,7 +187,7 @@
               </el-button>
             </div>
             <el-input
-              v-if="interactive"
+              v-if="interactive && !step.strictOptions"
               v-model="infoStepCustomInputs[step.id]"
               class="info-step-input"
               type="textarea"
@@ -220,6 +231,7 @@ type InfoStepItem = {
   title: string;
   description?: string;
   required?: boolean;
+  strictOptions?: boolean;
   suggestions?: Array<string | InfoStepSuggestion | Record<string, unknown>>;
   placeholder?: string;
 };
@@ -241,7 +253,7 @@ const emit = defineEmits<{
     e: 'decideAction',
     payload: {
       part: ChatMessagePart;
-      decision: 'approved' | 'rejected' | 'revise';
+      decision: 'approved' | 'rejected' | 'revise' | 'retry';
       detail?: string;
     },
   ): void;
@@ -275,6 +287,11 @@ const mcpApprovalScope = computed(() => {
 
 const mcpApprovalIsSessionGranted = computed(
   () => mcpApprovalScope.value === 'session' && props.part.status !== 'pending',
+);
+
+const mcpApprovalSessionAllowed = computed(
+  () => props.part.metadata?.sessionApprovalAllowed !== false
+    && props.part.metadata?.session_approval_allowed !== false,
 );
 
 const mcpApprovalStatusText = computed(() => {
@@ -362,6 +379,7 @@ const confirmTagType = computed(() => {
   if (props.part.status === 'approved') return 'success';
   if (props.part.status === 'rejected') return 'info';
   if (props.part.status === 'revise') return 'warning';
+  if (props.part.status === 'blocked' || props.part.status === 'failed') return 'danger';
   return 'warning';
 });
 
@@ -369,7 +387,22 @@ const confirmStatusText = computed(() => {
   if (props.part.status === 'approved') return '已确认';
   if (props.part.status === 'rejected') return '已取消';
   if (props.part.status === 'revise') return '继续更新';
+  if (props.part.status === 'blocked') return '暂不可确认';
+  if (props.part.status === 'failed') return '校验失败';
   return '待确认';
+});
+
+const isConfirmPending = computed(
+  () => !props.part.status || props.part.status === 'pending',
+);
+const isConfirmBlocked = computed(
+  () => props.part.status === 'blocked' || props.part.status === 'failed',
+);
+const confirmValidationMessage = computed(() => {
+  const value = props.part.metadata?.validationMessage;
+  return typeof value === 'string' && value.trim()
+    ? value
+    : '实体或字段 Meta 查询证据不完整，请重新查询后生成确认方案。';
 });
 
 const metadataStringList = (key: string) => {
@@ -377,7 +410,33 @@ const metadataStringList = (key: string) => {
   return Array.isArray(value) ? (value.filter(item => typeof item === 'string') as string[]) : [];
 };
 
-const supportsConfirmRevise = computed(() => metadataStringList('actions').includes('revise'));
+const blockedRetryLabel = computed(() => (
+  metadataStringList('allowedActions').includes('retry')
+    ? '重试当前阶段'
+    : '重新查询 Meta'
+));
+
+const supportsConfirmRevise = computed(() => (
+  metadataStringList('actions').includes('revise')
+  || metadataStringList('allowedActions').includes('revise')
+));
+
+const workflowSummary = computed(() => {
+  const id = metadataText(props.part, 'workflowId');
+  if (!id) return '';
+  const step = metadataText(props.part, 'step') || '-';
+  const refs = props.part.metadata?.evidenceRefs;
+  const evidence = Array.isArray(refs)
+    ? refs.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
+    : [];
+  const tools = evidence
+    .map(item => String(item.tool || ''))
+    .filter(Boolean);
+  const toolText = tools.length
+    ? `；MCP 证据：${Array.from(new Set(tools)).join('、')}（成功）`
+    : '';
+  return `工作流阶段：${step}${toolText}`;
+});
 
 const confirmReviseLabel = computed(() => {
   const value = props.part.metadata?.reviseLabel;
@@ -385,7 +444,7 @@ const confirmReviseLabel = computed(() => {
 });
 
 const confirmRevisePlaceholder = computed(() => {
-  const action = props.part.metadata?.action;
+  const action = props.part.metadata?.action || props.part.metadata?.blockedAction;
   if (
     action === 'analysis.confirm_dataset'
   ) {
@@ -402,6 +461,9 @@ const confirmRevisePlaceholder = computed(() => {
   ) {
     return '输入需要补充的配置调整要求，例如：修改字段值、约束条件或目标文件';
   }
+  if (action === 'data_visualization.confirm_query_plan') {
+    return '输入要调整的实体、时间字段、指标、维度、过滤条件、排序或图表类型';
+  }
   return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';
 });
 
@@ -411,6 +473,15 @@ const submitConfirmRevise = () => {
     part: props.part,
     decision: 'revise',
     detail: confirmDecisionInput.value.trim(),
+  });
+};
+
+const requestBlockedPlanRetry = () => {
+  if (!props.interactive) return;
+  emit('decideAction', {
+    part: props.part,
+    decision: metadataStringList('allowedActions').includes('retry') ? 'retry' : 'revise',
+    detail: confirmValidationMessage.value,
   });
 };
 
@@ -443,6 +514,7 @@ const infoSteps = computed<InfoStepItem[]>(() => {
         title: typeof raw.title === 'string' ? raw.title : '',
         description: typeof raw.description === 'string' ? raw.description : '',
         required: raw.required === true || raw.required === 'true',
+        strictOptions: raw.strictOptions === true || raw.strict_options === true,
         suggestions: Array.isArray(raw.suggestions) ? raw.suggestions : [],
         placeholder: typeof raw.placeholder === 'string' ? raw.placeholder : '',
       };
@@ -481,7 +553,7 @@ const selectInfoStepSuggestion = (step: InfoStepItem, suggestion: InfoStepSugges
 };
 
 const infoStepAnswerValue = (step: InfoStepItem) => {
-  const customValue = (infoStepCustomInputs[step.id] || '').trim();
+  const customValue = step.strictOptions ? '' : (infoStepCustomInputs[step.id] || '').trim();
   if (customValue) {
     return {
       value: customValue,
@@ -501,11 +573,14 @@ const infoStepsSubmitLabel = computed(() => {
 
 const infoStepsTagType = computed(() => {
   if (props.part.status === 'submitted') return 'success';
+  if (props.part.status === 'blocked' || props.part.status === 'failed') return 'danger';
   return 'warning';
 });
 
 const infoStepsStatusText = computed(() => {
   if (props.part.status === 'submitted') return '已提交';
+  if (props.part.status === 'blocked') return '不可选择';
+  if (props.part.status === 'failed') return '校验失败';
   return '待补充';
 });
 

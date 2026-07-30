@@ -10,3 +10,7 @@ export { SystemService } from './api-system';
 export { HomeService } from './api-dashboard';
 export { UserService } from './api-user';
 export { AnalysisTaskService } from './api-analysis-task';
+export {
+  EntityAnalyticsApi,
+  isSafeEntityAnalyticsTool,
+} from './api-entity-analytics';

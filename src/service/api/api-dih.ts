@@ -8,6 +8,9 @@ import {
   ChatMessage,
   ChatStreamEvent,
   ChatActionDecisionParams,
+  WorkflowActionParams,
+  WorkflowActionResult,
+  WorkflowTelemetryParams,
   McpApprovalData,
   McpApprovalDecisionParams,
   ChatSessionPageParams,
@@ -79,6 +82,8 @@ type RawMcpApproval = Record<string, unknown> & {
   policy?: string;
   approval_scope?: string;
   approvalScope?: string;
+  session_approval_allowed?: boolean;
+  sessionApprovalAllowed?: boolean;
   status?: string;
   arguments?: string;
   result?: string;
@@ -207,6 +212,8 @@ const normalizeMcpApproval = (item: RawMcpApproval): McpApprovalData => ({
   channel: item?.channel || '',
   policy: item?.policy || '',
   approvalScope: String(item?.approval_scope || item?.approvalScope || '').toLowerCase(),
+  sessionApprovalAllowed:
+    item?.session_approval_allowed ?? item?.sessionApprovalAllowed ?? true,
   status: String(item?.status || 'pending').toLowerCase(),
   arguments: item?.arguments ?? item?.arguments_summary ?? item?.argumentsSummary ?? '',
   result: item?.result ?? item?.result_summary ?? item?.resultSummary ?? '',
@@ -411,6 +418,36 @@ export class DihService {
 
   static async recordActionDecision(params: ChatActionDecisionParams): Promise<string> {
     return request<string>(`${prefix}/chat/action-decision`, params, 'POST', { silent: true });
+  }
+
+  static async workflowAction(params: WorkflowActionParams): Promise<WorkflowActionResult> {
+    const response = await request<Record<string, unknown>>(
+      `${prefix}/chat/workflow/action`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    const continuation = response.continuation && typeof response.continuation === 'object'
+      ? response.continuation as WorkflowActionResult['continuation']
+      : {};
+    return {
+      accepted: Boolean(response.accepted),
+      workflowId: String(response.workflow_id || response.workflowId || ''),
+      state: String(response.state || ''),
+      partStatus: String(response.part_status || response.partStatus || ''),
+      continuation,
+      retryable: Boolean(response.retryable),
+      extraData: String(response.extra_data || response.extraData || ''),
+    };
+  }
+
+  static async workflowTelemetry(params: WorkflowTelemetryParams): Promise<string> {
+    return request<string>(
+      `${prefix}/chat/workflow/telemetry`,
+      params,
+      'POST',
+      { silent: true },
+    );
   }
 
   static async decideMcpApproval(

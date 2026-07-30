@@ -16,6 +16,7 @@ import {
   DATA_REPORT_RECORD_EVENT,
   DATA_REPORT_RECORD_REQUEST_EVENT,
   DATA_VISUALIZATION_RECORD_EVENT,
+  DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT,
   REPORT_EXTRA_DATA_CHANGED_EVENT,
   REPORT_QUICK_ACTION_EVENT,
   REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
@@ -146,6 +147,8 @@ export const usePanelRecordSync = ({
       visualizationConfigs: asRecordList(dataVisualization.visualizationConfigs),
       dashboardConfigs: asRecordList(dataVisualization.dashboardConfigs),
       menuConfigs: asRecordList(dataVisualization.menuConfigs),
+      extraData: chatSessionExtraData.value,
+      sessionRecordId: chatSessionRecordId.value,
     };
   };
 
@@ -278,6 +281,14 @@ export const usePanelRecordSync = ({
     }
   };
 
+  const handleDataVisualizationExtraDataChanged = (
+    detail: { extraData?: string },
+  ) => {
+    if (typeof detail?.extraData === 'string') {
+      chatSessionExtraData.value = detail.extraData;
+    }
+  };
+
   const stripSelectionRewriteFence = (content = '') => {
     const trimmed = content.trim();
     const match = trimmed.match(/^```(?:[\w:-]+)?\s*\n?([\s\S]*?)\n?```$/);
@@ -327,6 +338,10 @@ export const usePanelRecordSync = ({
   useDihEventListener(CONFIG_RECORD_ACTION_EVENT, handleConfigRecordActionRequested);
   useDihEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, publishReportRecords);
   useDihEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
+  useDihEventListener(
+    DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT,
+    handleDataVisualizationExtraDataChanged,
+  );
   useDihEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
 
   onMounted(() => {

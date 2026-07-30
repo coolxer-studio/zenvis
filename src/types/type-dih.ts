@@ -60,6 +60,7 @@ export type McpApprovalData = {
   channel?: string;
   policy?: string;
   approvalScope?: McpApprovalScope;
+  sessionApprovalAllowed?: boolean;
   status?: McpApprovalStatus;
   arguments?: string;
   result?: string;
@@ -267,6 +268,45 @@ export type ChatActionDecisionParams = {
   message_id: string;
   part_id: string;
   decision: 'approved' | 'rejected' | 'apply_config' | 'abandon' | 'revise' | 'submitted';
+};
+
+export type WorkflowActionName =
+  | 'submit'
+  | 'approve'
+  | 'reject'
+  | 'revise'
+  | 'retry'
+  | 'add_to_library';
+
+export type WorkflowActionParams = {
+  chat_id: string;
+  message_id: string;
+  part_id: string;
+  workflow_id: string;
+  action: WorkflowActionName;
+  answers?: Array<Record<string, unknown>>;
+  revision?: string;
+};
+
+export type WorkflowActionResult = {
+  accepted: boolean;
+  workflowId: string;
+  state: string;
+  partStatus: string;
+  continuation: {
+    display?: string;
+    request?: string;
+    [key: string]: unknown;
+  };
+  retryable: boolean;
+  extraData?: string;
+};
+
+export type WorkflowTelemetryParams = {
+  chat_id: string;
+  workflow_id: string;
+  event: 'chart_render_failed';
+  detail?: string;
 };
 
 export type McpApprovalDecisionParams = {

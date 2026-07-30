@@ -236,39 +236,43 @@ const renderLowCodeAppPreview = (schema: Record<string, unknown>) => {
       return children.length > 0 ? children : [page];
     })
     .filter(page => stringValue(page.label));
-  const menus =
-    menuItems.length > 0
-      ? menuItems
-      : [
-          { label: '首页', url: 'index' },
-          { label: '管理页面', url: 'manage' },
-        ];
+  const brand = schema.title || data.title || data.brandName || '低代码应用';
   return `
     <div class="amis-preview-app">
       <aside class="amis-preview-sidebar">
-        <div class="amis-preview-brand">用户事件应用</div>
-        ${menus
-          .map(
-            (menu, index) => `
+        <div class="amis-preview-brand">${escapeHtml(brand)}</div>
+        ${
+          menuItems.length > 0
+            ? menuItems
+                .map(
+                  (menu, index) => `
           <div class="amis-preview-nav-item ${index === 0 ? 'active' : ''}">
             <span>${escapeHtml(menu.label)}</span>
             <small>${escapeHtml(menu.url)}</small>
           </div>
         `,
-          )
-          .join('')}
+                )
+                .join('')
+            : '<div class="amis-preview-empty">配置中未提供页面菜单。</div>'
+        }
       </aside>
       <main class="amis-preview-app-main">
         <div class="amis-preview-page-title">低代码应用预览</div>
         <div class="amis-preview-grid">
-          <section class="amis-preview-panel">
-            <div class="amis-preview-panel-title">首页</div>
-            <p>展示用户事件总览、上报趋势和常用入口。</p>
-          </section>
-          <section class="amis-preview-panel">
-            <div class="amis-preview-panel-title">管理页面</div>
-            <p>提供用户事件查询、新增、编辑和删除操作。</p>
-          </section>
+          ${
+            menuItems.length > 0
+              ? menuItems
+                  .map(
+                    menu => `
+              <section class="amis-preview-panel">
+                <div class="amis-preview-panel-title">${escapeHtml(menu.label)}</div>
+                <p>${escapeHtml(menu.url || '页面配置')}</p>
+              </section>
+            `,
+                  )
+                  .join('')
+              : '<div class="amis-preview-empty">暂无可预览页面。</div>'
+          }
         </div>
       </main>
     </div>
@@ -372,53 +376,66 @@ const renderLowCodeToolbar = (toolbar: unknown) => {
 
 const renderCrudPreview = (schema: Record<string, unknown>) => {
   const columns = asRecordArray(schema.columns).slice(0, 8);
-  const visibleColumns =
-    columns.length > 0
-      ? columns
-      : [
-          { name: 'id', label: '事件ID' },
-          { name: 'user', label: '用户' },
-          { name: 'event_type', label: '事件类型' },
-          { name: 'reliability', label: '可信度' },
-          { name: 'server_time', label: '入库时间' },
-        ];
+  const data = asRecord(schema.data);
+  const rowsFromData = Array.isArray(schema.data)
+    ? asRecordArray(schema.data)
+    : asRecordArray(data.items).length > 0
+      ? asRecordArray(data.items)
+      : asRecordArray(data.rows);
+  const rows = rowsFromData.slice(0, 2);
+  const filters = asRecordArray(asRecord(schema.filter).body).slice(0, 8);
   return `
     <section class="amis-preview-crud">
       <div class="amis-preview-crud-header">
         <div>
-          <div class="amis-preview-panel-title">用户事件列表</div>
-          <div class="amis-preview-api">${escapeHtml(
-            schema.api || '/zenvis/api/v1/entity/user-event/list',
-          )}</div>
+          <div class="amis-preview-panel-title">${escapeHtml(schema.title || '数据列表')}</div>
+          <div class="amis-preview-api">${escapeHtml(schema.api || '未配置查询 API')}</div>
         </div>
         <button type="button">查询</button>
       </div>
-      <div class="amis-preview-filter">
-        <span>用户</span>
-        <span>事件类型</span>
-        <span>入库时间</span>
-      </div>
+      ${
+        filters.length > 0
+          ? `<div class="amis-preview-filter">${filters
+              .map(filter => `<span>${escapeHtml(filter.label || filter.name)}</span>`)
+              .join('')}</div>`
+          : ''
+      }
       <div class="amis-preview-table-wrap">
-        <table class="amis-preview-table">
-          <thead>
-            <tr>${visibleColumns
-              .map(
-                column =>
-                  `<th>${escapeHtml(
-                    column.label || column.name || configTypeLabel(stringValue(column.type)),
-                  )}</th>`,
-              )
-              .join('')}</tr>
-          </thead>
-          <tbody>
-            <tr>${visibleColumns
-              .map(column => `<td>${escapeHtml(sampleColumnValue(column))}</td>`)
-              .join('')}</tr>
-            <tr>${visibleColumns
-              .map(column => `<td>${escapeHtml(sampleColumnValue(column, true))}</td>`)
-              .join('')}</tr>
-          </tbody>
-        </table>
+        ${
+          columns.length > 0
+            ? `<table class="amis-preview-table">
+                <thead>
+                  <tr>${columns
+                    .map(
+                      column =>
+                        `<th>${escapeHtml(
+                          column.label ||
+                            column.name ||
+                            configTypeLabel(stringValue(column.type)),
+                        )}</th>`,
+                    )
+                    .join('')}</tr>
+                </thead>
+                <tbody>
+                  ${
+                    rows.length > 0
+                      ? rows
+                          .map(
+                            row =>
+                              `<tr>${columns
+                                .map(column => {
+                                  const name = stringValue(column.name);
+                                  return `<td>${escapeHtml(name ? row[name] : '')}</td>`;
+                                })
+                                .join('')}</tr>`,
+                          )
+                          .join('')
+                      : `<tr><td colspan="${columns.length}">配置预览不填充演示数据</td></tr>`
+                  }
+                </tbody>
+              </table>`
+            : '<div class="amis-preview-empty">配置中未提供表格字段。</div>'
+        }
       </div>
     </section>
   `;
@@ -430,18 +447,11 @@ const renderChartSchemaPreview = (schema: Record<string, unknown>) => {
   return `
     <section class="amis-preview-chart">
       <div class="amis-preview-chart-title">${escapeHtml(
-        title.text || schema.title || '用户事件上报趋势',
+        title.text || schema.title || '图表',
       )}</div>
-      <div class="amis-preview-api">${escapeHtml(
-        schema.api || '/zenvis/api/v1/entity/trend/query',
-      )}</div>
+      <div class="amis-preview-api">${escapeHtml(schema.api || '未配置查询 API')}</div>
       <div class="amis-preview-chart-canvas">
-        <span class="amis-preview-bar bar-1"></span>
-        <span class="amis-preview-bar bar-2"></span>
-        <span class="amis-preview-bar bar-3"></span>
-        <span class="amis-preview-bar bar-4"></span>
-        <span class="amis-preview-bar bar-5"></span>
-        <span class="amis-preview-bar bar-6"></span>
+        <span>此处不填充演示图形；真实数据图表请使用可视化预览。</span>
       </div>
     </section>
   `;
@@ -460,7 +470,10 @@ const renderFormPreview = (schema: Record<string, unknown>) => {
             <span>${escapeHtml(
               field.label || field.name || configTypeLabel(stringValue(field.type)),
             )}</span>
-            <input readonly value="${escapeHtml(sampleColumnValue(field))}" />
+            <input
+              readonly
+              value="${escapeHtml(field.value ?? field.defaultValue ?? field.default ?? '')}"
+            />
           </label>
         `,
           )
@@ -473,27 +486,9 @@ const renderFormPreview = (schema: Record<string, unknown>) => {
 const stripTemplateText = (value: unknown) => {
   return String(value ?? '')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/\$\{[^}]+}/g, '示例值')
+    .replace(/\$\{[^}]+}/g, '动态字段')
     .replace(/\s+/g, ' ')
     .trim();
-};
-
-const sampleColumnValue = (column: Record<string, unknown>, secondRow = false) => {
-  const name = stringValue(column.name).toLowerCase();
-  const label = stringValue(column.label);
-  if (stringValue(column.type) === 'operation' || label === '操作') {
-    return secondRow ? '编辑 / 删除' : '查看 / 编辑';
-  }
-  if (name.includes('id')) return secondRow ? 'evt-2026070902' : 'evt-2026070901';
-  if (name.includes('procid')) return secondRow ? '108' : '101';
-  if (name.includes('user')) return secondRow ? 'operator-b' : 'demo-user';
-  if (name.includes('event_type')) return secondRow ? '点击' : '登录';
-  if (name.includes('reliability')) return secondRow ? '7.6' : '8.8';
-  if (name.includes('server_time') || name.includes('time'))
-    return secondRow ? '2026-07-09 11:20:00' : '2026-07-09 10:00:00';
-  if (name.includes('tag')) return secondRow ? '运营' : '演示, 可视化';
-  if (name.includes('detail')) return secondRow ? '{"path":"/event"}' : '{"method":"POST"}';
-  return secondRow ? '示例值 B' : '示例值 A';
 };
 
 const configTypeLabel = (type: string) => {

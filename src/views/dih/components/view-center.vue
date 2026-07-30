@@ -31,6 +31,7 @@
                 @decide-action="handleActionDecision(message, $event)"
                 @submit-info-steps="handleInfoStepsSubmit(message, $event)"
                 @add-chart-library="handleAddChartLibrary(message, $event)"
+                @chart-render-failed="handleChartRenderFailure($event)"
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
                 @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
                 @select-prompt-suggestion="fillPromptSuggestion"
@@ -544,7 +545,7 @@ onMounted(() => {
   void fetchModelList();
 });
 
-const { addChartRecordToExtraData } = usePanelRecordSync({
+usePanelRecordSync({
   messages,
   chatSessionExtraData,
   chatSessionRecordId,
@@ -558,12 +559,11 @@ const {
   handleActionDecision,
   handleAddChartLibrary,
   handleDataAccessDecision,
+  handleChartRenderFailure,
 } = useChatMessageActions({
   chatSessionId,
   chatSessionExtraData,
   sendMessage,
-  ensureChatSessionRecordId,
-  addChartRecordToExtraData,
 });
 
 const fetchModelList = async () => {

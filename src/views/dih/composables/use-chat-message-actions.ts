@@ -3,7 +3,10 @@ import type { Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { DihService } from '@/service/api';
 import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
-import type { DihPanelRecord } from './use-panel-record-sync';
+import type {
+  WorkflowActionName,
+  WorkflowActionResult,
+} from '@/types/type-dih';
 import type { SendMessageOptions } from './use-chat-stream';
 
 export type InfoStepAnswer = {
@@ -17,8 +20,6 @@ type UseChatMessageActionsOptions = {
   chatSessionId: Ref<string>;
   chatSessionExtraData: Ref<string>;
   sendMessage: (options?: SendMessageOptions) => Promise<void>;
-  ensureChatSessionRecordId: () => Promise<string>;
-  addChartRecordToExtraData: (record: DihPanelRecord) => string;
 };
 
 const AUTO_CONFIRM_ACTIONS = new Set([
@@ -29,7 +30,7 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'config.confirm_apply',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
-  'data_visualization.add_chart_library',
+  'data_visualization.confirm_query_plan',
   'data_visualization.apply_config',
 ]);
 
@@ -40,6 +41,7 @@ const AUTO_REJECT_ACTIONS = new Set([
   'config.confirm_apply',
   'data_access.generate_demo_push_config',
   'data_access.create_demo_push_task',
+  'data_visualization.confirm_query_plan',
   'data_visualization.apply_config',
 ]);
 
@@ -59,29 +61,35 @@ const textValue = (value: unknown, fallback = '') => {
   return String(value);
 };
 
-const confirmAction = (part: ChatMessagePart) => {
-  const action = part.metadata?.action;
-  return typeof action === 'string' ? action : '';
+const errorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  const payload = asObject(error);
+  return textValue(
+    payload.msg || payload.message || payload.error,
+    fallback,
+  );
 };
 
-const buildChartLibraryRecord = (part: ChatMessagePart): DihPanelRecord => {
-  const metadata = asObject(part.metadata);
-  const name = textValue(metadata.title || part.title, '临时可视化图表');
-  const entity = textValue(metadata.entity, '');
-  const chartType = textValue(metadata.chartType, '');
-  return {
-    id: textValue(metadata.id, `chart:${entity || 'unknown'}:${name}`),
-    title: '图表库记录已创建',
-    name,
-    description: textValue(metadata.content || part.content || metadata.description, ''),
-    entity,
-    chartType,
-    api: textValue(metadata.api, ''),
-    status: 'temporary',
-    source: 'session',
-    config: metadata.amisConfig || metadata.config || {},
-  };
+const confirmAction = (part: ChatMessagePart) => {
+  const action = part.metadata?.action || part.metadata?.blockedAction;
+  if (typeof action === 'string' && action) {
+    return action;
+  }
+  const query = asObject(part.metadata?.query);
+  if (
+    part.type === 'confirm'
+    && textValue(part.metadata?.planId)
+    && textValue(query.tool)
+  ) {
+    return 'data_visualization.confirm_query_plan';
+  }
+  return '';
 };
+
+const workflowId = (part: ChatMessagePart) => textValue(part.metadata?.workflowId);
+const demoId = (part: ChatMessagePart) => textValue(part.metadata?.demoId);
 
 const autoConfirmMessage = (action: string) => {
   if (action === 'analysis.confirm_dataset') {
@@ -108,8 +116,8 @@ const autoConfirmMessage = (action: string) => {
   if (action === 'data_visualization.apply_config') {
     return '我已确认并授权应用上一轮数据可视化配置。请根据上一条确认卡和已生成的配置内容，按需调用配置、看板和菜单 MCP 工具写入系统；写入或创建成功后，请输出 zenvis:visualization-config-record、zenvis:dashboard-config-record、zenvis:menu-config-record 等记录围栏。';
   }
-  if (action === 'data_visualization.add_chart_library') {
-    return '我已确认把上一轮临时图表加入图表库，请记录该图表的 amis 配置并输出 zenvis:visualization-chart-record。';
+  if (action === 'data_visualization.confirm_query_plan') {
+    return '我已确认上一轮 Meta 查询得到的实体、字段角色、统计口径和查询参数。请严格按该 planId 调用卡片中的数据 MCP 工具；成功后直接使用返回的 meta、result 和 echarts.option 生成可视化产物，不得改用示例数据。';
   }
   return '我已确认本次操作，请继续执行下一阶段。';
 };
@@ -129,6 +137,9 @@ const autoRejectMessage = (action: string) => {
   }
   if (action === 'data_visualization.apply_config') {
     return '我选择放弃本次数据可视化配置。请记录本次配置已放弃，不要写入 open_config，不要创建菜单，也不要创建看板。';
+  }
+  if (action === 'data_visualization.confirm_query_plan') {
+    return '我取消当前实体与字段查询方案。请不要调用数据查询工具，也不要生成或保存图表。';
   }
   return '我已取消本次操作。';
 };
@@ -267,15 +278,77 @@ export const useChatMessageActions = ({
   chatSessionId,
   chatSessionExtraData,
   sendMessage,
-  ensureChatSessionRecordId,
-  addChartRecordToExtraData,
 }: UseChatMessageActionsOptions) => {
+  const continueWorkflow = async (result: WorkflowActionResult) => {
+    if (result.extraData) {
+      chatSessionExtraData.value = result.extraData;
+    }
+    const display = textValue(result.continuation?.display);
+    const requestContent = textValue(result.continuation?.request);
+    if (!display && !requestContent) {
+      return;
+    }
+    await nextTick();
+    await sendMessage({
+      content: display || requestContent,
+      requestContent: requestContent || display,
+    });
+  };
+
+  const performWorkflowAction = async (
+    message: ChatMessage,
+    part: ChatMessagePart,
+    action: WorkflowActionName,
+    options: {
+      answers?: InfoStepAnswer[];
+      revision?: string;
+    } = {},
+  ) => {
+    const id = workflowId(part);
+    if (!chatSessionId.value || !message.id || !part.id || !id) {
+      throw new Error('缺少工作流动作定位信息');
+    }
+    const result = await DihService.workflowAction({
+      chat_id: chatSessionId.value,
+      message_id: message.id,
+      part_id: part.id,
+      workflow_id: id,
+      action,
+      answers: options.answers,
+      revision: options.revision,
+    });
+    part.status = result.partStatus;
+    await continueWorkflow(result);
+    return result;
+  };
+
   const handleInfoStepsSubmit = async (
     message: ChatMessage,
     payload: { part: ChatMessagePart; answers: InfoStepAnswer[] },
   ) => {
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning('缺少补充信息卡片标识，无法记录提交结果');
+      return;
+    }
+
+    if (workflowId(payload.part)) {
+      try {
+        await performWorkflowAction(message, payload.part, 'submit', {
+          answers: payload.answers,
+        });
+        ElMessage.success('已提交补充信息');
+      } catch (error) {
+        console.error('提交工作流补充信息失败:', error);
+        ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
+      }
+      return;
+    }
+    const action = confirmAction(payload.part);
+    if (
+      !demoId(payload.part)
+      && (action.startsWith('data_visualization.') || action.startsWith('data_access.'))
+    ) {
+      ElMessage.error('普通业务卡片缺少共享工作流标识，请重新发起流程');
       return;
     }
 
@@ -300,10 +373,58 @@ export const useChatMessageActions = ({
 
   const handleActionDecision = async (
     message: ChatMessage,
-    payload: { part: ChatMessagePart; decision: 'approved' | 'rejected' | 'revise'; detail?: string },
+    payload: {
+      part: ChatMessagePart;
+      decision: 'approved' | 'rejected' | 'revise' | 'retry';
+      detail?: string;
+    },
   ) => {
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning('缺少确认记录标识，无法记录操作结果');
+      return;
+    }
+
+    if (workflowId(payload.part)) {
+      const actionMap: Record<typeof payload.decision, WorkflowActionName> = {
+        approved: 'approve',
+        rejected: 'reject',
+        revise: 'revise',
+        retry: 'retry',
+      };
+      try {
+        await performWorkflowAction(
+          message,
+          payload.part,
+          actionMap[payload.decision],
+          { revision: payload.detail },
+        );
+        ElMessage.success(
+          payload.decision === 'approved'
+            ? '已确认执行'
+            : payload.decision === 'rejected'
+              ? '已取消操作'
+              : payload.decision === 'retry'
+                ? '已开始重试'
+                : '已提交调整要求',
+        );
+      } catch (error) {
+        console.error('执行工作流确认动作失败:', error);
+        ElMessage.error(error instanceof Error ? error.message : '执行工作流动作失败');
+      }
+      return;
+    }
+
+    if (payload.decision === 'retry') {
+      ElMessage.warning('历史卡片不支持工作流重试，请重新发起查询');
+      return;
+    }
+
+    const action = confirmAction(payload.part);
+    if (
+      !demoId(payload.part)
+      && (action.startsWith('data_visualization.') || action.startsWith('data_access.'))
+    ) {
+      ElMessage.error('普通业务卡片缺少共享工作流标识，请重新发起流程');
       return;
     }
 
@@ -318,13 +439,22 @@ export const useChatMessageActions = ({
       console.error('记录确认结果失败:', error);
     }
     payload.part.status = payload.decision;
-    const action = confirmAction(payload.part);
     if (payload.decision === 'revise' && action === 'data_visualization.apply_config') {
       ElMessage.success('已提交配置调整要求');
       await nextTick();
       await sendMessage({
         content: dataVisualizationDecisionDisplayMessage(payload.detail),
         requestContent: dataVisualizationDecisionMessage(payload.detail),
+      });
+      return;
+    }
+    if (payload.decision === 'revise' && action === 'data_visualization.confirm_query_plan') {
+      ElMessage.success('已提交查询方案调整要求');
+      await nextTick();
+      const detail = payload.detail?.trim() || '请重新选择实体、字段角色或统计口径。';
+      await sendMessage({
+        content: `我已补充查询方案调整要求：\n${detail}`,
+        requestContent: `我需要调整上一轮数据可视化查询方案：\n${detail}\n请重新调用实体和字段 Meta MCP 核验，并输出新的 data_visualization.confirm_query_plan 确认卡；本轮不要调用数据工具。`,
       });
       return;
     }
@@ -362,7 +492,7 @@ export const useChatMessageActions = ({
     }
   };
 
-  const handleAddChartLibrary = async (_message: ChatMessage, part: ChatMessagePart) => {
+  const handleAddChartLibrary = async (message: ChatMessage, part: ChatMessagePart) => {
     const action = confirmAction(part);
     if (action !== 'data_visualization.add_chart_library') {
       ElMessage.warning('当前图表不支持加入图表库');
@@ -372,38 +502,98 @@ export const useChatMessageActions = ({
       ElMessage.info('该图表已加入图表库');
       return;
     }
-    const previousExtraData = chatSessionExtraData.value;
-    const previousStatus = part.status;
-    try {
-      const sessionRecordId = await ensureChatSessionRecordId();
-      if (!sessionRecordId) {
-        ElMessage.warning('当前会话尚未创建完成，无法加入图表库');
-        return;
+    if (demoId(part)) {
+      const previousStatus = part.status;
+      try {
+        part.status = 'submitted';
+        await nextTick();
+        await sendMessage({
+          content: '我已确认把上一轮临时图表加入图表库。',
+          requestContent: '我已确认把上一轮临时图表加入图表库。',
+        });
+      } catch (error) {
+        part.status = previousStatus;
+        ElMessage.error(errorMessage(error, '演示图表加入图表库失败'));
       }
-      const record = buildChartLibraryRecord(part);
-      const nextExtraData = addChartRecordToExtraData(record);
-      part.status = 'added';
-      chatSessionExtraData.value = nextExtraData;
-      await DihService.updateChatSession(sessionRecordId, { extra_data: nextExtraData });
-      ElMessage.success('已加入图表库');
-    } catch (error) {
-      console.error('加入图表库失败:', error);
-      part.status = previousStatus;
-      chatSessionExtraData.value = previousExtraData;
-      ElMessage.error('加入图表库失败');
+      return;
     }
+    const metadata = asObject(part.metadata);
+    const query = asObject(metadata.query);
+    const echartsOption = asObject(metadata.echartsOption);
+    if (textValue(metadata.validationStatus) !== 'success'
+      || !textValue(metadata.planId)
+      || !textValue(query.tool)
+      || Object.keys(asObject(query.request)).length === 0
+      || Object.keys(echartsOption).length === 0) {
+      ElMessage.warning('当前预览尚未通过真实查询验证，不能加入图表库');
+      return;
+    }
+    if (workflowId(part)) {
+      try {
+        await performWorkflowAction(message, part, 'add_to_library');
+        ElMessage.success('已加入图表库');
+      } catch (error) {
+        console.error('服务端加入图表库失败:', error);
+        ElMessage.error(error instanceof Error ? error.message : '加入图表库失败');
+      }
+      return;
+    }
+    ElMessage.error('普通图表缺少共享工作流标识，不能加入图表库');
   };
 
   const handleDataAccessDecision = async (
     message: ChatMessage,
     payload: {
       part: ChatMessagePart;
-      decision: 'apply_config' | 'abandon' | 'revise';
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
       detail?: string;
     },
   ) => {
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning('缺少数据接入选择记录标识，无法记录操作结果');
+      return;
+    }
+
+    if (workflowId(payload.part)) {
+      const actionMap: Record<typeof payload.decision, WorkflowActionName> = {
+        apply_config: 'approve',
+        abandon: 'reject',
+        revise: 'revise',
+        retry: 'retry',
+      };
+      try {
+        await performWorkflowAction(
+          message,
+          payload.part,
+          actionMap[payload.decision],
+          { revision: payload.detail },
+        );
+        const isPushTaskDecision = dataAccessDecisionKind(payload.part) === 'push_task';
+        ElMessage.success(
+          payload.decision === 'apply_config'
+            ? isPushTaskDecision
+              ? '已确认创建数据推送服务'
+              : '已确认应用元数据配置'
+            : payload.decision === 'abandon'
+              ? '已取消当前数据接入流程'
+              : payload.decision === 'retry'
+                ? '已开始重试当前阶段'
+              : '已提交配置调整要求',
+        );
+      } catch (error) {
+        console.error('执行数据接入工作流动作失败:', error);
+        ElMessage.error(errorMessage(error, '执行数据接入工作流失败'));
+      }
+      return;
+    }
+
+    if (payload.decision === 'retry') {
+      ElMessage.error('只有共享工作流阻塞卡支持重试');
+      return;
+    }
+
+    if (!demoId(payload.part)) {
+      ElMessage.error('普通数据接入卡片缺少共享工作流标识，请重新发起流程');
       return;
     }
 
@@ -438,10 +628,28 @@ export const useChatMessageActions = ({
     });
   };
 
+  const handleChartRenderFailure = async (
+    payload: { part: ChatMessagePart; error: string },
+  ) => {
+    const id = workflowId(payload.part);
+    if (!chatSessionId.value || !id) return;
+    try {
+      await DihService.workflowTelemetry({
+        chat_id: chatSessionId.value,
+        workflow_id: id,
+        event: 'chart_render_failed',
+        detail: payload.error.slice(0, 500),
+      });
+    } catch (error) {
+      console.debug('记录图表渲染失败指标未成功:', error);
+    }
+  };
+
   return {
     handleInfoStepsSubmit,
     handleActionDecision,
     handleAddChartLibrary,
     handleDataAccessDecision,
+    handleChartRenderFailure,
   };
 };

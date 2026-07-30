@@ -17,22 +17,49 @@
       </el-tooltip>
     </div>
     <template v-if="isExpanded">
+      <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
       <div class="data-access-decision-content">
         {{ part.content || defaultDecisionContent }}
       </div>
       <div
-        v-if="interactive && (!part.status || part.status === 'pending')"
+        v-if="interactive && hasAvailableAction && (!part.status || part.status === 'pending')"
         class="data-access-decision-actions"
       >
-        <el-button size="small" type="primary" @click="requestDataAccessDecision('apply_config')">
+        <el-button
+          v-if="canApprove"
+          size="small"
+          type="primary"
+          @click="requestDataAccessDecision('apply_config')"
+        >
           {{ applyButtonText }}
         </el-button>
-        <el-button size="small" @click="requestDataAccessDecision('abandon')">
+        <el-button
+          v-if="canReject"
+          size="small"
+          @click="requestDataAccessDecision('abandon')"
+        >
           {{ abandonButtonText }}
         </el-button>
-        <el-button size="small" type="warning" plain @click="requestDataAccessDecision('revise')">
+        <el-button
+          v-if="canRetry"
+          size="small"
+          type="primary"
+          @click="requestDataAccessDecision('retry')"
+        >
+          重试当前阶段
+        </el-button>
+        <el-button
+          v-if="canRevise"
+          size="small"
+          type="warning"
+          plain
+          @click="requestDataAccessDecision('revise')"
+        >
           {{ reviseButtonText }}
         </el-button>
+      </div>
+      <div v-if="workflowValidationMessage" class="workflow-validation-message">
+        {{ workflowValidationMessage }}
       </div>
       <div
         v-if="interactive && reviseInputVisible && (!part.status || part.status === 'pending')"
@@ -80,7 +107,7 @@ const emit = defineEmits<{
     e: 'chooseDataAccessDecision',
     payload: {
       part: ChatMessagePart;
-      decision: 'apply_config' | 'abandon' | 'revise';
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
       detail?: string;
     },
   ): void;
@@ -90,6 +117,40 @@ const { parseMarkdown } = useMarkdownRenderer();
 const { isExpanded, toggleExpanded } = useDefaultExpanded(toRef(props, 'part'));
 const reviseInputVisible = ref(false);
 const decisionInput = ref('');
+
+const workflowSummary = computed(() => {
+  const id = String(props.part.metadata?.workflowId || '');
+  if (!id) return '';
+  const step = String(props.part.metadata?.step || '-');
+  const refs = Array.isArray(props.part.metadata?.evidenceRefs)
+    ? props.part.metadata?.evidenceRefs as Array<Record<string, unknown>>
+    : [];
+  const tools = refs.map(item => String(item.tool || '')).filter(Boolean);
+  return tools.length
+    ? `工作流阶段：${step}；MCP 证据：${Array.from(new Set(tools)).join('、')}（成功）`
+    : `工作流阶段：${step}`;
+});
+
+const workflowId = computed(() => String(props.part.metadata?.workflowId || ''));
+const allowedActions = computed(() => {
+  const actions = props.part.metadata?.allowedActions;
+  return Array.isArray(actions) ? actions.map(action => String(action)) : [];
+});
+const isWorkflowCard = computed(() => Boolean(workflowId.value));
+const canApprove = computed(() =>
+  !isWorkflowCard.value || allowedActions.value.includes('approve'));
+const canReject = computed(() =>
+  !isWorkflowCard.value || allowedActions.value.includes('reject'));
+const canRevise = computed(() =>
+  !isWorkflowCard.value || allowedActions.value.includes('revise'));
+const canRetry = computed(() =>
+  isWorkflowCard.value && allowedActions.value.includes('retry'));
+const hasAvailableAction = computed(() =>
+  canApprove.value || canReject.value || canRevise.value || canRetry.value);
+const workflowValidationMessage = computed(() => {
+  if (!isWorkflowCard.value) return '';
+  return String(props.part.metadata?.validationMessage || '');
+});
 
 const isPushTaskDecision = computed(() => {
   const explicitKind = String(props.part.metadata?.configKind || '')
@@ -125,6 +186,8 @@ const revisePlaceholder = computed(() =>
 );
 
 const dataAccessDecisionTagType = computed(() => {
+  if (props.part.metadata?.validationStatus === 'blocked'
+    || props.part.metadata?.step === 'BLOCKED') return 'danger';
   if (props.part.status === 'apply_config') return 'success';
   if (props.part.status === 'abandon') return 'info';
   if (props.part.status === 'revise') return 'warning';
@@ -132,6 +195,8 @@ const dataAccessDecisionTagType = computed(() => {
 });
 
 const dataAccessDecisionStatusText = computed(() => {
+  if (props.part.metadata?.validationStatus === 'blocked'
+    || props.part.metadata?.step === 'BLOCKED') return '已阻断';
   if (props.part.status === 'apply_config') {
     return isPushTaskDecision.value ? '已确认创建' : '已选择添加';
   }
@@ -144,14 +209,20 @@ const dataAccessDecisionStatusText = computed(() => {
   return '待选择';
 });
 
-const requestDataAccessDecision = async (decision: 'apply_config' | 'abandon' | 'revise') => {
+const requestDataAccessDecision = async (
+  decision: 'apply_config' | 'abandon' | 'revise' | 'retry',
+) => {
   if (!props.interactive) return;
   if (decision === 'revise') {
     reviseInputVisible.value = true;
     return;
   }
 
-  const label = decision === 'apply_config' ? applyButtonText.value : abandonButtonText.value;
+  const label = decision === 'apply_config'
+    ? applyButtonText.value
+    : decision === 'retry'
+      ? '重试当前阶段'
+      : abandonButtonText.value;
   try {
     await ElMessageBox.confirm(`确认${label}？`, '后续处理', {
       confirmButtonText: '确定',

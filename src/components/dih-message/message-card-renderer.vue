@@ -28,6 +28,7 @@
         :interactive="interactive"
         @copy-code="emit('copyCode', $event)"
         @add-chart-library="emit('addChartLibrary', $event)"
+        @chart-render-failed="emit('chartRenderFailed', $event)"
       />
       <DataAnalysisMessagePart
         v-else-if="part.type === 'data-analysis-record'"
@@ -91,7 +92,7 @@ const emit = defineEmits<{
     e: 'decideAction',
     payload: {
       part: ChatMessagePart;
-      decision: 'approved' | 'rejected' | 'revise';
+      decision: 'approved' | 'rejected' | 'revise' | 'retry';
       detail?: string;
     },
   ): void;
@@ -104,10 +105,14 @@ const emit = defineEmits<{
   ): void;
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (
+    e: 'chartRenderFailed',
+    payload: { part: ChatMessagePart; error: string },
+  ): void;
+  (
     e: 'chooseDataAccessDecision',
     payload: {
       part: ChatMessagePart;
-      decision: 'apply_config' | 'abandon' | 'revise';
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
       detail?: string;
     },
   ): void;

@@ -34,8 +34,15 @@
         </el-tooltip>
       </div>
     </div>
+    <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
     <div v-if="part.content" class="visualization-chart-preview-desc">{{ part.content }}</div>
-    <div ref="chartPreviewEl" class="visualization-chart-preview-canvas"></div>
+    <SafeEcharts
+      :option="chartPreviewOption"
+      :loading="part.status === 'loading'"
+      :error="chartPreviewError"
+      min-height="320px"
+      @render-failed="emit('chartRenderFailed', { part, error: $event })"
+    />
   </div>
 
   <div v-else-if="isDataVisualizationRecord" class="notice-part notice-info">
@@ -70,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, toRef, watch } from 'vue';
+import { computed, toRef } from 'vue';
 import {
   CaretBottom,
   CaretTop,
@@ -79,8 +86,7 @@ import {
   DataAnalysis,
   Plus,
 } from '@element-plus/icons-vue';
-import * as echarts from 'echarts';
-import { useWindowResize } from '@/composables/use-window-resize';
+import SafeEcharts from '@/components/visualization/safe-echarts.vue';
 import type { ChatMessagePart } from '@/types/type-dih';
 import { metadataJsonText, metadataText, useDefaultExpanded } from './message-part-context';
 
@@ -92,10 +98,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'copyCode', content: string): void;
   (e: 'addChartLibrary', part: ChatMessagePart): void;
+  (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
 }>();
 
-const chartPreviewEl = ref<HTMLElement | null>(null);
-let chartPreviewInstance: ReturnType<typeof echarts.init> | null = null;
 const { isExpanded, toggleExpanded } = useDefaultExpanded(toRef(props, 'part'));
 
 const chartPreviewConfigText = computed(() => {
@@ -104,7 +109,25 @@ const chartPreviewConfigText = computed(() => {
 
 const chartLibraryAction = computed(() => {
   const action = metadataText(props.part, 'action');
-  return action === 'data_visualization.add_chart_library' ? action : '';
+  if (action !== 'data_visualization.add_chart_library') {
+    return '';
+  }
+  const source = metadataText(props.part, 'source');
+  const demo = metadataText(props.part, 'demoId');
+  if (source === 'demo' && demo) {
+    return action;
+  }
+  const workflow = metadataText(props.part, 'workflowId');
+  const validationStatus = metadataText(props.part, 'validationStatus');
+  return workflow && validationStatus === 'success' ? action : '';
+});
+
+const workflowSummary = computed(() => {
+  const workflow = metadataText(props.part, 'workflowId');
+  if (!workflow) return '';
+  const step = metadataText(props.part, 'step') || 'ARTIFACT_READY';
+  const validation = metadataText(props.part, 'validationStatus') || 'unverified';
+  return `工作流阶段：${step}；产物校验：${validation}`;
 });
 
 const isChartLibraryAdded = computed(() => {
@@ -118,13 +141,15 @@ const requestAddChartLibrary = () => {
   emit('addChartLibrary', props.part);
 };
 
-const chartPreviewOption = () => {
+const chartPreviewOption = computed(() => {
   const metadata = props.part.metadata as Record<string, any> | undefined;
   const value =
+    metadata?.echartsOption ||
     metadata?.echarts?.option ||
     metadata?.data?.echarts?.option ||
-    metadata?.echartsOption ||
-    metadata?.option;
+    metadata?.option ||
+    metadata?.amisConfig?.config ||
+    metadata?.config?.config;
   if (typeof value === 'string') {
     try {
       return JSON.parse(value);
@@ -136,29 +161,15 @@ const chartPreviewOption = () => {
     return value;
   }
   return null;
-};
+});
 
-const renderChartPreview = () => {
-  const option = chartPreviewOption();
-  if (!chartPreviewEl.value || !option) {
-    return;
+const chartPreviewError = computed(() => {
+  const validationStatus = metadataText(props.part, 'validationStatus');
+  if (validationStatus === 'blocked' || validationStatus === 'failed') {
+    return metadataText(props.part, 'validationMessage') || '真实数据查询未完成';
   }
-  if (!chartPreviewInstance) {
-    chartPreviewInstance = echarts.init(chartPreviewEl.value);
-  }
-  chartPreviewInstance.setOption(option, true);
-  chartPreviewInstance.resize();
-};
-
-useWindowResize(() => chartPreviewInstance?.resize());
-
-watch(
-  () => props.part,
-  () => {
-    void nextTick(renderChartPreview);
-  },
-  { deep: true, immediate: true },
-);
+  return '';
+});
 
 const isDataVisualizationRecord = computed(() => {
   return [
@@ -178,8 +189,4 @@ const dataVisualizationRecordTitle = computed(() => {
   return props.part.title || '数据可视化记录';
 });
 
-onBeforeUnmount(() => {
-  chartPreviewInstance?.dispose();
-  chartPreviewInstance = null;
-});
 </script>

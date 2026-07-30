@@ -82,27 +82,70 @@
         <template v-if="!isValueless(criterion.operator)">
           <template v-if="criterion.operator === 'between'">
             <el-date-picker
-              v-if="isDateAttribute(criterion.attribute)"
+              v-if="isDateOnlyAttribute(criterion.attribute)"
+              v-model="criterion.value_list"
+              type="daterange"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              @change="value => syncRangeValue(criterion, value)"
+            />
+            <el-date-picker
+              v-else-if="isDateTimeAttribute(criterion.attribute)"
               v-model="criterion.value_list"
               type="datetimerange"
+              format="YYYY-MM-DD HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
               range-separator="至"
-              start-placeholder="开始时间"
-              end-placeholder="结束时间"
-              @change="notifyChange"
+              start-placeholder="开始日期时间"
+              end-placeholder="结束日期时间"
+              @change="value => syncRangeValue(criterion, value)"
             />
             <div v-else class="range-inputs">
-              <el-input v-model="criterion.value_list[0]" placeholder="起始值" @input="notifyChange" />
+              <el-input
+                v-model="criterion.value_list[0]"
+                :type="isNumberAttribute(criterion.attribute) ? 'number' : 'text'"
+                :inputmode="isNumberAttribute(criterion.attribute) ? 'decimal' : 'text'"
+                placeholder="起始值"
+                @input="notifyChange"
+              />
               <span>至</span>
-              <el-input v-model="criterion.value_list[1]" placeholder="结束值" @input="notifyChange" />
+              <el-input
+                v-model="criterion.value_list[1]"
+                :type="isNumberAttribute(criterion.attribute) ? 'number' : 'text'"
+                :inputmode="isNumberAttribute(criterion.attribute) ? 'decimal' : 'text'"
+                placeholder="结束值"
+                @input="notifyChange"
+              />
             </div>
           </template>
+          <el-input
+            v-else-if="criterion.operator === 'in'"
+            v-model="criterion.value_text"
+            class="criteria-value-input"
+            type="textarea"
+            :rows="2"
+            placeholder="每行一个值"
+            @input="value => syncValueText(criterion, value)"
+          />
           <el-date-picker
-            v-else-if="isDateAttribute(criterion.attribute)"
+            v-else-if="isDateOnlyAttribute(criterion.attribute)"
+            v-model="criterion.value_text"
+            type="date"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            @change="syncValueText(criterion)"
+          />
+          <el-date-picker
+            v-else-if="isDateTimeAttribute(criterion.attribute)"
             v-model="criterion.value_text"
             type="datetime"
+            format="YYYY-MM-DD HH:mm:ss"
             value-format="YYYY-MM-DD HH:mm:ss"
-            placeholder="选择时间"
+            placeholder="选择日期时间"
             @change="syncValueText(criterion)"
           />
           <el-autocomplete
@@ -120,9 +163,9 @@
             v-else
             v-model="criterion.value_text"
             class="criteria-value-input"
-            :type="criterion.operator === 'in' ? 'textarea' : 'text'"
-            :rows="criterion.operator === 'in' ? 2 : undefined"
-            :placeholder="criterion.operator === 'in' ? '每行一个值' : '输入值'"
+            :type="isNumberAttribute(criterion.attribute) ? 'number' : 'text'"
+            :inputmode="isNumberAttribute(criterion.attribute) ? 'decimal' : 'text'"
+            placeholder="输入值"
             @input="value => syncValueText(criterion, value)"
           />
         </template>
@@ -286,7 +329,7 @@ function buildQuery(): RetrievalSearchRequest {
         ? draft.criteria_list.map(({ attribute, operator, value_list }) => ({
             attribute,
             operator,
-            value_list: [...value_list],
+            value_list: [...(value_list || [])],
           }))
         : [],
     sql: draft.type === 'advanced' ? draft.sql.trim() : undefined,
@@ -321,8 +364,25 @@ function operatorOptions(attributeName: string): OperatorItem[] {
   return props.attributes.find(attribute => attribute.name === attributeName)?.operator_list || [];
 }
 
-function isDateAttribute(attributeName: string): boolean {
-  return props.attributes.find(attribute => attribute.name === attributeName)?.retrieval_type === 'date';
+type SearchInputType = 'date' | 'datetime' | 'number' | 'text';
+
+function searchInputType(attributeName: string): SearchInputType {
+  const searchType = props.attributes.find(attribute => attribute.name === attributeName)?.search_type;
+  return searchType === 'date' || searchType === 'datetime' || searchType === 'number'
+    ? searchType
+    : 'text';
+}
+
+function isDateOnlyAttribute(attributeName: string): boolean {
+  return searchInputType(attributeName) === 'date';
+}
+
+function isDateTimeAttribute(attributeName: string): boolean {
+  return searchInputType(attributeName) === 'datetime';
+}
+
+function isNumberAttribute(attributeName: string): boolean {
+  return searchInputType(attributeName) === 'number';
 }
 
 function isValueless(operator: string): boolean {
@@ -331,7 +391,11 @@ function isValueless(operator: string): boolean {
 
 function supportsAutoComplete(criterion: EditableCriterion): boolean {
   const attribute = props.attributes.find(item => item.name === criterion.attribute);
-  return Boolean(attribute?.auto_complete && !['between', 'in', 'isnull', 'isnotnull'].includes(criterion.operator));
+  return Boolean(
+    attribute?.auto_complete
+    && searchInputType(criterion.attribute) === 'text'
+    && !['between', 'in', 'isnull', 'isnotnull'].includes(criterion.operator),
+  );
 }
 
 function addCriterion() {
@@ -380,6 +444,13 @@ function syncValueText(criterion: EditableCriterion, inputValue?: unknown) {
   criterion.value_list = criterion.operator === 'in'
     ? criterion.value_text.split(/\r?\n|,/).map(value => value.trim()).filter(Boolean)
     : [criterion.value_text];
+  notifyChange();
+}
+
+function syncRangeValue(criterion: EditableCriterion, inputValue: unknown) {
+  criterion.value_list = Array.isArray(inputValue)
+    ? inputValue.map(value => String(value ?? ''))
+    : ['', ''];
   notifyChange();
 }
 

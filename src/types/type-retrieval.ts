@@ -51,6 +51,7 @@ export type TAttributeListResponse = {
   description?: string;
   operator_list: OperatorItem[];
   retrieval_type?: string;
+  search_type?: string;
   display_type?: string;
   link_template?: string;
   copyable?: boolean;

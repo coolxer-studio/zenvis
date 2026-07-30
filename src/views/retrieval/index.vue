@@ -74,7 +74,7 @@ import axios from 'axios';
 import { ArrowLeft, ArrowRight, Close } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import JsonViewer from 'vue3-json-viewer';
+import { JsonViewer } from 'vue3-json-viewer';
 import 'vue3-json-viewer/dist/vue3-json-viewer.css';
 import { RetrievalService } from '@/service/api';
 import type {
@@ -99,6 +99,7 @@ const saving = ref(false);
 const formRef = ref<FormInstance>();
 const formRule = reactive({ name: '' });
 const formRules: FormRules = { name: [{ required: true, message: '请输入名称', trigger: 'blur' }] };
+const RETRIEVAL_ENTITY_CACHE_KEY = '__retrieval_entity__';
 
 const ruleList = ref<RetrievalRuleListItem[]>([]);
 const activeRule = ref(0);
@@ -115,7 +116,7 @@ const currentSorter = ref<Pick<RetrievalSearchRequest, 'sort_by' | 'order'>>();
 const loadedIssues = ref<RetrievalRuleIssue[]>([]);
 const loadedConfig = ref<RetrievalSearchRequest>();
 const pendingSave = ref<RetrievalSearchRequest>();
-const deviceData = ref<object>({});
+const deviceData = ref<unknown>({});
 
 let loadGeneration = 0;
 let dataRequestId = 0;
@@ -219,8 +220,14 @@ async function enterNewRule() {
     const response = await RetrievalService.getEntity({}, { signal: loadController.signal, silent: true });
     if (generation !== loadGeneration) return;
     entityList.value = response.entity_list || [];
-    const entity = response.selected_entity?.[0] || entityList.value[0]?.name;
+    const cachedEntity = ls.get(RETRIEVAL_ENTITY_CACHE_KEY);
+    const selectedEntity = typeof cachedEntity === 'string'
+      && entityList.value.some(item => item.name === cachedEntity)
+      ? cachedEntity
+      : response.selected_entity?.find(name => entityList.value.some(item => item.name === name));
+    const entity = selectedEntity || entityList.value[0]?.name;
     if (!entity) {
+      ls.remove(RETRIEVAL_ENTITY_CACHE_KEY);
       currentFilter.value = { type: 'normal', criteria_logic: 'and', criteria_list: [], display_list: [] };
       return;
     }
@@ -233,6 +240,7 @@ async function enterNewRule() {
 
 async function loadEntity(entity: string, generation: number, executeAfterLoad: boolean, signal: AbortSignal) {
   clearDataState();
+  ls.set(RETRIEVAL_ENTITY_CACHE_KEY, entity);
   currentFilter.value = {
     type: 'normal',
     entity,
@@ -302,6 +310,7 @@ async function loadRule(item: RetrievalRuleListItem, fromStartup = false) {
     loadedConfig.value = cloneConfig(editableConfig);
     currentFilter.value = cloneConfig(editableConfig);
     ls.set('__rule__', { ruleId: detail.id, ruleName: detail.name });
+    ls.set(RETRIEVAL_ENTITY_CACHE_KEY, detail.config.entity);
     const selectedNames = detail.config.display_list?.[0]?.attribute_list || [];
     applyColumns(detail.config.entity, attributeList.value, selectedNames);
     if (detail.status === 'valid') await getData();
@@ -493,16 +502,16 @@ async function deleteRule(item: RetrievalRuleListItem) {
 }
 
 function showJsonData(data: unknown) {
-  visibleJson.value = true;
   if (typeof data === 'object' && data !== null) {
     deviceData.value = data;
-    return;
+  } else {
+    try {
+      deviceData.value = JSON.parse(String(data));
+    } catch {
+      deviceData.value = { value: data };
+    }
   }
-  try {
-    deviceData.value = JSON.parse(String(data));
-  } catch {
-    deviceData.value = { value: data };
-  }
+  visibleJson.value = true;
 }
 
 onMounted(async () => {

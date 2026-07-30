@@ -21,8 +21,26 @@
 
 - 元数据固定执行 `config_tree → [config_add] → config_apply → config_read`；`config_add` 和 `config_apply` 分别触发平台 MCP 审批。
 - 数据推送固定执行 `push_task_detect_format → push_task_list_by_source_mark → [push_task_create_and_start] → push_task_list_by_source_mark → push_task_get_log(system)`；创建新任务时 `push_task_create_and_start` 触发平台 MCP 审批。
+- 演示中的默认 `ASK` 写工具必须逐次展示真实 `mcp-approval` 卡片；系统 `ALLOW` 覆盖和历史会话授权不得跳过演示审批，管理员 `DENY` 仍然生效。演示审批只允许“允许本次”或拒绝，不提供“本会话始终允许”。
 - 业务确认不替代 MCP 审批。审批拒绝、取消、超时、工具失败、读回不一致、任务状态异常或日志含本轮错误时，由确定性编排器停止并输出失败卡，不调用模型补救或编造结果。
 - 演示只有在真实工具返回满足成功门槛后才输出成功记录；普通非演示请求继续遵循本 Skill 后续状态机。
+
+## 普通请求共享工作流协议（最高优先级）
+
+除上述内置演示外，数据接入请求由平台共享工作流维护状态、锁定候选配置并执行写入和读回。模型负责意图理解、信息补充和生成候选配置；平台负责状态转换、业务确认后的固定 MCP 调用及成功门槛。
+
+- 普通卡片中的 `workflowId`、`workflowVersion`、`stateRevision`、`step`、`allowedActions`、`evidenceRefs`、`candidateDigest` 和 `artifactId` 均由服务端生成或校验。不得自行伪造、删除或复用旧卡片中的值。
+- Meta 候选必须先获得真实 `config_tree(type="meta")` 证据，再展示完整 `zenvis:meta-config` 和 `zenvis:data-access-decision`。卡片确认后，平台严格使用已锁定的 `fileName` 和候选内容执行检查、可选创建、应用及读回；此时不得重新生成配置或替换参数。
+- 同名同内容由平台按 JSON 语义一致性幂等通过；同名不同内容时平台只允许输出独立覆盖确认卡，用户再次批准前不得写入。
+- PushTask 候选必须先展示完整 TOML/YAML/JSON 代码，然后输出 `action=data_access.confirm_push_plan` 的确认卡并结束本轮。确认卡必须携带稳定 `sourceMark` 和任务参数：
+
+```zenvis:confirm
+{"title":"确认数据推送任务方案","content":"确认后平台将使用已锁定配置执行格式检测、冲突检查、创建或复用，并读回任务状态和 system 日志。","action":"data_access.confirm_push_plan","configKind":"push_task","sourceMark":"data-access:<chatId>:<business_name>","request":{"name":"<任务名称>","description":"<任务说明>","source":"SYSTEM","mark":"data-access:<chatId>:<business_name>"},"actions":["revise"]}
+```
+
+- `request.config` 由平台从确认卡之前的已锁定完整代码注入，模型不得在确认卡中放置不同配置。批准后平台严格执行卡片对应方案，写操作失败时先按 `sourceMark` 读回，不盲目重复创建。
+- 只有平台返回的固定执行结果已经完成 `config_read` 语义一致校验，才输出 `zenvis:meta-config-record`；只有唯一 SYSTEM 任务状态为 `running` 且最新 system 日志无本轮错误，才输出 `zenvis:vectum-task-record`。
+- 平台提示当前工作流阶段或已经执行 MCP 时，以该状态和真实返回为准。不得重复调用、跳过确认，或把自然语言说明当作执行证据。
 
 ## 元数据配置执行状态机（最高优先级）
 

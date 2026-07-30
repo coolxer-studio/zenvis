@@ -2,7 +2,13 @@
 
 本文面向第一次接触 ZenVis DIH 的产品、测试、前端和后端同事，说明 MCP 工具权限、聊天内审批、Skill 和后台 AI分析任务之间的关系，以及最短的验证和扩展路径。
 
-更底层的实现与数据结构见 [MCP Client 与业务 Agent 工具集成设计说明](MCP-Client-Agent-Design.md)，完整接口见 [ChatController](../05-API参考/控制器/ChatController.md)、[McpController](../05-API参考/控制器/McpController.md)、[AnalysisTaskController](../05-API参考/控制器/AnalysisTaskController.md) 和 [SkillController](../05-API参考/控制器/SkillController.md)。
+更底层的实现与数据结构见 [MCP Client 与业务 Agent 工具集成设计说明](MCP-Client-Agent-Design.md)，
+数据接入和数据可视化的工作流及演示规则见
+[DIH 数据接入与数据可视化工作流](DIH数据接入与可视化工作流.md)。完整接口见
+[ChatController](../05-API参考/控制器/ChatController.md)、
+[McpController](../05-API参考/控制器/McpController.md)、
+[AnalysisTaskController](../05-API参考/控制器/AnalysisTaskController.md) 和
+[SkillController](../05-API参考/控制器/SkillController.md)。
 
 ## 1. 先理解四个概念
 
@@ -45,6 +51,10 @@ flowchart TD
 ```
 
 全局 `DENY` 优先级最高，聊天会话授权、任务授权和 `AUTO` 都不能覆盖它。
+
+确定性数据接入和数据可视化演示有一项有意的审批例外：工具声明的默认策略为 `ASK` 时，
+演示必须逐次展示真实审批卡。管理员的 `ALLOW` 覆盖和已有 Chat 会话授权不能跳过该演示；
+全局 `DENY` 仍然阻止执行。
 
 ### 默认策略如何产生
 
@@ -97,6 +107,9 @@ flowchart TD
 | 允许本次 | 当前 `requestId` | 是 |
 | 本会话始终允许 | 当前用户 + 当前 `chatId` + 精确 `toolKey` | 否，直到聊天被删除 |
 | 拒绝执行 | 当前 `requestId` | 下次仍可重新审批 |
+
+内置数据接入和数据可视化演示只提供“允许本次”和“拒绝执行”，不显示“本会话始终允许”。
+这是为了保证无模型演示能够完整呈现 MCP 审批过程，不影响普通 Chat 的会话授权能力。
 
 注意：
 

@@ -150,13 +150,17 @@ Controller 会做几类前置检查：
 
 `type=agent_data_access` 时调用 `DataAccessAgent`。
 
-它本身不实现复杂工具链，主要是：
+开场白中的用户事件示例由 `DataAccessDemoResponseService` 在模型校验前处理；普通输入进入
+`DataAccessWorkflowDefinition`。共享状态保存在 `extraData.agentWorkflows`，服务端锁定
+候选 Meta 或 PushTask 配置、摘要、目标文件和 `sourceMark`。
 
-1. 使用 `agentDataAccessSystemPromptTemplate` 替换默认系统提示词。
-2. 通过 `SkillService.buildAgentSkillPrompt` 严格加载显式绑定的 `data-access-agent` Skill。
-3. 调用 `AIChatService.agentChat`，按 Agent scope 注入允许的 MCP 工具。
+Meta 分支由平台执行 `config_tree`、必要的 `config_add`、`config_apply` 和
+`config_read`；读回 JSON 语义一致前不会生成 `metadata-config-record`。PushTask 分支执行
+格式检测、冲突检查、创建或复用、状态读回和 system 日志验证。模型负责意图理解、信息补充
+和候选生成，不负责声明写入成功。
 
-因此它仍支持聊天记忆、附件文本和图片原生流式，但不会检索公共 RAG 文档。
+数据接入仍加载显式绑定的 `data-access-agent` Skill，按 Agent scope 注入允许的 MCP 工具，
+支持聊天记忆和附件，但不检索公共 RAG。
 
 ### 统一 MCP 工具与内联审批
 
@@ -172,32 +176,41 @@ MCP 不再作为独立 `mcp_agent` 入口。只有业务 Agent 通过 `AgentMcpT
 
 工具参数和返回结果由 MCP 调用日志以 JSON 代码块展示，审批卡片不重复展示 payload。最终审批 part 与模型消息按发生顺序保存。
 
+内置数据接入和数据可视化演示的调用上下文分别标记为
+`builtin-data-access-demo` 和 `builtin-data-visualization-demo`。对于默认 `ASK` 的写工具，
+`McpApprovalService` 会强制逐次进入审批，即使有效策略是 `ALLOW` 或同会话已有授权；
+`McpApprovalVo.sessionApprovalAllowed=false` 使前端隐藏会话级允许按钮。全局 `DENY`
+仍直接拒绝调用。
+
 ### 数据可视化 Agent
 
-`type=agent_data_visualization` 时调用 `DataVisualizationAgent.chat`。这条链路由 `PromptDrivenAgentRuntime` 驱动，后端按专用本地白名单注入工具，返回文本或 Markdown 流式内容。它不会加载外部 MCP。
+`type=agent_data_visualization` 时调用 `DataVisualizationAgent.chat`。内置五个示例由
+`DataVisualizationDemoResponseService` 在模型校验前确定性处理；普通输入由
+`DataVisualizationWorkflowDefinition` 和平台执行器驱动，不加载外部 MCP。
 
 核心流程：
 
 ```text
-用户问题
-  |
-  v
-解析数据可视化 Agent 的本地工具白名单
-  |
-  v
-拼接数据可视化 system prompt、Skill prompt 和工具说明
-  |
-  v
-调用 Spring AI ChatClient 流式对话
-  |
-  v
-模型按需调用查询、统计、趋势、详情或受控配置落地工具
-  |
-  v
-输出普通文本/Markdown 分析，MessageType.TEXT
+意图确认 → 实体 Meta → 严格实体选择 → 字段 Meta
+→ 查询方案确认 → 平台执行锁定查询 → ECharts 产物
+→ 渲染 → 可选图表库或配置写入 → 读回
 ```
 
-白名单包括 Retrieval/实体查询，以及 `config_*`、`dashboard_*`、`menu_*` 中明确允许的读取、创建和应用操作；不包含实体更新、删除或任意外部 MCP。配置新增/应用、看板创建和菜单创建等写入动作通过 `@McpToolApproval(ASK, HIGH)` 进入审批。Agent 仍不直接访问数据库，也不生成任意 SQL。
+实体候选必须来自 `retrieval_list_display_entity` 或 `retrieval_list_entity`；字段候选必须使用
+所选逻辑实体准确 `name` 调用字段 Meta 工具。`strictOptions` 同时校验卡片选项和服务端保存的
+候选快照。
+
+查询方案批准后，`DihChatApplicationService` 按卡片锁定的 `query.tool/query.request`
+调用实体分析白名单。返回的 `meta`、`result.columns/rows` 和 `echarts.option` 组成
+`visualization-chart-preview`；Agent 不得重新生成参数或使用演示数据。
+
+对话预览和右侧图表库都使用 `SafeEcharts`。入库记录保存 `artifactId`、`planId`、实体、
+字段角色、锁定查询、`queryMeta`、`echartsOption`、`amisConfig`、查询时间和校验状态。
+图表库固定提供预览入口；手动刷新仅调用固定实体分析 REST 白名单，失败时保留原快照。
+
+白名单还包括 `config_*`、`dashboard_*`、`menu_*` 中明确允许的读取、创建和应用操作，
+不包含实体更新、删除或任意外部 MCP。写入动作通过 `@McpToolApproval(ASK, HIGH)` 审批，
+并在 `config_read`、`dashboard_view` 或 `menu_view` 读回一致后生成成功记录。
 
 ### 动态专项 Skill
 
@@ -270,7 +283,10 @@ MCP，显式声明后仅注入对应的本地与外部工具白名单。`promptM
 | `<think>...</think>` | `thinking` | 保存思考过程，状态为 `completed` |
 | `zenvis:notice` 代码围栏中的 JSON | `notice` | 解析标题、内容、level、metadata |
 | `zenvis:confirm` 代码围栏中的 JSON | `confirm` | 解析为待确认片段，默认 `status=pending` |
+| `zenvis:info-steps` 代码围栏中的 JSON | `info-steps` | 信息补充或严格 Meta 候选选择 |
 | `zenvis:mcp-approval` 内部标记 | `mcp-approval` | 保存 MCP 工具、决策、范围和最终状态 |
+| `zenvis:visualization-chart-preview` | `visualization-chart-preview` | 使用真实 ECharts option 渲染和入库 |
+| 可视化记录围栏 | `visualization-*-record` | 同步图表、配置、看板和菜单记录 |
 | `zenvis:report-document-config` 代码围栏 | `report-document` | 解析为报表文档，自动同步到 `extraData.report` |
 | `prompt-suggestions` part | `prompt-suggestions` | 用于智能体开场白展示可点击示例提示词 |
 | `MessageType.CHART` | `chart` | 整体作为图表内容 |
@@ -279,16 +295,19 @@ MCP，显式声明后仅注入对应的本地与外部工具白名单。`promptM
 
 ### 确认动作记录
 
-`POST /api/v1/dih/chat/action-decision` 用来记录 confirm 片段的用户选择。
+普通数据接入和数据可视化卡片调用
+`POST /api/v1/dih/chat/workflow/action`。请求必须携带：
 
-请求字段：
+- `chat_id`、`message_id`、`part_id`、`workflow_id`
+- `action`：`submit`、`approve`、`reject`、`revise`、`retry` 或 `add_to_library`
+- 可选 `answers` 或 `revision`
 
-- `chat_id`
-- `message_id`
-- `part_id`
-- `decision`，业务动作根据 part 类型支持 `approved`、`rejected`、`dispose`、`ignore`、`continue`、`apply_config`、`abandon`、`revise` 或 `submitted`
+`WorkflowActionService` 精确校验消息、part、工作流、状态修订号、允许动作和严格选项，
+更新 `extraData.agentWorkflows`，并返回服务端生成的下一轮 `continuation`。不能回退修改最近
+同类型卡片。
 
-后端会在对应 `Message.parts` 中找到相应 part，并更新 `status`。这个接口只用于已完成保存的业务动作；MCP 审批必须使用 `/api/v1/dih/mcp/approvals/{requestId}/decision`。
+`POST /api/v1/dih/chat/action-decision` 仅用于带 `demoId` 的确定性演示卡和旧协议卡片。
+MCP 审批始终使用 `/api/v1/dih/mcp/approvals/{requestId}/decision`。
 
 ## 会话管理接口
 
@@ -358,8 +377,11 @@ MCP，显式声明后仅注入对应的本地与外部工具白名单。`promptM
 | :--- | :--- |
 | 前端有历史，模型却不接上下文 | Spring AI chat memory 表中是否有同一 `chat_id` 的记录；是否走了不会写 memory 的异常路径 |
 | 图片附件没有被模型看到 | 是否配置了 `spring.ai.openai.base-url` 和 `api-key`；是否走了原生 OpenAI 分支 |
-| 数据可视化 Agent 数据查询失败 | retrieval MCP 工具是否启用、可查询实体和字段是否存在、工具返回是否为空或报错 |
-| 图表没有渲染 | AI 消息 `MessageType` 是否为 `CHART`，`content` 是否为 ECharts JSON，最终 `parts` 是否有 `chart` |
+| 实体选择没有候选或出现编造值 | 实体/字段 Meta MCP 是否成功；字段查询是否使用所选实体准确 `name`；`strictOptions` 候选快照是否存在 |
+| 数据可视化 Agent 数据查询失败 | 批准方案的 `query.tool/query.request` 是否完整；实际 MCP 调用是否与方案一致；实体分析接口是否报错 |
+| 图表没有渲染 | 是否为 `visualization-chart-preview`；`echartsOption` 是否为纯 JSON；`SafeEcharts` 和 `chart_render_failed` 账本 |
+| 图表库没有预览按钮 | 前端是否已更新；图表库当前固定展示预览入口，旧记录缺少快照时应显示错误提示 |
 | Agent 不会调用 MCP 工具 | 工具是否可用、是否被 `DENY`、Agent scope 是否包含该服务、工具提示词是否已注入 |
-| 审批卡片不出现 | 有效策略是否为 `ASK`，当前 chatId 是否已有会话授权，是否使用 `response_format=events` |
+| 普通请求审批卡片不出现 | 有效策略是否为 `ASK`，当前 chatId 是否已有会话授权，是否使用 `response_format=events` |
+| 内置演示审批卡片不出现 | 后端是否已重启；写工具默认策略是否为 `ASK`；调用上下文是否为内置 demo client |
 | 深度思考没有过程 | 模型是否支持 reasoning metadata 或 `<think>` 输出；是否触发了后端 fallback thinking part |

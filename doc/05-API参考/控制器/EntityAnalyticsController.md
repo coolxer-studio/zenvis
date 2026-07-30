@@ -18,7 +18,9 @@ Meta 中的逻辑字段名，服务端负责校验并解析物理表和列。
       "end_time": null,
       "comparison": "NONE",
       "granularity": null,
-      "result_count": 2
+      "result_count": 2,
+      "fields": ["addr_src"],
+      "truncated": false
     },
     "result": {
       "columns": [{"name": "bucket"}, {"name": "value"}],
@@ -44,7 +46,8 @@ Meta 中的逻辑字段名，服务端负责校验并解析物理表和列。
 
 - 时间预设：`TODAY`、`YESTERDAY`、`LAST_7_DAYS`、`LAST_30_DAYS`、
   `THIS_MONTH`、`CUSTOM`。概览、汇总、分布和值统计额外支持 `ALL_TIME`。
-- 时间粒度：`AUTO`、`HOUR`、`DAY`、`WEEK`、`MONTH`，最多 1000 个桶。
+- 时间粒度：`AUTO`、`MINUTE`、`FIVE_MINUTES`、`FIFTEEN_MINUTES`、
+  `HOUR`、`DAY`、`WEEK`、`MONTH`、`QUARTER`、`YEAR`，最多 1000 个桶。
 - 对比方式：`NONE`、`PREVIOUS_PERIOD`、`YEAR_OVER_YEAR`，用于概览、汇总和趋势。
 - 条件格式：`criteria_list[{attribute,operator,value_list}]`，
   `criteria_logic` 仅支持 `and` 或 `or`。
@@ -85,7 +88,9 @@ Meta 中的逻辑字段名，服务端负责校验并解析物理表和列。
 }
 ```
 
-支持 `COUNT`、`DISTINCT_COUNT`、`SUM`、`AVG`、`MIN`、`MAX`。
+支持 `COUNT`、`DISTINCT_COUNT`、`SUM`、`AVG`、`MIN`、`MAX` 和
+`PERCENTILE`。百分位指标必须提供 `(0,1)` 范围内的 `percentile`，例如
+`{"operation":"PERCENTILE","field":"latency","percentile":0.95}`。
 
 ## 时间趋势
 
@@ -150,6 +155,87 @@ Meta 中的逻辑字段名，服务端负责校验并解析物理表和列。
 ```
 
 `limit` 默认 10、最大 100，按数量降序和字段值升序稳定排序。
+
+## 多维聚合
+
+`POST /api/v1/entity/aggregate/query`，对应 MCP `entity_aggregate`。
+
+```json
+{
+  "entity": "traffic",
+  "dimensions": [
+    {
+      "name": "day",
+      "field": "event_time",
+      "kind": "TIME",
+      "granularity": "DAY"
+    },
+    {
+      "name": "action",
+      "field": "action",
+      "kind": "FIELD",
+      "include_null": false
+    }
+  ],
+  "metrics": [
+    {"name": "records", "operation": "COUNT", "label": "事件数"},
+    {"name": "bytes", "operation": "SUM", "field": "bytes_sent", "label": "发送字节"}
+  ],
+  "time_range": {"preset": "LAST_30_DAYS"},
+  "criteria_list": [],
+  "criteria_logic": "and",
+  "order_by": {"field": "day", "direction": "asc"},
+  "limit": 200,
+  "chart_hint": "AREA"
+}
+```
+
+单实体最多两个维度、20 个指标、50 个条件、1000 个结果单元和 20 个图表序列。
+`chart_hint` 支持 `AUTO`、`BAR`、`LINE`、`AREA`、`PIE`、`HEATMAP`。
+
+## 数值直方图
+
+`POST /api/v1/entity/histogram/query`，对应 MCP `entity_histogram`。
+
+```json
+{
+  "entity": "traffic",
+  "field": "bytes_sent",
+  "bins": 20,
+  "min": 0,
+  "max": 100000,
+  "time_range": {"preset": "LAST_7_DAYS"},
+  "criteria_list": [],
+  "criteria_logic": "and"
+}
+```
+
+`field` 必须是 Meta 数值逻辑字段；`bins` 范围为 5–100。结果返回每个区间的
+`lower_bound`、`upper_bound`、`label` 和 `value`，所有桶计数之和与 `total`
+一致。
+
+## 散点图与气泡图
+
+`POST /api/v1/entity/scatter/query`，对应 MCP `entity_scatter`。
+
+```json
+{
+  "entity": "traffic",
+  "x_field": "bytes_sent",
+  "y_field": "latency",
+  "size_field": "packet_count",
+  "category_field": "action",
+  "label_field": "session_id",
+  "time_range": {"preset": "LAST_7_DAYS"},
+  "sort_by": "event_time",
+  "order": "desc",
+  "limit": 500
+}
+```
+
+X、Y 和气泡大小字段必须是 Meta 数值逻辑字段。默认返回 500、最大 2000 个点；
+空 X/Y 点被排除，结果按指定字段及 X/Y 稳定排序，并通过 `has_more` 和
+`meta.truncated` 标识截断。分类图表序列最多 20 个。
 
 ## 指定值统计
 
@@ -241,3 +327,31 @@ IP。
 ```
 
 `size` 最大为 100。未指定 `sort_by` 时使用实体配置的默认排序字段；抽样不是随机抽样。
+
+## 查询安全
+
+所有分析接口只接受 Meta 逻辑实体名和逻辑字段名。服务端负责解析并校验物理标识符，
+请求不接受 SQL、物理表名、物理列名、表达式、任意 URL、amis adaptor 或 JavaScript。
+
+## 数据可视化智能体调用约束
+
+数据可视化智能体不能直接从用户自然语言拼接本接口参数。普通工作流必须先调用实体 Meta，
+再使用所选实体准确逻辑 `name` 查询字段 Meta，最后让用户确认锁定的工具和请求。
+
+批准后平台按原请求调用对应 MCP 工具：
+
+| REST | MCP |
+| --- | --- |
+| `/api/v1/entity/overview/query` | `entity_overview` |
+| `/api/v1/entity/summary/query` | `entity_summary` |
+| `/api/v1/entity/trend/query` | `entity_trend` |
+| `/api/v1/entity/distribution/query` | `entity_distribution` |
+| `/api/v1/entity/aggregate/query` | `entity_aggregate` |
+| `/api/v1/entity/histogram/query` | `entity_histogram` |
+| `/api/v1/entity/scatter/query` | `entity_scatter` |
+| `/api/v1/entity/value-statistics/query` | `entity_value_statistics` |
+| `/api/v1/entity/relations/query` | `entity_relations` |
+| `/api/v1/entity/relation-timeline/query` | `entity_relation_timeline` |
+
+图表库手动刷新也只允许使用受控白名单中的原 `query.tool/query.request`，不得使用记录中
+提供的任意 URL。刷新失败保留原 `echartsOption` 快照。

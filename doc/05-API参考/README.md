@@ -7,6 +7,8 @@
 - [前端 API 接口说明](前端API接口文档.md)
 - [Controller 详细接口目录](控制器/)
 - [TypeScript Skill API 示例](示例/skill-api.ts)
+- [DIH Chat、工作流与 MCP 审批](控制器/ChatController.md)
+- [实体统计分析接口](控制器/EntityAnalyticsController.md)
 
 ## 基础信息
 

@@ -14,6 +14,8 @@ http://localhost:11001/swagger-ui/index.html
 
 | 文档 | 说明 |
 | :--- | :--- |
+| [DIH 数据接入与数据可视化工作流](../07-AI与数据智能/DIH数据接入与可视化工作流.md) | 共享状态机、Meta 证据、演示、图表和读回规则 |
+| [ChatController](控制器/ChatController.md) | Chat 事件流、工作流动作、渲染遥测和 MCP 审批 |
 | [第三方 REST API 对接指南](third-party-api-integration.md) | 产品接口地图、Bearer Token 调用、示例和排障 |
 | [MCP 审批与 AI分析任务快速上手](../07-AI与数据智能/MCP审批与AI分析任务快速上手.md) | 产品概念、操作流程、权限顺序、验收与排障 |
 | [MCP Client 与业务 Agent 设计](../07-AI与数据智能/MCP-Client-Agent-Design.md) | MCP 客户端、策略状态机、Chat 审批与任务调度实现 |
@@ -27,6 +29,7 @@ http://localhost:11001/swagger-ui/index.html
 | :--- | :--- |
 | [Retrieval 模块快速上手](../03-架构设计/retrieval-module.md) | 产品行为、前后端状态流、规则兼容、元数据和排障 |
 | [RetrievalController](控制器/RetrievalController.md) | 检索、过滤器和元数据 REST 契约 |
+| [EntityAnalyticsController](控制器/EntityAnalyticsController.md) | 标准分析数据、ECharts、多维聚合、直方图和散点图 |
 
 ## 服务管理专题
 
@@ -44,13 +47,13 @@ http://localhost:11001/swagger-ui/index.html
 | [AboutController](控制器/AboutController.md) | 系统关于信息 |
 | [AnalysisTaskController](控制器/AnalysisTaskController.md) | AI分析任务 |
 | [BusinessServiceController](控制器/BusinessServiceController.md) | 业务应用服务文档；当前公开上报由 `BusinessServicePublicController` 实现，管理查询由 `BusinessServiceController` 实现 |
-| [ChatController](控制器/ChatController.md) | AI 对话、DIH 基础接口、上传与预览 |
+| [ChatController](控制器/ChatController.md) | AI 对话、共享工作流动作、MCP 审批、上传与预览 |
 | [ChatSessionController](控制器/ChatSessionController.md) | AI 对话会话 |
 | [ConfigController](控制器/ConfigController.md) | 配置文件管理 |
 | [DashboardController](控制器/DashboardController.md) | 看板管理 |
 | [DIH 基础接口兼容文档](控制器/DihController.md) | 旧 `DihController` 文档名保留；当前接口由 `ChatController` 实现 |
 | [EntityCoreController](控制器/EntityCoreController.md) | 动态实体数据 |
-| [EntityCountController](控制器/EntityCountController.md) | 实体统计 |
+| [EntityAnalyticsController](控制器/EntityAnalyticsController.md) | 实体统计分析与 ECharts |
 | [HomeBoardController](控制器/HomeBoardController.md) | 首页看板 |
 | [LoginController](控制器/LoginController.md) | 登录认证 |
 | [McpController](控制器/McpController.md) | MCP 服务管理 |

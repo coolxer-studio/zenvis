@@ -16,7 +16,9 @@
 | POST | `/suggest` | 生成编辑器补全建议 |
 | POST | `/upload` | 上传本轮聊天附件 |
 | GET | `/upload/{fileId}/preview` | 预览当前用户的图片附件 |
-| POST | `/chat/action-decision` | 保存已完成消息中的业务动作决定；不用于 MCP 审批 |
+| POST | `/chat/workflow/action` | 执行普通数据接入或数据可视化工作流动作 |
+| POST | `/chat/workflow/telemetry` | 记录普通工作流的客户端渲染故障 |
+| POST | `/chat/action-decision` | 保存内置演示或旧卡片的业务动作决定；不用于 MCP 审批 |
 | GET | `/health` | 健康检查 |
 
 MCP 审批使用 `/api/v1/dih/mcp/approvals/{requestId}/decision`，因为审批发生时 AI 消息尚未完成保存。
@@ -84,6 +86,7 @@ curl -N -X POST "http://localhost:11001/api/v1/dih/chat" \
     "description": "创建一个新的看板",
     "arguments": "{\"request\":{...}}",
     "status": "PENDING",
+    "session_approval_allowed": true,
     "expire_time": "2026-07-14T15:05:00.000+08:00"
   }
 }
@@ -135,7 +138,101 @@ Content-Type: application/json
 
 审批卡片在最终消息中保存为 `mcp-approval` part；参数和返回结果由 MCP 调用日志 JSON 代码块各展示一次，卡片不重复显示 payload。
 
-## 6. 模型列表
+确定性数据接入和数据可视化演示对默认 `ASK` 的写工具强制逐次审批。此时
+`session_approval_allowed=false`，前端只展示“允许本次”和“拒绝执行”；历史
+`ALLOW` 策略或已有会话授权不能跳过该演示审批。全局 `DENY` 仍优先。
+
+## 6. 普通业务工作流动作
+
+### 6.1 提交工作流动作
+
+```http
+POST /api/v1/dih/chat/workflow/action
+Content-Type: application/json
+```
+
+请求示例：
+
+```json
+{
+  "chat_id": "chat-001",
+  "message_id": "message-001",
+  "part_id": "part-001",
+  "workflow_id": "workflow-001",
+  "action": "approve",
+  "answers": [],
+  "revision": null
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `chat_id` | 是 | 当前用户可访问的业务会话 ID |
+| `message_id` | 是 | 卡片所在的精确消息 ID |
+| `part_id` | 是 | 当前可操作的精确 part ID |
+| `workflow_id` | 是 | 卡片与服务端状态中的工作流 ID |
+| `action` | 是 | `submit`、`approve`、`reject`、`revise`、`retry` 或 `add_to_library` |
+| `answers` | `submit` 时 | 信息步骤答案；严格选项的值必须来自当前 MCP 候选快照 |
+| `revision` | `revise` 时 | 用户的调整要求 |
+
+响应示例：
+
+```json
+{
+  "status": 0,
+  "data": {
+    "accepted": true,
+    "workflow_id": "workflow-001",
+    "state": "DATA_QUERY",
+    "part_status": "approved",
+    "continuation": {
+      "display": "已确认实体、字段和查询方案。",
+      "request": "平台将严格执行已批准卡片中的查询工具和参数。"
+    },
+    "retryable": false,
+    "extra_data": "{...}"
+  }
+}
+```
+
+后端会同时校验：
+
+1. 会话归属。
+2. 消息、part 和工作流精确匹配。
+3. 卡片 `stateRevision` 未过期。
+4. 动作同时存在于卡片 `allowedActions` 和服务端状态定义。
+5. `strictOptions=true` 的实体或字段值与服务端保存的 MCP 候选快照一致。
+6. 查询、写入和图表入库所需证据完整。
+
+普通数据接入和数据可视化工作流不得在该接口失败后回退到
+`/chat/action-decision`。返回的 `continuation` 由前端作为下一轮显示和请求内容使用。
+
+### 6.2 图表渲染遥测
+
+```http
+POST /api/v1/dih/chat/workflow/telemetry
+Content-Type: application/json
+```
+
+```json
+{
+  "chat_id": "chat-001",
+  "workflow_id": "workflow-001",
+  "event": "chart_render_failed",
+  "detail": "ECharts 配置不合法"
+}
+```
+
+当前只接受 `chart_render_failed`，且工作流必须属于数据可视化并处于
+`ARTIFACT_READY`。后端将错误、时间、可重试标记和保留的 `artifactId` 写入失败账本，
+不会删除已查询的数据快照。
+
+### 6.3 内置演示动作
+
+`POST /api/v1/dih/chat/action-decision` 继续处理带 `demoId` 的确定性演示卡。它只更新
+已经保存的业务卡状态并触发演示续跑，不替代 MCP 审批。
+
+## 7. 模型列表
 
 ```http
 GET /api/v1/dih/model/list
@@ -154,7 +251,7 @@ GET /api/v1/dih/model/list
 
 模型目录来自当前 OpenAI 兼容配置和远端 `/v1/models`。DIH Chat 与 AI分析任务创建/编辑表单共用此接口。
 
-## 7. 附件
+## 8. 附件
 
 ### 上传
 
@@ -173,11 +270,13 @@ GET /api/v1/dih/upload/{fileId}/preview
 
 只允许预览当前用户上传且内容类型为图片的附件。
 
-## 8. 注意事项
+## 9. 注意事项
 
 1. 前端新实现应使用 `response_format=events` 和 NDJSON 解析，不要按 SSE `data:` 行解析。
 2. 客户端应按 `event` 分发，未知事件应忽略而不是终止整个流。
 3. 同一轮可能出现多个审批请求，必须按 `request_id` 独立维护状态。
 4. 后续文本增量不能覆盖已插入的审批 part。
-5. `action-decision` 用于已保存消息的业务动作卡片，不用于 MCP 工具审批。
-6. 详细权限规则见 [MCP 审批与 AI分析任务快速上手](../../07-AI与数据智能/MCP审批与AI分析任务快速上手.md)。
+5. 普通数据接入和数据可视化卡片使用 `workflow/action`；带 `demoId` 的内置演示卡使用 `action-decision`。
+6. MCP 工具审批始终使用 `/mcp/approvals/{requestId}/decision`。
+7. 共享工作流和演示规则见 [DIH 数据接入与数据可视化工作流](../../07-AI与数据智能/DIH数据接入与可视化工作流.md)。
+8. 详细权限规则见 [MCP 审批与 AI分析任务快速上手](../../07-AI与数据智能/MCP审批与AI分析任务快速上手.md)。

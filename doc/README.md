@@ -70,7 +70,7 @@ doc/
 | 后端逐 Controller 文档 | [`05-API参考/控制器`](05-API参考/控制器/) | 21 份详细接口文档 |
 | 前端 API 说明与示例 | [`05-API参考`](05-API参考/) | 前端接口文档和 TypeScript 示例 |
 | 后端插件开发设计 | [`06-插件开发与集成`](06-插件开发与集成/) | 完整插件开发指南 |
-| DIH、MCP、报表和 Redis Search | [`07-AI与数据智能`](07-AI与数据智能/) | 4 份 DIH 专项文档 |
+| DIH、MCP、报表和 Redis Search | [`07-AI与数据智能`](07-AI与数据智能/) | 会话、共享工作流、MCP、报表和检索专项文档 |
 | AI 会话设计 | [`07-AI与数据智能`](07-AI与数据智能/) | 会话数据结构与实现说明 |
 | Starter README | [原位保留](../zenvis-business-service-spring-boot-starter/README.md) | Starter 最小使用契约；平台接入说明已纳入主题文档 |
 | 社区插件资料 | [原位保留](../zenvis-plugin-community/) | 作为只读专项资料，由统一插件主题建立入口，不复制或改写 `plugin-*` 内容 |

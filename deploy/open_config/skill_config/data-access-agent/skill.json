@@ -2,7 +2,7 @@
   "id": "data-access-agent",
   "name": "数据接入",
   "description": "系统内置数据接入智能体 Skill，支持元数据配置生成与可选 Vectum 数据推送。",
-  "version": "1.2.4",
+  "version": "1.3.1",
   "author": "ZenVis",
   "agentTypes": [
     "agent_data_access"

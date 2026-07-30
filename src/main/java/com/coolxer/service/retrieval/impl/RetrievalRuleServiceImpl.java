@@ -519,6 +519,7 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         vo.setLabel(attribute.getLabel());
         vo.setDescription(attribute.getDescription());
         vo.setRetrievalType(attribute.getRetrievalType());
+        vo.setSearchType(attribute.getSearchType());
         vo.setDisplayType(attribute.getDisplayType());
         vo.setLinkTemplate(attribute.getLinkTemplate());
         vo.setAutoComplete(attribute.isAutoComplete());

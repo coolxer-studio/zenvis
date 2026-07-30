@@ -161,6 +161,7 @@ class RetrievalRuleLifecycleTest {
                 .satisfies(attribute -> {
                     assertThat(attribute.getLinkTemplate()).isEqualTo("/asset/detail?ip={ip}");
                     assertThat(attribute.isCopyable()).isTrue();
+                    assertThat(attribute.getSearchType()).isEqualTo("datetime");
                 });
     }
 
@@ -254,6 +255,7 @@ class RetrievalRuleLifecycleTest {
             attribute.setLabel("IP");
             attribute.setColumnName("src_ip");
             attribute.setColumnType("String");
+            attribute.setSearchType("datetime");
             attribute.setOperators(List.of("equal", "isnull"));
             attribute.setLinkTemplate("/asset/detail?ip={ip}");
             attribute.setCopyable(true);

@@ -13,6 +13,8 @@ public class DataAttributeVo {
 
     private String retrievalType;
 
+    private String searchType;
+
     private String displayType;
 
     private String description;

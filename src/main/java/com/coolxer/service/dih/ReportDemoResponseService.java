@@ -45,7 +45,7 @@ public class ReportDemoResponseService {
 
             ## 一、数据概览
 
-            - 覆盖实体：user-event / 调试信息。
+            - 覆盖实体：user-event / 用户事件数据。
             - 关键字段：event_type、server_time、reliability、tags、detail。
             - 主要事件：login、click、view、delete、modify、other。
             - 关注维度：事件趋势、事件类型分布、可信度评分、风险标签。

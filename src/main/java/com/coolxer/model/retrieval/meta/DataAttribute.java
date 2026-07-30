@@ -53,6 +53,11 @@ public class DataAttribute {
     private String retrievalType;
 
     /**
+     * 属性搜索输入组件类型，仅用于前端选择 date、datetime、number 等输入组件
+     */
+    private String searchType;
+
+    /**
      * 属性存储字段名，数据库相关
      */
     private String columnName;

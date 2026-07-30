@@ -28,6 +28,7 @@ class RetrievalServiceImplTest {
         attribute.setLabel("设备ID");
         attribute.setColumnName("guid");
         attribute.setColumnType("String");
+        attribute.setSearchType("number");
         attribute.setOperators(List.of("equal"));
         attribute.setDisplaySelected(true);
         attribute.setLinkTemplate("/device/detail?guid={guid}");
@@ -69,6 +70,7 @@ class RetrievalServiceImplTest {
                 .satisfies(result -> {
                     assertThat(result.getLinkTemplate()).isEqualTo("/device/detail?guid={guid}");
                     assertThat(result.isCopyable()).isTrue();
+                    assertThat(result.getSearchType()).isEqualTo("number");
                 });
         assertThat(displayResult.getSelectAttributeList()).singleElement()
                 .satisfies(result -> {

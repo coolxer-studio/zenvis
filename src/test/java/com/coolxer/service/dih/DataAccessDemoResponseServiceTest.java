@@ -138,7 +138,9 @@ class DataAccessDemoResponseServiceTest {
         assertThat(metadata).contains(
                 "\"fileName\":\"user_event.json\"",
                 "\"configKind\":\"meta\"",
+                "\"label\": \"用户事件数据\"",
                 "config_add 和 config_apply 的 MCP 审批");
+        assertThat(metadata).doesNotContain("调试信息");
         assertThat(push).contains(
                 "\"action\":\"data_access.create_demo_push_task\"",
                 "调用 push_task_create_and_start",

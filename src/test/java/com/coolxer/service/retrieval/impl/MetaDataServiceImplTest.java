@@ -54,6 +54,7 @@ class MetaDataServiceImplTest {
                       "entity": "asset",
                       "name": "device_name",
                       "column_type": "String",
+                      "search_type": "datetime",
                       "operators": ["equal"],
                       "auto_complete": true,
                       "copyable": true
@@ -71,6 +72,7 @@ class MetaDataServiceImplTest {
         assertThat(metaData.getAttribute()).hasSize(2);
         assertThat(metaData.getAttribute().get(0).isAutoComplete()).isTrue();
         assertThat(metaData.getAttribute().get(0).isCopyable()).isTrue();
+        assertThat(metaData.getAttribute().get(0).getSearchType()).isEqualTo("datetime");
         assertThat(metaData.getAttribute().get(1).isCopyable()).isFalse();
     }
 
@@ -391,10 +393,12 @@ class MetaDataServiceImplTest {
     void serializesDataAttributeVoAutoCompleteAsSnakeCase() {
         DataAttributeVo dataAttributeVo = new DataAttributeVo();
         dataAttributeVo.setName("device_name");
+        dataAttributeVo.setSearchType("datetime");
         dataAttributeVo.setAutoComplete(true);
         dataAttributeVo.setCopyable(true);
 
         assertThat(JacksonUtil.toMap(dataAttributeVo))
+                .containsEntry("search_type", "datetime")
                 .containsEntry("auto_complete", true)
                 .containsEntry("copyable", true);
     }

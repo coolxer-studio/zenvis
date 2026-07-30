@@ -45,7 +45,7 @@ public class DataAccessDemoResponseService {
             | 项目 | 内容 |
             | --- | --- |
             | 实体英文名 | user-event |
-            | 实体中文名 | 调试信息 |
+            | 实体中文名 | 用户事件数据 |
             | 数据描述 | 记录用户登录、点击、浏览、删除、修改等行为事件，用于测试验证场景。 |
             | 数据类型 | 用户事件日志 |
             | 目标表名（可选） | msg_user_event |
@@ -120,13 +120,13 @@ public class DataAccessDemoResponseService {
 
             | 数据类型或条件 | 对应实体 | 说明 |
             | --- | --- | --- |
-            | 全部用户事件数据 | user-event / 调试信息 | 写入 msg_user_event 表；目标库默认为系统的 zenvis 库。 |
+            | 全部用户事件数据 | user-event / 用户事件数据 | 写入 msg_user_event 表；目标库默认为系统的 zenvis 库。 |
 
            """;
 
     private static final String DEMO_META_FILE = "user_event.json";
     private static final String DEMO_ENTITY_NAME = "user_event";
-    private static final String DEMO_ENTITY_LABEL = "调试信息";
+    private static final String DEMO_ENTITY_LABEL = "用户事件数据";
     private static final String DEMO_TABLE_NAME = "zenvis.msg_user_event";
     private static final String DEMO_PUSH_MARK_PREFIX = "data-access-demo:user-event:";
     private static final String DEMO_PUSH_NAME = "用户事件数据推送服务";
@@ -143,7 +143,7 @@ public class DataAccessDemoResponseService {
                 {
                   "id": 1,
                   "name": "user_event",
-                  "label": "调试信息",
+                  "label": "用户事件数据",
                   "description": "用户行为事件数据，用于记录用户登录、点击、浏览、删除、修改等行为事件。",
                   "table_name": "zenvis.msg_user_event",
                   "data_source": "clickhouse",
@@ -171,6 +171,7 @@ public class DataAccessDemoResponseService {
                     "notequal",
                     "in"
                   ],
+                  "copyable": true,
                   "display_selected": true
                 },
                 {
@@ -181,6 +182,7 @@ public class DataAccessDemoResponseService {
                   "description": "产生事件时关联的进程编号",
                   "column_name": "procid",
                   "column_type": "UInt16",
+                  "search_type": "number",
                   "operators": [
                     "greatthan",
                     "lessthan",
@@ -203,6 +205,7 @@ public class DataAccessDemoResponseService {
                     "notequal",
                     "in"
                   ],
+                  "copyable": true,
                   "display_selected": true
                 },
                 {
@@ -236,6 +239,7 @@ public class DataAccessDemoResponseService {
                   "description": "行为的可信评估结果",
                   "column_name": "reliability",
                   "column_type": "Float64",
+                  "search_type": "number",
                   "operators": [
                     "equal",
                     "notequal",
@@ -281,6 +285,7 @@ public class DataAccessDemoResponseService {
                   "description": "数据写入或服务端处理时间",
                   "column_name": "server_time",
                   "column_type": "DateTime64(3)",
+                  "search_type": "datetime",
                   "operators": [
                     "greatthan",
                     "lessthan",
@@ -353,9 +358,9 @@ public class DataAccessDemoResponseService {
                 .event_id = uuid_v4()
                 .user = encode_base64(random_bytes(16))
                 .procid = random_int(100, 110)
-                .reliability = random_float(0.0, 10.0)
+                .reliability = round(random_float(0.0, 10.0), precision: 2)
                 .detail = parse_json!("{\\"method\\":\\"POST\\",\\"path\\":\\"/v1/orders\\",\\"query\\":\\"dry_run=false\\"}")
-                .server_time = format_timestamp!(now(), format: "%Y-%m-%d %H:%M:%S")
+                .server_time = format_timestamp!(now(),format: "%Y-%m-%d %H:%M:%S",timezone: "Asia/Shanghai")
               '''
 
             [sinks.my_clickhouse_sink]
@@ -526,8 +531,8 @@ public class DataAccessDemoResponseService {
                       "required": true,
                       "suggestions": [
                         {
-                          "label": "调试信息 / msg_user_event",
-                          "value": "实体中文名为调试信息，实体英文名为 user_event，表名为 msg_user_event"
+                          "label": "用户事件数据 / msg_user_event",
+                          "value": "实体中文名为用户事件数据，实体英文名为 user_event，表名为 msg_user_event"
                         },
                         {
                           "label": "用户事件 / msg_user_event",
@@ -594,7 +599,7 @@ public class DataAccessDemoResponseService {
 
                 配置摘要：
                 - 目标文件：user_event.json
-                - 实体：调试信息（user_event）
+                - 实体：用户事件数据（user_event）
                 - 目标表：zenvis.msg_user_event
                 - 字段数量：8
                 - 时间字段：server_time
@@ -626,7 +631,7 @@ public class DataAccessDemoResponseService {
 
                 配置摘要：
                 - 目标文件：user_event.json
-                - 实体：调试信息（user_event）
+                - 实体：用户事件数据（user_event）
                 - 目标表：zenvis.msg_user_event
                 - 字段数量：8
                 - 时间字段：server_time

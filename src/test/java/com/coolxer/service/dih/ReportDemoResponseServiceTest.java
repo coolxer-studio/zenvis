@@ -33,8 +33,10 @@ class ReportDemoResponseServiceTest {
         assertThat(response)
                 .contains("zenvis:report-document-config")
                 .contains("# 用户事件数据分析报告")
+                .contains("覆盖实体：user-event / 用户事件数据")
                 .contains("## 三、图表与素材占位")
-                .contains("## 四、结论与建议");
+                .contains("## 四、结论与建议")
+                .doesNotContain("调试信息");
     }
 
     @Test

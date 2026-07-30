@@ -178,6 +178,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         if (Objects.nonNull(dataAttribute.getRetrievalType())) {
             dataAttributeVo.setRetrievalType(dataAttribute.getRetrievalType());
         }
+        dataAttributeVo.setSearchType(dataAttribute.getSearchType());
         dataAttributeVo.setDisplayType(dataAttribute.getDisplayType());
         List<OperatorVo> operatorVoList = dataAttribute.getOperators().stream()
                 .map(operator -> metaDataService.getDataOperatorByName(operator))

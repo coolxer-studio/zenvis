@@ -23,6 +23,14 @@ import {
   PageRowsVo,
   SkillSearchParams,
   SkillVo,
+  ReportArchiveParams,
+  ReportArtifact,
+  ReportArtifactRenameParams,
+  ReportDocument,
+  ReportDocumentSaveParams,
+  ReportRevision,
+  ReportSourceRef,
+  ReportWorkspace,
 } from '@/types/type-dih';
 import { withBaseUrl } from '@u/url';
 import {
@@ -308,6 +316,73 @@ const normalizeChatSession = (item: RawChatSession): ChatSession => ({
   pin: item.pin || false,
 });
 
+const normalizeReportDocument = (
+  item: Record<string, unknown> = {},
+): ReportDocument => ({
+  ...item,
+  id: String(item.id || item.document_id || item.documentId || ''),
+  documentId: String(item.document_id || item.documentId || item.id || ''),
+  title: String(item.title || item.name || ''),
+  name: String(item.name || item.title || ''),
+  format: String(item.format || 'markdown'),
+  revision: Number(item.revision || 0),
+  version: String(item.version || ''),
+  status: String(item.status || ''),
+  source: String(item.source || ''),
+  updatedAt: String(item.updated_at || item.updatedAt || ''),
+  content: String(item.content || ''),
+  contentHash: String(item.content_hash || item.contentHash || ''),
+  outline: Array.isArray(item.outline) ? item.outline as Array<Record<string, unknown>> : [],
+  sourceRefs: Array.isArray(item.source_refs || item.sourceRefs)
+    ? (item.source_refs || item.sourceRefs) as ReportDocument['sourceRefs']
+    : [],
+  sourceAttachments: Array.isArray(item.source_attachments || item.sourceAttachments)
+    ? (item.source_attachments || item.sourceAttachments) as Array<Record<string, unknown>>
+    : [],
+});
+
+const normalizeReportArtifact = (
+  item: Record<string, unknown> = {},
+): ReportArtifact => ({
+  ...normalizeReportDocument(item),
+  artifactId: String(item.artifact_id || item.artifactId || item.id || ''),
+  createdAt: String(item.created_at || item.createdAt || ''),
+});
+
+const normalizeReportRevision = (
+  item: Record<string, unknown> = {},
+): ReportRevision => ({
+  revision: Number(item.revision || 0),
+  version: String(item.version || ''),
+  title: String(item.title || ''),
+  format: String(item.format || ''),
+  contentHash: String(item.content_hash || item.contentHash || ''),
+  createdAt: String(item.created_at || item.createdAt || ''),
+  sourceRefs: Array.isArray(item.source_refs || item.sourceRefs)
+    ? (item.source_refs || item.sourceRefs) as ReportRevision['sourceRefs']
+    : [],
+});
+
+const normalizeReportWorkspace = (
+  item: Record<string, unknown> = {},
+): ReportWorkspace => {
+  const current = item.current_document || item.currentDocument;
+  const revisions = item.revisions;
+  const artifacts = item.artifacts;
+  return {
+    currentDocument: current && typeof current === 'object'
+      ? normalizeReportDocument(current as Record<string, unknown>)
+      : undefined,
+    revisions: Array.isArray(revisions)
+      ? revisions.map(value => normalizeReportRevision(value as Record<string, unknown>))
+      : [],
+    artifacts: Array.isArray(artifacts)
+      ? artifacts.map(value => normalizeReportArtifact(value as Record<string, unknown>))
+      : [],
+    extraData: String(item.extra_data || item.extraData || ''),
+  };
+};
+
 export class DihService {
   /**
    * 上传文件接口
@@ -525,6 +600,94 @@ export class DihService {
     params: UpdateChatSessionParams,
   ): Promise<UpdateChatSessionResponse> {
     return request<UpdateChatSessionResponse>(`${prefixChatSession}/${id}/update`, params);
+  }
+
+  static async getReportWorkspace(sessionRecordId: string): Promise<ReportWorkspace> {
+    const response = await request<Record<string, unknown>>(
+      `${prefixChatSession}/${sessionRecordId}/report`,
+      {},
+      'GET',
+      { silent: true },
+    );
+    return normalizeReportWorkspace(response);
+  }
+
+  static async getReportMaterials(sessionRecordId: string): Promise<ReportSourceRef[]> {
+    const response = await request<Array<Record<string, unknown>>>(
+      `${prefixChatSession}/${sessionRecordId}/report/materials`,
+      {},
+      'GET',
+      { silent: true },
+    );
+    return Array.isArray(response) ? response as ReportSourceRef[] : [];
+  }
+
+  static async saveReportDocument(
+    sessionRecordId: string,
+    params: ReportDocumentSaveParams,
+  ): Promise<ReportWorkspace> {
+    const response = await request<Record<string, unknown>>(
+      `${prefixChatSession}/${sessionRecordId}/report/save`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return normalizeReportWorkspace(response);
+  }
+
+  static async archiveReportDocument(
+    sessionRecordId: string,
+    params: ReportArchiveParams,
+  ): Promise<ReportWorkspace> {
+    const response = await request<Record<string, unknown>>(
+      `${prefixChatSession}/${sessionRecordId}/report/archive`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return normalizeReportWorkspace(response);
+  }
+
+  static async restoreReportArtifact(
+    sessionRecordId: string,
+    artifactId: string,
+    params: ReportArchiveParams,
+  ): Promise<ReportWorkspace> {
+    const response = await request<Record<string, unknown>>(
+      `${prefixChatSession}/${sessionRecordId}/report/artifacts/${encodeURIComponent(artifactId)}/restore`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return normalizeReportWorkspace(response);
+  }
+
+  static async renameReportArtifact(
+    sessionRecordId: string,
+    artifactId: string,
+    params: ReportArtifactRenameParams,
+  ): Promise<ReportWorkspace> {
+    const response = await request<Record<string, unknown>>(
+      `${prefixChatSession}/${sessionRecordId}/report/artifacts/${encodeURIComponent(artifactId)}/rename`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return normalizeReportWorkspace(response);
+  }
+
+  static async deleteReportArtifact(
+    sessionRecordId: string,
+    artifactId: string,
+    baseRevision: number,
+  ): Promise<ReportWorkspace> {
+    const response = await request<Record<string, unknown>>(
+      `${prefixChatSession}/${sessionRecordId}/report/artifacts/${encodeURIComponent(artifactId)}?base_revision=${baseRevision}`,
+      {},
+      'DELETE',
+      { silent: true },
+    );
+    return normalizeReportWorkspace(response);
   }
 
   static async deleteChatSession(id: string): Promise<DeleteChatSessionResponse> {

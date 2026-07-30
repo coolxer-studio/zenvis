@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'notice' | 'confirm' | 'mcp-approval' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'report-fragment' | 'notice' | 'confirm' | 'mcp-approval' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -101,12 +101,15 @@ export type ReportDocument = {
   title?: string;
   name?: string;
   format?: 'markdown' | 'html' | string;
+  revision?: number;
   version?: string;
   status?: string;
   source?: string;
   updatedAt?: string;
   content?: string;
   outline?: Array<Record<string, unknown>>;
+  contentHash?: string;
+  sourceRefs?: ReportSourceRef[];
   sourceAttachments?: Array<Record<string, unknown>>;
   raw?: Record<string, unknown>;
 };
@@ -118,10 +121,74 @@ export type ReportArtifact = {
   name?: string;
   title?: string;
   format?: 'markdown' | 'html' | string;
+  revision?: number;
   version?: string;
   status?: string;
   createdAt?: string;
   content?: string;
+  contentHash?: string;
+  sourceRefs?: ReportSourceRef[];
+  outline?: Array<Record<string, unknown>>;
+};
+
+export type ReportSourceRef = Record<string, unknown> & {
+  type?: 'attachment' | 'message' | 'chart' | 'analysis_task' | 'mcp_audit' | string;
+  id?: string;
+  name?: string;
+  status?: string;
+  parseStatus?: string;
+  truncated?: boolean;
+  queriedAt?: string;
+  dataTime?: string;
+};
+
+export type ReportRevision = {
+  revision: number;
+  version?: string;
+  title?: string;
+  format?: string;
+  contentHash?: string;
+  createdAt?: string;
+  sourceRefs?: ReportSourceRef[];
+};
+
+export type ReportWorkspace = {
+  currentDocument?: ReportDocument;
+  revisions: ReportRevision[];
+  artifacts: ReportArtifact[];
+  extraData?: string;
+};
+
+export type ReportActionType = 'full_generate' | 'full_rewrite' | 'selection_rewrite';
+
+export type ReportAction = {
+  type: ReportActionType;
+  document_id?: string;
+  base_revision?: number;
+  selection_id?: string;
+  selection_hash?: string;
+  source_refs?: ReportSourceRef[];
+};
+
+export type ReportDocumentSaveParams = {
+  document_id?: string;
+  base_revision: number;
+  title: string;
+  format: 'markdown' | 'html';
+  content: string;
+  outline?: Array<Record<string, unknown>>;
+  source_refs?: ReportSourceRef[];
+};
+
+export type ReportArchiveParams = {
+  document_id?: string;
+  base_revision: number;
+  name?: string;
+};
+
+export type ReportArtifactRenameParams = {
+  base_revision: number;
+  name: string;
 };
 
 export type DataAnalysisStage = 'dataset_preparation' | 'service_analysis' | 'report_output';
@@ -260,6 +327,7 @@ export type ChatParams = {
   response_format?: 'text' | 'events';
   context?: string[];
   attachments?: ChatAttachment[];
+  report_action?: ReportAction;
   [key: string]: unknown;
 };
 

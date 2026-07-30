@@ -9,6 +9,7 @@ import type {
   ChatMessagePart,
   ChatSession,
   McpApprovalData,
+  ReportAction,
 } from '@/types/type-dih';
 import { generateUUID } from '@/utils/util-common';
 import { getCurrentFormattedDate } from '@/utils/util-time';
@@ -20,6 +21,7 @@ import {
 export type SendMessageOptions = {
   content?: string;
   requestContent?: string;
+  reportAction?: ReportAction;
 };
 
 type UseChatStreamOptions = {
@@ -96,6 +98,36 @@ export const useChatStream = ({
   });
 
   const hasThinkTag = (content: string) => content.includes('<think>');
+
+  const defaultReportAction = (): ReportAction | undefined => {
+    if (chatSessionType.value !== 'agent_report') return undefined;
+    try {
+      const extraData = chatSessionExtraData.value.trim()
+        ? JSON.parse(chatSessionExtraData.value) as Record<string, unknown>
+        : {};
+      const report = extraData.report && typeof extraData.report === 'object'
+        ? extraData.report as Record<string, unknown>
+        : {};
+      const document = report.currentDocument && typeof report.currentDocument === 'object'
+        ? report.currentDocument as Record<string, unknown>
+        : {};
+      const documentId = String(document.documentId || document.document_id || document.id || '');
+      const revision = Number(document.revision || 0);
+      return {
+        type: documentId ? 'full_rewrite' : 'full_generate',
+        document_id: documentId || undefined,
+        base_revision: revision,
+        source_refs: Array.isArray(document.sourceRefs || document.source_refs)
+          ? (document.sourceRefs || document.source_refs) as ReportAction['source_refs']
+          : [],
+      };
+    } catch {
+      return {
+        type: 'full_generate',
+        base_revision: 0,
+      };
+    }
+  };
 
   const createDeepThinkingStreamingParts = (content: string): ChatMessagePart[] => {
     const parts: ChatMessagePart[] = [createThinkingPart('running')];
@@ -212,6 +244,7 @@ export const useChatStream = ({
           deep_think: chatSessionType.value === 'ask' && isDeepThinking.value,
           chat_id: chatSessionId.value,
           attachments: messageAttachments,
+          report_action: options.reportAction || defaultReportAction(),
         }, async event => {
           if (event.event === 'delta') {
             const delta = event.content || '';

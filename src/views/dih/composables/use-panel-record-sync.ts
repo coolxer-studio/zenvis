@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   ConfigRecord,
   DataAnalysisRecord,
+  ReportRevision,
 } from '@/types/type-dih';
 import {
   CONFIG_RECORD_ACTION_EVENT,
@@ -177,10 +178,50 @@ export const usePanelRecordSync = ({
 
   const extractReportRecords = () => {
     const report = asObject(parseSessionExtraData().report);
+    const dataVisualization = asObject(parseSessionExtraData().dataVisualization);
+    const dataAnalysis = asObject(parseSessionExtraData().dataAnalysis);
+    const materials: DihPanelRecord[] = [];
+    messages.value.forEach(message => {
+      (message.attachments || []).forEach(attachment => {
+        materials.push({
+          type: 'attachment',
+          id: textValue(attachment.file_id || attachment.fileId),
+          name: textValue(attachment.file_name || attachment.fileName, '附件'),
+          status: textValue(attachment.parse_status || attachment.parseStatus, 'uploaded'),
+          parseStatus: textValue(attachment.parse_status || attachment.parseStatus),
+          truncated: textValue(attachment.message).includes('截断'),
+          messageId: message.id,
+          sessionRecordId: chatSessionRecordId.value,
+        });
+      });
+    });
+    asRecordList(dataVisualization.chartLibrary).forEach(record => {
+      materials.push({
+        ...record,
+        type: 'chart',
+        id: textValue(record.id || record.recordId),
+        name: textValue(record.name || record.title, '图表'),
+        sessionRecordId: chatSessionRecordId.value,
+      });
+    });
+    asRecordList(dataAnalysis.records).forEach(record => {
+      materials.push({
+        ...record,
+        type: record.serviceTaskId ? 'analysis_task' : 'analysis_record',
+        id: textValue(record.serviceTaskId || record.recordId || record.id),
+        name: textValue(record.title, '分析产物'),
+        sessionRecordId: chatSessionRecordId.value,
+      });
+    });
     return {
       currentDocument: asObject(report.currentDocument),
       documents: asRecordList(report.documents),
       artifacts: asRecordList(report.artifacts),
+      revisions: asRecordList(report.revisions).map(record => ({
+        ...record,
+        revision: Number(record.revision || 0),
+      })) as ReportRevision[],
+      materials,
       extraData: chatSessionExtraData.value,
       sessionRecordId: chatSessionRecordId.value,
       sessionId: chatSessionId.value,
@@ -297,12 +338,20 @@ export const usePanelRecordSync = ({
 
   const extractSelectionRewriteContent = (message?: ChatMessage) => {
     if (!message) {
-      return '';
+      return { content: '' };
     }
     const preferredPart = message.parts?.find(part => {
-      return ['report-document', 'markdown', 'code'].includes(part.type) && !!part.content?.trim();
+      return ['report-fragment', 'report-document', 'markdown', 'code'].includes(part.type)
+        && !!part.content?.trim();
     });
-    return stripSelectionRewriteFence(preferredPart?.content || message.content || '');
+    const metadata = asObject(preferredPart?.metadata);
+    return {
+      content: stripSelectionRewriteFence(preferredPart?.content || message.content || ''),
+      documentId: textValue(metadata.documentId || metadata.document_id),
+      baseRevision: Number(metadata.baseRevision || metadata.base_revision || 0),
+      selectionHash: textValue(metadata.selectionHash || metadata.selection_hash),
+      contentHash: textValue(metadata.contentHash || metadata.content_hash),
+    };
   };
 
   const handleReportQuickActionRequested = async (detail: ReportQuickActionEventDetail) => {
@@ -320,15 +369,17 @@ export const usePanelRecordSync = ({
     await sendMessage({
       content: detail.displayContent || '请根据右侧文档执行 AI 写作操作。',
       requestContent,
+      reportAction: detail.reportAction,
     });
     if (detail.target === 'selection') {
       const responseMessage = [...messages.value.slice(messageStartIndex)]
         .reverse()
         .find(message => message.sender === 'ai' && !message.loading && !message.isError);
+      const result = extractSelectionRewriteContent(responseMessage);
       emitDihEvent(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, {
         selectionId: detail.selectionId,
         actionKey: detail.actionKey,
-        content: extractSelectionRewriteContent(responseMessage),
+        ...result,
       });
     }
   };

@@ -6,6 +6,9 @@ import type {
   DataAnalysisExtraData,
   ReportArtifact,
   ReportDocument,
+  ReportRevision,
+  ReportSourceRef,
+  ReportAction,
 } from '@/types/type-dih';
 
 export const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
@@ -55,6 +58,8 @@ export type ReportRecordEventDetail = {
   currentDocument?: ReportDocument;
   documents?: ReportDocument[];
   artifacts?: ReportArtifact[];
+  revisions?: ReportRevision[];
+  materials?: ReportSourceRef[];
   extraData?: string;
   sessionRecordId?: string;
   sessionId?: string;
@@ -66,6 +71,7 @@ export type ReportQuickActionEventDetail = {
   target?: 'document' | 'selection';
   actionKey?: string;
   selectionId?: string;
+  reportAction?: ReportAction;
 };
 
 export type ReportExtraDataChangedEventDetail = {
@@ -76,6 +82,10 @@ export type SelectionRewriteCompletedEventDetail = {
   selectionId?: string;
   actionKey?: string;
   content?: string;
+  documentId?: string;
+  baseRevision?: number;
+  selectionHash?: string;
+  contentHash?: string;
 };
 
 export type DihChatListItem = Pick<ChatSession, 'id' | 'sessionId' | 'title' | 'type' | 'pin'>

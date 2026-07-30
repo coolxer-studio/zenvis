@@ -64,7 +64,7 @@ plugin-name/
 - Produce valid JSON with exactly the top-level arrays `entity`, `attribute`, and `operator`. Prefer one Meta file per plugin unless the repository already splits definitions; the backend recursively merges all Meta JSON files and rejects cross-file duplicates.
 - Use snake_case identifiers matching `[A-Za-z_][A-Za-z0-9_]*`. Allow `table_name` and `column_name` one optional database qualifier, such as `zenvis.event`.
 - Give every entity and attribute a stable positive integer `id`. Keep entity IDs globally unique and attribute IDs globally unique across the loaded Meta directory.
-- Do not generate deprecated or invented keys such as `search_type` or `aggregate_link`. Inspect `DataEntity`, `DataAttribute`, `DataOperator`, and current Meta validation before using fields not listed here.
+- Do not generate deprecated or invented keys such as `aggregate_link`. `search_type` is optional and only accepts `date` (day precision), `datetime` (second precision), `number`, or `string`; omit it when the default string input is sufficient. Inspect `DataEntity`, `DataAttribute`, `DataOperator`, and current Meta validation before using other fields not listed here.
 
 ### Preserve one-to-one modeling
 

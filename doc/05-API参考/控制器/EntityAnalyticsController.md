@@ -44,8 +44,9 @@ Meta 中的逻辑字段名，服务端负责校验并解析物理表和列。
 
 ## 公共查询能力
 
-- 时间预设：`TODAY`、`YESTERDAY`、`LAST_7_DAYS`、`LAST_30_DAYS`、
+- 时间预设：`TODAY`、`YESTERDAY`、`LAST_24_HOURS`、`LAST_7_DAYS`、`LAST_30_DAYS`、
   `THIS_MONTH`、`CUSTOM`。概览、汇总、分布和值统计额外支持 `ALL_TIME`。
+- `LAST_24_HOURS` 使用当前时间向前滚动 24 小时，不按自然日截断。
 - 时间粒度：`AUTO`、`MINUTE`、`FIVE_MINUTES`、`FIFTEEN_MINUTES`、
   `HOUR`、`DAY`、`WEEK`、`MONTH`、`QUARTER`、`YEAR`，最多 1000 个桶。
 - 对比方式：`NONE`、`PREVIOUS_PERIOD`、`YEAR_OVER_YEAR`，用于概览、汇总和趋势。

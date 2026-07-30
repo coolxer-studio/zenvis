@@ -27,9 +27,19 @@
 - 数据大屏看板。
 - 添加菜单。
 
-演示保持既有固定产物、卡片顺序、按钮、配置写入和后续动作；演示产物标记 `source=demo`，不携带普通 `workflowId`，也不能混入普通工作流图表库。
+演示保持既有卡片顺序、按钮、配置写入和后续动作，但产物不是固定数据：
 
-三个需要写入配置或创建看板的演示，用户通过原有业务确认卡后必须执行真实
+- 必须先调用 `retrieval_list_display_entity` 和
+  `retrieval_list_display_attribute`，准确确认 `user_event` 及其字段。
+- 临时图表必须调用 `entity_aggregate` 获取真实 `meta`、`result` 和
+  `echarts.option`；加入图表库只能复制上一轮成功预览，不能重新查询或生成数据。
+- 单页面、侧边栏应用和看板生成前必须完成一次真实只读查询；运行时配置继续调用
+  `user_event` 的 entity/analytics REST API。
+- Meta、字段或查询失败时输出阻塞错误并停止；真实查询为空时展示空状态，不得回退到
+  固定数组、随机数或示例统计值。
+- 演示产物标记 `source=demo`，不携带普通 `workflowId`，也不能混入普通工作流图表库。
+
+四个需要写入配置、创建看板或创建菜单的演示，用户通过原有业务确认卡后必须执行真实
 MCP 工具和平台审批，不得直接调用 Service：
 
 - 单页面应用：`config_tree → [config_ensure_root → config_add] →
@@ -38,7 +48,10 @@ MCP 工具和平台审批，不得直接调用 Service：
 - 带侧边栏应用：四个固定配置文件分别执行上述配置链，然后两个菜单分别执行
   上述菜单链。
 - 数据看板：页面配置先执行上述配置链；配置菜单执行菜单链；看板执行
-  `dashboard_list → [dashboard_create] → dashboard_view`。外链看板只执行看板链。
+  `dashboard_list → [dashboard_create] → dashboard_view`。内置演示只提供低代码和
+  静态 HTML 两种真实数据看板，不提供无法验证数据来源的外链看板。
+- 添加菜单：先通过 `config_tree`、`config_read` 校验已经应用的用户事件单页面，
+  再执行菜单链；单页面不存在时阻止创建，不生成外链菜单。
 
 方括号内是资源不存在时的写操作。`config_ensure_root`、`config_add`、
 `config_apply`、`menu_create` 和 `dashboard_create` 均遵守平台 MCP 审批策略；

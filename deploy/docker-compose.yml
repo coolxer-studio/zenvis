@@ -303,17 +303,17 @@ services:
   vectum-service:
     image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum:latest-${ARCH}
     container_name: vectum-service
+    environment:
+      TZ: Asia/Shanghai
+      VECTUM_AUTH_TOKEN: "${VECTUM_AUTH_TOKEN:-sk-vectum-token}"
+      VECTUM_VECTOR_ALLOWED_ENV: "CLICKHOUSE_PASSWORD"
+      CLICKHOUSE_PASSWORD: "SFGEfSVVMcUHCBCjKmzJ"
     ports:
       - "11002:11002"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/vectum/workspace:/workspace
       - ./data/vectum/vector:/var/lib/vector
-    environment:
-      TZ: Asia/Shanghai
-      VECTUM_AUTH_TOKEN: "${VECTUM_AUTH_TOKEN:-sk-vectum-token}"
-      VECTUM_VECTOR_ALLOWED_ENV: "CLICKHOUSE_PASSWORD"
-      CLICKHOUSE_PASSWORD: "SFGEfSVVMcUHCBCjKmzJ"
     restart: unless-stopped
     networks:
       - zenvis-network

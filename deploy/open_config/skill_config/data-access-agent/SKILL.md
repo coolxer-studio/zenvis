@@ -190,8 +190,8 @@
 
 开场白中的“用户事件数据接入需求样例”是固定演示能力，命中该样例时应使用系统内置的固定结果完成流程，不进行开放式推理，也不要在聊天内容中说明“命中固定示例”“使用固定回复”或类似内部实现细节。
 
-- 样例识别依据：需求中同时包含“用户事件数据接入”、实体调试信息、目标表 `msg_user_event`、数据源 `demo_logs`、字段 `event_type`、`server_time`、`reliability` 等关键内容。
-- 固定元数据结果：使用单实体 `user_event`，中文名“调试信息”，目标表 `zenvis.msg_user_event`，业务字段为 `event_id`、`procid`、`user`、`event_type`、`reliability`、`detail`、`tags`、`server_time`；`zenvis_id` 和 `zenvis_insert_time` 由平台注入。
+- 样例识别依据：需求中同时包含“用户事件数据接入”、实体用户事件数据、目标表 `msg_user_event`、数据源 `demo_logs`、字段 `event_type`、`server_time`、`reliability` 等关键内容。
+- 固定元数据结果：使用单实体 `user_event`，中文名“用户事件数据”，目标表 `zenvis.msg_user_event`，业务字段为 `event_id`、`procid`、`user`、`event_type`、`reliability`、`detail`、`tags`、`server_time`；`zenvis_id` 和 `zenvis_insert_time` 由平台注入。
 - 固定数据推送结果：使用 `demo_logs` 生成用户事件 JSON，经 remap 解析、清洗、补齐字段后写入 `msg_user_event`，并同时输出到 console。
 - 交互表现仍按正常数据接入流程展示：生成元数据配置、用户确认添加、写入并记录、提示可继续创建数据推送服务、用户确认、创建并记录数据推送服务。
 - 对用户保持透明：不要输出内部路由、固定响应服务、短路 LLM、演示命中标记等实现细节。
@@ -239,7 +239,7 @@
 ### meta JSON 生成规则
 
 - 只生成一个合法 JSON 对象；顶层固定为 `entity`、`attribute`、`operator` 三个数组。
-- 字段名使用 snake_case；禁止生成 `search_type`。
+- 字段名使用 snake_case。仅在检索输入需要特殊组件时生成 `search_type`：只到天使用 `date`，到时分秒使用 `datetime`，数字使用 `number`；普通文本输入可省略或使用 `string`。
 - 每个 `entity` 必填 `id`、`name`、`label`、`description`、`table_name`、`data_source`。
 - 多个实体时，在同一个 JSON 的 `entity` 数组中放入多个实体对象，在同一个 `attribute` 数组中放入所有实体字段；每个 attribute 的 `entity` 必须指向所属实体的 `entity.name`。
 - 多个实体时，仍然只输出一个 `zenvis:meta-config` 配置卡和一个目标文件名，不要输出多个 `zenvis:meta-config` 配置卡。

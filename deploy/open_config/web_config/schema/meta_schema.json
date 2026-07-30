@@ -130,7 +130,13 @@
           },
           "search_type": {
             "type": "string",
-            "description": "搜索类型",
+            "enum": [
+              "string",
+              "date",
+              "datetime",
+              "number"
+            ],
+            "description": "检索输入组件类型：date 只到日期，datetime 到时分秒，number 为数字输入，string 为普通输入",
             "default": "string"
           }
         },

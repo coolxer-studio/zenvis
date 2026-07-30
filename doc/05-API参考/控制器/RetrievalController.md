@@ -344,6 +344,7 @@ field is not null
         "name": "risk_level",
         "label": "风险等级",
         "retrieval_type": "number",
+        "search_type": "number",
         "display_type": null,
         "link_template": "/asset/risk?level={risk_level}",
         "auto_complete": false,
@@ -418,6 +419,7 @@ field is not null
         "name": "ip",
         "label": "IP 地址",
         "retrieval_type": "string",
+        "search_type": "string",
         "display_type": null,
         "link_template": "/asset/detail?ip={ip}",
         "auto_complete": true,
@@ -442,6 +444,11 @@ field is not null
 响应结构与条件字段列表相同。`select_attribute_list` 为元数据中 `display_selected: true` 的默认展示字段。`/display/entity/list` 与 `/entity/list` 结构相同。
 
 字段返回 `copyable: boolean`，表示结果单元格是否支持复制，元数据未配置时为 `false`。字段还可选返回 `link_template: string`，表示结果单元格的页面跳转模板。`{属性名}` 引用当前结果行中同名逻辑属性的值，前端替换时会执行 URL 编码；模板可使用相对地址或 `http/https` 地址。未配置时不返回该字段。前端不额外要求占位符属于可见列，只要求属性实际存在于结果行且值非空；当前普通属性需通过展示字段进入查询结果，平台内置 `{zenvis_id}` 则会在模板引用它时由后端自动作为隐藏查询字段随行返回，而不增加可见列。
+
+字段可选返回 `search_type` 控制普通检索条件的输入组件：`date` 使用
+`YYYY-MM-DD` 日期选择器，`datetime` 使用 `YYYY-MM-DD HH:mm:ss` 日期时间选择器，
+`number` 使用数字输入框，未配置或其他值使用普通输入框。该字段只影响前端组件，
+不替代 `retrieval_type` 的查询值转换语义。
 
 ### 6.4 候选值
 

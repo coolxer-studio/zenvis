@@ -22,6 +22,10 @@ public record McpInvocationContext(
 ) {
     public static final String TOOL_CONTEXT_KEY = "zenvis_mcp_invocation_context";
     public static final String ANALYSIS_TASK_AGENT_TYPE = "agent_analysis_task";
+    public static final String BUILTIN_DATA_ACCESS_DEMO =
+            "builtin-data-access-demo";
+    public static final String BUILTIN_DATA_VISUALIZATION_DEMO =
+            "builtin-data-visualization-demo";
 
     public McpInvocationContext(McpInvocationChannel channel,
                                 Integer requesterUserId,
@@ -76,6 +80,21 @@ public record McpInvocationContext(
 
     public boolean isTaskCancelled() {
         return cancelled != null && cancelled.getAsBoolean();
+    }
+
+    /**
+     * Deterministic demos are meant to demonstrate the real MCP approval
+     * boundary. Their default-ASK tools must therefore request approval on
+     * every invocation instead of inheriting an ALLOW override or a previous
+     * chat grant.
+     */
+    public boolean requiresExplicitDemoApproval() {
+        return isExplicitApprovalDemoClient(mcpClientInfo);
+    }
+
+    public static boolean isExplicitApprovalDemoClient(String clientInfo) {
+        return BUILTIN_DATA_ACCESS_DEMO.equals(clientInfo)
+                || BUILTIN_DATA_VISUALIZATION_DEMO.equals(clientInfo);
     }
 
     public void emit(McpApprovalEvent event) {

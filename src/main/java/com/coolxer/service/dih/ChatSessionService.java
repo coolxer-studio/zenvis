@@ -38,6 +38,21 @@ public interface ChatSessionService {
     Boolean update(Long id, ChatSessionDto chatSessionDto, User currentUser);
 
     /**
+     * Updates server-owned workflow state together with its originating messages.
+     * This path is intentionally separate from the public session update contract.
+     */
+    default Boolean updateWorkflowState(
+            Long id,
+            String messages,
+            String extraData,
+            User currentUser) {
+        ChatSessionDto dto = new ChatSessionDto();
+        dto.setMessages(messages);
+        dto.setExtraData(extraData);
+        return update(id, dto, currentUser);
+    }
+
+    /**
      * 删除会话
      *
      * @param id 会话id

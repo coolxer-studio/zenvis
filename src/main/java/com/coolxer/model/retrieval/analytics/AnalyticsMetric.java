@@ -8,5 +8,10 @@ public record AnalyticsMetric(
         String name,
         String operation,
         String field,
-        String label) {
+        String label,
+        Double percentile) {
+
+    public AnalyticsMetric(String name, String operation, String field, String label) {
+        this(name, operation, field, label, null);
+    }
 }

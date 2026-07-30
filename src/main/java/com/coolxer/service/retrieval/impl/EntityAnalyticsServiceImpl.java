@@ -2,13 +2,16 @@ package com.coolxer.service.retrieval.impl;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
+import com.coolxer.model.retrieval.analytics.AggregateQueryRequest;
 import com.coolxer.model.retrieval.analytics.AnalyticsMetric;
 import com.coolxer.model.retrieval.analytics.AnalyticsResponse;
 import com.coolxer.model.retrieval.analytics.AnalyticsTimeRange;
 import com.coolxer.model.retrieval.analytics.DistributionQueryRequest;
+import com.coolxer.model.retrieval.analytics.HistogramQueryRequest;
 import com.coolxer.model.retrieval.analytics.OverviewQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationTimelineQueryRequest;
+import com.coolxer.model.retrieval.analytics.ScatterQueryRequest;
 import com.coolxer.model.retrieval.analytics.SummaryQueryRequest;
 import com.coolxer.model.retrieval.analytics.TrendQueryRequest;
 import com.coolxer.model.retrieval.analytics.ValueStatisticsQueryRequest;
@@ -47,6 +50,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -56,6 +60,14 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
     private static final int MAX_METRICS = 20;
     private static final int MAX_CRITERIA = 50;
     private static final int MAX_BUCKETS = 1_000;
+    private static final int MAX_RESULT_CELLS = 1_000;
+    private static final int MAX_CHART_SERIES = 20;
+    private static final int DEFAULT_AGGREGATE_LIMIT = 100;
+    private static final int DEFAULT_HISTOGRAM_BINS = 20;
+    private static final int MIN_HISTOGRAM_BINS = 5;
+    private static final int MAX_HISTOGRAM_BINS = 100;
+    private static final int DEFAULT_SCATTER_LIMIT = 500;
+    private static final int MAX_SCATTER_LIMIT = 2_000;
     private static final int DEFAULT_TOP_LIMIT = 10;
     private static final int MAX_TOP_LIMIT = 100;
     private static final int DEFAULT_CATEGORY_LIMIT = 10;
@@ -65,11 +77,16 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
     private static final DateTimeFormatter SECOND_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Set<String> OPERATIONS =
-            Set.of("COUNT", "DISTINCT_COUNT", "SUM", "AVG", "MIN", "MAX");
+            Set.of("COUNT", "DISTINCT_COUNT", "SUM", "AVG", "MIN", "MAX", "PERCENTILE");
     private static final Set<String> COMPARISONS =
             Set.of("NONE", "PREVIOUS_PERIOD", "YEAR_OVER_YEAR");
     private static final Set<String> GRANULARITIES =
-            Set.of("AUTO", "HOUR", "DAY", "WEEK", "MONTH");
+            Set.of("AUTO", "MINUTE", "FIVE_MINUTES", "FIFTEEN_MINUTES",
+                    "HOUR", "DAY", "WEEK", "MONTH", "QUARTER", "YEAR");
+    private static final Set<String> CHART_HINTS =
+            Set.of("AUTO", "BAR", "LINE", "AREA", "PIE", "HEATMAP");
+    private static final Pattern LOGICAL_ALIAS_PATTERN =
+            Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private final AnalyticsQueryEngine queryEngine;
     private final MetaDataService metaDataService;
@@ -391,6 +408,524 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
                 false, false, "bar", true));
     }
 
+    @Override
+    public AnalyticsResponse aggregate(AggregateQueryRequest request) {
+        requireRequest(request);
+        validateCriteriaBudget(request.criteriaList(), List.of());
+        ResolvedEntity entity =
+                resolveEntity(requireNonBlank(request.entity(), "实体不能为空"));
+        List<AggregateQueryRequest.Dimension> requestedDimensions =
+                request.dimensions() == null ? List.of() : request.dimensions();
+        if (requestedDimensions.size() > 2) {
+            throw unsupported("聚合维度不能超过2个");
+        }
+        List<AnalyticsMetric> requestedMetrics = requireMetrics(request.metrics());
+        boolean hasTimeDimension = requestedDimensions.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(item -> "TIME".equalsIgnoreCase(
+                        StringUtils.defaultIfBlank(item.kind(), "FIELD")));
+        TimeContext time = resolveTime(request.timeRange(),
+                hasTimeDimension ? "LAST_30_DAYS" : "ALL_TIME", !hasTimeDimension);
+
+        List<AnalyticsQueryEngine.GroupDimension> dimensions = new ArrayList<>();
+        Set<String> names = new LinkedHashSet<>();
+        for (int i = 0; i < requestedDimensions.size(); i++) {
+            AggregateQueryRequest.Dimension item = requestedDimensions.get(i);
+            if (item == null) {
+                throw empty("聚合维度不能为空");
+            }
+            String kind = StringUtils.upperCase(StringUtils.defaultIfBlank(item.kind(), "FIELD"));
+            if (!Set.of("FIELD", "TIME").contains(kind)) {
+                throw unsupported("维度kind仅支持FIELD或TIME");
+            }
+            String field = StringUtils.defaultIfBlank(item.field(),
+                    "TIME".equals(kind) ? StringUtils.defaultIfBlank(
+                            request.timeField(), MetaDataConstants.INSERT_TIME_ATTRIBUTE) : null);
+            field = requireNonBlank(field, "维度字段不能为空");
+            DataAttribute attribute = "TIME".equals(kind)
+                    ? resolveTimeAttribute(entity, field) : requireScalar(entity, field);
+            String name = requireAlias(StringUtils.defaultIfBlank(
+                    item.name(), "dimension_" + (i + 1)), "维度名称");
+            if (!names.add(name)) {
+                throw unsupported("维度和指标名称不能重复: " + name);
+            }
+            String granularity = "TIME".equals(kind)
+                    ? resolveGranularity(item.granularity(), time.current()) : null;
+            dimensions.add(new AnalyticsQueryEngine.GroupDimension(
+                    name,
+                    StringUtils.defaultIfBlank(item.label(), attribute.getLabel()),
+                    attribute.getColumnName(),
+                    attribute.getColumnType(),
+                    kind,
+                    granularity,
+                    Boolean.TRUE.equals(item.includeNull())));
+        }
+
+        List<AnalyticsQueryEngine.GroupMetric> metrics = new ArrayList<>();
+        for (int i = 0; i < requestedMetrics.size(); i++) {
+            ResolvedMetric metric = resolveMetric(entity, requestedMetrics.get(i), i);
+            String name = requireAlias(metric.name(), "指标名称");
+            if (!names.add(name)) {
+                throw unsupported("维度和指标名称不能重复: " + name);
+            }
+            metrics.add(new AnalyticsQueryEngine.GroupMetric(
+                    name, metric.label(), metric.metric()));
+        }
+        int columnsPerRow = dimensions.size() + metrics.size();
+        int maximumRows = Math.max(1, MAX_RESULT_CELLS / columnsPerRow);
+        int limit = request.limit() == null
+                ? Math.min(DEFAULT_AGGREGATE_LIMIT, maximumRows) : request.limit();
+        if (limit < 1 || limit > maximumRows) {
+            throw unsupported("当前维度和指标数量下limit必须为1到" + maximumRows
+                    + "，以保证结果单元不超过" + MAX_RESULT_CELLS);
+        }
+        AggregateQueryRequest.OrderBy requestedOrder = request.orderBy();
+        AnalyticsQueryEngine.GroupOrder order = requestedOrder == null ? null
+                : new AnalyticsQueryEngine.GroupOrder(
+                requireNonBlank(requestedOrder.field(), "排序字段不能为空"),
+                normalizeOrder(requestedOrder.direction()));
+        if (order != null && !names.contains(order.field())) {
+            throw unsupported("排序字段必须引用维度或指标名称");
+        }
+        AnalyticsQueryEngine.QuerySource querySource = source(
+                entity, request.timeField(), request.criteriaList(), request.criteriaLogic());
+        List<Map<String, Object>> queried = queryEngine.aggregateGroups(
+                new AnalyticsQueryEngine.GroupQuery(
+                        querySource, dimensions, metrics, order, limit + 1),
+                time.current());
+        boolean truncated = queried.size() > limit;
+        List<Map<String, Object>> rows = truncated
+                ? new ArrayList<>(queried.subList(0, limit))
+                : new ArrayList<>(queried);
+        ensureAggregateSeriesBudget(dimensions, metrics, rows);
+        String chartHint = normalizeChartHint(request.chartHint());
+
+        List<Map<String, Object>> resultColumns = new ArrayList<>();
+        dimensions.forEach(item -> resultColumns.add(column(
+                item.name(), item.label(), "TIME".equals(item.kind()) ? "date" : "dimension")));
+        metrics.forEach(item -> resultColumns.add(column(
+                item.name(), item.label(), "metric")));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("columns", resultColumns);
+        result.put("rows", rows);
+        Map<String, Object> metadata = meta("aggregate", time, "NONE",
+                dimensions.stream().filter(item -> "TIME".equals(item.kind()))
+                        .map(AnalyticsQueryEngine.GroupDimension::granularity)
+                        .findFirst().orElse(null), rows.size());
+        metadata.put("entity", entity.entity().getName());
+        metadata.put("truncated", truncated);
+        metadata.put("limit", limit);
+        metadata.put("dimensions", dimensions.stream().map(
+                AnalyticsQueryEngine.GroupDimension::name).toList());
+        metadata.put("metrics", metrics.stream().map(
+                AnalyticsQueryEngine.GroupMetric::name).toList());
+        metadata.put("fields", java.util.stream.Stream.concat(
+                        requestedDimensions.stream().map(item -> StringUtils.defaultIfBlank(
+                                item.field(), StringUtils.defaultIfBlank(
+                                        request.timeField(),
+                                        MetaDataConstants.INSERT_TIME_ATTRIBUTE))),
+                        requestedMetrics.stream().map(AnalyticsMetric::field)
+                                .filter(StringUtils::isNotBlank))
+                .distinct().toList());
+        return response(metadata, result,
+                aggregateOption(rows, dimensions, metrics, chartHint));
+    }
+
+    @Override
+    public AnalyticsResponse histogram(HistogramQueryRequest request) {
+        requireRequest(request);
+        validateCriteriaBudget(request.criteriaList(), List.of());
+        ResolvedEntity entity =
+                resolveEntity(requireNonBlank(request.entity(), "实体不能为空"));
+        DataAttribute field = requireNumeric(entity,
+                requireNonBlank(request.field(), "直方图字段不能为空"));
+        int bins = request.bins() == null ? DEFAULT_HISTOGRAM_BINS : request.bins();
+        if (bins < MIN_HISTOGRAM_BINS || bins > MAX_HISTOGRAM_BINS) {
+            throw unsupported("bins必须为" + MIN_HISTOGRAM_BINS
+                    + "到" + MAX_HISTOGRAM_BINS);
+        }
+        if (request.min() != null && request.max() != null
+                && request.min().compareTo(request.max()) >= 0) {
+            throw unsupported("min必须小于max");
+        }
+        TimeContext time = resolveTime(request.timeRange(), "ALL_TIME", true);
+        AnalyticsQueryEngine.QuerySource querySource = source(
+                entity, request.timeField(), request.criteriaList(), request.criteriaLogic());
+        AnalyticsQueryEngine.HistogramResult queried = queryEngine.histogram(
+                new AnalyticsQueryEngine.HistogramSource(
+                        querySource, field.getName(), field.getColumnName(),
+                        field.getColumnType(), bins, request.min(), request.max()),
+                time.current());
+        List<Map<String, Object>> rows = buildHistogramRows(
+                queried, bins);
+        Map<String, Object> result = tabularResult(
+                columns("bucket", "lower_bound", "upper_bound", "label", "value"), rows);
+        result.put("total", queried.total());
+        Map<String, Object> metadata = meta(
+                "histogram", time, "NONE", null, rows.size());
+        metadata.put("entity", entity.entity().getName());
+        metadata.put("field", field.getName());
+        metadata.put("fields", List.of(field.getName()));
+        metadata.put("bins", bins);
+        metadata.put("min", queried.min());
+        metadata.put("max", queried.max());
+        metadata.put("truncated", false);
+        return response(metadata, result,
+                histogramOption(rows, field.getLabel()));
+    }
+
+    @Override
+    public AnalyticsResponse scatter(ScatterQueryRequest request) {
+        requireRequest(request);
+        validateCriteriaBudget(request.criteriaList(), List.of());
+        ResolvedEntity entity =
+                resolveEntity(requireNonBlank(request.entity(), "实体不能为空"));
+        DataAttribute x = requireNumeric(entity,
+                requireNonBlank(request.xField(), "x_field不能为空"));
+        DataAttribute y = requireNumeric(entity,
+                requireNonBlank(request.yField(), "y_field不能为空"));
+        DataAttribute size = StringUtils.isBlank(request.sizeField()) ? null
+                : requireNumeric(entity, request.sizeField());
+        DataAttribute category = StringUtils.isBlank(request.categoryField()) ? null
+                : requireScalar(entity, request.categoryField());
+        DataAttribute label = StringUtils.isBlank(request.labelField()) ? null
+                : requireScalar(entity, request.labelField());
+        List<String> selectedFields = java.util.stream.Stream.of(x, y, size, category, label)
+                .filter(Objects::nonNull).map(DataAttribute::getName).toList();
+        if (new HashSet<>(selectedFields).size() != selectedFields.size()) {
+            throw unsupported("散点图字段不能重复");
+        }
+        int limit = request.limit() == null ? DEFAULT_SCATTER_LIMIT : request.limit();
+        if (limit < 1 || limit > MAX_SCATTER_LIMIT) {
+            throw unsupported("limit必须为1到" + MAX_SCATTER_LIMIT);
+        }
+        TimeContext time = resolveTime(request.timeRange(), "ALL_TIME", true);
+        String sortBy = StringUtils.defaultIfBlank(
+                request.sortBy(), StringUtils.defaultIfBlank(
+                        request.timeField(), MetaDataConstants.INSERT_TIME_ATTRIBUTE));
+        DataAttribute sort = requireScalar(entity, sortBy);
+        AnalyticsQueryEngine.QuerySource querySource = source(
+                entity, request.timeField(), request.criteriaList(), request.criteriaLogic());
+        AnalyticsQueryEngine.ScatterResult queried = queryEngine.scatter(
+                new AnalyticsQueryEngine.ScatterSource(
+                        querySource,
+                        x.getName(), x.getColumnName(),
+                        y.getName(), y.getColumnName(),
+                        size == null ? null : size.getName(),
+                        size == null ? null : size.getColumnName(),
+                        category == null ? null : category.getName(),
+                        category == null ? null : category.getColumnName(),
+                        label == null ? null : label.getName(),
+                        label == null ? null : label.getColumnName(),
+                        sort.getColumnName(), normalizeOrder(request.order()), limit),
+                time.current());
+        List<Map<String, Object>> rows = queried.rows();
+        if (category != null) {
+            long seriesCount = rows.stream()
+                    .map(row -> String.valueOf(row.get("category")))
+                    .distinct().count();
+            if (seriesCount > MAX_CHART_SERIES) {
+                throw unsupported("散点图分类序列不能超过" + MAX_CHART_SERIES + "个");
+            }
+        }
+        Map<String, Object> result = tabularResult(
+                columns("x", "y", "size", "category", "label"), rows);
+        result.put("has_more", queried.hasMore());
+        Map<String, Object> metadata =
+                meta("scatter", time, "NONE", null, rows.size());
+        metadata.put("entity", entity.entity().getName());
+        metadata.put("x_field", x.getName());
+        metadata.put("y_field", y.getName());
+        metadata.put("size_field", size == null ? null : size.getName());
+        metadata.put("category_field", category == null ? null : category.getName());
+        metadata.put("label_field", label == null ? null : label.getName());
+        metadata.put("fields", selectedFields);
+        metadata.put("limit", limit);
+        metadata.put("truncated", queried.hasMore());
+        return response(metadata, result,
+                scatterOption(rows, x.getLabel(), y.getLabel(), size != null));
+    }
+
+    private void ensureAggregateSeriesBudget(
+            List<AnalyticsQueryEngine.GroupDimension> dimensions,
+            List<AnalyticsQueryEngine.GroupMetric> metrics,
+            List<Map<String, Object>> rows) {
+        int series = metrics.size();
+        if (dimensions.size() == 2) {
+            long secondDimensionValues = rows.stream()
+                    .map(row -> String.valueOf(row.get(dimensions.get(1).name())))
+                    .distinct().count();
+            series = Math.toIntExact(secondDimensionValues * metrics.size());
+        }
+        if (series > MAX_CHART_SERIES) {
+            throw unsupported("聚合结果图表序列不能超过" + MAX_CHART_SERIES
+                    + "个，请减少第二维度基数或指标数量");
+        }
+    }
+
+    private Map<String, Object> aggregateOption(
+            List<Map<String, Object>> rows,
+            List<AnalyticsQueryEngine.GroupDimension> dimensions,
+            List<AnalyticsQueryEngine.GroupMetric> metrics,
+            String chartHint) {
+        if (dimensions.isEmpty()) {
+            List<Map<String, Object>> source = metrics.stream().map(metric -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("metric", metric.label());
+                item.put("value", rows.isEmpty() ? 0 : rows.get(0).get(metric.name()));
+                return item;
+            }).toList();
+            return barOption(source, "metric",
+                    List.of(new SeriesDefinition("value", "指标值")), false);
+        }
+        if ("PIE".equals(chartHint)) {
+            if (dimensions.size() != 1 || metrics.size() != 1) {
+                throw unsupported("PIE仅支持一个维度和一个指标");
+            }
+            Map<String, Object> series = new LinkedHashMap<>();
+            series.put("type", "pie");
+            series.put("radius", "65%");
+            series.put("encode", Map.of(
+                    "itemName", dimensions.get(0).name(),
+                    "value", metrics.get(0).name(),
+                    "tooltip", List.of(dimensions.get(0).name(), metrics.get(0).name())));
+            return Map.of("chart_type", "pie", "option", Map.of(
+                    "tooltip", Map.of("trigger", "item"),
+                    "legend", Map.of(),
+                    "dataset", Map.of("source", rows),
+                    "series", List.of(series)));
+        }
+        if ("HEATMAP".equals(chartHint)) {
+            if (dimensions.size() != 2 || metrics.size() != 1) {
+                throw unsupported("HEATMAP仅支持两个维度和一个指标");
+            }
+            return heatmapOption(rows, dimensions.get(0), dimensions.get(1), metrics.get(0));
+        }
+
+        String seriesType = switch (chartHint) {
+            case "LINE", "AREA" -> "line";
+            case "BAR" -> "bar";
+            default -> "TIME".equals(dimensions.get(0).kind()) ? "line" : "bar";
+        };
+        boolean area = "AREA".equals(chartHint);
+        if (dimensions.size() == 1) {
+            List<Map<String, Object>> series = new ArrayList<>();
+            for (AnalyticsQueryEngine.GroupMetric metric : metrics) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("name", metric.label());
+                item.put("type", seriesType);
+                item.put("encode", Map.of(
+                        "x", dimensions.get(0).name(), "y", metric.name()));
+                if (area) {
+                    item.put("areaStyle", Map.of());
+                }
+                series.add(item);
+            }
+            return Map.of("chart_type", area ? "area" : seriesType,
+                    "option", cartesianOption(rows, series));
+        }
+
+        AnalyticsQueryEngine.GroupDimension xDimension = dimensions.get(0);
+        AnalyticsQueryEngine.GroupDimension seriesDimension = dimensions.get(1);
+        LinkedHashSet<String> xValues = rows.stream()
+                .map(row -> String.valueOf(row.get(xDimension.name())))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        LinkedHashSet<String> seriesValues = rows.stream()
+                .map(row -> String.valueOf(row.get(seriesDimension.name())))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<Map<String, Object>> pivot = new ArrayList<>();
+        for (String xValue : xValues) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put(xDimension.name(), xValue);
+            for (Map<String, Object> row : rows) {
+                if (!xValue.equals(String.valueOf(row.get(xDimension.name())))) {
+                    continue;
+                }
+                String seriesValue = String.valueOf(row.get(seriesDimension.name()));
+                for (AnalyticsQueryEngine.GroupMetric metric : metrics) {
+                    item.put(seriesValue + " / " + metric.label(), row.get(metric.name()));
+                }
+            }
+            pivot.add(item);
+        }
+        List<Map<String, Object>> chartSeries = new ArrayList<>();
+        for (String seriesValue : seriesValues) {
+            for (AnalyticsQueryEngine.GroupMetric metric : metrics) {
+                String name = seriesValue + " / " + metric.label();
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("name", name);
+                item.put("type", seriesType);
+                item.put("encode", Map.of("x", xDimension.name(), "y", name));
+                if (area) {
+                    item.put("stack", "total");
+                    item.put("areaStyle", Map.of());
+                }
+                chartSeries.add(item);
+            }
+        }
+        return Map.of("chart_type", area ? "area" : seriesType,
+                "option", cartesianOption(pivot, chartSeries));
+    }
+
+    private Map<String, Object> cartesianOption(
+            List<Map<String, Object>> rows, List<Map<String, Object>> series) {
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("tooltip", Map.of("trigger", "axis"));
+        option.put("legend", Map.of());
+        option.put("dataset", Map.of("source", rows));
+        option.put("xAxis", Map.of("type", "category"));
+        option.put("yAxis", Map.of("type", "value"));
+        option.put("series", series);
+        return option;
+    }
+
+    private Map<String, Object> heatmapOption(
+            List<Map<String, Object>> rows,
+            AnalyticsQueryEngine.GroupDimension xDimension,
+            AnalyticsQueryEngine.GroupDimension yDimension,
+            AnalyticsQueryEngine.GroupMetric metric) {
+        List<String> xValues = rows.stream()
+                .map(row -> String.valueOf(row.get(xDimension.name())))
+                .distinct().toList();
+        List<String> yValues = rows.stream()
+                .map(row -> String.valueOf(row.get(yDimension.name())))
+                .distinct().toList();
+        List<List<Object>> data = new ArrayList<>();
+        BigDecimal maximum = BigDecimal.ZERO;
+        for (Map<String, Object> row : rows) {
+            Object raw = row.get(metric.name());
+            BigDecimal value = raw == null ? BigDecimal.ZERO : decimal(raw);
+            maximum = maximum.max(value.abs());
+            data.add(List.of(
+                    xValues.indexOf(String.valueOf(row.get(xDimension.name()))),
+                    yValues.indexOf(String.valueOf(row.get(yDimension.name()))),
+                    raw == null ? 0 : raw));
+        }
+        Map<String, Object> series = new LinkedHashMap<>();
+        series.put("name", metric.label());
+        series.put("type", "heatmap");
+        series.put("data", data);
+        series.put("label", Map.of("show", true));
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("tooltip", Map.of());
+        option.put("xAxis", Map.of("type", "category", "data", xValues));
+        option.put("yAxis", Map.of("type", "category", "data", yValues));
+        option.put("visualMap", Map.of(
+                "min", 0,
+                "max", maximum.compareTo(BigDecimal.ZERO) == 0 ? 1 : maximum,
+                "calculable", true,
+                "orient", "horizontal"));
+        option.put("series", List.of(series));
+        return Map.of("chart_type", "heatmap", "option", option);
+    }
+
+    private List<Map<String, Object>> buildHistogramRows(
+            AnalyticsQueryEngine.HistogramResult result, int bins) {
+        if (result.total() == 0L || result.min() == null || result.max() == null) {
+            return List.of();
+        }
+        if (result.min().compareTo(result.max()) == 0) {
+            return List.of(histogramRow(
+                    0, result.min(), result.max(), result.total(), true));
+        }
+        Map<Integer, Long> counts = result.rows().stream().collect(Collectors.toMap(
+                row -> ((Number) row.get("bucket")).intValue(),
+                row -> ((Number) row.get("value")).longValue(),
+                Long::sum, LinkedHashMap::new));
+        BigDecimal width = result.max().subtract(result.min())
+                .divide(BigDecimal.valueOf(bins), 16, java.math.RoundingMode.HALF_UP);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int index = 0; index < bins; index++) {
+            BigDecimal lower = result.min().add(width.multiply(BigDecimal.valueOf(index)));
+            BigDecimal upper = index == bins - 1 ? result.max() : lower.add(width);
+            rows.add(histogramRow(
+                    index, lower, upper, counts.getOrDefault(index, 0L), index == bins - 1));
+        }
+        return rows;
+    }
+
+    private Map<String, Object> histogramRow(
+            int bucket, BigDecimal lower, BigDecimal upper, long value, boolean inclusiveUpper) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("bucket", bucket);
+        row.put("lower_bound", lower);
+        row.put("upper_bound", upper);
+        row.put("label", formatNumber(lower) + " – " + formatNumber(upper)
+                + (inclusiveUpper ? "（含上界）" : ""));
+        row.put("value", value);
+        return row;
+    }
+
+    private Map<String, Object> histogramOption(
+            List<Map<String, Object>> rows, String fieldLabel) {
+        Map<String, Object> series = new LinkedHashMap<>();
+        series.put("name", StringUtils.defaultIfBlank(fieldLabel, "数量"));
+        series.put("type", "bar");
+        series.put("encode", Map.of("x", "label", "y", "value"));
+        return Map.of("chart_type", "bar", "option", Map.of(
+                "tooltip", Map.of("trigger", "axis"),
+                "dataset", Map.of("source", rows),
+                "xAxis", Map.of("type", "category", "axisLabel", Map.of("rotate", 30)),
+                "yAxis", Map.of("type", "value"),
+                "series", List.of(series)));
+    }
+
+    private Map<String, Object> scatterOption(
+            List<Map<String, Object>> rows, String xLabel, String yLabel, boolean bubble) {
+        Map<String, List<Map<String, Object>>> grouped = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            String category = StringUtils.defaultIfBlank(
+                    row.get("category") == null ? null : row.get("category").toString(), "数据");
+            grouped.computeIfAbsent(category, ignored -> new ArrayList<>()).add(row);
+        }
+        BigDecimal maxSize = rows.stream()
+                .map(row -> row.get("size"))
+                .filter(Objects::nonNull)
+                .map(this::decimal)
+                .map(BigDecimal::abs)
+                .max(Comparator.naturalOrder())
+                .orElse(BigDecimal.ONE);
+        List<Map<String, Object>> series = new ArrayList<>();
+        for (Map.Entry<String, List<Map<String, Object>>> entry : grouped.entrySet()) {
+            List<Map<String, Object>> data = new ArrayList<>();
+            for (Map<String, Object> row : entry.getValue()) {
+                Map<String, Object> point = new LinkedHashMap<>();
+                List<Object> value = new ArrayList<>();
+                value.add(row.get("x"));
+                value.add(row.get("y"));
+                if (bubble) {
+                    value.add(row.get("size"));
+                    BigDecimal size = row.get("size") == null
+                            ? BigDecimal.ZERO : decimal(row.get("size")).abs();
+                    int symbolSize = 8 + size.multiply(BigDecimal.valueOf(32))
+                            .divide(maxSize.compareTo(BigDecimal.ZERO) == 0
+                                            ? BigDecimal.ONE : maxSize,
+                                    0, java.math.RoundingMode.HALF_UP).intValue();
+                    point.put("symbolSize", symbolSize);
+                }
+                point.put("value", value);
+                if (row.get("label") != null) {
+                    point.put("name", row.get("label"));
+                }
+                data.add(point);
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", entry.getKey());
+            item.put("type", "scatter");
+            item.put("data", data);
+            series.add(item);
+        }
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("tooltip", Map.of("trigger", "item"));
+        option.put("legend", Map.of());
+        option.put("xAxis", Map.of("type", "value", "name",
+                StringUtils.defaultIfBlank(xLabel, "X")));
+        option.put("yAxis", Map.of("type", "value", "name",
+                StringUtils.defaultIfBlank(yLabel, "Y")));
+        option.put("series", series);
+        return Map.of("chart_type", bubble ? "bubble" : "scatter", "option", option);
+    }
+
     private List<ResolvedSeries> resolveSeries(TrendQueryRequest request) {
         List<ResolvedSeries> result = new ArrayList<>();
         if (request.series() != null && !request.series().isEmpty()) {
@@ -595,10 +1130,14 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
             throw unsupported("不支持的指标操作: " + input.operation());
         }
         DataAttribute attribute = null;
+        if ("COUNT".equals(operation) && StringUtils.isNotBlank(input.field())) {
+            throw unsupported("COUNT指标不接受字段，请省略field");
+        }
         if (!"COUNT".equals(operation)) {
             attribute = requireScalar(entity, requireNonBlank(input.field(), "指标字段不能为空"));
             String type = typeFamily(attribute.getColumnType());
-            if (Set.of("SUM", "AVG").contains(operation) && !"number".equals(type)) {
+            if (Set.of("SUM", "AVG", "PERCENTILE").contains(operation)
+                    && !"number".equals(type)) {
                 throw unsupported(operation + "指标仅支持数字字段");
             }
             if (Set.of("MIN", "MAX").contains(operation)
@@ -611,10 +1150,20 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         String name = StringUtils.defaultIfBlank(input.name(), fallbackName);
         String label = StringUtils.defaultIfBlank(input.label(),
                 attribute == null ? "数量" : attribute.getLabel());
+        Double percentile = input.percentile();
+        if ("PERCENTILE".equals(operation)) {
+            if (percentile == null || !Double.isFinite(percentile)
+                    || percentile <= 0D || percentile >= 1D) {
+                throw unsupported("PERCENTILE指标必须提供大于0且小于1的percentile");
+            }
+        } else if (percentile != null) {
+            throw unsupported("percentile仅能用于PERCENTILE指标");
+        }
         return new ResolvedMetric(name, label, attribute == null ? null : attribute.getName(),
                 new AnalyticsQueryEngine.Metric(operation,
                         attribute == null ? null : attribute.getColumnName(),
-                        attribute == null ? null : attribute.getColumnType()));
+                        attribute == null ? null : attribute.getColumnType(),
+                        percentile));
     }
 
     private ResolvedEntity resolveEntity(String entityName) {
@@ -650,6 +1199,15 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         if (!isSupportedScalarType(type)) {
             throw unsupported("字段不是可分析的标量类型: "
                     + entity.entity().getName() + "." + field);
+        }
+        return attribute;
+    }
+
+    private DataAttribute requireNumeric(ResolvedEntity entity, String field) {
+        DataAttribute attribute = requireScalar(entity, requireNonBlank(field, "字段不能为空"));
+        if (!"number".equals(typeFamily(attribute.getColumnType()))) {
+            throw unsupported("字段必须为数字类型: "
+                    + entity.entity().getName() + "." + attribute.getName());
         }
         return attribute;
     }
@@ -765,14 +1323,16 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         LocalDateTime end = parseBoundary(window.endTime());
         Duration duration = Duration.between(start, end);
         String resolved;
-        if (duration.compareTo(Duration.ofDays(2)) <= 0) {
+        if (duration.compareTo(Duration.ofHours(12)) <= 0) {
+            resolved = "MINUTE";
+        } else if (duration.compareTo(Duration.ofDays(7)) <= 0) {
+            resolved = "FIFTEEN_MINUTES";
+        } else if (duration.compareTo(Duration.ofDays(30)) <= 0) {
             resolved = "HOUR";
-        } else if (duration.compareTo(Duration.ofDays(120)) <= 0) {
-            resolved = "DAY";
         } else if (duration.compareTo(Duration.ofDays(730)) <= 0) {
-            resolved = "WEEK";
+            resolved = "DAY";
         } else {
-            resolved = "MONTH";
+            resolved = "WEEK";
         }
         bucketKeys(window, resolved);
         return resolved;
@@ -782,26 +1342,44 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         LocalDateTime start = parseBoundary(window.startTime());
         LocalDateTime end = parseBoundary(window.endTime());
         LocalDateTime cursor = switch (granularity) {
+            case "MINUTE" -> start.withSecond(0).withNano(0);
+            case "FIVE_MINUTES" -> start.withMinute(
+                    start.getMinute() - start.getMinute() % 5).withSecond(0).withNano(0);
+            case "FIFTEEN_MINUTES" -> start.withMinute(
+                    start.getMinute() - start.getMinute() % 15).withSecond(0).withNano(0);
             case "HOUR" -> start.withMinute(0).withSecond(0).withNano(0);
             case "DAY" -> start.toLocalDate().atStartOfDay();
             case "WEEK" -> start.toLocalDate()
                     .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay();
             case "MONTH" -> start.toLocalDate().withDayOfMonth(1).atStartOfDay();
+            case "QUARTER" -> start.toLocalDate()
+                    .withMonth(((start.getMonthValue() - 1) / 3) * 3 + 1)
+                    .withDayOfMonth(1).atStartOfDay();
+            case "YEAR" -> start.toLocalDate().withDayOfYear(1).atStartOfDay();
             default -> throw unsupported("不支持的时间粒度: " + granularity);
         };
         List<String> result = new ArrayList<>();
         while (cursor.isBefore(end)) {
-            result.add("HOUR".equals(granularity)
-                    ? cursor.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00:00"))
-                    : cursor.format(DateTimeFormatter.ISO_LOCAL_DATE));
+            result.add(switch (granularity) {
+                case "MINUTE", "FIVE_MINUTES", "FIFTEEN_MINUTES" ->
+                        cursor.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:00"));
+                case "HOUR" ->
+                        cursor.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00:00"));
+                default -> cursor.format(DateTimeFormatter.ISO_LOCAL_DATE);
+            });
             if (result.size() > MAX_BUCKETS) {
                 throw unsupported("时间桶数量不能超过" + MAX_BUCKETS);
             }
             cursor = switch (granularity) {
+                case "MINUTE" -> cursor.plusMinutes(1);
+                case "FIVE_MINUTES" -> cursor.plusMinutes(5);
+                case "FIFTEEN_MINUTES" -> cursor.plusMinutes(15);
                 case "HOUR" -> cursor.plusHours(1);
                 case "DAY" -> cursor.plusDays(1);
                 case "WEEK" -> cursor.plusWeeks(1);
                 case "MONTH" -> cursor.plusMonths(1);
+                case "QUARTER" -> cursor.plusMonths(3);
+                case "YEAR" -> cursor.plusYears(1);
                 default -> cursor;
             };
         }
@@ -862,6 +1440,8 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         meta.put("comparison", comparison);
         meta.put("granularity", granularity);
         meta.put("result_count", resultCount);
+        meta.put("fields", List.of());
+        meta.put("truncated", false);
         return meta;
     }
 
@@ -881,6 +1461,14 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
             columns.add(column);
         }
         return columns;
+    }
+
+    private Map<String, Object> column(String name, String label, String type) {
+        Map<String, Object> column = new LinkedHashMap<>();
+        column.put("name", name);
+        column.put("label", label);
+        column.put("type", type);
+        return column;
     }
 
     private Map<String, Object> barOption(List<Map<String, Object>> rows, String category,
@@ -1021,6 +1609,22 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         return comparison;
     }
 
+    private String normalizeOrder(String value) {
+        String order = StringUtils.lowerCase(StringUtils.defaultIfBlank(value, "desc"));
+        if (!Set.of("asc", "desc").contains(order)) {
+            throw unsupported("排序方向仅支持asc或desc");
+        }
+        return order;
+    }
+
+    private String normalizeChartHint(String value) {
+        String chartHint = StringUtils.upperCase(StringUtils.defaultIfBlank(value, "AUTO"));
+        if (!CHART_HINTS.contains(chartHint)) {
+            throw unsupported("不支持的chart_hint: " + value);
+        }
+        return chartHint;
+    }
+
     private String normalizeCriteriaLogic(String value) {
         if (StringUtils.isBlank(value) || "and".equalsIgnoreCase(value)) {
             return "and";
@@ -1056,7 +1660,8 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
                         ? "COUNT|"
                         : StringUtils.upperCase(
                         StringUtils.defaultIfBlank(metric.operation(), "COUNT"))
-                        + "|" + StringUtils.defaultString(metric.field()))
+                        + "|" + StringUtils.defaultString(metric.field())
+                        + "|" + String.valueOf(metric.percentile()))
                 .distinct()
                 .count();
         if (metricCount > MAX_METRICS) {
@@ -1171,11 +1776,26 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
         return value.format(BOUNDARY_FORMAT);
     }
 
-    private BigDecimal decimal(Number value) {
+    private BigDecimal decimal(Object value) {
         if (value instanceof BigDecimal decimal) {
             return decimal;
         }
+        if (!(value instanceof Number)) {
+            throw unsupported("查询结果不是数值");
+        }
         return new BigDecimal(String.valueOf(value));
+    }
+
+    private String formatNumber(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    private String requireAlias(String value, String label) {
+        String alias = requireNonBlank(value, label + "不能为空");
+        if (!LOGICAL_ALIAS_PATTERN.matcher(alias).matches()) {
+            throw unsupported(label + "仅支持字母、数字和下划线，且不能以数字开头");
+        }
+        return alias;
     }
 
     private String requireNonBlank(String value, String message) {

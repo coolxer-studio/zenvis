@@ -42,6 +42,7 @@ public class McpApprovalVo {
     private Long durationMillis;
     private Date createTime;
     private String riskLevel;
+    private Boolean sessionApprovalAllowed;
 
     public McpApprovalVo(McpToolInvocation invocation) {
         this.requestId = invocation.getRequestId();
@@ -74,5 +75,10 @@ public class McpApprovalVo {
         this.createTime = invocation.getCreateTime();
         this.riskLevel = invocation.getRiskLevel() == null
                 ? "unknown" : invocation.getRiskLevel().name().toLowerCase(java.util.Locale.ROOT);
+        this.sessionApprovalAllowed =
+                invocation.getChannel() == McpInvocationChannel.CHAT_AGENT
+                        && !com.coolxer.service.dih.mcp.McpInvocationContext
+                        .isExplicitApprovalDemoClient(
+                                invocation.getMcpClientInfo());
     }
 }

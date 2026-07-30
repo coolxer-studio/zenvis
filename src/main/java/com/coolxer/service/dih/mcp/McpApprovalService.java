@@ -103,12 +103,23 @@ public class McpApprovalService {
                           Callable<String> delegate) {
         McpInvocationContext executionContext = context == null
                 ? McpInvocationContext.background(null) : context;
-        McpApprovalPolicy policy = policyService.effectivePolicy(descriptor.toolKey(), descriptor.defaultPolicy());
-        boolean sessionGranted = policy == McpApprovalPolicy.ASK
+        McpApprovalPolicy configuredPolicy = policyService.effectivePolicy(
+                descriptor.toolKey(),
+                descriptor.defaultPolicy());
+        boolean explicitDemoApproval =
+                executionContext.requiresExplicitDemoApproval()
+                        && descriptor.defaultPolicy() == McpApprovalPolicy.ASK
+                        && configuredPolicy != McpApprovalPolicy.DENY;
+        McpApprovalPolicy policy = explicitDemoApproval
+                ? McpApprovalPolicy.ASK : configuredPolicy;
+        boolean sessionGranted = !explicitDemoApproval
+                && policy == McpApprovalPolicy.ASK
                 && chatToolGrantService.isGranted(executionContext, descriptor.toolKey());
-        boolean taskGranted = policy == McpApprovalPolicy.ASK
+        boolean taskGranted = !explicitDemoApproval
+                && policy == McpApprovalPolicy.ASK
                 && taskToolGrantService.isGranted(executionContext, descriptor.toolKey());
-        boolean taskAutoApproved = policy == McpApprovalPolicy.ASK
+        boolean taskAutoApproved = !explicitDemoApproval
+                && policy == McpApprovalPolicy.ASK
                 && executionContext.analysisTaskId() != null
                 && executionContext.taskApprovalMode() == AnalysisTaskApprovalMode.AUTO;
         boolean approvalRequired = policy == McpApprovalPolicy.ASK
@@ -378,6 +389,12 @@ public class McpApprovalService {
     }
 
     private void assertSessionApprovalSupported(McpToolInvocation invocation) {
+        if (McpInvocationContext.isExplicitApprovalDemoClient(
+                invocation.getMcpClientInfo())) {
+            throw new ApiException(
+                    400,
+                    "内置演示必须逐次审批，不支持本会话始终允许");
+        }
         if (invocation.getChannel() != McpInvocationChannel.CHAT_AGENT
                 || invocation.getRequesterUserId() == null
                 || StringUtils.isBlank(invocation.getChatId())) {

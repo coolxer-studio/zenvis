@@ -1,5 +1,6 @@
 package com.coolxer.service.retrieval;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +24,12 @@ public interface AnalyticsQueryEngine {
                                                TimeWindow window, String granularity,
                                                int categoryLimit);
 
+    List<Map<String, Object>> aggregateGroups(GroupQuery query, TimeWindow window);
+
+    HistogramResult histogram(HistogramSource source, TimeWindow window);
+
+    ScatterResult scatter(ScatterSource source, TimeWindow window);
+
     record Criterion(String column, String columnType, String operator, List<String> values) {
     }
 
@@ -31,7 +38,10 @@ public interface AnalyticsQueryEngine {
                        List<Criterion> criteria, String criteriaLogic) {
     }
 
-    record Metric(String operation, String column, String columnType) {
+    record Metric(String operation, String column, String columnType, Double percentile) {
+        public Metric(String operation, String column, String columnType) {
+            this(operation, column, columnType, null);
+        }
     }
 
     record DistributionSource(QuerySource source, String dimensionColumn,
@@ -45,6 +55,39 @@ public interface AnalyticsQueryEngine {
     record TimelineSource(RelationSource relation, String categoryColumn,
                           String categoryColumnType, String extractionType,
                           int extractionStart, int extractionLength) {
+    }
+
+    record GroupDimension(String name, String label, String column, String columnType,
+                          String kind, String granularity, boolean includeNull) {
+    }
+
+    record GroupMetric(String name, String label, Metric metric) {
+    }
+
+    record GroupOrder(String field, String direction) {
+    }
+
+    record GroupQuery(QuerySource source, List<GroupDimension> dimensions,
+                      List<GroupMetric> metrics, GroupOrder orderBy, int limit) {
+    }
+
+    record HistogramSource(QuerySource source, String field, String column,
+                           String columnType, int bins, BigDecimal min,
+                           BigDecimal max) {
+    }
+
+    record HistogramResult(List<Map<String, Object>> rows, BigDecimal min,
+                           BigDecimal max, long total) {
+    }
+
+    record ScatterSource(QuerySource source, String xField, String xColumn,
+                         String yField, String yColumn, String sizeField,
+                         String sizeColumn, String categoryField, String categoryColumn,
+                         String labelField, String labelColumn, String sortColumn,
+                         String sortDirection, int limit) {
+    }
+
+    record ScatterResult(List<Map<String, Object>> rows, boolean hasMore) {
     }
 
     record TimeWindow(String startTime, String endTime) {

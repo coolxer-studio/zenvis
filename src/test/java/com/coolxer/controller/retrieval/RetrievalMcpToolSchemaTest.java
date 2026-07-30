@@ -75,8 +75,25 @@ class RetrievalMcpToolSchemaTest {
         assertThat(names).contains(
                 "entity_overview", "entity_summary", "entity_trend",
                 "entity_distribution", "entity_value_statistics",
-                "entity_relations", "entity_relation_timeline");
+                "entity_relations", "entity_relation_timeline",
+                "entity_aggregate", "entity_histogram", "entity_scatter");
         assertThat(names).doesNotContain("entity_count", "entity_statistics");
+    }
+
+    @Test
+    void newAnalyticsToolSchemasExposeLogicalFieldsButNoSqlSurface() throws Exception {
+        for (String toolName : Set.of(
+                "entity_aggregate", "entity_histogram", "entity_scatter")) {
+            JsonNode schema = objectMapper.readTree(
+                    findTool(toolName).getToolDefinition().inputSchema());
+            String schemaText = schema.toString();
+
+            assertThat(schema.path("properties").path("request").path("type").asText())
+                    .isEqualTo("object");
+            assertThat(schemaText)
+                    .contains("\"entity\"")
+                    .doesNotContain("\"sql\"", "\"table_name\"", "\"column_name\"");
+        }
     }
 
     @Test

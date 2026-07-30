@@ -1,10 +1,13 @@
 package com.coolxer.service.retrieval;
 
+import com.coolxer.model.retrieval.analytics.AggregateQueryRequest;
 import com.coolxer.model.retrieval.analytics.AnalyticsResponse;
 import com.coolxer.model.retrieval.analytics.DistributionQueryRequest;
+import com.coolxer.model.retrieval.analytics.HistogramQueryRequest;
 import com.coolxer.model.retrieval.analytics.OverviewQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationTimelineQueryRequest;
+import com.coolxer.model.retrieval.analytics.ScatterQueryRequest;
 import com.coolxer.model.retrieval.analytics.SummaryQueryRequest;
 import com.coolxer.model.retrieval.analytics.TrendQueryRequest;
 import com.coolxer.model.retrieval.analytics.ValueStatisticsQueryRequest;
@@ -24,4 +27,10 @@ public interface EntityAnalyticsService {
     AnalyticsResponse relations(RelationQueryRequest request);
 
     AnalyticsResponse relationTimeline(RelationTimelineQueryRequest request);
+
+    AnalyticsResponse aggregate(AggregateQueryRequest request);
+
+    AnalyticsResponse histogram(HistogramQueryRequest request);
+
+    AnalyticsResponse scatter(ScatterQueryRequest request);
 }

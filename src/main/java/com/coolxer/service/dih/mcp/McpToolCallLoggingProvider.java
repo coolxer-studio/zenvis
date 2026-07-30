@@ -85,14 +85,16 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
                         "工具执行已停止：" + runtimeContext.stopReason());
             }
             long startedAt = System.nanoTime();
-            emit(McpToolCallLog.started(toolName, summarize(toolInput, MAX_ARGUMENT_CHARS)));
+            emit(McpToolCallLog.started(
+                    toolName, summarize(toolInput, MAX_ARGUMENT_CHARS), toolInput));
             log.info("MCP工具调用开始: tool={}, arguments={}", toolName, summarize(toolInput, MAX_ARGUMENT_CHARS));
             try {
                 String result = toolContext == null
                         ? delegate.call(toolInput)
                         : delegate.call(toolInput, toolContext);
                 long durationMillis = elapsedMillis(startedAt);
-                emit(McpToolCallLog.succeeded(toolName, durationMillis, summarize(result, MAX_RESULT_CHARS)));
+                emit(McpToolCallLog.succeeded(
+                        toolName, durationMillis, summarize(result, MAX_RESULT_CHARS), result));
                 log.info("MCP工具调用成功: tool={}, durationMs={}, result={}",
                         toolName, durationMillis, summarize(result, MAX_RESULT_CHARS));
                 return result;
@@ -186,18 +188,33 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
                                  String result,
                                  String error,
                                  Long durationMillis,
-                                 Instant time) {
+                                 Instant time,
+                                 String rawArguments,
+                                 String rawResult) {
 
         public static McpToolCallLog started(String toolName, String arguments) {
-            return new McpToolCallLog("started", toolName, arguments, null, null, null, Instant.now());
+            return started(toolName, arguments, arguments);
+        }
+
+        public static McpToolCallLog started(
+                String toolName, String arguments, String rawArguments) {
+            return new McpToolCallLog("started", toolName, arguments, null, null, null,
+                    Instant.now(), rawArguments, null);
         }
 
         public static McpToolCallLog succeeded(String toolName, long durationMillis, String result) {
-            return new McpToolCallLog("succeeded", toolName, null, result, null, durationMillis, Instant.now());
+            return succeeded(toolName, durationMillis, result, result);
+        }
+
+        public static McpToolCallLog succeeded(
+                String toolName, long durationMillis, String result, String rawResult) {
+            return new McpToolCallLog("succeeded", toolName, null, result, null,
+                    durationMillis, Instant.now(), null, rawResult);
         }
 
         public static McpToolCallLog failed(String toolName, long durationMillis, String error) {
-            return new McpToolCallLog("failed", toolName, null, null, error, durationMillis, Instant.now());
+            return new McpToolCallLog("failed", toolName, null, null, error,
+                    durationMillis, Instant.now(), null, null);
         }
     }
 }

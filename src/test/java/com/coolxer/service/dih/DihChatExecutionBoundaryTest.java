@@ -14,17 +14,22 @@ import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.definition.ToolDefinition;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -83,7 +88,8 @@ class DihChatExecutionBoundaryTest {
         verify(fixture.visualizationAgent).chat(
                 eq("chat-1"),
                 eq("model-1"),
-                eq("问题"),
+                argThat(prompt -> prompt.startsWith("问题")
+                        && prompt.contains("普通数据可视化请求没有可用的 MCP 工具")),
                 eq(List.of()),
                 isNull(),
                 eq(List.of("data-visualization-agent")),
@@ -94,6 +100,74 @@ class DihChatExecutionBoundaryTest {
                 anyString(), anyString(), anyString(), anyList(), any(), anyBoolean()
         );
         assertThat(capturedSessionDefaults(fixture).getDeepThink()).isFalse();
+    }
+
+    @Test
+    void visualizationAgentBootstrapsEntityMetaThroughVisibleMcpCall() {
+        Fixture fixture = fixture();
+        AtomicInteger calls = new AtomicInteger();
+        ToolCallback entityMetaTool = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("retrieval_list_display_entity")
+                        .description("获取展示用实体Meta列表")
+                        .inputSchema("{\"type\":\"object\"}")
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                calls.incrementAndGet();
+                return "{\"entityList\":[{\"name\":\"probe_agent_message\","
+                        + "\"label\":\"探针消息\"}]}";
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                return call(toolInput);
+            }
+        };
+        McpToolContext toolContext = new McpToolContext(
+                ToolCallbackProvider.from(entityMetaTool),
+                "允许 retrieval_list_display_entity"
+        );
+        when(fixture.skillService.isBuiltinAgentEnabled(
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
+        )).thenReturn(true);
+        when(fixture.agentMcpToolService.resolve(
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                List.of("data-visualization-agent")
+        )).thenReturn(toolContext);
+        when(fixture.visualizationAgent.chat(
+                anyString(), anyString(), anyString(), anyList(), isNull(),
+                anyList(), any(McpToolContext.class)
+        )).thenReturn(Flux.just("实体选择结果"));
+
+        List<String> response = fixture.service.chat(
+                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION, false),
+                null
+        ).collectList().block();
+
+        assertThat(calls).hasValue(1);
+        assertThat(response)
+                .anySatisfy(chunk -> assertThat(chunk)
+                        .contains("MCP调用成功", "retrieval_list_display_entity"));
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(fixture.visualizationAgent).chat(
+                eq("chat-1"),
+                eq("model-1"),
+                promptCaptor.capture(),
+                eq(List.of()),
+                isNull(),
+                eq(List.of("data-visualization-agent")),
+                any(McpToolContext.class)
+        );
+        assertThat(promptCaptor.getValue())
+                .contains("平台已执行实体 Meta MCP",
+                        "retrieval_list_display_entity",
+                        "probe_agent_message",
+                        "探针消息");
     }
 
     @Test

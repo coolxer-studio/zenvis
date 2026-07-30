@@ -303,6 +303,84 @@ class McpApprovalServiceTest {
     }
 
     @Test
+    void deterministicDemoForcesOneTimeApprovalDespiteAllowPolicyAndChatGrant()
+            throws Exception {
+        when(policyService.effectivePolicy(anyString(), any()))
+                .thenReturn(McpApprovalPolicy.ALLOW);
+        when(chatToolGrantService.isGranted(any(), anyString()))
+                .thenReturn(true);
+        List<McpApprovalEvent> events = new CopyOnWriteArrayList<>();
+        AtomicBoolean called = new AtomicBoolean();
+        User requester = user(42, false);
+
+        CompletableFuture<String> result = CompletableFuture.supplyAsync(
+                () -> service.execute(
+                        descriptor(),
+                        "{\"id\":1}",
+                        demoContext(events),
+                        () -> {
+                            called.set(true);
+                            return "ok";
+                        }));
+
+        McpToolInvocation pending = awaitPendingInvocation();
+        assertThat(called).isFalse();
+        assertThat(pending.getPolicySnapshot())
+                .isEqualTo(McpApprovalPolicy.ASK);
+        assertThat(pending.getMcpClientInfo()).isEqualTo(
+                McpInvocationContext.BUILTIN_DATA_VISUALIZATION_DEMO);
+        assertThat(events)
+                .filteredOn(event ->
+                        "approval_required".equals(event.event()))
+                .singleElement()
+                .satisfies(event -> assertThat(
+                        event.data().getSessionApprovalAllowed())
+                        .isFalse());
+        verify(chatToolGrantService, never())
+                .isGranted(any(), anyString());
+
+        assertThatThrownBy(() -> service.decide(
+                pending.getRequestId(),
+                "approved_session",
+                null,
+                requester))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("必须逐次审批");
+        service.decide(
+                pending.getRequestId(),
+                "approved",
+                null,
+                requester);
+
+        assertThat(result.get(2, TimeUnit.SECONDS)).isEqualTo("ok");
+        assertThat(called).isTrue();
+        assertThat(pending.getApprovalScope())
+                .isEqualTo(McpApprovalScope.ONCE);
+    }
+
+    @Test
+    void deterministicDemoStillHonorsGlobalDeny() {
+        when(policyService.effectivePolicy(anyString(), any()))
+                .thenReturn(McpApprovalPolicy.DENY);
+        AtomicBoolean called = new AtomicBoolean();
+
+        String result = service.execute(
+                descriptor(),
+                "{}",
+                demoContext(null),
+                () -> {
+                    called.set(true);
+                    return "should-not-run";
+                });
+
+        assertThat(result).contains("denied");
+        assertThat(called).isFalse();
+        assertThat(invocations.values()).singleElement()
+                .extracting(McpToolInvocation::getPolicySnapshot)
+                .isEqualTo(McpApprovalPolicy.DENY);
+    }
+
+    @Test
     void sessionApprovalReleasesParallelPendingCalls() throws Exception {
         when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
         User requester = user(42, false);
@@ -438,6 +516,21 @@ class McpApprovalServiceTest {
                 "ask",
                 null,
                 null,
+                events == null ? null : events::add
+        );
+    }
+
+    private McpInvocationContext demoContext(
+            List<McpApprovalEvent> events) {
+        return new McpInvocationContext(
+                McpInvocationChannel.CHAT_AGENT,
+                42,
+                "chat-demo",
+                "turn-demo",
+                "agent_data_visualization",
+                null,
+                McpInvocationContext
+                        .BUILTIN_DATA_VISUALIZATION_DEMO,
                 events == null ? null : events::add
         );
     }

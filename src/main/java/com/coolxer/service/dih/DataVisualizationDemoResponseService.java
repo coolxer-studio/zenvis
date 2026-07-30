@@ -3,31 +3,37 @@ package com.coolxer.service.dih;
 import com.coolxer.commons.enums.DashboardType;
 import com.coolxer.commons.enums.MenuLevel;
 import com.coolxer.commons.enums.MenuType;
-import com.coolxer.dao.mysql.entity.Dashboard;
-import com.coolxer.dao.mysql.entity.Menu;
+import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.Message;
-import com.coolxer.model.config.dto.ConfigDto;
-import com.coolxer.model.system.dto.DashboardDto;
-import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.system.vo.DashboardVo;
 import com.coolxer.model.system.vo.MenuVo;
 import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,6 +42,16 @@ import java.util.regex.Pattern;
 public class DataVisualizationDemoResponseService {
 
     public static final String USER_EVENT_VISUALIZATION_DEMO_TITLE = "用户事件数据可视化演示";
+    public static final String CHART_EXAMPLE_PROMPT =
+            "请查看用户事件数据的上报情况，并生成一个临时性的可视化图表。";
+    public static final String PAGE_EXAMPLE_PROMPT =
+            "请根据用户事件数据生成一个单页面应用。";
+    public static final String SIDEBAR_APP_EXAMPLE_PROMPT =
+            "请生成一个带侧边栏的用户事件数据应用。";
+    public static final String DASHBOARD_EXAMPLE_PROMPT =
+            "请生成一个用户事件数据看板。";
+    public static final String MENU_EXAMPLE_PROMPT =
+            "请添加一个用户事件外部看板菜单。";
 
     private static final String ENTITY = "user-event";
     private static final String ENTITY_LABEL = "用户事件";
@@ -49,6 +65,9 @@ public class DataVisualizationDemoResponseService {
     private static final String ACTION_ADD_CHART_LIBRARY = "data_visualization.add_chart_library";
     private static final String ACTION_APPLY_CONFIG = "data_visualization.apply_config";
     private static final String SOURCE_PREFIX = "data-visualization-demo:user-event:";
+    private static final String MENU_DEMO_NAME = "用户事件外部看板";
+    private static final String MENU_DEMO_URL = "https://example.com/user-event-dashboard";
+    private static final String MENU_DEMO_SOURCE = SOURCE_PREFIX + "menu-external-dashboard";
     private static final String DECISION_ACTIONS = "[\"apply_config\",\"abandon\",\"revise\"]";
     private static final int DEMO_STREAM_CHUNK_SIZE = 20;
     private static final Duration DEMO_STREAM_DELAY = Duration.ofMillis(45);
@@ -510,25 +529,34 @@ public class DataVisualizationDemoResponseService {
             """;
 
     private final ConfigService configService;
-    private final MenuService menuService;
-    private final DashboardService dashboardService;
 
     public DataVisualizationDemoResponseService(ConfigService configService,
                                                 MenuService menuService,
                                                 DashboardService dashboardService) {
         this.configService = configService;
-        this.menuService = menuService;
-        this.dashboardService = dashboardService;
     }
 
     public static boolean isUserEventVisualizationDemoPrompt(String prompt) {
-        return isChartRequirement(prompt)
-                || isSinglePageRequirement(prompt)
-                || isSidebarAppRequirement(prompt)
-                || isDashboardRequirement(prompt);
+        if (!StringUtils.hasText(prompt)) {
+            return false;
+        }
+        String normalized = prompt.trim();
+        return CHART_EXAMPLE_PROMPT.equals(normalized)
+                || PAGE_EXAMPLE_PROMPT.equals(normalized)
+                || SIDEBAR_APP_EXAMPLE_PROMPT.equals(normalized)
+                || DASHBOARD_EXAMPLE_PROMPT.equals(normalized)
+                || MENU_EXAMPLE_PROMPT.equals(normalized);
     }
 
     public Optional<Flux<String>> findResponse(ChatSession chatSession, String chatId, String prompt, User user) {
+        return findResponse(chatSession, chatId, prompt, user, McpToolContext.empty());
+    }
+
+    public Optional<Flux<String>> findResponse(ChatSession chatSession,
+                                               String chatId,
+                                               String prompt,
+                                               User user,
+                                               McpToolContext mcpToolContext) {
         if (!StringUtils.hasText(prompt)) {
             return Optional.empty();
         }
@@ -539,10 +567,12 @@ public class DataVisualizationDemoResponseService {
             return Optional.of(streamResponse(abandonVisualizationConfigResponse()));
         }
         if (isReviseVisualizationConfigPrompt(prompt)) {
-            return Optional.of(streamResponse(reviseLatestVisualizationConfig(chatSession)));
+            return Optional.of(streamAction(
+                    () -> reviseLatestVisualizationConfig(chatSession, mcpToolContext)));
         }
         if (isApplyVisualizationConfigPrompt(prompt)) {
-            return Optional.of(streamResponse(applyLatestVisualizationConfig(chatSession)));
+            return Optional.of(streamAction(
+                    () -> applyLatestVisualizationConfig(chatSession, mcpToolContext)));
         }
         if (isChartInfoSubmitted(prompt)) {
             return Optional.of(streamResponse(buildChartPreviewResponse()));
@@ -571,7 +601,17 @@ public class DataVisualizationDemoResponseService {
         if (isDashboardRequirement(prompt)) {
             return Optional.of(streamResponse(withMetadataNotice(buildDashboardInfoStepsResponse())));
         }
+        if (isMenuRequirement(prompt)) {
+            return Optional.of(streamAction(
+                    () -> buildMenuConfirmationResponse(mcpToolContext)));
+        }
         return Optional.empty();
+    }
+
+    private Flux<String> streamAction(Callable<String> action) {
+        return Mono.fromCallable(action)
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMapMany(this::streamResponse);
     }
 
     private Flux<String> streamResponse(String response) {
@@ -597,26 +637,32 @@ public class DataVisualizationDemoResponseService {
 
     private static boolean isChartRequirement(String prompt) {
         return StringUtils.hasText(prompt)
-                && (prompt.contains("# 用户事件数据可视化：临时图表")
-                || (prompt.contains("用户事件") && prompt.contains("临时") && prompt.contains("图表")));
+                && (CHART_EXAMPLE_PROMPT.equals(prompt.trim())
+                || prompt.contains("# 用户事件数据可视化：临时图表"));
     }
 
     private static boolean isSinglePageRequirement(String prompt) {
         return StringUtils.hasText(prompt)
-                && (prompt.contains("# 用户事件数据可视化：单页面应用")
-                || (prompt.contains("用户事件") && prompt.contains("单页面") && prompt.contains("应用")));
+                && (PAGE_EXAMPLE_PROMPT.equals(prompt.trim())
+                || prompt.contains("# 用户事件数据可视化：单页面应用"));
     }
 
     private static boolean isSidebarAppRequirement(String prompt) {
         return StringUtils.hasText(prompt)
-                && (prompt.contains("# 用户事件数据可视化：带侧边栏应用")
-                || (prompt.contains("用户事件") && prompt.contains("侧边栏") && prompt.contains("应用")));
+                && (SIDEBAR_APP_EXAMPLE_PROMPT.equals(prompt.trim())
+                || prompt.contains("# 用户事件数据可视化：带侧边栏应用"));
     }
 
     private static boolean isDashboardRequirement(String prompt) {
         return StringUtils.hasText(prompt)
-                && (prompt.contains("# 用户事件数据可视化：数据看板")
-                || (prompt.contains("用户事件") && prompt.contains("看板")));
+                && (DASHBOARD_EXAMPLE_PROMPT.equals(prompt.trim())
+                || prompt.contains("# 用户事件数据可视化：数据看板"));
+    }
+
+    private static boolean isMenuRequirement(String prompt) {
+        return StringUtils.hasText(prompt)
+                && (MENU_EXAMPLE_PROMPT.equals(prompt.trim())
+                || prompt.contains("# 用户事件数据可视化：添加菜单"));
     }
 
     private boolean isChartInfoSubmitted(String prompt) {
@@ -849,6 +895,105 @@ public class DataVisualizationDemoResponseService {
                 """;
     }
 
+    private String buildMenuConfirmationResponse(McpToolContext mcpToolContext) {
+        try {
+            Map<String, Object> typeResult = toolResultObject(callTool(
+                    mcpToolContext,
+                    "menu_type_options",
+                    Map.of()));
+            List<Map<String, Object>> typeOptions = listOfMaps(typeResult.get("options"));
+            boolean externalAppAvailable = typeOptions.stream().anyMatch(option ->
+                    "EXTERNAL_APP".equals(String.valueOf(option.get("value"))));
+            if (!externalAppAvailable) {
+                throw new IllegalStateException(
+                        "menu_type_options 未返回 EXTERNAL_APP 菜单类型");
+            }
+
+            Map<String, Object> parentResult = toolResultObject(callTool(
+                    mcpToolContext,
+                    "menu_parent_options",
+                    Map.of()));
+            List<Map<String, Object>> parentOptions =
+                    listOfMaps(parentResult.get("options"));
+            List<Map<String, Object>> existing = listOfMaps(toolResultObject(callTool(
+                    mcpToolContext,
+                    "menu_list",
+                    Map.of("request", Map.of(
+                            "page", 1,
+                            "per_page", 100,
+                            "name", MENU_DEMO_NAME)))).get("rows"));
+            Map<String, Object> request = menuDemoRequest();
+            Optional<Map<String, Object>> existingTarget = existing.stream()
+                    .filter(candidate -> MENU_DEMO_NAME.equals(
+                            String.valueOf(candidate.get("name")))
+                            || MENU_DEMO_SOURCE.equals(
+                            String.valueOf(candidate.get("source"))))
+                    .findFirst();
+            if (existingTarget.isPresent()
+                    && !menuRequestMatches(request, existingTarget.get())) {
+                throw new IllegalStateException(
+                        "系统已存在同名或同 source 但内容不同的菜单，不能生成覆盖方案");
+            }
+            boolean createRequired = existingTarget.isEmpty();
+
+            Map<String, Object> card = new LinkedHashMap<>();
+            card.put("title", "确认添加用户事件菜单");
+            card.put("content",
+                    "已通过 MCP 查询菜单类型、父级菜单和同名菜单。"
+                            + (createRequired
+                            ? "确认后将调用 menu_create，并由平台展示高风险 MCP 审批；"
+                            : "系统中已存在完全一致的菜单，确认后将幂等复用；")
+                            + "随后调用 menu_view 读回校验。");
+            card.put("action", ACTION_APPLY_CONFIG);
+            card.put("actions", List.of("apply_config", "abandon", "revise"));
+            card.put("demoScenario", "menu");
+            card.put("menu", Map.of("request", request));
+            card.put("mcpEvidence", List.of(
+                    Map.of(
+                            "tool", "menu_type_options",
+                            "request", Map.of(),
+                            "status", "success",
+                            "resultSummary", "可用菜单类型 " + typeOptions.size() + " 个"),
+                    Map.of(
+                            "tool", "menu_parent_options",
+                            "request", Map.of(),
+                            "status", "success",
+                            "resultSummary", "可选父级菜单 " + parentOptions.size() + " 个"),
+                    Map.of(
+                            "tool", "menu_list",
+                            "request", Map.of(
+                                    "page", 1,
+                                    "per_page", 100,
+                                    "name", MENU_DEMO_NAME),
+                            "status", "success",
+                            "resultSummary", "同名一级菜单 " + existing.size() + " 个")
+            ));
+
+            return """
+                    已通过 MCP 接口查询系统菜单能力，并生成确定性的菜单创建方案。
+
+                    - `menu_type_options`，参数：`{}`
+                    - `menu_parent_options`，参数：`{}`
+                    - `menu_list`，参数：`{"page":1,"per_page":100,"name":"%s"}`
+                    - 目标菜单：%s
+                    - 类型：EXTERNAL_APP
+                    - 层级：LEVEL_1，parentId=0
+                    - 目标地址：%s
+
+                    ```zenvis:confirm
+                    %s
+                    ```
+                    """.formatted(
+                    MENU_DEMO_NAME,
+                    MENU_DEMO_NAME,
+                    MENU_DEMO_URL,
+                    JacksonUtil.toJson(card));
+        } catch (Exception e) {
+            log.error("查询添加菜单演示所需 MCP 信息失败: {}", e.getMessage(), e);
+            return menuFailureResponse("菜单方案查询", e);
+        }
+    }
+
     private String buildDashboardLinkInfoStepsResponse() {
         return """
                 外链接看板需要补充可访问的看板 URL。
@@ -917,10 +1062,16 @@ public class DataVisualizationDemoResponseService {
                   "chartType": "line",
                   "api": "/zenvis/api/v1/entity/trend/query",
                   "status": "temporary",
+                  "echartsOption": %s,
+                  "amisConfig": %s,
                   "config": %s
                 }
                 ```
-                """.formatted(ENTITY, CHART_AMIS_CONFIG.trim());
+                """.formatted(
+                ENTITY,
+                CHART_ECHARTS_OPTION.trim(),
+                CHART_AMIS_CONFIG.trim(),
+                CHART_AMIS_CONFIG.trim());
     }
 
     private String buildSinglePageConfigResponse(String prompt) {
@@ -934,7 +1085,7 @@ public class DataVisualizationDemoResponseService {
                     ```
 
                     ```zenvis:confirm
-                    {"title":"是否写入用户事件 HTML 单页面","content":"确认后会写入 html-page_config/user-event-page.html，并创建 HTML 页面类型菜单。","action":"%s","actions":%s,"demoScenario":"single_page","implementation":"html"}
+                    {"title":"是否写入用户事件 HTML 单页面","content":"确认后平台将通过 config_tree 检查配置；新文件依次调用 config_ensure_root、config_add，随后调用 config_apply（高风险 MCP 审批）和 config_read 读回校验；菜单调用 menu_list、menu_create（高风险 MCP 审批）和 menu_view。","action":"%s","actions":%s,"demoScenario":"single_page","implementation":"html"}
                     ```
                     """.formatted(USER_EVENT_PAGE_HTML.trim(), ACTION_APPLY_CONFIG, DECISION_ACTIONS);
         }
@@ -946,7 +1097,7 @@ public class DataVisualizationDemoResponseService {
                 ```
 
                 ```zenvis:confirm
-                {"title":"是否写入用户事件低代码单页面","content":"确认后会创建 user-event-page_config/index.json，并创建配置管理菜单和低代码页面菜单。","action":"%s","actions":%s,"demoScenario":"single_page","implementation":"low_code"}
+                {"title":"是否写入用户事件低代码单页面","content":"确认后平台将通过 config_tree 检查配置；新文件依次调用 config_ensure_root、config_add，随后调用 config_apply（高风险 MCP 审批）和 config_read 读回校验；两个菜单分别调用 menu_list、menu_create（高风险 MCP 审批）和 menu_view。","action":"%s","actions":%s,"demoScenario":"single_page","implementation":"low_code"}
                 ```
                 """.formatted(USER_EVENT_PAGE_CONFIG.trim(), ACTION_APPLY_CONFIG, DECISION_ACTIONS);
     }
@@ -960,7 +1111,7 @@ public class DataVisualizationDemoResponseService {
                 ```
 
                 ```zenvis:confirm
-                {"title":"是否写入用户事件侧边栏应用","content":"确认后会创建 user-event-app_config/site.json 及子页面配置，并创建配置管理菜单和低代码应用菜单。","action":"%s","actions":%s,"demoScenario":"sidebar_app","implementation":"low_code_app"}
+                {"title":"是否写入用户事件侧边栏应用","content":"确认后平台将为 site.json、index.json、manage.json、trend.json 执行 config_tree、必要时 config_ensure_root/config_add、config_apply（高风险 MCP 审批）及 config_read；两个菜单分别执行 menu_list、menu_create（高风险 MCP 审批）和 menu_view。","action":"%s","actions":%s,"demoScenario":"sidebar_app","implementation":"low_code_app"}
                 ```
                 """.formatted(USER_EVENT_APP_SITE_CONFIG.trim(), ACTION_APPLY_CONFIG, DECISION_ACTIONS);
     }
@@ -973,7 +1124,7 @@ public class DataVisualizationDemoResponseService {
                     已生成用户事件外链接看板配置，请确认后创建看板。
 
                     ```zenvis:confirm
-                    {"title":"是否创建用户事件外链看板","content":"确认后会创建 LINK 类型看板，外链地址：%s","action":"%s","actions":%s,"demoScenario":"dashboard","dashboardType":"link","url":"%s"}
+                    {"title":"是否创建用户事件外链看板","content":"确认后平台将调用 dashboard_list 检查同名看板，必要时调用 dashboard_create（高风险 MCP 审批），并用 dashboard_view 读回校验。外链地址：%s","action":"%s","actions":%s,"demoScenario":"dashboard","dashboardType":"link","url":"%s"}
                     ```
                     """.formatted(escapeJson(url), ACTION_APPLY_CONFIG, DECISION_ACTIONS, escapeJson(url));
         }
@@ -986,7 +1137,7 @@ public class DataVisualizationDemoResponseService {
                     ```
 
                     ```zenvis:confirm
-                    {"title":"是否写入用户事件 HTML 看板","content":"确认后会写入 html-page_config/user-event-dashboard.html，并创建 HTML_PAGE 类型看板。","action":"%s","actions":%s,"demoScenario":"dashboard","dashboardType":"html"}
+                    {"title":"是否写入用户事件 HTML 看板","content":"确认后平台将通过 config_tree 检查配置；必要时调用 config_ensure_root/config_add，再调用 config_apply（高风险 MCP 审批）和 config_read；看板调用 dashboard_list、dashboard_create（高风险 MCP 审批）和 dashboard_view。","action":"%s","actions":%s,"demoScenario":"dashboard","dashboardType":"html"}
                     ```
                     """.formatted(USER_EVENT_DASHBOARD_HTML.trim(), ACTION_APPLY_CONFIG, DECISION_ACTIONS);
         }
@@ -998,7 +1149,7 @@ public class DataVisualizationDemoResponseService {
                 ```
 
                 ```zenvis:confirm
-                {"title":"是否写入用户事件低代码看板","content":"确认后会创建 user-event-dashboard_config/index.json、配置管理菜单和 LOW_CODE_PAGE 类型看板。","action":"%s","actions":%s,"demoScenario":"dashboard","dashboardType":"low_code"}
+                {"title":"是否写入用户事件低代码看板","content":"确认后平台将执行 config_tree、必要时 config_ensure_root/config_add、config_apply（高风险 MCP 审批）和 config_read；配置菜单执行 menu_list/menu_create/menu_view；看板执行 dashboard_list/dashboard_create（高风险 MCP 审批）/dashboard_view。","action":"%s","actions":%s,"demoScenario":"dashboard","dashboardType":"low_code"}
                 ```
                 """.formatted(USER_EVENT_DASHBOARD_CONFIG.trim(), ACTION_APPLY_CONFIG, DECISION_ACTIONS);
     }
@@ -1061,7 +1212,8 @@ public class DataVisualizationDemoResponseService {
         }
     }
 
-    private String applyLatestVisualizationConfig(ChatSession chatSession) {
+    private String applyLatestVisualizationConfig(ChatSession chatSession,
+                                                  McpToolContext mcpToolContext) {
         String history = allMessagesText(chatSession);
         int singlePageIndex = history.lastIndexOf("\"demoScenario\":\"single_page\"");
         if (singlePageIndex < 0) {
@@ -1075,24 +1227,40 @@ public class DataVisualizationDemoResponseService {
         if (dashboardIndex < 0) {
             dashboardIndex = history.lastIndexOf("\"demoScenario\": \"dashboard\"");
         }
-        if (singlePageIndex >= sidebarIndex && singlePageIndex >= dashboardIndex && singlePageIndex >= 0) {
+        int menuIndex = history.lastIndexOf("\"demoScenario\":\"menu\"");
+        if (menuIndex < 0) {
+            menuIndex = history.lastIndexOf("\"demoScenario\": \"menu\"");
+        }
+        if (menuIndex >= singlePageIndex
+                && menuIndex >= sidebarIndex
+                && menuIndex >= dashboardIndex
+                && menuIndex >= 0) {
+            return applyMenuDemo(mcpToolContext);
+        }
+        if (singlePageIndex >= sidebarIndex
+                && singlePageIndex >= dashboardIndex
+                && singlePageIndex >= menuIndex
+                && singlePageIndex >= 0) {
             String scope = history.substring(singlePageIndex);
             return scope.contains("\"implementation\":\"html\"") || scope.contains("\"implementation\": \"html\"")
-                    ? applySinglePageHtml()
-                    : applySinglePageLowCode();
+                    ? applySinglePageHtml(mcpToolContext)
+                    : applySinglePageLowCode(mcpToolContext);
         }
-        if (sidebarIndex >= singlePageIndex && sidebarIndex >= dashboardIndex && sidebarIndex >= 0) {
-            return applySidebarApp();
+        if (sidebarIndex >= singlePageIndex
+                && sidebarIndex >= dashboardIndex
+                && sidebarIndex >= menuIndex
+                && sidebarIndex >= 0) {
+            return applySidebarApp(mcpToolContext);
         }
-        if (dashboardIndex >= 0) {
+        if (dashboardIndex >= menuIndex && dashboardIndex >= 0) {
             String scope = history.substring(dashboardIndex);
             if (scope.contains("\"dashboardType\":\"link\"") || scope.contains("\"dashboardType\": \"link\"")) {
-                return applyDashboardLink(extractUrl(scope));
+                return applyDashboardLink(extractUrl(scope), mcpToolContext);
             }
             if (scope.contains("\"dashboardType\":\"html\"") || scope.contains("\"dashboardType\": \"html\"")) {
-                return applyDashboardHtml();
+                return applyDashboardHtml(mcpToolContext);
             }
-            return applyDashboardLowCode();
+            return applyDashboardLowCode(mcpToolContext);
         }
         return """
                 ```zenvis:notice
@@ -1111,7 +1279,8 @@ public class DataVisualizationDemoResponseService {
                 """;
     }
 
-    private String reviseLatestVisualizationConfig(ChatSession chatSession) {
+    private String reviseLatestVisualizationConfig(ChatSession chatSession,
+                                                   McpToolContext mcpToolContext) {
         String history = allMessagesText(chatSession);
         int singlePageIndex = history.lastIndexOf("\"demoScenario\":\"single_page\"");
         if (singlePageIndex < 0) {
@@ -1125,7 +1294,24 @@ public class DataVisualizationDemoResponseService {
         if (dashboardIndex < 0) {
             dashboardIndex = history.lastIndexOf("\"demoScenario\": \"dashboard\"");
         }
-        if (singlePageIndex >= sidebarIndex && singlePageIndex >= dashboardIndex && singlePageIndex >= 0) {
+        int menuIndex = history.lastIndexOf("\"demoScenario\":\"menu\"");
+        if (menuIndex < 0) {
+            menuIndex = history.lastIndexOf("\"demoScenario\": \"menu\"");
+        }
+        if (menuIndex >= singlePageIndex
+                && menuIndex >= sidebarIndex
+                && menuIndex >= dashboardIndex
+                && menuIndex >= 0) {
+            return """
+                    菜单演示采用固定且经过 MCP 校验的外部看板入口，已重新查询系统菜单能力并生成方案。
+
+                    %s
+                    """.formatted(buildMenuConfirmationResponse(mcpToolContext).trim());
+        }
+        if (singlePageIndex >= sidebarIndex
+                && singlePageIndex >= dashboardIndex
+                && singlePageIndex >= menuIndex
+                && singlePageIndex >= 0) {
             String scope = history.substring(singlePageIndex);
             String implementation = scope.contains("\"implementation\":\"html\"") || scope.contains("\"implementation\": \"html\"")
                     ? "使用静态 HTML 单页面直接调用实体 REST API"
@@ -1138,14 +1324,17 @@ public class DataVisualizationDemoResponseService {
                     {"answers":[{"value":"%s"}]}
                     """.formatted(implementation)).trim());
         }
-        if (sidebarIndex >= singlePageIndex && sidebarIndex >= dashboardIndex && sidebarIndex >= 0) {
+        if (sidebarIndex >= singlePageIndex
+                && sidebarIndex >= dashboardIndex
+                && sidebarIndex >= menuIndex
+                && sidebarIndex >= 0) {
             return """
                     已根据补充信息更新用户事件侧边栏应用配置，请再次确认后续处理。
 
                     %s
                     """.formatted(buildSidebarAppConfigResponse().trim());
         }
-        if (dashboardIndex >= 0) {
+        if (dashboardIndex >= menuIndex && dashboardIndex >= 0) {
             String scope = history.substring(dashboardIndex);
             String dashboardType;
             if (scope.contains("\"dashboardType\":\"link\"") || scope.contains("\"dashboardType\": \"link\"")) {
@@ -1171,272 +1360,798 @@ public class DataVisualizationDemoResponseService {
                 """;
     }
 
-    private String applySinglePageLowCode() {
-        writeConfig(PAGE_CONFIG_TYPE, "index.json", USER_EVENT_PAGE_CONFIG);
-        MenuVo policyMenu = createOrGetMenu(
-                SOURCE_PREFIX + "page-policy-menu",
-                "用户事件单页面配置",
-                MenuType.POLICY_CONFIG,
-                PAGE_CONFIG_TYPE
-        );
-        MenuVo pageMenu = createOrGetMenu(
-                SOURCE_PREFIX + "page-low-code-menu",
-                "用户事件单页面应用",
-                MenuType.LOW_CODE_PAGE,
-                PAGE_CONFIG_TYPE
-        );
-        return """
-                用户事件低代码单页面已写入系统。
+    private String applyMenuDemo(McpToolContext mcpToolContext) {
+        Map<String, Object> request = menuDemoRequest();
+        try {
+            List<Map<String, Object>> candidates = listOfMaps(toolResultObject(callTool(
+                    mcpToolContext,
+                    "menu_list",
+                    Map.of("request", Map.of(
+                            "page", 1,
+                            "per_page", 100,
+                            "name", MENU_DEMO_NAME)))).get("rows"));
+            Map<String, Object> matched = candidates.stream()
+                    .filter(candidate -> MENU_DEMO_NAME.equals(
+                            String.valueOf(candidate.get("name")))
+                            || MENU_DEMO_SOURCE.equals(
+                            String.valueOf(candidate.get("source"))))
+                    .findFirst()
+                    .orElse(null);
 
-                %s
+            long menuId;
+            if (matched == null) {
+                Map<String, Object> created = toolResultObject(callTool(
+                        mcpToolContext,
+                        "menu_create",
+                        Map.of("request", request)));
+                menuId = longValue(created.get("id"));
+                if (menuId <= 0) {
+                    throw new IllegalStateException(
+                            "menu_create 未返回有效菜单 ID："
+                                    + describeToolResult(JacksonUtil.toJson(created)));
+                }
+            } else {
+                if (!menuRequestMatches(request, matched)) {
+                    throw new IllegalStateException(
+                            "已存在同名或同 source 但内容不同的菜单，禁止覆盖");
+                }
+                menuId = longValue(matched.get("id"));
+                if (menuId <= 0) {
+                    throw new IllegalStateException("menu_list 返回的已有菜单缺少有效 ID");
+                }
+            }
 
-                %s
+            Map<String, Object> readBack = toolResultObject(callTool(
+                    mcpToolContext,
+                    "menu_view",
+                    Map.of("id", menuId)));
+            if (!menuRequestMatches(request, readBack)) {
+                throw new IllegalStateException(
+                        "menu_view 读回与已确认菜单方案不一致："
+                                + JacksonUtil.toJson(readBack));
+            }
+            MenuVo menu = JacksonConfig.OBJECT_MAPPER.convertValue(
+                    readBack,
+                    MenuVo.class);
+            return """
+                    菜单已通过 MCP 审批创建，并完成 `menu_view` 读回校验。
 
-                %s
-                """.formatted(
-                visualizationConfigRecord("用户事件单页面配置已写入", PAGE_CONFIG_TYPE, "index.json", "LOW_CODE_PAGE", PAGE_CONFIG_TYPE),
-                menuRecord("配置管理菜单已创建", policyMenu),
-                menuRecord("低代码页面菜单已创建", pageMenu)
-        );
+                    执行顺序：`menu_list → %smenu_view`
+
+                    %s
+                    """.formatted(
+                    matched == null ? "menu_create（已审批） → " : "",
+                    menuRecord("用户事件外部看板菜单已创建", menu));
+        } catch (Exception e) {
+            log.error("执行添加菜单 MCP 演示失败: {}", e.getMessage(), e);
+            return menuFailureResponse("菜单创建或读回", e);
+        }
     }
 
-    private String applySinglePageHtml() {
-        writeConfig("html-page", HTML_PAGE_FILE, USER_EVENT_PAGE_HTML);
-        MenuVo menu = createOrGetMenu(
-                SOURCE_PREFIX + "page-html-menu",
-                "用户事件 HTML 单页面",
-                MenuType.HTML_PAGE,
-                HTML_PAGE_PATH
-        );
-        return """
-                用户事件静态 HTML 单页面已写入系统。
-
-                %s
-
-                %s
-                """.formatted(
-                visualizationConfigRecord("用户事件 HTML 单页面已写入", "html-page", HTML_PAGE_FILE, "HTML_PAGE", HTML_PAGE_PATH),
-                menuRecord("HTML 页面菜单已创建", menu)
-        );
+    private Map<String, Object> menuDemoRequest() {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("name", MENU_DEMO_NAME);
+        request.put("type", MenuType.EXTERNAL_APP.name());
+        request.put("route", MenuType.EXTERNAL_APP.getRoute());
+        request.put("level", MenuLevel.LEVEL_1.name());
+        request.put("parentId", 0);
+        request.put("params", MENU_DEMO_URL);
+        request.put("superscript", "演示");
+        request.put("source", MENU_DEMO_SOURCE);
+        request.put("createRootPath", false);
+        return request;
     }
 
-    private String applySidebarApp() {
-        writeConfig(APP_CONFIG_TYPE, "site.json", USER_EVENT_APP_SITE_CONFIG);
-        writeConfig(APP_CONFIG_TYPE, "index.json", USER_EVENT_APP_HOME_CONFIG);
-        writeConfig(APP_CONFIG_TYPE, "manage.json", USER_EVENT_PAGE_CONFIG);
-        writeConfig(APP_CONFIG_TYPE, "trend.json", USER_EVENT_APP_TREND_CONFIG);
-        MenuVo policyMenu = createOrGetMenu(
-                SOURCE_PREFIX + "app-policy-menu",
-                "用户事件应用配置",
-                MenuType.POLICY_CONFIG,
-                APP_CONFIG_TYPE
-        );
-        MenuVo appMenu = createOrGetMenu(
-                SOURCE_PREFIX + "app-low-code-menu",
-                "用户事件侧边栏应用",
-                MenuType.LOW_CODE_APP,
-                APP_CONFIG_TYPE
-        );
-        return """
-                用户事件侧边栏低代码应用已写入系统。
-
-                %s
-
-                %s
-
-                %s
-                """.formatted(
-                visualizationConfigRecord("用户事件侧边栏应用配置已写入", APP_CONFIG_TYPE, "site.json", "LOW_CODE_APP", APP_CONFIG_TYPE),
-                menuRecord("配置管理菜单已创建", policyMenu),
-                menuRecord("低代码应用菜单已创建", appMenu)
-        );
+    private boolean menuRequestMatches(Map<String, Object> request,
+                                       Map<String, Object> actual) {
+        if (actual == null || actual.isEmpty()) {
+            return false;
+        }
+        return String.valueOf(request.get("name")).equals(
+                String.valueOf(actual.get("name")))
+                && String.valueOf(request.get("type")).equals(
+                String.valueOf(actual.get("type")))
+                && String.valueOf(request.get("route")).equals(
+                String.valueOf(actual.get("route")))
+                && String.valueOf(request.get("level")).equals(
+                String.valueOf(actual.get("level")))
+                && longValue(request.get("parentId"))
+                == longValue(actual.get("parentId"))
+                && String.valueOf(request.get("params")).equals(
+                String.valueOf(actual.get("params")))
+                && String.valueOf(request.get("superscript")).equals(
+                String.valueOf(actual.get("superscript")))
+                && String.valueOf(request.get("source")).equals(
+                String.valueOf(actual.get("source")));
     }
 
-    private String applyDashboardLowCode() {
-        writeConfig(DASHBOARD_CONFIG_TYPE, "index.json", USER_EVENT_DASHBOARD_CONFIG);
-        MenuVo policyMenu = createOrGetMenu(
-                SOURCE_PREFIX + "dashboard-policy-menu",
-                "用户事件看板配置",
-                MenuType.POLICY_CONFIG,
-                DASHBOARD_CONFIG_TYPE
-        );
-        DashboardVo dashboard = createOrGetDashboard(
-                SOURCE_PREFIX + "dashboard-low-code",
-                "用户事件低代码看板",
-                "user-event-low-code-dashboard",
-                DashboardType.LOW_CODE_PAGE,
-                DASHBOARD_CONFIG_TYPE,
-                null,
-                null
-        );
-        return """
-                用户事件低代码看板已写入系统。
-
-                %s
-
-                %s
-
-                %s
-                """.formatted(
-                visualizationConfigRecord("用户事件看板配置已写入", DASHBOARD_CONFIG_TYPE, "index.json", "LOW_CODE_PAGE", DASHBOARD_CONFIG_TYPE),
-                menuRecord("看板配置管理菜单已创建", policyMenu),
-                dashboardRecord("低代码看板已创建", dashboard)
-        );
+    private Map<String, Object> toolResultObject(String result) {
+        if (!StringUtils.hasText(result)) {
+            return Map.of();
+        }
+        Map<String, Object> parsed = JacksonUtil.toMap(
+                result,
+                new TypeReference<Map<String, Object>>() {
+                });
+        Object data = parsed.get("data");
+        if (data instanceof Map<?, ?> dataMap) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            dataMap.forEach((key, value) ->
+                    normalized.put(String.valueOf(key), value));
+            return normalized;
+        }
+        return parsed;
     }
 
-    private String applyDashboardHtml() {
-        writeConfig("html-page", HTML_DASHBOARD_FILE, USER_EVENT_DASHBOARD_HTML);
-        DashboardVo dashboard = createOrGetDashboard(
-                SOURCE_PREFIX + "dashboard-html",
-                "用户事件 HTML 看板",
-                "user-event-html-dashboard",
-                DashboardType.HTML_PAGE,
-                null,
-                HTML_DASHBOARD_PATH,
-                null
-        );
-        return """
-                用户事件 HTML 看板已写入系统。
-
-                %s
-
-                %s
-                """.formatted(
-                visualizationConfigRecord("用户事件 HTML 看板页面已写入", "html-page", HTML_DASHBOARD_FILE, "HTML_PAGE", HTML_DASHBOARD_PATH),
-                dashboardRecord("HTML 看板已创建", dashboard)
-        );
+    private List<Map<String, Object>> listOfMaps(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            map.forEach((key, entryValue) ->
+                    normalized.put(String.valueOf(key), entryValue));
+            result.add(normalized);
+        }
+        return result;
     }
 
-    private String applyDashboardLink(String url) {
+    private long longValue(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private String callTool(McpToolContext mcpToolContext,
+                            String toolName,
+                            Map<String, Object> arguments) {
+        if (mcpToolContext == null
+                || mcpToolContext.toolCallbackProvider() == null
+                || mcpToolContext.toolCallbackProvider().getToolCallbacks() == null) {
+            throw new IllegalStateException("演示所需 MCP 工具上下文不可用");
+        }
+        ToolCallback callback = Arrays.stream(
+                        mcpToolContext.toolCallbackProvider().getToolCallbacks())
+                .filter(tool -> tool != null
+                        && tool.getToolDefinition() != null
+                        && toolName.equals(tool.getToolDefinition().name()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "演示所需 MCP 工具不可用：" + toolName));
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        McpInvocationContext invocationContext =
+                mcpToolContext.invocationContext();
+        if (invocationContext != null) {
+            context.put(McpInvocationContext.TOOL_CONTEXT_KEY, invocationContext);
+        }
+        ToolRuntimeContext runtimeContext =
+                mcpToolContext.toolRuntimeContext();
+        if (runtimeContext != null) {
+            context.put(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext);
+        }
+        return callback.call(
+                JacksonUtil.toJson(arguments),
+                new ToolContext(context));
+    }
+
+    private String menuFailureResponse(String stage, Exception exception) {
+        return """
+                ```zenvis:notice
+                {"title":"添加菜单演示失败","content":"失败阶段：%s\\n真实错误：%s\\n未生成菜单成功记录；若审批被拒绝，系统不会创建菜单。","level":"error"}
+                ```
+                """.formatted(
+                escapeJson(stage),
+                escapeJson(safeError(exception)));
+    }
+
+    private String describeToolResult(String result) {
+        if (!StringUtils.hasText(result)) {
+            return "工具未返回结果";
+        }
+        try {
+            Map<String, Object> parsed = JacksonUtil.toMap(
+                    result,
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            String status = String.valueOf(parsed.getOrDefault("status", ""));
+            String message = String.valueOf(parsed.getOrDefault("message", ""));
+            if (StringUtils.hasText(status) || StringUtils.hasText(message)) {
+                return "status=" + status
+                        + (StringUtils.hasText(message) ? "，" + message : "");
+            }
+        } catch (RuntimeException ignored) {
+            // 使用受限的纯文本摘要。
+        }
+        return result.length() <= 500
+                ? result : result.substring(0, 500) + "...";
+    }
+
+    private String safeError(Exception exception) {
+        String message = exception == null ? null : exception.getMessage();
+        if (!StringUtils.hasText(message)) {
+            return "未知错误";
+        }
+        String sanitized = message.replaceAll(
+                "(?i)(password|passwd|token|secret|api[_-]?key)"
+                        + "\\s*[:=]\\s*[^\\s,;]+",
+                "$1=***");
+        return sanitized.length() <= 1_000
+                ? sanitized : sanitized.substring(0, 1_000) + "...";
+    }
+
+    private String applySinglePageLowCode(McpToolContext mcpToolContext) {
+        try {
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    PAGE_CONFIG_TYPE,
+                    "index.json",
+                    USER_EVENT_PAGE_CONFIG);
+            int parentId = configParentMenuIdViaMcp(mcpToolContext);
+            MenuVo policyMenu = createOrGetMenuViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "page-policy-menu",
+                    "用户事件单页面配置",
+                    MenuType.POLICY_CONFIG,
+                    PAGE_CONFIG_TYPE,
+                    MenuLevel.LEVEL_2,
+                    parentId
+            );
+            MenuVo pageMenu = createOrGetMenuViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "page-low-code-menu",
+                    "用户事件单页面应用",
+                    MenuType.LOW_CODE_PAGE,
+                    PAGE_CONFIG_TYPE,
+                    MenuLevel.LEVEL_1,
+                    0
+            );
+            return """
+                    用户事件低代码单页面已通过 MCP 审批写入系统并完成读回。
+
+                    %s
+
+                    %s
+
+                    %s
+                    """.formatted(
+                    visualizationConfigRecord("用户事件单页面配置已写入", PAGE_CONFIG_TYPE, "index.json", "LOW_CODE_PAGE", PAGE_CONFIG_TYPE),
+                    menuRecord("配置管理菜单已创建", policyMenu),
+                    menuRecord("低代码页面菜单已创建", pageMenu)
+            );
+        } catch (Exception e) {
+            log.error("执行低代码单页面 MCP 演示失败: {}", e.getMessage(), e);
+            return visualizationApplyFailureResponse("低代码单页面", e);
+        }
+    }
+
+    private String applySinglePageHtml(McpToolContext mcpToolContext) {
+        try {
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    "html-page",
+                    HTML_PAGE_FILE,
+                    USER_EVENT_PAGE_HTML);
+            MenuVo menu = createOrGetMenuViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "page-html-menu",
+                    "用户事件 HTML 单页面",
+                    MenuType.HTML_PAGE,
+                    HTML_PAGE_PATH,
+                    MenuLevel.LEVEL_1,
+                    0
+            );
+            return """
+                    用户事件静态 HTML 单页面已通过 MCP 审批写入系统并完成读回。
+
+                    %s
+
+                    %s
+                    """.formatted(
+                    visualizationConfigRecord("用户事件 HTML 单页面已写入", "html-page", HTML_PAGE_FILE, "HTML_PAGE", HTML_PAGE_PATH),
+                    menuRecord("HTML 页面菜单已创建", menu)
+            );
+        } catch (Exception e) {
+            log.error("执行 HTML 单页面 MCP 演示失败: {}", e.getMessage(), e);
+            return visualizationApplyFailureResponse("HTML 单页面", e);
+        }
+    }
+
+    private String applySidebarApp(McpToolContext mcpToolContext) {
+        try {
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    APP_CONFIG_TYPE,
+                    "site.json",
+                    USER_EVENT_APP_SITE_CONFIG);
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    APP_CONFIG_TYPE,
+                    "index.json",
+                    USER_EVENT_APP_HOME_CONFIG);
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    APP_CONFIG_TYPE,
+                    "manage.json",
+                    USER_EVENT_PAGE_CONFIG);
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    APP_CONFIG_TYPE,
+                    "trend.json",
+                    USER_EVENT_APP_TREND_CONFIG);
+            int parentId = configParentMenuIdViaMcp(mcpToolContext);
+            MenuVo policyMenu = createOrGetMenuViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "app-policy-menu",
+                    "用户事件应用配置",
+                    MenuType.POLICY_CONFIG,
+                    APP_CONFIG_TYPE,
+                    MenuLevel.LEVEL_2,
+                    parentId
+            );
+            MenuVo appMenu = createOrGetMenuViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "app-low-code-menu",
+                    "用户事件侧边栏应用",
+                    MenuType.LOW_CODE_APP,
+                    APP_CONFIG_TYPE,
+                    MenuLevel.LEVEL_1,
+                    0
+            );
+            return """
+                    用户事件侧边栏低代码应用已通过 MCP 审批写入系统并完成读回。
+
+                    %s
+
+                    %s
+
+                    %s
+                    """.formatted(
+                    visualizationConfigRecord("用户事件侧边栏应用配置已写入", APP_CONFIG_TYPE, "site.json", "LOW_CODE_APP", APP_CONFIG_TYPE),
+                    menuRecord("配置管理菜单已创建", policyMenu),
+                    menuRecord("低代码应用菜单已创建", appMenu)
+            );
+        } catch (Exception e) {
+            log.error("执行侧边栏应用 MCP 演示失败: {}", e.getMessage(), e);
+            return visualizationApplyFailureResponse("带侧边栏应用", e);
+        }
+    }
+
+    private String applyDashboardLowCode(McpToolContext mcpToolContext) {
+        try {
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    DASHBOARD_CONFIG_TYPE,
+                    "index.json",
+                    USER_EVENT_DASHBOARD_CONFIG);
+            int parentId = configParentMenuIdViaMcp(mcpToolContext);
+            MenuVo policyMenu = createOrGetMenuViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "dashboard-policy-menu",
+                    "用户事件看板配置",
+                    MenuType.POLICY_CONFIG,
+                    DASHBOARD_CONFIG_TYPE,
+                    MenuLevel.LEVEL_2,
+                    parentId
+            );
+            DashboardVo dashboard = createOrGetDashboardViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "dashboard-low-code",
+                    "用户事件低代码看板",
+                    "user-event-low-code-dashboard",
+                    DashboardType.LOW_CODE_PAGE,
+                    DASHBOARD_CONFIG_TYPE,
+                    null,
+                    null
+            );
+            return """
+                    用户事件低代码看板已通过 MCP 审批写入系统并完成读回。
+
+                    %s
+
+                    %s
+
+                    %s
+                    """.formatted(
+                    visualizationConfigRecord("用户事件看板配置已写入", DASHBOARD_CONFIG_TYPE, "index.json", "LOW_CODE_PAGE", DASHBOARD_CONFIG_TYPE),
+                    menuRecord("看板配置管理菜单已创建", policyMenu),
+                    dashboardRecord("低代码看板已创建", dashboard)
+            );
+        } catch (Exception e) {
+            log.error("执行低代码看板 MCP 演示失败: {}", e.getMessage(), e);
+            return visualizationApplyFailureResponse("低代码数据看板", e);
+        }
+    }
+
+    private String applyDashboardHtml(McpToolContext mcpToolContext) {
+        try {
+            applyConfigViaMcp(
+                    mcpToolContext,
+                    "html-page",
+                    HTML_DASHBOARD_FILE,
+                    USER_EVENT_DASHBOARD_HTML);
+            DashboardVo dashboard = createOrGetDashboardViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "dashboard-html",
+                    "用户事件 HTML 看板",
+                    "user-event-html-dashboard",
+                    DashboardType.HTML_PAGE,
+                    null,
+                    HTML_DASHBOARD_PATH,
+                    null
+            );
+            return """
+                    用户事件 HTML 看板已通过 MCP 审批写入系统并完成读回。
+
+                    %s
+
+                    %s
+                    """.formatted(
+                    visualizationConfigRecord("用户事件 HTML 看板页面已写入", "html-page", HTML_DASHBOARD_FILE, "HTML_PAGE", HTML_DASHBOARD_PATH),
+                    dashboardRecord("HTML 看板已创建", dashboard)
+            );
+        } catch (Exception e) {
+            log.error("执行 HTML 看板 MCP 演示失败: {}", e.getMessage(), e);
+            return visualizationApplyFailureResponse("HTML 数据看板", e);
+        }
+    }
+
+    private String applyDashboardLink(String url,
+                                      McpToolContext mcpToolContext) {
         if (!StringUtils.hasText(url)) {
             return buildDashboardLinkInfoStepsResponse();
         }
-        DashboardVo dashboard = createOrGetDashboard(
-                SOURCE_PREFIX + "dashboard-link",
-                "用户事件外链看板",
-                "user-event-link-dashboard",
-                DashboardType.LINK,
-                null,
-                null,
-                url
-        );
-        return """
-                用户事件外链看板已创建。
-
-                %s
-                """.formatted(dashboardRecord("外链看板已创建", dashboard));
-    }
-
-    private void writeConfig(String type, String fileName, String text) {
         try {
-            configService.ensureRootPath(type);
-            if (!configService.fileExistsInConfigPath(type, fileName)) {
-                configService.addFile(type, fileName);
-            }
-            ConfigDto configDto = new ConfigDto();
-            configDto.setFileName(fileName);
-            configDto.setText(text);
-            configService.modifyConfig(type, configDto);
+            DashboardVo dashboard = createOrGetDashboardViaMcp(
+                    mcpToolContext,
+                    SOURCE_PREFIX + "dashboard-link",
+                    "用户事件外链看板",
+                    "user-event-link-dashboard",
+                    DashboardType.LINK,
+                    null,
+                    null,
+                    url
+            );
+            return """
+                    用户事件外链看板已通过 MCP 审批创建并完成读回。
+
+                    %s
+                    """.formatted(dashboardRecord("外链看板已创建", dashboard));
         } catch (Exception e) {
-            log.error("写入数据可视化演示配置失败 type={}, fileName={}: {}", type, fileName, e.getMessage(), e);
-            throw e;
+            log.error("执行外链看板 MCP 演示失败: {}", e.getMessage(), e);
+            return visualizationApplyFailureResponse("外链数据看板", e);
         }
     }
 
-    private MenuVo createOrGetMenu(String source, String name, MenuType type, String params) {
-        MenuDto dto = buildMenuDto(source, name, type, params);
-        try {
-            List<Menu> existing = menuService.findBySource(source);
-            if (existing != null && !existing.isEmpty()) {
-                Menu menu = existing.get(0);
-                if (menuNeedsSync(menu, dto)) {
-                    boolean updated = menuService.update(menu.getId().longValue(), dto);
-                    if (updated) {
-                        MenuVo latest = menuService.info(menu.getId().longValue());
-                        if (latest != null) {
-                            return latest;
-                        }
-                    }
-                }
-                return new MenuVo(menu);
+    private void applyConfigViaMcp(McpToolContext mcpToolContext,
+                                   String type,
+                                   String fileName,
+                                   String content) throws Exception {
+        String treeResult = callTool(
+                mcpToolContext,
+                "config_tree",
+                Map.of("type", type));
+        boolean exists = configTreeContainsFile(treeResult, fileName);
+        if (exists) {
+            String current = decodeStringResult(callTool(
+                    mcpToolContext,
+                    "config_read",
+                    Map.of("type", type, "fileName", fileName)));
+            if (contentEquivalent(content, current)) {
+                return;
             }
-        } catch (Exception e) {
-            log.warn("查询演示菜单失败 source={}: {}", source, e.getMessage(), e);
-        }
-        return new MenuVo(menuService.create(dto));
-    }
-
-    private MenuDto buildMenuDto(String source, String name, MenuType type, String params) {
-        MenuDto dto = new MenuDto();
-        dto.setName(name);
-        dto.setType(type);
-        dto.setParams(params);
-        dto.setSource(source);
-        if (type == MenuType.POLICY_CONFIG) {
-            dto.setLevel(MenuLevel.LEVEL_2);
-            dto.setParentId(findParentMenuIdByName("配置管理"));
         } else {
-            dto.setLevel(MenuLevel.LEVEL_1);
-            dto.setParentId(0);
+            requireTrueResult(
+                    "config_ensure_root",
+                    callTool(
+                            mcpToolContext,
+                            "config_ensure_root",
+                            Map.of("type", type)));
+            requireTrueResult(
+                    "config_add",
+                    callTool(
+                            mcpToolContext,
+                            "config_add",
+                            Map.of(
+                                    "type", type,
+                                    "configDto", Map.of(
+                                            "fileName", fileName))));
         }
-        dto.setCreateRootPath(false);
-        return dto;
-    }
-
-    private boolean menuNeedsSync(Menu menu, MenuDto dto) {
-        return !dto.getName().equals(menu.getName())
-                || dto.getType() != menu.getType()
-                || !dto.getParams().equals(menu.getParams())
-                || !dto.getParentId().equals(menu.getParentId())
-                || dto.getLevel() != menu.getLevel();
-    }
-
-    private int findParentMenuIdByName(String name) {
-        try {
-            return menuService.findAllParentMenu().stream()
-                    .filter(menu -> name.equals(menu.getName()))
-                    .map(Menu::getId)
-                    .filter(id -> id != null)
-                    .findFirst()
-                    .orElseGet(() -> menuService.findAllParentMenu().stream()
-                            .min(Comparator.comparing(Menu::getOrderNumber, Comparator.nullsLast(Integer::compareTo)))
-                            .map(Menu::getId)
-                            .orElse(0));
-        } catch (Exception e) {
-            return 0;
+        requireTrueResult(
+                "config_apply",
+                callTool(
+                        mcpToolContext,
+                        "config_apply",
+                        Map.of(
+                                "type", type,
+                                "configDto", Map.of(
+                                        "fileName", fileName,
+                                        "text", content))));
+        String readBack = decodeStringResult(callTool(
+                mcpToolContext,
+                "config_read",
+                Map.of("type", type, "fileName", fileName)));
+        if (!contentEquivalent(content, readBack)) {
+            throw new IllegalStateException(
+                    "config_read 读回与已确认配置不一致："
+                            + type + "/" + fileName);
         }
     }
 
-    private DashboardVo createOrGetDashboard(String source,
-                                             String name,
-                                             String code,
-                                             DashboardType type,
-                                             String configIndex,
-                                             String htmlPath,
-                                             String url) {
-        try {
-            List<DashboardVo> existing = dashboardService.findAll();
-            if (existing != null) {
-                Optional<DashboardVo> matched = existing.stream()
-                        .filter(item -> source.equals(item.getSource()) || code.equals(item.getCode()))
-                        .findFirst();
-                if (matched.isPresent()) {
-                    return matched.get();
-                }
+    private boolean configTreeContainsFile(String result,
+                                           String fileName) throws Exception {
+        Object tree = JacksonConfig.OBJECT_MAPPER.readValue(
+                result,
+                Object.class);
+        if (tree instanceof Map<?, ?> wrapper
+                && wrapper.containsKey("data")) {
+            tree = wrapper.get("data");
+        }
+        return containsConfigFile(tree, fileName);
+    }
+
+    private boolean containsConfigFile(Object value, String fileName) {
+        if (value instanceof Map<?, ?> map) {
+            if (fileName.equals(String.valueOf(map.get("fileName")))) {
+                return true;
             }
-        } catch (Exception e) {
-            log.warn("查询演示看板失败 source={}: {}", source, e.getMessage(), e);
+            return map.values().stream()
+                    .anyMatch(child -> containsConfigFile(child, fileName));
         }
-        DashboardDto dto = new DashboardDto();
-        dto.setName(name);
-        dto.setCode(code);
-        dto.setType(type);
-        dto.setConfigIndex(configIndex);
-        dto.setHtmlPath(htmlPath);
-        dto.setUrl(url);
-        dto.setSource(source);
-        Dashboard dashboard = dashboardService.create(dto);
-        return new DashboardVo(dashboard);
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .anyMatch(child -> containsConfigFile(child, fileName));
+        }
+        return false;
+    }
+
+    private void requireTrueResult(String toolName,
+                                   String result) throws Exception {
+        com.fasterxml.jackson.databind.JsonNode node =
+                JacksonConfig.OBJECT_MAPPER.readTree(result);
+        if (node != null && ((node.isBoolean() && node.booleanValue())
+                || (node.isTextual()
+                && Boolean.parseBoolean(node.textValue())))) {
+            return;
+        }
+        throw new IllegalStateException(
+                toolName + " 未成功：" + describeToolResult(result));
+    }
+
+    private String decodeStringResult(String result) throws Exception {
+        com.fasterxml.jackson.databind.JsonNode node =
+                JacksonConfig.OBJECT_MAPPER.readTree(result);
+        return node != null && node.isTextual()
+                ? node.textValue() : result;
+    }
+
+    private boolean contentEquivalent(String expected,
+                                      String actual) {
+        if (expected == null || actual == null) {
+            return expected == null && actual == null;
+        }
+        try {
+            return JacksonConfig.OBJECT_MAPPER.readTree(expected)
+                    .equals(JacksonConfig.OBJECT_MAPPER.readTree(actual));
+        } catch (Exception ignored) {
+            return expected.replace("\r\n", "\n")
+                    .equals(actual.replace("\r\n", "\n"));
+        }
+    }
+
+    private int configParentMenuIdViaMcp(
+            McpToolContext mcpToolContext) {
+        List<Map<String, Object>> options = listOfMaps(toolResultObject(callTool(
+                mcpToolContext,
+                "menu_parent_options",
+                Map.of())).get("options"));
+        Optional<Map<String, Object>> configured = options.stream()
+                .filter(option -> "配置管理".equals(
+                        String.valueOf(option.get("label"))))
+                .findFirst();
+        Map<String, Object> selected = configured.orElseGet(
+                () -> options.stream().findFirst().orElse(Map.of()));
+        return (int) longValue(selected.get("value"));
+    }
+
+    private MenuVo createOrGetMenuViaMcp(
+            McpToolContext mcpToolContext,
+            String source,
+            String name,
+            MenuType type,
+            String params,
+            MenuLevel level,
+            int parentId) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("name", name);
+        request.put("type", type.name());
+        request.put("route", type.getRoute());
+        request.put("params", params);
+        request.put("createRootPath", false);
+        request.put("parentId", parentId);
+        request.put("level", level.name());
+        request.put("source", source);
+
+        List<Map<String, Object>> rows = listOfMaps(toolResultObject(callTool(
+                mcpToolContext,
+                "menu_list",
+                Map.of("request", Map.of(
+                        "page", 1,
+                        "per_page", 100,
+                        "name", name)))).get("rows"));
+        Optional<Map<String, Object>> existing = flattenRows(rows).stream()
+                .filter(item -> name.equals(String.valueOf(item.get("name")))
+                        || source.equals(String.valueOf(item.get("source"))))
+                .findFirst();
+        long id;
+        if (existing.isPresent()) {
+            if (!menuRequestMatches(request, existing.get())) {
+                throw new IllegalStateException(
+                        "已存在同名或同 source 但内容不同的菜单，禁止覆盖");
+            }
+            id = longValue(existing.get().get("id"));
+        } else {
+            String createResult = callTool(
+                    mcpToolContext,
+                    "menu_create",
+                    Map.of("request", request));
+            Map<String, Object> created = toolResultObject(createResult);
+            id = longValue(created.get("id"));
+            if (id <= 0) {
+                throw new IllegalStateException(
+                        "menu_create 未返回有效菜单 ID："
+                                + describeToolResult(createResult));
+            }
+        }
+        if (id <= 0) {
+            throw new IllegalStateException(
+                    "menu_list 返回的已有菜单缺少有效 ID");
+        }
+        Map<String, Object> readBack = toolResultObject(callTool(
+                mcpToolContext,
+                "menu_view",
+                Map.of("id", id)));
+        if (!menuRequestMatches(request, readBack)) {
+            throw new IllegalStateException(
+                    "menu_view 读回与演示配置不一致："
+                            + JacksonUtil.toJson(readBack));
+        }
+        return JacksonConfig.OBJECT_MAPPER.convertValue(
+                readBack,
+                MenuVo.class);
+    }
+
+    private List<Map<String, Object>> flattenRows(
+            List<Map<String, Object>> rows) {
+        List<Map<String, Object>> flattened = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            flattened.add(row);
+            flattened.addAll(flattenRows(
+                    listOfMaps(row.get("children"))));
+        }
+        return flattened;
+    }
+
+    private DashboardVo createOrGetDashboardViaMcp(
+            McpToolContext mcpToolContext,
+            String source,
+            String name,
+            String code,
+            DashboardType type,
+            String configIndex,
+            String htmlPath,
+            String url) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("name", name);
+        request.put("code", code);
+        request.put("type", type.name());
+        request.put("url", url);
+        request.put("configIndex", configIndex);
+        request.put("htmlPath", htmlPath);
+        request.put("isDefault", false);
+        request.put("source", source);
+
+        List<Map<String, Object>> rows = listOfMaps(toolResultObject(callTool(
+                mcpToolContext,
+                "dashboard_list",
+                Map.of("request", Map.of(
+                        "page", 1,
+                        "per_page", 100,
+                        "name", name)))).get("rows"));
+        Optional<Map<String, Object>> existing = rows.stream()
+                .filter(item -> name.equals(String.valueOf(item.get("name")))
+                        || code.equals(String.valueOf(item.get("code")))
+                        || source.equals(String.valueOf(item.get("source"))))
+                .findFirst();
+        long id;
+        if (existing.isPresent()) {
+            if (!dashboardRequestMatches(request, existing.get())) {
+                throw new IllegalStateException(
+                        "已存在同名、同 code 或同 source 但内容不同的看板，"
+                                + "禁止覆盖");
+            }
+            id = longValue(existing.get().get("id"));
+        } else {
+            String createResult = callTool(
+                    mcpToolContext,
+                    "dashboard_create",
+                    Map.of("request", request));
+            Map<String, Object> created = toolResultObject(createResult);
+            id = longValue(created.get("id"));
+            if (id <= 0) {
+                throw new IllegalStateException(
+                        "dashboard_create 未返回有效看板 ID："
+                                + describeToolResult(createResult));
+            }
+        }
+        if (id <= 0) {
+            throw new IllegalStateException(
+                    "dashboard_list 返回的已有看板缺少有效 ID");
+        }
+        Map<String, Object> readBack = toolResultObject(callTool(
+                mcpToolContext,
+                "dashboard_view",
+                Map.of("id", id)));
+        if (!dashboardRequestMatches(request, readBack)) {
+            throw new IllegalStateException(
+                    "dashboard_view 读回与演示配置不一致："
+                            + JacksonUtil.toJson(readBack));
+        }
+        return JacksonConfig.OBJECT_MAPPER.convertValue(
+                readBack,
+                DashboardVo.class);
+    }
+
+    private boolean dashboardRequestMatches(
+            Map<String, Object> request,
+            Map<String, Object> actual) {
+        if (actual == null || actual.isEmpty()) {
+            return false;
+        }
+        return valuesEqual(request.get("name"), actual.get("name"))
+                && valuesEqual(request.get("code"), actual.get("code"))
+                && valuesEqual(request.get("type"), actual.get("type"))
+                && valuesEqual(request.get("url"), actual.get("url"))
+                && valuesEqual(
+                request.get("configIndex"),
+                actual.get("configIndex"))
+                && valuesEqual(
+                request.get("htmlPath"),
+                actual.get("htmlPath"))
+                && valuesEqual(
+                request.get("isDefault"),
+                actual.get("isDefault"))
+                && valuesEqual(
+                request.get("source"),
+                actual.get("source"));
+    }
+
+    private boolean valuesEqual(Object expected, Object actual) {
+        if (expected == null || actual == null) {
+            return expected == null && actual == null;
+        }
+        return String.valueOf(expected).equals(String.valueOf(actual));
+    }
+
+    private String visualizationApplyFailureResponse(
+            String stage,
+            Exception exception) {
+        return """
+                ```zenvis:notice
+                {"title":"执行数据可视化演示工作流失败","content":"失败阶段：%s\\n真实错误：%s\\n未生成配置、菜单或看板成功记录；审批被拒绝或读回不一致时不会伪造成功。","level":"error"}
+                ```
+                """.formatted(
+                escapeJson(stage),
+                escapeJson(safeError(exception)));
     }
 
     private String visualizationConfigRecord(String title, String configType, String fileName, String type, String configIndex) {

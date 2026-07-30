@@ -42,6 +42,9 @@ class EntityAnalyticsControllerTest {
         when(service.summary(any())).thenReturn(response("summary", "bar"));
         when(service.trend(any())).thenReturn(response("trend", "line"));
         when(service.distribution(any())).thenReturn(response("distribution", "bar"));
+        when(service.aggregate(any())).thenReturn(response("aggregate", "bar"));
+        when(service.histogram(any())).thenReturn(response("histogram", "bar"));
+        when(service.scatter(any())).thenReturn(response("scatter", "scatter"));
         when(service.valueStatistics(any())).thenReturn(response("value_statistics", "bar"));
         when(service.relations(any())).thenReturn(response("relations", "graph"));
         when(service.relationTimeline(any()))
@@ -49,9 +52,10 @@ class EntityAnalyticsControllerTest {
     }
 
     @Test
-    void exposesAllSevenPostEndpointsWithUnifiedEchartsEnvelope() throws Exception {
+    void exposesAllTenPostEndpointsWithUnifiedEchartsEnvelope() throws Exception {
         List<String> endpoints = List.of(
                 "overview", "summary", "trend", "distribution",
+                "aggregate", "histogram", "scatter",
                 "value-statistics", "relations", "relation-timeline");
         for (String endpoint : endpoints) {
             mockMvc.perform(post("/api/v1/entity/" + endpoint + "/query")

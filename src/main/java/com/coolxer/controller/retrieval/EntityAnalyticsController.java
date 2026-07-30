@@ -2,10 +2,13 @@ package com.coolxer.controller.retrieval;
 
 import com.coolxer.controller.BaseController;
 import com.coolxer.model.base.vo.ResponseWrap;
+import com.coolxer.model.retrieval.analytics.AggregateQueryRequest;
 import com.coolxer.model.retrieval.analytics.DistributionQueryRequest;
+import com.coolxer.model.retrieval.analytics.HistogramQueryRequest;
 import com.coolxer.model.retrieval.analytics.OverviewQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationTimelineQueryRequest;
+import com.coolxer.model.retrieval.analytics.ScatterQueryRequest;
 import com.coolxer.model.retrieval.analytics.SummaryQueryRequest;
 import com.coolxer.model.retrieval.analytics.TrendQueryRequest;
 import com.coolxer.model.retrieval.analytics.ValueStatisticsQueryRequest;
@@ -54,6 +57,27 @@ public class EntityAnalyticsController extends BaseController {
             description = "按一个或多个实体的任意兼容标量字段统计TopN分布，TopN最大100。")
     public ResponseWrap<?> distribution(@RequestBody DistributionQueryRequest request) {
         return ResponseWrap.success(analyticsService.distribution(request));
+    }
+
+    @PostMapping("/aggregate/query")
+    @Operation(summary = "单实体多维聚合",
+            description = "使用Meta逻辑字段执行最多两个维度、二十个指标的受控聚合查询。")
+    public ResponseWrap<?> aggregate(@RequestBody AggregateQueryRequest request) {
+        return ResponseWrap.success(analyticsService.aggregate(request));
+    }
+
+    @PostMapping("/histogram/query")
+    @Operation(summary = "数值字段直方图",
+            description = "对一个Meta数值字段执行5到100个受控区间的直方图统计。")
+    public ResponseWrap<?> histogram(@RequestBody HistogramQueryRequest request) {
+        return ResponseWrap.success(analyticsService.histogram(request));
+    }
+
+    @PostMapping("/scatter/query")
+    @Operation(summary = "散点图与气泡图",
+            description = "对Meta数值字段进行有上限、稳定排序的散点或气泡取样。")
+    public ResponseWrap<?> scatter(@RequestBody ScatterQueryRequest request) {
+        return ResponseWrap.success(analyticsService.scatter(request));
     }
 
     @PostMapping("/value-statistics/query")

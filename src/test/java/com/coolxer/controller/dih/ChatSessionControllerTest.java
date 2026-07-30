@@ -12,11 +12,30 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.coolxer.service.dih.DataVisualizationDemoResponseService.MENU_EXAMPLE_PROMPT;
 
 class ChatSessionControllerTest {
 
     @TempDir
     Path skillRoot;
+
+    @Test
+    void visualizationPrologueIncludesDeterministicMenuExample() {
+        ChatSessionController controller = new ChatSessionController();
+
+        Message message = ReflectionTestUtils.invokeMethod(
+                controller,
+                "buildPrologueMessage",
+                "agent_data_visualization"
+        );
+
+        assertThat(message).isNotNull();
+        assertThat(message.getContent()).contains("添加菜单");
+        assertThat(message.getParts()).extracting("type")
+                .containsExactly("markdown", "markdown", "prompt-suggestions");
+        assertThat(message.getParts().get(2).getMetadata().toString())
+                .contains("添加菜单", MENU_EXAMPLE_PROMPT);
+    }
 
     @Test
     void dynamicSkillPrologueUsesManifestContentAndSuggestions() throws Exception {

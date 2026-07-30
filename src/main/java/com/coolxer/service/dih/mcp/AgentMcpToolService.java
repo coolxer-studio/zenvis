@@ -48,36 +48,8 @@ public class AgentMcpToolService {
 
     private static final String DEFAULT_LIMITS_PREFIX = "app.ai.dih.agent.default-limits.";
 
-    private static final Set<String> DATA_VISUALIZATION_ALLOWED_TOOLS = Set.of(
-            "retrieval_search",
-            "retrieval_list_rule",
-            "retrieval_list_entity",
-            "retrieval_list_attribute",
-            "retrieval_list_candidate",
-            "retrieval_list_display_entity",
-            "retrieval_list_display_attribute",
-            "entity_overview",
-            "entity_summary",
-            "entity_trend",
-            "entity_distribution",
-            "entity_value_statistics",
-            "entity_relations",
-            "entity_relation_timeline",
-            "entity_list",
-            "entity_view",
-            "config_ensure_root",
-            "config_add",
-            "config_apply",
-            "config_read",
-            "dashboard_create",
-            "dashboard_list",
-            "dashboard_view",
-            "menu_create",
-            "menu_list",
-            "menu_view",
-            "menu_type_options",
-            "menu_parent_options"
-    );
+    private static final Set<String> DATA_VISUALIZATION_ONLY_TOOLS = Set.of(
+            "entity_aggregate", "entity_histogram", "entity_scatter");
 
     private static final String MCP_TOOL_USAGE_PROMPT = """
             【MCP工具使用规则】
@@ -161,14 +133,15 @@ public class AgentMcpToolService {
         boolean dataVisualizationAgent = DATA_VISUALIZATION_AGENT_TYPE.equals(normalizedAgentType);
         SkillRuntimeToolsVo runtimeTools = runtime == null ? null : runtime.getTools();
         Set<String> localAllowlist = runtimeTools == null
-                ? (dataVisualizationAgent ? DATA_VISUALIZATION_ALLOWED_TOOLS : null)
+                ? (dataVisualizationAgent ? Set.of() : null)
                 : normalizeToolNames(runtimeTools.getLocal());
         Map<String, Set<String>> externalAllowlist = normalizeExternalToolNames(runtimeTools);
 
         List<ToolCallback> toolCallbacks = new ArrayList<>();
         Set<String> addedToolNames = new LinkedHashSet<>();
         StringBuilder mcpPrompt = new StringBuilder();
-        appendLocalTools(toolCallbacks, addedToolNames, mcpPrompt, localAllowlist);
+        appendLocalTools(toolCallbacks, addedToolNames, mcpPrompt, localAllowlist,
+                dataVisualizationAgent);
         if (runtimeTools != null) {
             appendExternalTools(scope, toolCallbacks, addedToolNames, mcpPrompt, externalAllowlist);
         } else if (!dataVisualizationAgent) {
@@ -188,7 +161,8 @@ public class AgentMcpToolService {
     private void appendLocalTools(List<ToolCallback> toolCallbacks,
                                   Set<String> addedToolNames,
                                   StringBuilder prompt,
-                                  Set<String> allowedToolNames) {
+                                  Set<String> allowedToolNames,
+                                  boolean dataVisualizationAgent) {
         ToolCallback[] callbacks = localToolCallbackProvider == null ? null : localToolCallbackProvider.getToolCallbacks();
         if (callbacks == null || callbacks.length == 0) {
             return;
@@ -200,6 +174,10 @@ public class AgentMcpToolService {
                 continue;
             }
             String toolName = callback.getToolDefinition().name();
+            if (!dataVisualizationAgent
+                    && DATA_VISUALIZATION_ONLY_TOOLS.contains(toolName)) {
+                continue;
+            }
             if (allowedToolNames != null && !allowedToolNames.contains(toolName)) {
                 continue;
             }

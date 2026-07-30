@@ -38,16 +38,7 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
 
     @Override
     public Number aggregate(QuerySource source, Metric metric, TimeWindow window) {
-        String operation = normalizeOperation(metric.operation());
-        String expression = switch (operation) {
-            case "COUNT" -> "count()";
-            case "DISTINCT_COUNT" -> "uniqExact(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "SUM" -> "sum(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "AVG" -> "avg(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "MIN" -> "min(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "MAX" -> "max(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            default -> throw unsupported("不支持的指标操作: " + metric.operation());
-        };
+        String expression = metricExpression(metric);
         SqlFragment where = buildWhere(source, window, "a");
         Query query = createQuery("select " + expression + " from "
                 + requireIdentifier(source.tableName(), "表名") + where.sql());
@@ -64,16 +55,7 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
         }
         String timeColumn = requireIdentifier(source.timeColumn(), "时间字段");
         String bucket = bucketExpression(timeColumn, source.timeColumnType(), granularity);
-        String operation = normalizeOperation(metric.operation());
-        String aggregate = switch (operation) {
-            case "COUNT" -> "count()";
-            case "DISTINCT_COUNT" -> "uniqExact(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "SUM" -> "sum(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "AVG" -> "avg(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "MIN" -> "min(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            case "MAX" -> "max(" + requireIdentifier(metric.column(), "指标字段") + ")";
-            default -> throw unsupported("不支持的指标操作: " + metric.operation());
-        };
+        String aggregate = metricExpression(metric);
         SqlFragment where = buildWhere(source, window, "t");
         String sql = "select " + bucket + " as bucket, " + aggregate + " as value from "
                 + requireIdentifier(source.tableName(), "表名") + where.sql()
@@ -277,6 +259,190 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
         return rows;
     }
 
+    @Override
+    public List<Map<String, Object>> aggregateGroups(GroupQuery query, TimeWindow window) {
+        if (query == null || query.source() == null || CollectionUtils.isEmpty(query.metrics())) {
+            throw empty("聚合查询和指标不能为空");
+        }
+        List<String> selects = new ArrayList<>();
+        List<String> groupAliases = new ArrayList<>();
+        Map<String, String> orderAliases = new LinkedHashMap<>();
+        List<String> nonNullPredicates = new ArrayList<>();
+
+        for (int i = 0; i < query.dimensions().size(); i++) {
+            GroupDimension dimension = query.dimensions().get(i);
+            String alias = "d" + i;
+            String column = requireIdentifier(dimension.column(), "维度字段");
+            String expression;
+            if ("TIME".equalsIgnoreCase(dimension.kind())) {
+                expression = bucketExpression(column, dimension.columnType(), dimension.granularity());
+            } else {
+                expression = "ifNull(toString(" + column + "), '')";
+                if (!dimension.includeNull()) {
+                    nonNullPredicates.add(column
+                            + " is not null and notEmpty(trim(toString(" + column + ")))");
+                }
+            }
+            selects.add(expression + " as " + alias);
+            groupAliases.add(alias);
+            orderAliases.put(dimension.name(), alias);
+        }
+        for (int i = 0; i < query.metrics().size(); i++) {
+            GroupMetric metric = query.metrics().get(i);
+            String alias = "m" + i;
+            selects.add(metricExpression(metric.metric()) + " as " + alias);
+            orderAliases.put(metric.name(), alias);
+        }
+
+        SqlFragment where = buildWhere(query.source(), window, "g");
+        String whereSql = where.sql();
+        for (String predicate : nonNullPredicates) {
+            whereSql = conditionSuffix(whereSql, predicate);
+        }
+        StringBuilder sql = new StringBuilder("select ")
+                .append(String.join(", ", selects))
+                .append(" from ")
+                .append(requireIdentifier(query.source().tableName(), "表名"))
+                .append(whereSql);
+        if (!groupAliases.isEmpty()) {
+            sql.append(" group by ").append(String.join(", ", groupAliases));
+        }
+        GroupOrder order = query.orderBy();
+        String orderAlias = order == null ? null : orderAliases.get(order.field());
+        if (order != null && orderAlias == null) {
+            throw unsupported("排序字段必须引用维度或指标名称");
+        }
+        if (orderAlias == null) {
+            orderAlias = !groupAliases.isEmpty() ? groupAliases.get(0) : "m0";
+        }
+        String direction = order == null
+                ? (!groupAliases.isEmpty()
+                && "TIME".equalsIgnoreCase(query.dimensions().get(0).kind()) ? "asc" : "desc")
+                : normalizeSortDirection(order.direction());
+        sql.append(" order by ").append(orderAlias).append(" ").append(direction)
+                .append(" limit ").append(query.limit());
+
+        Query nativeQuery = createQuery(sql.toString());
+        bind(nativeQuery, where.params());
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Object raw : nativeQuery.getResultList()) {
+            int columnCount = query.dimensions().size() + query.metrics().size();
+            Object[] values = columnCount == 1 && !(raw instanceof Object[])
+                    ? new Object[]{raw}
+                    : requireRow(raw, columnCount, "多维聚合");
+            Map<String, Object> row = new LinkedHashMap<>();
+            int cursor = 0;
+            for (GroupDimension dimension : query.dimensions()) {
+                row.put(dimension.name(), values[cursor++]);
+            }
+            for (GroupMetric metric : query.metrics()) {
+                row.put(metric.name(), toNumber(values[cursor++]));
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    @Override
+    public HistogramResult histogram(HistogramSource source, TimeWindow window) {
+        if (source == null || source.source() == null) {
+            throw empty("直方图查询不能为空");
+        }
+        String column = requireIdentifier(source.column(), "直方图字段");
+        SqlFragment baseWhere = buildWhere(source.source(), window, "h");
+        String whereSql = conditionSuffix(baseWhere.sql(), column + " is not null");
+        Map<String, Object> params = new LinkedHashMap<>(baseWhere.params());
+        if (source.min() != null) {
+            whereSql = conditionSuffix(whereSql, "toFloat64(" + column + ") >= :histLower");
+            params.put("histLower", source.min());
+        }
+        if (source.max() != null) {
+            whereSql = conditionSuffix(whereSql, "toFloat64(" + column + ") <= :histUpper");
+            params.put("histUpper", source.max());
+        }
+        Query rangeQuery = createQuery("select min(toFloat64(" + column + ")), "
+                + "max(toFloat64(" + column + ")), count() from "
+                + requireIdentifier(source.source().tableName(), "表名") + whereSql);
+        bind(rangeQuery, params);
+        Object[] range = requireRow(rangeQuery.getSingleResult(), 3, "直方图范围");
+        long total = toLong(range[2]);
+        BigDecimal min = source.min() == null ? decimalValue(range[0]) : source.min();
+        BigDecimal max = source.max() == null ? decimalValue(range[1]) : source.max();
+        if (total == 0L || min == null || max == null) {
+            return new HistogramResult(List.of(), min, max, total);
+        }
+        if (min.compareTo(max) == 0) {
+            return new HistogramResult(List.of(Map.of("bucket", 0, "value", total)),
+                    min, max, total);
+        }
+
+        BigDecimal width = max.subtract(min)
+                .divide(BigDecimal.valueOf(source.bins()), 16, java.math.RoundingMode.HALF_UP);
+        String bucket = "least(" + (source.bins() - 1)
+                + ", greatest(0, toInt64(floor((toFloat64(" + column
+                + ") - :histMin) / :histWidth))))";
+        Query histogramQuery = createQuery("select " + bucket
+                + " as bucket, count() as value from "
+                + requireIdentifier(source.source().tableName(), "表名") + whereSql
+                + " group by bucket order by bucket");
+        Map<String, Object> histogramParams = new LinkedHashMap<>(params);
+        histogramParams.put("histMin", min);
+        histogramParams.put("histWidth", width);
+        bind(histogramQuery, histogramParams);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Object raw : histogramQuery.getResultList()) {
+            Object[] values = requireRow(raw, 2, "直方图");
+            rows.add(Map.of("bucket", ((Number) values[0]).intValue(),
+                    "value", toLong(values[1])));
+        }
+        return new HistogramResult(rows, min, max, total);
+    }
+
+    @Override
+    public ScatterResult scatter(ScatterSource source, TimeWindow window) {
+        if (source == null || source.source() == null) {
+            throw empty("散点图查询不能为空");
+        }
+        String xColumn = requireIdentifier(source.xColumn(), "X轴字段");
+        String yColumn = requireIdentifier(source.yColumn(), "Y轴字段");
+        String sizeExpression = source.sizeColumn() == null
+                ? "NULL" : "toFloat64(" + requireIdentifier(source.sizeColumn(), "气泡大小字段") + ")";
+        String categoryExpression = source.categoryColumn() == null
+                ? "NULL" : "ifNull(toString("
+                + requireIdentifier(source.categoryColumn(), "分类字段") + "), '')";
+        String labelExpression = source.labelColumn() == null
+                ? "NULL" : "ifNull(toString("
+                + requireIdentifier(source.labelColumn(), "标签字段") + "), '')";
+        SqlFragment where = buildWhere(source.source(), window, "s");
+        String whereSql = conditionSuffix(where.sql(), xColumn + " is not null");
+        whereSql = conditionSuffix(whereSql, yColumn + " is not null");
+        String sortColumn = requireIdentifier(source.sortColumn(), "排序字段");
+        String sql = "select toFloat64(" + xColumn + "), toFloat64(" + yColumn + "), "
+                + sizeExpression + ", " + categoryExpression + ", " + labelExpression
+                + " from " + requireIdentifier(source.source().tableName(), "表名")
+                + whereSql + " order by " + sortColumn + " "
+                + normalizeSortDirection(source.sortDirection())
+                + ", " + xColumn + " asc, " + yColumn + " asc"
+                + " limit " + (source.limit() + 1);
+        Query query = createQuery(sql);
+        bind(query, where.params());
+        List<?> rawRows = query.getResultList();
+        boolean hasMore = rawRows.size() > source.limit();
+        List<?> visibleRows = hasMore ? rawRows.subList(0, source.limit()) : rawRows;
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Object raw : visibleRows) {
+            Object[] values = requireRow(raw, 5, "散点图");
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("x", toNumber(values[0]));
+            row.put("y", toNumber(values[1]));
+            row.put("size", values[2] == null ? null : toNumber(values[2]));
+            row.put("category", values[3]);
+            row.put("label", values[4]);
+            rows.add(row);
+        }
+        return new ScatterResult(rows, hasMore);
+    }
+
     private UnionSql buildRelationUnion(List<RelationSource> sources, TimeWindow window) {
         List<String> selects = new ArrayList<>();
         Map<String, Object> params = new LinkedHashMap<>();
@@ -438,13 +604,22 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
         String local = "toTimeZone(" + dateTime + ", '" + zone + "')";
         String normalized = StringUtils.upperCase(StringUtils.defaultIfBlank(granularity, "DAY"));
         String bucket = switch (normalized) {
+            case "MINUTE" -> "toStartOfMinute(" + local + ")";
+            case "FIVE_MINUTES" -> "toStartOfInterval(" + local + ", INTERVAL 5 MINUTE)";
+            case "FIFTEEN_MINUTES" -> "toStartOfInterval(" + local + ", INTERVAL 15 MINUTE)";
             case "HOUR" -> "toStartOfHour(" + local + ")";
             case "DAY" -> "toStartOfDay(" + local + ")";
-            case "WEEK" -> "toStartOfWeek(" + local + ")";
+            case "WEEK" -> "toStartOfWeek(" + local + ", 1)";
             case "MONTH" -> "toStartOfMonth(" + local + ")";
+            case "QUARTER" -> "toStartOfQuarter(" + local + ")";
+            case "YEAR" -> "toStartOfYear(" + local + ")";
             default -> throw unsupported("不支持的时间粒度: " + granularity);
         };
-        String format = "HOUR".equals(normalized) ? "%Y-%m-%d %H:00:00" : "%Y-%m-%d";
+        String format = switch (normalized) {
+            case "MINUTE", "FIVE_MINUTES", "FIFTEEN_MINUTES" -> "%Y-%m-%d %H:%i:00";
+            case "HOUR" -> "%Y-%m-%d %H:00:00";
+            default -> "%Y-%m-%d";
+        };
         return "formatDateTime(" + bucket + ", '" + format + "', '" + zone + "')";
     }
 
@@ -481,6 +656,54 @@ public class AnalyticsQueryEngineImpl implements AnalyticsQueryEngine {
 
     private String normalizeOperation(String value) {
         return StringUtils.upperCase(StringUtils.defaultIfBlank(value, "COUNT"));
+    }
+
+    private String metricExpression(Metric metric) {
+        String operation = normalizeOperation(metric.operation());
+        String column = "COUNT".equals(operation)
+                ? null : requireIdentifier(metric.column(), "指标字段");
+        return switch (operation) {
+            case "COUNT" -> "count()";
+            case "DISTINCT_COUNT" -> "uniqExact(" + column + ")";
+            case "SUM" -> "sum(" + column + ")";
+            case "AVG" -> "avg(" + column + ")";
+            case "MIN" -> "min(" + column + ")";
+            case "MAX" -> "max(" + column + ")";
+            case "PERCENTILE" -> {
+                double percentile = metric.percentile() == null ? 0.5D : metric.percentile();
+                if (!Double.isFinite(percentile) || percentile <= 0D || percentile >= 1D) {
+                    throw unsupported("PERCENTILE的percentile必须大于0且小于1");
+                }
+                yield "quantileExact(" + BigDecimal.valueOf(percentile).stripTrailingZeros()
+                        .toPlainString() + ")(" + column + ")";
+            }
+            default -> throw unsupported("不支持的指标操作: " + metric.operation());
+        };
+    }
+
+    private String normalizeSortDirection(String value) {
+        String normalized = StringUtils.lowerCase(StringUtils.defaultIfBlank(value, "desc"));
+        if (!Set.of("asc", "desc").contains(normalized)) {
+            throw unsupported("排序方向仅支持asc或desc");
+        }
+        return normalized;
+    }
+
+    private BigDecimal decimalValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException e) {
+            throw unsupported("数值结果格式不正确");
+        }
     }
 
     private void requireTopLimit(int limit) {

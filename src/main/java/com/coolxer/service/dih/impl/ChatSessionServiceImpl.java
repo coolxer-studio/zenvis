@@ -11,7 +11,9 @@ import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.demo.AgentDemoStateStore;
 import com.coolxer.service.dih.mcp.McpChatToolGrantService;
+import com.coolxer.service.dih.workflow.WorkflowStateStore;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,12 @@ public class ChatSessionServiceImpl implements ChatSessionService {
 
     @Autowired
     private McpChatToolGrantService mcpChatToolGrantService;
+
+    @Autowired
+    private WorkflowStateStore workflowStateStore;
+
+    @Autowired
+    private AgentDemoStateStore agentDemoStateStore;
 
     @Override
     public List<ChatSessionVo> findAll() {
@@ -67,6 +75,12 @@ public class ChatSessionServiceImpl implements ChatSessionService {
             Optional<ChatSession> optionalChatSession = chatSessionRepository.findById(id);
             if (optionalChatSession.isPresent() && Objects.equals(optionalChatSession.get().getCreateBy(), currentUser.getId())) {
                 ChatSession chatSession = optionalChatSession.get();
+                if (StringUtils.isNotBlank(chatSessionDto.getExtraData())) {
+                    String preserved = workflowStateStore.preserveReserved(
+                            chatSession.getExtraData(), chatSessionDto.getExtraData());
+                    chatSessionDto.setExtraData(agentDemoStateStore.preserveReserved(
+                            chatSession.getExtraData(), preserved));
+                }
                 chatSession.updateFromDto(chatSessionDto);
                 chatSessionRepository.save(chatSession);
                 return true;
@@ -80,6 +94,31 @@ public class ChatSessionServiceImpl implements ChatSessionService {
             log.error("更新对象失败, id: {}", id, e);
             return false;
         }
+    }
+
+    @Override
+    @Transactional(transactionManager = "mysqlTransactionManager")
+    public Boolean updateWorkflowState(
+            Long id,
+            String messages,
+            String extraData,
+            User currentUser) {
+        if (currentUser == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        ChatSession chatSession = chatSessionRepository.findById(id).orElse(null);
+        if (chatSession == null
+                || !Objects.equals(chatSession.getCreateBy(), currentUser.getId())) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        if (StringUtils.isNotBlank(messages)) {
+            chatSession.setMessages(messages);
+        }
+        if (StringUtils.isNotBlank(extraData)) {
+            chatSession.setExtraData(extraData);
+        }
+        chatSessionRepository.save(chatSession);
+        return true;
     }
 
     @Override

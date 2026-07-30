@@ -1,6 +1,7 @@
 package com.coolxer.controller.dih;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.controller.BaseController;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
@@ -12,11 +13,15 @@ import com.coolxer.model.dih.SuggestDto;
 import com.coolxer.model.dih.dto.ChatActionDecisionDto;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
+import com.coolxer.model.dih.dto.WorkflowActionDto;
+import com.coolxer.model.dih.dto.WorkflowTelemetryDto;
+import com.coolxer.model.dih.vo.WorkflowActionVo;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AIGeneralCompleteService;
 import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.DihChatApplicationService;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.workflow.WorkflowActionService;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.swagger.v3.oas.annotations.Operation;
@@ -79,6 +84,9 @@ public class ChatController extends BaseController {
 
     @Autowired
     private AIGeneralCompleteService completeService;
+
+    @Autowired
+    private WorkflowActionService workflowActionService;
 
 
     /**
@@ -215,6 +223,36 @@ public class ChatController extends BaseController {
         }
     }
 
+    @PostMapping("/chat/workflow/action")
+    @Operation(summary = "执行精确匹配的聊天工作流动作")
+    public ResponseWrap<WorkflowActionVo> workflowAction(
+            @Valid @RequestBody WorkflowActionDto workflowActionDto) {
+        try {
+            return ResponseWrap.success(
+                    workflowActionService.handle(workflowActionDto, getSessionUser()));
+        } catch (ApiException e) {
+            return ResponseWrap.fail(e);
+        } catch (Exception e) {
+            log.error("执行聊天工作流动作失败: {}", e.getMessage(), e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping("/chat/workflow/telemetry")
+    @Operation(summary = "记录聊天工作流客户端遥测")
+    public ResponseWrap<String> workflowTelemetry(
+            @Valid @RequestBody WorkflowTelemetryDto telemetryDto) {
+        try {
+            workflowActionService.recordTelemetry(telemetryDto, getSessionUser());
+            return ResponseWrap.success("记录成功");
+        } catch (ApiException e) {
+            return ResponseWrap.fail(e);
+        } catch (Exception e) {
+            log.error("记录聊天工作流客户端遥测失败: {}", e.getMessage(), e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
     private boolean isPlaceholderBuiltinAgent(String chatType) {
         return false;
     }
@@ -252,6 +290,15 @@ public class ChatController extends BaseController {
                     decisionDto.getMessageId(),
                     decisionDto.getPartId(),
                     decisionDto.getDecision());
+            return false;
+        }
+        if (matchedPart.getMetadata() != null
+                && StringUtils.hasText(String.valueOf(
+                matchedPart.getMetadata().getOrDefault("workflowId", "")))) {
+            log.warn("拒绝使用旧动作接口修改共享工作流卡片: chatId={}, messageId={}, partId={}",
+                    decisionDto.getChatId(),
+                    decisionDto.getMessageId(),
+                    decisionDto.getPartId());
             return false;
         }
         matchedPart.setStatus(decisionDto.getDecision());

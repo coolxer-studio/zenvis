@@ -2,10 +2,13 @@ package com.coolxer.controller.retrieval;
 
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.retrieval.analytics.AnalyticsResponse;
+import com.coolxer.model.retrieval.analytics.AggregateQueryRequest;
 import com.coolxer.model.retrieval.analytics.DistributionQueryRequest;
+import com.coolxer.model.retrieval.analytics.HistogramQueryRequest;
 import com.coolxer.model.retrieval.analytics.OverviewQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationQueryRequest;
 import com.coolxer.model.retrieval.analytics.RelationTimelineQueryRequest;
+import com.coolxer.model.retrieval.analytics.ScatterQueryRequest;
 import com.coolxer.model.retrieval.analytics.SummaryQueryRequest;
 import com.coolxer.model.retrieval.analytics.TrendQueryRequest;
 import com.coolxer.model.retrieval.analytics.ValueStatisticsQueryRequest;
@@ -109,7 +112,8 @@ public class RetrievalMcpTool {
      * 获取实体列表
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_list_entity", description = "获取数据实体列表，可按规则ID过滤")
+    @Tool(name = "retrieval_list_entity",
+            description = "获取数据实体Meta列表；后续查询必须使用返回的entityList[].name逻辑名称，并可展示对应label")
     public DataEntityResultVo listEntity(@ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listEntity(ruleId, currentUserId());
     }
@@ -118,7 +122,8 @@ public class RetrievalMcpTool {
      * 获取属性列表
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_list_attribute", description = "获取数据属性列表，可按实体或规则ID过滤")
+    @Tool(name = "retrieval_list_attribute",
+            description = "按准确实体逻辑名称获取字段Meta；后续查询字段必须使用返回的attributeList[].name，并可展示对应label")
     public DataAttributeResultVo listAttribute(@ToolParam(description = "实体名称，可选", required = false) String entity,
                                                @ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listAttribute(entity, ruleId, currentUserId());
@@ -138,7 +143,8 @@ public class RetrievalMcpTool {
      * 获取展示实体列表
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_list_display_entity", description = "获取展示用的实体列表，可按规则ID过滤")
+    @Tool(name = "retrieval_list_display_entity",
+            description = "获取展示用实体Meta列表；必须从entityList[].name选择准确逻辑实体名称，并同时保留label供用户确认")
     public DataEntityResultVo listDisplayEntity(@ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listEntity(ruleId, currentUserId());
     }
@@ -147,7 +153,8 @@ public class RetrievalMcpTool {
      * 获取展示属性列表
      */
     @McpToolApproval(value = ALLOW, risk = LOW)
-    @Tool(name = "retrieval_list_display_attribute", description = "获取展示用的属性列表，可按实体或规则ID过滤")
+    @Tool(name = "retrieval_list_display_attribute",
+            description = "按准确实体逻辑名称获取展示字段Meta；必须从attributeList[].name选择字段，并同时保留label供用户确认")
     public DataAttributeResultVo listDisplayAttribute(@ToolParam(description = "实体名称，可选", required = false) String entity,
                                                       @ToolParam(description = "规则ID，可选", required = false) Integer ruleId) {
         return retrievalService.listAttributeForDisplay(entity, ruleId, currentUserId());
@@ -179,6 +186,31 @@ public class RetrievalMcpTool {
     public AnalyticsResponse entityDistribution(
             @ToolParam(description = "实体字段分布查询请求") DistributionQueryRequest request) {
         return entityAnalyticsService.distribution(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_aggregate",
+            description = "使用Meta逻辑字段执行最多两个维度的多指标聚合、分组趋势或热力透视")
+    public AnalyticsResponse entityAggregate(
+            @ToolParam(description = "单实体多维聚合请求，不允许SQL或物理字段")
+            AggregateQueryRequest request) {
+        return entityAnalyticsService.aggregate(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_histogram",
+            description = "统计一个Meta数值字段的区间分布并返回ECharts直方图")
+    public AnalyticsResponse entityHistogram(
+            @ToolParam(description = "单实体数值直方图请求") HistogramQueryRequest request) {
+        return entityAnalyticsService.histogram(request);
+    }
+
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "entity_scatter",
+            description = "查询两个Meta数值字段的有限、稳定排序散点或气泡数据")
+    public AnalyticsResponse entityScatter(
+            @ToolParam(description = "单实体散点图或气泡图请求") ScatterQueryRequest request) {
+        return entityAnalyticsService.scatter(request);
     }
 
     @McpToolApproval(value = ALLOW, risk = LOW)

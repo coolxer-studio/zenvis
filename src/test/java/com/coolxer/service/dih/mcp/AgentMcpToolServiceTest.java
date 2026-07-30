@@ -93,12 +93,25 @@ class AgentMcpToolServiceTest {
 
     @Test
     void resolveDataVisualizationAgentUsesRetrievalAndControlledWriteTools() {
+        SkillService skillService = mock(SkillService.class);
+        List<String> allowedTools = List.of(
+                "retrieval_search", "entity_view",
+                "entity_aggregate", "entity_histogram", "entity_scatter",
+                "config_apply", "dashboard_create", "menu_create");
+        when(skillService.resolveRuntimeConfig(List.of("data-visualization-agent")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        new SkillRuntimeToolsVo(allowedTools, Map.of()),
+                        new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
                 new MockEnvironment(),
                 ToolCallbackProvider.from(
                         new FakeToolCallback("retrieval_search", "根据条件检索数据"),
                         new FakeToolCallback("entity_view", "获取指定实体的单条记录详情"),
+                        new FakeToolCallback("entity_aggregate", "多维聚合"),
+                        new FakeToolCallback("entity_histogram", "直方图"),
+                        new FakeToolCallback("entity_scatter", "散点图"),
                         new FakeToolCallback("retrieval_create_rule", "创建一个新的检索规则"),
                         new FakeToolCallback("entity_update", "更新指定实体的记录"),
                         new FakeToolCallback("config_apply", "应用配置"),
@@ -107,10 +120,13 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("dashboard_delete", "删除看板"),
                         new FakeToolCallback("menu_create", "创建菜单"),
                         new FakeToolCallback("menu_update", "更新菜单")
-                )
+                ),
+                null,
+                skillService
         );
 
-        McpToolContext context = service.resolve("agent_data_visualization");
+        McpToolContext context = service.resolve(
+                "agent_data_visualization", List.of("data-visualization-agent"));
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
@@ -118,26 +134,60 @@ class AgentMcpToolServiceTest {
                 .doesNotContain("retrieval_create_rule", "entity_update", "config_delete", "dashboard_delete", "menu_update", "external_write");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("retrieval_search", "entity_view", "config_apply", "dashboard_create", "menu_create");
+                .containsExactly(
+                        "retrieval_search", "entity_view",
+                        "entity_aggregate", "entity_histogram", "entity_scatter",
+                        "config_apply", "dashboard_create", "menu_create");
+    }
+
+    @Test
+    void newVisualizationAnalyticsToolsAreHiddenFromOtherAgents() {
+        AgentMcpToolService service = new AgentMcpToolService(
+                new EmptyMcpClientService(),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("retrieval_search", "检索"),
+                        new FakeToolCallback("entity_aggregate", "多维聚合"),
+                        new FakeToolCallback("entity_histogram", "直方图"),
+                        new FakeToolCallback("entity_scatter", "散点图"))
+        );
+
+        McpToolContext context = service.resolve("agent_data_access");
+
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly("retrieval_search");
+        assertThat(context.systemPrompt())
+                .doesNotContain("entity_aggregate", "entity_histogram", "entity_scatter");
     }
 
     @Test
     void resolveDataVisualizationAgentCanUseControlledWriteToolsWithoutRetrievalTools() {
+        SkillService skillService = mock(SkillService.class);
+        when(skillService.resolveRuntimeConfig(List.of("data-visualization-agent")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        new SkillRuntimeToolsVo(
+                                List.of("config_tree", "dashboard_create"), Map.of()),
+                        new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),
                 ToolCallbackProvider.from(
                         new FakeToolCallback("config_tree", "获取配置文件树"),
                         new FakeToolCallback("dashboard_create", "创建看板")
-                )
+                ),
+                null,
+                skillService
         );
 
-        McpToolContext context = service.resolve("agent_data_visualization");
+        McpToolContext context = service.resolve(
+                "agent_data_visualization", List.of("data-visualization-agent"));
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("dashboard_create");
+                .containsExactly("config_tree", "dashboard_create");
     }
 
     @Test

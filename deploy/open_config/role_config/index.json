@@ -1,0 +1,118 @@
+{
+  "type": "page",
+  "title": "角色管理",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "dialog",
+      "label": "创建角色",
+      "primary": true,
+      "dialog": {
+        "title": "创建角色",
+        "mode": "horizontal",
+        "size": "lg",
+        "body": {
+          "type": "form",
+          "api": "/zenvis/api/v1/system/role/add",
+          "body": [
+            {
+              "label": "角色名称",
+              "name": "name",
+              "type": "input-text",
+              "required": true
+            },
+            {
+              "label": "菜单权限",
+              "type": "input-tree",
+              "name": "menu_ids",
+              "multiple": true,
+              "autoCheckChildren": false,
+              "source": "/zenvis/api/v1/system/role/permission/tree"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/system/role/list",
+      "autoGenerateFilter": true,
+      "columns": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "name": "name",
+          "label": "角色名称",
+          "type": "text",
+          "searchable": true,
+          "toggled": true
+        },
+        {
+          "name": "menu_names",
+          "label": "菜单权限",
+          "type": "tpl",
+          "width": 800,
+          "tpl": "<% if (data.menu_names) { data.menu_names.forEach(function(item) { %> <span class='label label-info m-1'><%- item %></span> <% });} %>"
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "type": "text",
+          "toggled": true
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": 100,
+          "buttons": [
+            {
+              "type": "button",
+              "icon": "fa fa-pencil",
+              "actionType": "dialog",
+              "dialog": {
+                "size": "lg",
+                "title": "编辑",
+                "body": {
+                  "type": "form",
+                  "name": "sample-edit-form",
+                  "api": "/zenvis/api/v1/system/role/$id/update",
+                  "body": [
+                    {
+                      "label": "角色名称",
+                      "name": "name",
+                      "type": "input-text",
+                      "required": true
+                    },
+                    {
+                      "label": "菜单权限",
+                      "type": "input-tree",
+                      "name": "menu_ids",
+                      "multiple": true,
+                      "autoCheckChildren": false,
+                      "source": "/zenvis/api/v1/system/role/permission/tree"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "icon": "fa fa-times text-danger",
+              "actionType": "ajax",
+              "confirmText": "您确认要删除?",
+              "api": "delete:/zenvis/api/v1/system/role/$id"
+            }
+          ],
+          "toggled": true
+        }
+      ]
+    }
+  ]
+}

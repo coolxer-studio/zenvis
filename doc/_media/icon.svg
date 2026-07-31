@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="256"
+  height="256"
+  viewBox="0 0 256 256"
+  role="img"
+  aria-labelledby="logo-title logo-description"
+>
+  <title id="logo-title">ZenVis Logo</title>
+  <desc id="logo-description">
+    蓝色六边形内包含上升趋势线、箭头、数据柱和发光圆点。
+  </desc>
+
+  <defs>
+    <linearGradient id="background" x1="72" y1="56" x2="182" y2="178" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0069d5" />
+      <stop offset="0.48" stop-color="#078de9" />
+      <stop offset="1" stop-color="#0870d5" />
+    </linearGradient>
+
+    <radialGradient id="center-light" cx="0" cy="0" r="1" gradientTransform="translate(127 94) rotate(90) scale(68)">
+      <stop offset="0" stop-color="#6dd7ff" stop-opacity="0.72" />
+      <stop offset="0.38" stop-color="#2dafff" stop-opacity="0.24" />
+      <stop offset="1" stop-color="#0066cf" stop-opacity="0" />
+    </radialGradient>
+
+    <linearGradient id="bar-fill" x1="0" y1="115" x2="0" y2="181" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9be9ff" />
+      <stop offset="0.45" stop-color="#41baff" />
+      <stop offset="1" stop-color="#0876df" />
+    </linearGradient>
+
+    <filter id="point-glow" x="-250%" y="-250%" width="600%" height="600%">
+      <feGaussianBlur stdDeviation="5.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <clipPath id="hexagon-clip">
+      <path d="M128 42L194 78V154L128 190L62 154V78Z" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#hexagon-clip)">
+    <path d="M128 42L194 78V154L128 190L62 154V78Z" fill="url(#background)" />
+    <rect x="62" y="42" width="132" height="148" fill="url(#center-light)" />
+
+    <g fill="none" stroke="#8ddfff" opacity="0.17">
+      <circle cx="128" cy="92" r="18" />
+      <circle cx="128" cy="92" r="27" />
+      <path d="M78 78H180M70 110H188M66 142H192" stroke-width="0.6" opacity="0.45" />
+    </g>
+
+    <g fill="url(#bar-fill)">
+      <rect x="140" y="154" width="8" height="29" rx="1.5" opacity="0.7" />
+      <rect x="153" y="137" width="8" height="46" rx="1.5" opacity="0.82" />
+      <rect x="166" y="115" width="8" height="68" rx="1.5" opacity="0.95" />
+      <rect x="179" y="132" width="8" height="51" rx="1.5" opacity="0.75" />
+    </g>
+
+    <path
+      d="M62 151L99 107L128 129L169 88"
+      fill="none"
+      stroke="#ffffff"
+      stroke-width="7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path d="M163 82L180 79L176 96L171 89Z" fill="#ffffff" stroke="#ffffff" stroke-linejoin="round" />
+
+    <circle cx="128" cy="92" r="7" fill="#ffffff" filter="url(#point-glow)" />
+    <circle cx="128" cy="92" r="4.5" fill="#ffffff" />
+  </g>
+
+  <path
+    d="M128 42L194 78V154L128 190L62 154V78Z"
+    fill="none"
+    stroke="#66d8ff"
+    stroke-width="0.8"
+    stroke-linejoin="round"
+    opacity="0.9"
+  />
+</svg>

@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zenvis.fullname" . }}-vectum
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vectum
+spec:
+  replicas: {{ .Values.vectum.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "zenvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: vectum
+  template:
+    metadata:
+      labels:
+        {{- include "zenvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: vectum
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: vectum
+          image: {{ include "zenvis.image" (dict "root" . "repository" .Values.vectum.image.repository) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 11002
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret }}
+          env:
+            - name: TZ
+              value: {{ .Values.global.timezone | quote }}
+            - name: VECTUM_VECTOR_ALLOWED_ENV
+              value: CLICKHOUSE_PASSWORD,KAFKA_BOOTSTRAP_SERVERS,CLICKHOUSE_ENDPOINT,CLICKHOUSE_DATABASE,CLICKHOUSE_USER
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ include "zenvis.kafkaServers" . | quote }}
+            - name: CLICKHOUSE_ENDPOINT
+              value: {{ printf "http://%s:%v" (include "zenvis.clickhouseHost" .) .Values.external.clickhouse.httpPort | quote }}
+            - name: CLICKHOUSE_DATABASE
+              value: {{ .Values.external.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.external.clickhouse.user | quote }}
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.vectum.resources | nindent 12 }}
+          volumeMounts:
+            - name: vectum-data
+              mountPath: /workspace
+              subPath: workspace
+            - name: vectum-data
+              mountPath: /var/lib/vector
+              subPath: vector
+      volumes:
+        - name: vectum-data
+          persistentVolumeClaim:
+            claimName: {{ include "zenvis.fullname" . }}-vectum
+      nodeSelector:
+        kubernetes.io/arch: {{ .Values.global.arch }}
+        {{- with .Values.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenvis.fullname" . }}-vectum
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vectum
+spec:
+  selector:
+    {{- include "zenvis.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: vectum
+  ports:
+    - name: http
+      port: 11002
+      targetPort: http

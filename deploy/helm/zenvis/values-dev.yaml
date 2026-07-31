@@ -1,0 +1,17 @@
+global:
+  version: latest
+
+embedded:
+  mysql:
+    enabled: true
+  clickhouse:
+    enabled: true
+  redis:
+    enabled: true
+  redisStack:
+    enabled: true
+  kafka:
+    enabled: true
+
+ingress:
+  enabled: false

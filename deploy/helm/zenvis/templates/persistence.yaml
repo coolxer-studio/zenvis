@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zenvis.fullname" . }}-open-config
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- include "zenvis.storageClass" . | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.openConfig.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zenvis.fullname" . }}-vectum
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- include "zenvis.storageClass" . | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.vectum.size }}

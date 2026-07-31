@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "arch": { "type": "string", "enum": ["amd64", "arm64"] },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "required": ["arch", "version"]
+    },
+    "backend": {
+      "type": "object",
+      "properties": { "replicas": { "type": "integer", "minimum": 1, "maximum": 1 } }
+    },
+    "vectum": {
+      "type": "object",
+      "properties": { "replicas": { "type": "integer", "minimum": 1, "maximum": 1 } }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": { "existingSecret": { "type": "string", "minLength": 1 } },
+      "required": ["existingSecret"]
+    }
+  },
+  "required": ["global", "secrets", "backend", "vectum"]
+}

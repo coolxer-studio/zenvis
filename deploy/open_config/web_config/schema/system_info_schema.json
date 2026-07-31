@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "system_title": {
+      "type": "string",
+      "description": "系统标题"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "产品名称"
+    },
+    "product_version": {
+      "type": "string",
+      "description": "产品版本"
+    },
+    "product_introduction": {
+      "type": "string",
+      "description": "产品介绍"
+    },
+    "service_phone": {
+      "type": "string",
+      "description": "服务电话"
+    },
+    "service_email": {
+      "type": "string",
+      "format": "email",
+      "description": "服务邮箱"
+    },
+    "technical_email": {
+      "type": "string",
+      "format": "email",
+      "description": "技术邮箱"
+    },
+    "copyright": {
+      "type": "string",
+      "description": "版权信息"
+    }
+  },
+  "required": [
+    "system_title",
+    "product_name",
+    "product_version",
+    "product_introduction",
+    "service_phone",
+    "service_email",
+    "technical_email",
+    "copyright"
+  ]
+}

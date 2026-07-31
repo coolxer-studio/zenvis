@@ -1,0 +1,393 @@
+{{- if .Values.embedded.mysql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenvis.fullname" . }}-mysql
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+spec:
+  selector:
+    {{- include "zenvis.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "zenvis.fullname" . }}-mysql
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+spec:
+  serviceName: {{ include "zenvis.fullname" . }}-mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zenvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mysql
+  template:
+    metadata:
+      labels:
+        {{- include "zenvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mysql
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mysql
+          image: {{ printf "%s/mysql:8.4-%s" .Values.global.imageRegistry .Values.global.arch }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: TZ
+              value: {{ .Values.global.timezone | quote }}
+            - name: MYSQL_DATABASE
+              value: {{ .Values.external.mysql.database | quote }}
+            - name: MYSQL_USER
+              value: {{ .Values.external.mysql.user | quote }}
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: MYSQL_PASSWORD
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$MYSQL_ROOT_PASSWORD\" --silent"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$MYSQL_ROOT_PASSWORD\" --silent"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 4Gi}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      nodeSelector:
+        kubernetes.io/arch: {{ .Values.global.arch }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "zenvis.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.mysql.size }}
+---
+{{- end }}
+{{- if .Values.embedded.clickhouse.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenvis.fullname" . }}-clickhouse
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  selector:
+    {{- include "zenvis.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+  ports:
+    - {name: http, port: 8123, targetPort: http}
+    - {name: native, port: 9000, targetPort: native}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "zenvis.fullname" . }}-clickhouse
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: {{ include "zenvis.fullname" . }}-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zenvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  template:
+    metadata:
+      labels:
+        {{- include "zenvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: clickhouse
+          image: {{ printf "%s/clickhouse-server:25.9-%s" .Values.global.imageRegistry .Values.global.arch }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - {name: http, containerPort: 8123}
+            - {name: native, containerPort: 9000}
+          env:
+            - {name: TZ, value: {{ .Values.global.timezone | quote }}}
+            - {name: CLICKHOUSE_DB, value: {{ .Values.external.clickhouse.database | quote }}}
+            - {name: CLICKHOUSE_USER, value: {{ .Values.external.clickhouse.user | quote }}}
+            - {name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: "1"}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: CLICKHOUSE_PASSWORD
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "clickhouse-client --user \"$CLICKHOUSE_USER\" --password \"$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: http}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "4", memory: 8Gi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/clickhouse}
+      nodeSelector:
+        kubernetes.io/arch: {{ .Values.global.arch }}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "zenvis.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.clickhouse.size }}
+---
+{{- end }}
+{{- if .Values.embedded.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenvis.fullname" . }}-redis
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    {{- include "zenvis.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  ports:
+    - {name: redis, port: 6379, targetPort: redis}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "zenvis.fullname" . }}-redis
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: {{ include "zenvis.fullname" . }}-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zenvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "zenvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ printf "%s/redis:7-%s" .Values.global.imageRegistry .Values.global.arch }}
+          command: ["/bin/sh", "-ec", "exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]
+          ports:
+            - {name: redis, containerPort: 6379}
+          envFrom:
+            - secretRef: {name: {{ .Values.secrets.existingSecret }}}
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "redis-cli -a \"$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: redis}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+      nodeSelector:
+        kubernetes.io/arch: {{ .Values.global.arch }}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "zenvis.storageClass" . | nindent 8 }}
+        resources:
+          requests: {storage: {{ .Values.persistence.redis.size }}}
+---
+{{- end }}
+{{- if .Values.embedded.redisStack.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenvis.fullname" . }}-redis-stack
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis-stack
+spec:
+  selector:
+    {{- include "zenvis.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis-stack
+  ports:
+    - {name: redis, port: 6379, targetPort: redis}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "zenvis.fullname" . }}-redis-stack
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis-stack
+spec:
+  serviceName: {{ include "zenvis.fullname" . }}-redis-stack
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zenvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis-stack
+  template:
+    metadata:
+      labels:
+        {{- include "zenvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis-stack
+    spec:
+      containers:
+        - name: redis-stack
+          image: {{ printf "%s/redis-stack-server:7.2.0-v18-%s" .Values.global.imageRegistry .Values.global.arch }}
+          command: ["/bin/sh", "-ec", "exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\" --loadmodule /opt/redis-stack/lib/redisearch.so --loadmodule /opt/redis-stack/lib/rejson.so"]
+          ports:
+            - {name: redis, containerPort: 6379}
+          envFrom:
+            - secretRef: {name: {{ .Values.secrets.existingSecret }}}
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "redis-cli -a \"$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: redis}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+      nodeSelector:
+        kubernetes.io/arch: {{ .Values.global.arch }}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "zenvis.storageClass" . | nindent 8 }}
+        resources:
+          requests: {storage: {{ .Values.persistence.redisStack.size }}}
+---
+{{- end }}
+{{- if .Values.embedded.kafka.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenvis.fullname" . }}-kafka
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kafka
+spec:
+  selector:
+    {{- include "zenvis.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: kafka
+  ports:
+    - {name: broker, port: 9092, targetPort: broker}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "zenvis.fullname" . }}-kafka
+  labels:
+    {{- include "zenvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kafka
+spec:
+  serviceName: {{ include "zenvis.fullname" . }}-kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zenvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kafka
+  template:
+    metadata:
+      labels:
+        {{- include "zenvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: {{ printf "%s/apache-kafka:4.2.0-%s" .Values.global.imageRegistry .Values.global.arch }}
+          ports:
+            - {name: broker, containerPort: 9092}
+            - {name: controller, containerPort: 9093}
+          env:
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: "controller,broker"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://{{ include "zenvis.fullname" . }}-kafka:9092"}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@{{ include "zenvis.fullname" . }}-kafka:9093"}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER"}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_LOG_DIRS, value: "/tmp/kafka-logs"}
+            - name: CLUSTER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: KAFKA_CLUSTER_ID
+          readinessProbe:
+            exec:
+              command: ["/opt/kafka/bin/kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: broker}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 4Gi}
+          volumeMounts:
+            - {name: data, mountPath: /tmp/kafka-logs}
+      nodeSelector:
+        kubernetes.io/arch: {{ .Values.global.arch }}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "zenvis.storageClass" . | nindent 8 }}
+        resources:
+          requests: {storage: {{ .Values.persistence.kafka.size }}}
+{{- end }}

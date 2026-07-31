@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "startConfig": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      }
+    },
+    "deviceConfig": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "screen": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "systemSetting": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "appBaseInfo": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "appAuthorizeSetting": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "battery": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uuid": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "startConfig",
+    "deviceConfig"
+  ]
+}

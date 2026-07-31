@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1600"
+  height="1050"
+  viewBox="0 0 1600 1050"
+  role="img"
+  aria-labelledby="overview-title overview-description"
+>
+  <title id="overview-title">ZenVis 产品全景图</title>
+  <desc id="overview-description">
+    ZenVis 将多源数据和业务能力接入配置驱动的平台，经过 Meta 与存储、统一检索与统计、可视化应用和 AI 分析，输出检索、看板、低代码应用、业务 Agent、报表和业务服务运行视图。插件、权限审计、平台管理和开放集成贯穿整个平台。
+  </desc>
+
+  <defs>
+    <linearGradient id="page-background" x1="160" y1="0" x2="1440" y2="1050" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f5f9ff" />
+      <stop offset="0.52" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#f2f8ff" />
+    </linearGradient>
+    <linearGradient id="brand-gradient" x1="130" y1="330" x2="1470" y2="730" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0759d9" />
+      <stop offset="0.55" stop-color="#0789e8" />
+      <stop offset="1" stop-color="#0ea5e9" />
+    </linearGradient>
+    <linearGradient id="plugin-gradient" x1="180" y1="575" x2="1420" y2="635" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#edf4ff" />
+      <stop offset="0.5" stop-color="#eaf9ff" />
+      <stop offset="1" stop-color="#edf6ff" />
+    </linearGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#163b71" flood-opacity="0.12" />
+    </filter>
+    <filter id="platform-shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#0759d9" flood-opacity="0.18" />
+    </filter>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#3187e5" />
+    </marker>
+    <marker id="arrow-white" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#ffffff" />
+    </marker>
+    <style>
+      .text {
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      .title {
+        fill: #13233a;
+        font-size: 38px;
+        font-weight: 700;
+      }
+      .subtitle {
+        fill: #52657d;
+        font-size: 18px;
+      }
+      .zone-label {
+        fill: #1769d2;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 1px;
+      }
+      .zone-label-vertical {
+        writing-mode: vertical-rl;
+        text-orientation: upright;
+        letter-spacing: 6px;
+      }
+      .app-title {
+        fill: #17304f;
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .app-subtitle {
+        fill: #64768b;
+        font-size: 13px;
+      }
+      .platform-title {
+        fill: #ffffff;
+        font-size: 28px;
+        font-weight: 700;
+      }
+      .platform-subtitle {
+        fill: #dbeeff;
+        font-size: 15px;
+      }
+      .stage-number {
+        fill: #0875df;
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .stage-title {
+        fill: #17304f;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .stage-subtitle {
+        fill: #5b6f87;
+        font-size: 13px;
+      }
+      .bar-title {
+        fill: #135cae;
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .bar-text {
+        fill: #405974;
+        font-size: 14px;
+      }
+      .foundation-title {
+        fill: #17304f;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .foundation-text {
+        fill: #5c7088;
+        font-size: 13px;
+      }
+      .source-title {
+        fill: #17304f;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .source-text {
+        fill: #667a91;
+        font-size: 13px;
+      }
+      .infra {
+        fill: #57708b;
+        font-size: 14px;
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1050" fill="url(#page-background)" />
+  <circle cx="85" cy="110" r="150" fill="#d8eaff" opacity="0.22" />
+  <circle cx="1510" cy="920" r="220" fill="#d8f5ff" opacity="0.28" />
+
+  <g class="text">
+    <g transform="translate(118 42)">
+      <path d="M34 0L68 19V57L34 76L0 57V19Z" fill="url(#brand-gradient)" />
+      <path d="M4 53L21 33L35 44L53 26" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M48 23L59 21L57 32Z" fill="#ffffff" />
+      <rect x="43" y="47" width="4" height="16" rx="1" fill="#8edfff" />
+      <rect x="51" y="40" width="4" height="23" rx="1" fill="#8edfff" />
+      <rect x="59" y="32" width="4" height="31" rx="1" fill="#8edfff" />
+    </g>
+    <text x="208" y="73" class="title">ZenVis 配置驱动的数据分析应用框架</text>
+    <text x="208" y="108" class="subtitle">用 Meta 定义数据 · 用插件交付业务 · 用 AI 连接分析与行动</text>
+
+    <g transform="translate(84 166)">
+      <rect width="32" height="90" rx="16" fill="#e4f0ff" />
+      <text x="16" y="45" text-anchor="middle" dominant-baseline="central" class="zone-label zone-label-vertical">应用层</text>
+    </g>
+
+    <g stroke="#3187e5" stroke-width="2" fill="none" opacity="0.55">
+      <path d="M800 330V282" marker-end="url(#arrow-blue)" />
+      <path d="M265 282H1335" />
+      <path d="M265 282V261" marker-end="url(#arrow-blue)" />
+      <path d="M479 282V261" marker-end="url(#arrow-blue)" />
+      <path d="M693 282V261" marker-end="url(#arrow-blue)" />
+      <path d="M907 282V261" marker-end="url(#arrow-blue)" />
+      <path d="M1121 282V261" marker-end="url(#arrow-blue)" />
+      <path d="M1335 282V261" marker-end="url(#arrow-blue)" />
+    </g>
+
+    <g filter="url(#soft-shadow)">
+      <g transform="translate(170 161)">
+        <rect width="190" height="100" rx="16" fill="#ffffff" stroke="#dfe9f5" />
+        <circle cx="28" cy="28" r="13" fill="#e5f0ff" />
+        <circle cx="25" cy="25" r="6" fill="none" stroke="#1677e8" stroke-width="2" />
+        <path d="M30 30L36 36" stroke="#1677e8" stroke-width="2" stroke-linecap="round" />
+        <text x="50" y="34" class="app-title">统一检索</text>
+        <text x="20" y="64" class="app-subtitle">筛选 · 详情 · 关联调查</text>
+        <text x="20" y="84" class="app-subtitle">个人过滤器与字段跳转</text>
+      </g>
+      <g transform="translate(384 161)">
+        <rect width="190" height="100" rx="16" fill="#ffffff" stroke="#dfe9f5" />
+        <circle cx="28" cy="28" r="13" fill="#e8f8ff" />
+        <path d="M20 32L25 27L30 30L36 21" fill="none" stroke="#0896df" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="50" y="34" class="app-title">统计与趋势</text>
+        <text x="20" y="64" class="app-subtitle">计数 · 增量 · 聚合</text>
+        <text x="20" y="84" class="app-subtitle">趋势与关联统计</text>
+      </g>
+      <g transform="translate(598 161)">
+        <rect width="190" height="100" rx="16" fill="#ffffff" stroke="#dfe9f5" />
+        <circle cx="28" cy="28" r="13" fill="#e8f6ff" />
+        <rect x="20" y="20" width="7" height="7" rx="1.5" fill="#1688e6" />
+        <rect x="30" y="20" width="7" height="7" rx="1.5" fill="#62c8f5" />
+        <rect x="20" y="30" width="17" height="7" rx="1.5" fill="#3ea8ed" />
+        <text x="50" y="34" class="app-title">看板与低代码</text>
+        <text x="20" y="64" class="app-subtitle">内置 · 低代码 · HTML</text>
+        <text x="20" y="84" class="app-subtitle">专题大屏与外链集成</text>
+      </g>
+      <g transform="translate(812 161)">
+        <rect width="190" height="100" rx="16" fill="#ffffff" stroke="#dfe9f5" />
+        <circle cx="28" cy="28" r="13" fill="#e9f1ff" />
+        <path d="M28 18L30.5 24.5L37 27L30.5 29.5L28 36L25.5 29.5L19 27L25.5 24.5Z" fill="#366fe0" />
+        <text x="50" y="34" class="app-title">DIH / 业务 Agent</text>
+        <text x="20" y="64" class="app-subtitle">知识问答 · Skill · MCP</text>
+        <text x="20" y="84" class="app-subtitle">工具审批与调用审计</text>
+      </g>
+      <g transform="translate(1026 161)">
+        <rect width="190" height="100" rx="16" fill="#ffffff" stroke="#dfe9f5" />
+        <circle cx="28" cy="28" r="13" fill="#eaf6ff" />
+        <path d="M22 19H33L37 23V37H22Z" fill="none" stroke="#1389df" stroke-width="2" stroke-linejoin="round" />
+        <path d="M25 28H34M25 32H32" stroke="#1389df" stroke-width="1.7" stroke-linecap="round" />
+        <text x="50" y="34" class="app-title">报表与分析任务</text>
+        <text x="20" y="64" class="app-subtitle">生成 · 改写 · 归档</text>
+        <text x="20" y="84" class="app-subtitle">计划执行与后台分析</text>
+      </g>
+      <g transform="translate(1240 161)">
+        <rect width="190" height="100" rx="16" fill="#ffffff" stroke="#dfe9f5" />
+        <circle cx="28" cy="28" r="13" fill="#e8f8ff" />
+        <path d="M18 29H23L26 23L30 34L33 28H38" fill="none" stroke="#0a99d7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="50" y="34" class="app-title">服务运行视图</text>
+        <text x="20" y="64" class="app-subtitle">实例心跳 · 状态概览</text>
+        <text x="20" y="84" class="app-subtitle">业务事件与版本分布</text>
+      </g>
+    </g>
+
+    <g transform="translate(84 495)">
+      <rect width="32" height="90" rx="16" fill="#dcecff" />
+      <text x="16" y="45" text-anchor="middle" dominant-baseline="central" class="zone-label zone-label-vertical">平台层</text>
+    </g>
+
+    <g filter="url(#platform-shadow)">
+      <rect x="130" y="330" width="1340" height="420" rx="28" fill="#ffffff" stroke="#bcd9f7" stroke-width="1.5" />
+      <path d="M158 330H1442Q1470 330 1470 358V405H130V358Q130 330 158 330Z" fill="url(#brand-gradient)" />
+    </g>
+    <text x="180" y="373" class="platform-title">ZenVis Platform</text>
+    <text x="450" y="372" class="platform-subtitle">配置驱动 · 插件化交付 · 统一权限 · 开放集成</text>
+
+    <g>
+      <path d="M410 493H448" stroke="#ffffff" stroke-width="3" marker-end="url(#arrow-white)" opacity="0.9" />
+      <path d="M670 493H708" stroke="#ffffff" stroke-width="3" marker-end="url(#arrow-white)" opacity="0.9" />
+      <path d="M930 493H968" stroke="#ffffff" stroke-width="3" marker-end="url(#arrow-white)" opacity="0.9" />
+      <path d="M1190 493H1228" stroke="#ffffff" stroke-width="3" marker-end="url(#arrow-white)" opacity="0.9" />
+
+      <g transform="translate(180 435)" filter="url(#soft-shadow)">
+        <rect width="230" height="116" rx="18" fill="#ffffff" stroke="#d9e7f5" />
+        <circle cx="30" cy="31" r="17" fill="#e7f1ff" />
+        <text x="30" y="36" text-anchor="middle" class="stage-number">1</text>
+        <text x="58" y="37" class="stage-title">数据接入</text>
+        <text x="24" y="72" class="stage-subtitle">API · 文件 · Kafka · Vectum</text>
+        <text x="24" y="94" class="stage-subtitle">Source → Transform → Sink</text>
+      </g>
+      <g transform="translate(440 435)" filter="url(#soft-shadow)">
+        <rect width="230" height="116" rx="18" fill="#ffffff" stroke="#d9e7f5" />
+        <circle cx="30" cy="31" r="17" fill="#e8f8ff" />
+        <text x="30" y="36" text-anchor="middle" class="stage-number">2</text>
+        <text x="58" y="37" class="stage-title">Meta 与存储</text>
+        <text x="24" y="72" class="stage-subtitle">实体 · 属性 · 操作符 · Schema</text>
+        <text x="24" y="94" class="stage-subtitle">ClickHouse 分析数据存储</text>
+      </g>
+      <g transform="translate(700 435)" filter="url(#soft-shadow)">
+        <rect width="230" height="116" rx="18" fill="#ffffff" stroke="#d9e7f5" />
+        <circle cx="30" cy="31" r="17" fill="#e7f3ff" />
+        <text x="30" y="36" text-anchor="middle" class="stage-number">3</text>
+        <text x="58" y="37" class="stage-title">检索与统计</text>
+        <text x="24" y="72" class="stage-subtitle">条件 · 高级表达式 · 过滤器</text>
+        <text x="24" y="94" class="stage-subtitle">聚合 · 趋势 · 详情 · 跳转</text>
+      </g>
+      <g transform="translate(960 435)" filter="url(#soft-shadow)">
+        <rect width="230" height="116" rx="18" fill="#ffffff" stroke="#d9e7f5" />
+        <circle cx="30" cy="31" r="17" fill="#e8f8ff" />
+        <text x="30" y="36" text-anchor="middle" class="stage-number">4</text>
+        <text x="58" y="37" class="stage-title">可视化与应用</text>
+        <text x="24" y="72" class="stage-subtitle">内置页面 · 低代码 · HTML</text>
+        <text x="24" y="94" class="stage-subtitle">看板 · 菜单 · 外链容器</text>
+      </g>
+      <g transform="translate(1220 435)" filter="url(#soft-shadow)">
+        <rect width="200" height="116" rx="18" fill="#ffffff" stroke="#d9e7f5" />
+        <circle cx="30" cy="31" r="17" fill="#e9f0ff" />
+        <text x="30" y="36" text-anchor="middle" class="stage-number">5</text>
+        <text x="58" y="37" class="stage-title">AI 分析</text>
+        <text x="24" y="72" class="stage-subtitle">RAG · Skill · MCP</text>
+        <text x="24" y="94" class="stage-subtitle">审批 · 任务 · 报表</text>
+      </g>
+    </g>
+
+    <g>
+      <rect x="180" y="575" width="1240" height="60" rx="15" fill="url(#plugin-gradient)" stroke="#bcdcf8" />
+      <circle cx="211" cy="605" r="15" fill="#1677e8" />
+      <path d="M204 605H218M211 598V612" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" />
+      <text x="239" y="601" class="bar-title">插件化扩展</text>
+      <text x="239" y="620" class="bar-text">Meta · 推送任务 · 动态 API · MySQL 迁移 · UI · 看板 · MCP · Skill · 菜单 · 文档</text>
+    </g>
+
+    <g>
+      <g transform="translate(180 655)">
+        <rect width="385" height="70" rx="14" fill="#f7faff" stroke="#dce7f3" />
+        <text x="22" y="29" class="foundation-title">权限、审批与审计</text>
+        <text x="22" y="51" class="foundation-text">用户 · 角色 · 菜单 · ALLOW / ASK / DENY · 调用审计</text>
+      </g>
+      <g transform="translate(607 655)">
+        <rect width="385" height="70" rx="14" fill="#f7faff" stroke="#dce7f3" />
+        <text x="22" y="29" class="foundation-title">平台与生命周期管理</text>
+        <text x="22" y="51" class="foundation-text">配置 · 插件安装升级 · 任务 · 会话 · 系统管理</text>
+      </g>
+      <g transform="translate(1035 655)">
+        <rect width="385" height="70" rx="14" fill="#f7faff" stroke="#dce7f3" />
+        <text x="22" y="29" class="foundation-title">开放集成</text>
+        <text x="22" y="51" class="foundation-text">REST API · MCP · Spring Boot Starter · 外部系统</text>
+      </g>
+    </g>
+
+    <g transform="translate(84 829)">
+      <rect width="32" height="90" rx="16" fill="#e4f0ff" />
+      <text x="16" y="45" text-anchor="middle" dominant-baseline="central" class="zone-label zone-label-vertical">数据源</text>
+    </g>
+
+    <g stroke="#91bce8" stroke-width="1.8" fill="none" opacity="0.65">
+      <path d="M800 825V752" marker-end="url(#arrow-blue)" />
+      <path d="M270 802H1330" />
+      <path d="M270 824V802" />
+      <path d="M535 824V802" />
+      <path d="M800 824V802" />
+      <path d="M1065 824V802" />
+      <path d="M1330 824V802" />
+    </g>
+
+    <g filter="url(#soft-shadow)">
+      <g transform="translate(170 824)">
+        <rect width="200" height="100" rx="16" fill="#ffffff" stroke="#dfe8f2" />
+        <circle cx="32" cy="31" r="15" fill="#e7f1ff" />
+        <ellipse cx="32" cy="27" rx="8" ry="3.5" fill="none" stroke="#1677e8" stroke-width="1.8" />
+        <path d="M24 27V35C24 39 40 39 40 35V27" fill="none" stroke="#1677e8" stroke-width="1.8" />
+        <text x="57" y="35" class="source-title">业务数据库</text>
+        <text x="22" y="68" class="source-text">MySQL · ClickHouse</text>
+        <text x="22" y="87" class="source-text">既有数据服务与 REST API</text>
+      </g>
+      <g transform="translate(435 824)">
+        <rect width="200" height="100" rx="16" fill="#ffffff" stroke="#dfe8f2" />
+        <circle cx="32" cy="31" r="15" fill="#e8f8ff" />
+        <path d="M24 34L28 28L32 34L36 24L40 30" fill="none" stroke="#0794db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="57" y="35" class="source-title">日志与事件</text>
+        <text x="22" y="68" class="source-text">Kafka · 文件 · 消息流</text>
+        <text x="22" y="87" class="source-text">运营、安全与业务事件</text>
+      </g>
+      <g transform="translate(700 824)">
+        <rect width="200" height="100" rx="16" fill="#ffffff" stroke="#dfe8f2" />
+        <circle cx="32" cy="31" r="15" fill="#e8f6ff" />
+        <rect x="25" y="22" width="14" height="18" rx="3" fill="none" stroke="#1688e6" stroke-width="1.8" />
+        <circle cx="32" cy="36" r="1.6" fill="#1688e6" />
+        <text x="57" y="35" class="source-title">设备与流量</text>
+        <text x="22" y="68" class="source-text">探针 · Vector · 网络流量</text>
+        <text x="22" y="87" class="source-text">资产、状态与遥测数据</text>
+      </g>
+      <g transform="translate(965 824)">
+        <rect width="200" height="100" rx="16" fill="#ffffff" stroke="#dfe8f2" />
+        <circle cx="32" cy="31" r="15" fill="#e9f2ff" />
+        <path d="M24 22H35L40 27V40H24Z" fill="none" stroke="#3976db" stroke-width="1.8" stroke-linejoin="round" />
+        <path d="M28 31H36M28 35H35" stroke="#3976db" stroke-width="1.5" stroke-linecap="round" />
+        <text x="57" y="35" class="source-title">知识文档</text>
+        <text x="22" y="68" class="source-text">README · 业务知识 · 附件</text>
+        <text x="22" y="87" class="source-text">向量索引与公共 RAG</text>
+      </g>
+      <g transform="translate(1230 824)">
+        <rect width="200" height="100" rx="16" fill="#ffffff" stroke="#dfe8f2" />
+        <circle cx="32" cy="31" r="15" fill="#e9f8ff" />
+        <path d="M23 31H29M35 31H41M29 25L35 37M35 25L29 37" stroke="#0b98d4" stroke-width="1.8" stroke-linecap="round" />
+        <text x="57" y="35" class="source-title">业务系统与工具</text>
+        <text x="22" y="68" class="source-text">MCP Server · Starter</text>
+        <text x="22" y="87" class="source-text">外部应用与可执行能力</text>
+      </g>
+    </g>
+
+    <rect x="170" y="958" width="1260" height="45" rx="14" fill="#eef5fc" />
+    <text x="800" y="986" text-anchor="middle" class="infra">
+      基础设施：MySQL · ClickHouse · Redis / Redis Stack · Kafka · Vectum · OpenAI 兼容模型
+    </text>
+  </g>
+</svg>

@@ -128,9 +128,11 @@ PUSH_IMAGE=true ./build.sh
 | `yarn build:dev-tsc` | TypeScript 检查 + 构建开发版本 |
 | `yarn build:pro` | 构建生产版本 |
 | `yarn build:pro-tsc` | TypeScript 检查 + 构建生产版本 |
-| `yarn lint` | ESLint 检查并修复 `src` 下的 Vue/TypeScript 文件 |
+| `yarn lint` | ESLint 检查 `src` 下的 Vue/TypeScript 文件 |
 | `yarn preview` | 预览构建结果 |
-| `yarn test` | TypeScript 类型检查 |
+| `yarn test` | TypeScript 类型检查 + Node 单元测试 |
+| `yarn test:unit` | 只运行 Node 单元测试 |
+| `yarn test:e2e` | 运行 Playwright E2E 测试 |
 
 ## 环境变量
 
@@ -155,7 +157,7 @@ PUSH_IMAGE=true ./build.sh
 
 ### ESLint
 
-项目使用 ESLint 进行代码质量检查，规则基于 `@vue/eslint-config-typescript`。
+项目使用 ESLint 进行代码质量检查，组合 Vue、TypeScript 和 Prettier 插件规则。
 
 ## 构建配置
 

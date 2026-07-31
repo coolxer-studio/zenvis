@@ -12,8 +12,14 @@ yarn server:dev
 # 生产构建
 yarn build:pro
 
-# TypeScript 类型检查（相当于"test"命令）
-yarn test                          # vue-tsc --noEmit
+# TypeScript 类型检查 + Node 单元测试
+yarn test
+
+# 只运行 Node 单元测试
+yarn test:unit
+
+# Playwright E2E 测试
+yarn test:e2e
 
 # 类型检查 + 生产构建
 yarn build:pro-tsc                 # vue-tsc --noEmit && vite build --mode production
@@ -24,9 +30,9 @@ yarn build:dev-tsc                 # vue-tsc --noEmit && vite build --mode devel
 # 预览构建产物
 yarn preview
 
-# 项目未配置测试框架 —— 无 Jest、Vitest 或 spec 文件。
+# 项目不使用 Jest/Vitest；Node test 文件使用 *.test.mts，E2E 使用 Playwright。
 # 格式化通过 Prettier 完成（配置在 prettier.config.js）。
-# package.json 中不存在 lint/format 脚本（尽管 README 中提及）。
+# package.json 提供 lint 脚本，但没有单独的 format 脚本。
 ```
 
 ### 不同环境模式启动
@@ -42,9 +48,9 @@ yarn server:pro    # vite --mode production
 
 - **Vue 3**（Composition API，优先使用 `<script setup>`）
 - **TypeScript**（strict 模式，但 `noImplicitAny: false`）
-- **Vite 7**（构建工具）
+- **Vite 8**（构建工具）
 - **Pinia**（状态管理）
-- **Vue Router 4**（hash 路由）
+- **Vue Router 5**（hash 路由）
 - **Element Plus**（UI 框架）
 - **ECharts 5**（图表，通过 `vue-echarts`）
 - **SCSS / Less**（CSS 预处理器）
@@ -222,7 +228,7 @@ module.exports = {
 
 ### 禁止事项
 
-- 不要添加测试框架（不存在；无 Jest/Vitest 配置）。
+- 不要另行添加 Jest/Vitest；现有单元测试使用 Node test，E2E 使用 Playwright。
 - 不要使用 `pinia-plugin-persistedstate` —— 项目有自定义 persist 插件。
 - 未经讨论不要修改 Prettier 配置。
 - 不要添加 `.clinerules` —— 该文件已被 gitignore。

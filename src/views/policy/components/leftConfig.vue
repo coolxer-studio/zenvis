@@ -16,8 +16,8 @@
             <template v-if="node.level === 1">
               <el-icon @click.stop="addNode(data)"><Plus /></el-icon>
             </template>
-            <!-- 二级节点显示编辑和删除按钮 -->
-            <template v-else-if="node.level === 2">
+            <!-- 所有非根节点都支持编辑和删除 -->
+            <template v-else>
               <el-icon @click.stop="editNode(data)"><Edit /></el-icon>
               <el-icon @click.stop="deleteNode(data)"><Delete /></el-icon>
             </template>
@@ -107,6 +107,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 interface TreeNode {
   id: string;
   file_name: string;
+  relative_path?: string;
   nodes?: TreeNode[];
   selectable?: boolean;
   [key: string]: any;
@@ -169,7 +170,7 @@ const defaultProps = {
 // 节点点击事件处理
 const handleNodeClick = (data: TreeNode) => {
   if (data && !(data.nodes && data.nodes.length)) {
-    emit('on-click', data.file_name);
+    emit('on-click', data.relative_path || data.file_name);
   }
 };
 

@@ -42,6 +42,7 @@
   interface TreeNode {
     id: string;
     file_name: string;
+    relative_path?: string;
     nodes?: TreeNode[];
     selectable?: boolean;
     [key: string]: any;
@@ -59,6 +60,16 @@
   const fileContext = ref<string>('');
   const currentFileName = ref<string>('');
   const language = ref<string>('javascript');
+
+  const nodePath = (node: TreeNode) => node.relative_path || node.file_name;
+
+  const renamedNodePath = (node: TreeNode, newName: string) => {
+    const originalPath = nodePath(node);
+    const separatorIndex = originalPath.lastIndexOf('/');
+    return separatorIndex === -1
+      ? newName
+      : `${originalPath.substring(0, separatorIndex + 1)}${newName}`;
+  };
 
   const routeFileName = () => {
     const fileName = route.query.fileName || route.query.file_name;
@@ -144,8 +155,8 @@
   const handleEditNode = (nodeData: { node: TreeNode, newName: string }) => {
     const params = {
       id: nodeData.node.id,
-      original_file_name: nodeData.node.file_name,
-      file_name: nodeData.newName
+      original_file_name: nodePath(nodeData.node),
+      file_name: renamedNodePath(nodeData.node, nodeData.newName)
     };
     
     PolicyService.renameNode(configType.value, params).then(() => {
@@ -160,7 +171,7 @@
   const handleDeleteNode = (nodeData: TreeNode) => {
     const params = {
       id: nodeData.id,
-      file_name: nodeData.file_name
+      file_name: nodePath(nodeData)
     };
     
     PolicyService.deleteNode(configType.value, params).then(() => {
@@ -168,7 +179,7 @@
       getListConfig(); // 重新加载树
       
       // 如果删除的是当前正在编辑的文件，则清空编辑器
-      if (currentFileName.value === nodeData.file_name) {
+      if (currentFileName.value === nodePath(nodeData)) {
         fileContext.value = '';
         currentFileName.value = '';
       }

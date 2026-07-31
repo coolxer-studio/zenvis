@@ -9,6 +9,8 @@ export type ConfigTreeNode = {
   name: string;
   label: string;
   file_name: string;
+  relative_path?: string;
+  is_dir?: boolean;
   type?: string;
   children?: ConfigTreeNode[];
   nodes?: ConfigTreeNode[];

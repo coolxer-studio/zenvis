@@ -8,9 +8,12 @@ import com.coolxer.dao.mysql.entity.*;
 import com.coolxer.dao.mysql.repository.*;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.service.system.SystemInfoService;
+import com.coolxer.utils.BCrypt;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +56,12 @@ public class DataInitiator {
 
     @Autowired
     private ResourceLoader resourceLoader;
+
+    @Value("${app.bootstrap.super-admin-password:}")
+    private String bootstrapSuperAdminPassword;
+
+    @Value("${app.bootstrap.admin-password:}")
+    private String bootstrapAdminPassword;
 
 
     public void initData() {
@@ -287,8 +296,8 @@ public class DataInitiator {
         if (user == null) {
             // 初始化机构管理员角色
             String adminRole = "机构管理员";
-            // admin@!QAZ2wsx
-            String defaultAdminPassword = SystemBuiltInConstants.DEFAULT_ADMIN_PASSWORD;
+            String defaultAdminPassword = hashBootstrapPassword(
+                    bootstrapAdminPassword, "ZENVIS_BOOTSTRAP_ADMIN_PASSWORD");
 
             Role role = new Role();
             role.setName(adminRole);
@@ -329,8 +338,8 @@ public class DataInitiator {
      */
     @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
     public void initDefaultSuperAdminUser() {
-        Role role = findOrCreateSuperAdminRole();
         User user = findOrCreateSuperAdminUser();
+        Role role = findOrCreateSuperAdminRole();
         UserRole userRole = userRoleRepository.findByUserId(user.getId());
         if (userRole == null) {
             userRole = new UserRole();
@@ -377,7 +386,8 @@ public class DataInitiator {
             user = new User();
             user.setEmail(SystemBuiltInConstants.SUPER_ADMIN_EMAIL);
             user.setName(SystemBuiltInConstants.SUPER_ADMIN_NAME);
-            user.setPassword(SystemBuiltInConstants.DEFAULT_ADMIN_PASSWORD);
+            user.setPassword(hashBootstrapPassword(
+                    bootstrapSuperAdminPassword, "ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD"));
             user.setIsSuperAdmin(true);
             return userRepository.save(user);
         }
@@ -395,6 +405,14 @@ public class DataInitiator {
             needSave = true;
         }
         return needSave ? userRepository.save(user) : user;
+    }
+
+    private String hashBootstrapPassword(String password, String environmentName) {
+        if (StringUtils.isBlank(password)) {
+            throw new IllegalStateException(environmentName
+                    + " 未配置，无法为全新环境创建内置管理员账号");
+        }
+        return BCrypt.hashpw(password, BCrypt.GENSALT_DEFAULT);
     }
 
     private void syncSuperAdminRolePermissions(Integer roleId) {
@@ -428,7 +446,7 @@ public class DataInitiator {
             systemInfo.setServicePhone("待补充");
             systemInfo.setServiceEmail("coolxer@163.com");
             systemInfo.setTechnicalEmail("coolxer@163.com");
-            systemInfo.setIntegrateLink("https://coolxer.com");
+            systemInfo.setIntegrateLink("https://zenvis.coolxer.com");
             systemInfo.setCopyright("Copyright  2026 coolXer社区团队. All rights reserved.");
             systemInfoRepository.save(systemInfo);
             log.info("初始化默认系统信息完成");

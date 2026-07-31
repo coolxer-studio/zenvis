@@ -18,9 +18,6 @@ public final class SystemBuiltInConstants {
 
     public static final String SUPER_ADMIN_ROLE_NAME = "超级管理员";
 
-    public static final String DEFAULT_ADMIN_PASSWORD =
-            "$2a$10$kCtgK9s26iFIZJXFQpO6DeLjLMd59xcHq/77DDLAZ9J8bZ5XxZAda";
-
     public static boolean isSuperAdmin(User user) {
         return user != null && BooleanUtils.isTrue(user.getIsSuperAdmin());
     }

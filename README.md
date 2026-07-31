@@ -96,7 +96,7 @@ ZenVis = **配置化数据存储 + 可视化引擎 + 检索分析 + 插件扩展
 
 ## 四、系统架构
 
-整体拓扑、模块边界和数据流见[系统架构](../doc/03-架构设计/README.md)。本模块负责后端 API、权限、检索、插件生命周期、DIH/MCP 和业务服务管理。
+整体拓扑、模块边界和数据流见[系统架构](../doc/06-架构设计/README.md)。本模块负责后端 API、权限、检索、插件生命周期、DIH/MCP 和业务服务管理。
 
 ### 架构分层
 
@@ -237,6 +237,9 @@ PUSH_IMAGE=true ./build.sh
 | `MYSQL_PASSWORD`                         | -           | MySQL 密码，通过环境变量或本地密钥文件注入 |
 | `CLICKHOUSE_PASSWORD`                    | -           | ClickHouse 密码，通过环境变量或本地密钥文件注入 |
 | `REDIS_PASSWORD`                         | -           | Redis 密码，通过环境变量或本地密钥文件注入 |
+| `VECTUM_AUTH_TOKEN`                     | -           | Vectum 服务 Bearer Token |
+| `ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD` | -           | 新库首次创建超级管理员时使用，不重置已有账号 |
+| `ZENVIS_BOOTSTRAP_ADMIN_PASSWORD`       | -           | 新库首次创建机构管理员时使用，不重置已有账号 |
 | `spring.data.redis.host`                 | `localhost` | Redis 主机地址            |
 | `spring.data.redis.port`                 | `6379`      | Redis 端口              |
 | `spring.ai.openai.base-url`              | -           | OpenAI 兼容模型服务地址；未配置不影响启动，调用 AI 功能时报错 |
@@ -258,6 +261,9 @@ MCP 客户端访问 Spring AI MCP Server 接口时需要携带请求头：`Autho
 MYSQL_PASSWORD=your_mysql_password
 CLICKHOUSE_PASSWORD=your_clickhouse_password
 REDIS_PASSWORD=your_redis_password
+VECTUM_AUTH_TOKEN=your_vectum_token
+ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD=your_initial_super_admin_password
+ZENVIS_BOOTSTRAP_ADMIN_PASSWORD=your_initial_admin_password
 OPENAI_BASE_URL=https://your-llm-endpoint
 OPENAI_API_KEY=your_api_key
 OPENAI_CHAT_MODEL=your_chat_model
@@ -270,7 +276,7 @@ MCP_BEARER_TOKEN=your_mcp_token
 
 ### 数据库初始化
 
-**MySQL**：执行项目根目录的 `deploy/config/mysql/init.sql` 创建数据库和用户：
+**MySQL**：Compose 部署由 MySQL 镜像根据 `deploy/.env` 中的 `MYSQL_DATABASE`、`MYSQL_USER` 和密码变量创建数据库与账号，不再执行仓库内的固定初始化 SQL。外部 MySQL 可由数据库管理员执行等价操作：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS zenvis CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -318,7 +324,7 @@ zenvis/
     │   ├── service/                      # 业务服务层
     │   └── utils/                        # 工具类
     ├── src/main/resources/               # 资源文件
-    ├── doc/                              # 模块 README 与 banner；整体文档在 ../doc
+    ├── AGENTS.md                         # AI Agent 架构与开发边界
     ├── Dockerfile                        # Docker 配置
     ├── build.sh                          # 构建脚本
     ├── LICENSE                           # 许可证

@@ -26,6 +26,7 @@ import com.coolxer.model.system.vo.RoleVo;
 import com.coolxer.model.system.vo.UserVo;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.system.CryptService;
+import com.coolxer.utils.BCrypt;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -109,6 +110,7 @@ class SuperAdminServiceTest {
         ReflectionTestUtils.setField(dataInitiator, "userRoleRepository", userRoleRepository);
         ReflectionTestUtils.setField(dataInitiator, "menuRepository", menuRepository);
         ReflectionTestUtils.setField(dataInitiator, "rolePermissionRepository", rolePermissionRepository);
+        ReflectionTestUtils.setField(dataInitiator, "bootstrapSuperAdminPassword", "super-admin-test-password");
 
         when(roleRepository.findByIsSuperAdmin(true)).thenReturn(List.of());
         when(roleRepository.findByName(SystemBuiltInConstants.SUPER_ADMIN_ROLE_NAME)).thenReturn(List.of());
@@ -139,6 +141,7 @@ class SuperAdminServiceTest {
         verify(userRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getEmail()).isEqualTo(SystemBuiltInConstants.SUPER_ADMIN_EMAIL);
         assertThat(userCaptor.getValue().getIsSuperAdmin()).isTrue();
+        assertThat(BCrypt.checkpw("super-admin-test-password", userCaptor.getValue().getPassword())).isTrue();
 
         ArgumentCaptor<UserRole> userRoleCaptor = ArgumentCaptor.forClass(UserRole.class);
         verify(userRoleRepository).save(userRoleCaptor.capture());
@@ -148,6 +151,24 @@ class SuperAdminServiceTest {
         ArgumentCaptor<Iterable<RolePermission>> permissionsCaptor = ArgumentCaptor.forClass(Iterable.class);
         verify(rolePermissionRepository).saveAll(permissionsCaptor.capture());
         assertThat(permissionsCaptor.getValue()).extracting(RolePermission::getPermissionId).containsExactly(2);
+    }
+
+    @Test
+    void initDefaultSuperAdminUserRejectsMissingBootstrapPasswordForNewDatabase() {
+        DataInitiator dataInitiator = new DataInitiator();
+        ReflectionTestUtils.setField(dataInitiator, "userRepository", userRepository);
+        ReflectionTestUtils.setField(dataInitiator, "roleRepository", roleRepository);
+        ReflectionTestUtils.setField(dataInitiator, "userRoleRepository", userRoleRepository);
+        ReflectionTestUtils.setField(dataInitiator, "menuRepository", menuRepository);
+        ReflectionTestUtils.setField(dataInitiator, "rolePermissionRepository", rolePermissionRepository);
+        ReflectionTestUtils.setField(dataInitiator, "bootstrapSuperAdminPassword", "");
+
+        when(userRepository.findByIsSuperAdmin(true)).thenReturn(List.of());
+        when(userRepository.findByEmail(SystemBuiltInConstants.SUPER_ADMIN_EMAIL)).thenReturn(null);
+
+        assertThatThrownBy(dataInitiator::initDefaultSuperAdminUser)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD");
     }
 
     @Test

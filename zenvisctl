@@ -1,0 +1,572 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly DEPLOY_DIR="${SCRIPT_DIR}/deploy"
+readonly COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
+readonly ENV_FILE="${DEPLOY_DIR}/.env"
+readonly ENV_EXAMPLE="${DEPLOY_DIR}/.env.example"
+readonly BACKUP_ROOT="${DEPLOY_DIR}/backups"
+readonly HELM_CHART="${DEPLOY_DIR}/helm/zenvis"
+readonly DEFAULT_NAMESPACE="${ZENVIS_K8S_NAMESPACE:-zenvis}"
+readonly DEFAULT_RELEASE="${ZENVIS_K8S_RELEASE:-zenvis}"
+readonly STARTUP_TIMEOUT="${ZENVIS_STARTUP_TIMEOUT:-900}"
+
+COMPOSE_CMD=()
+LAST_BACKUP_ID=""
+
+info() { printf '[信息] %s\n' "$*"; }
+warn() { printf '[提示] %s\n' "$*" >&2; }
+die() { printf '[错误] %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    sed -n '/^# ZENVISCTL_HELP$/,/^# ZENVISCTL_HELP_END$/p' "$0" \
+        | sed '1d;$d;s/^# //;s/^#$//'
+}
+
+# ZENVISCTL_HELP
+# ZenVis 部署管理工具
+#
+# 用法：
+#   ./zenvisctl compose init|doctor|up|status|logs|down
+#   ./zenvisctl compose backup
+#   ./zenvisctl compose upgrade --version <version>
+#   ./zenvisctl compose rollback --backup <backup-id> --confirm <backup-id>
+#
+#   ./zenvisctl k8s init [--namespace <ns>] [--release <name>]
+#   ./zenvisctl k8s doctor|install|status|logs [选项]
+#   ./zenvisctl k8s backup --external-ref <reference> [选项]
+#   ./zenvisctl k8s upgrade --version <version> --external-ref <reference> [选项]
+#   ./zenvisctl k8s rollback --backup <backup-id> --confirm <backup-id> [选项]
+#
+# Kubernetes 通用选项：
+#   --namespace <ns>   默认 zenvis
+#   --release <name>   默认 zenvis
+#   --secret-name <n>  默认 <release>-secrets
+#   -f, --values <f>   默认 deploy/helm/zenvis/values-dev.yaml
+# ZENVISCTL_HELP_END
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || die "缺少命令：$1"
+}
+
+detect_architecture() {
+    case "$(uname -m)" in
+        x86_64|amd64) printf 'amd64\n' ;;
+        arm64|aarch64) printf 'arm64\n' ;;
+        *) die "不支持的系统架构：$(uname -m)" ;;
+    esac
+}
+
+random_hex() {
+    require_command openssl
+    openssl rand -hex "${1:-24}"
+}
+
+random_password() {
+    printf 'Zv!%sAa\n' "$(random_hex 12)"
+}
+
+random_kafka_cluster_id() {
+    openssl rand -base64 16 | tr -d '=\n'
+}
+
+set_env_value() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    local temp_file="${file}.tmp.$$"
+
+    awk -v key="$key" -v value="$value" '
+        BEGIN { found = 0 }
+        index($0, key "=") == 1 {
+            print key "=" value
+            found = 1
+            next
+        }
+        { print }
+        END { if (!found) print key "=" value }
+    ' "$file" > "$temp_file"
+    mv "$temp_file" "$file"
+}
+
+env_value() {
+    local key="$1"
+    awk -F= -v key="$key" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
+}
+
+select_compose_command() {
+    require_command docker
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker compose)
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker-compose)
+    else
+        die "未检测到 Docker Compose v2 或 docker-compose"
+    fi
+}
+
+compose() {
+    if [[ "${#COMPOSE_CMD[@]}" -eq 0 ]]; then
+        select_compose_command
+    fi
+    "${COMPOSE_CMD[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+}
+
+has_existing_compose_data() {
+    [[ -d "${DEPLOY_DIR}/data/mysql/data/mysql" ]] \
+        || [[ -f "${DEPLOY_DIR}/data/clickhouse/data/status" ]] \
+        || [[ -f "${DEPLOY_DIR}/data/redis/data/dump.rdb" ]]
+}
+
+compose_init() {
+    [[ -f "$ENV_EXAMPLE" ]] || die "缺少模板：$ENV_EXAMPLE"
+    if [[ -f "$ENV_FILE" ]]; then
+        info "保留已有 deploy/.env；不会覆盖现有凭据。"
+        return
+    fi
+    if has_existing_compose_data; then
+        die "检测到已有数据但 deploy/.env 不存在。请按升级文档显式导入原环境凭据，工具不会猜测旧密码。"
+    fi
+
+    umask 077
+    cp "$ENV_EXAMPLE" "$ENV_FILE"
+    set_env_value "$ENV_FILE" ARCH "$(detect_architecture)"
+    set_env_value "$ENV_FILE" MYSQL_ROOT_PASSWORD "$(random_password)"
+    set_env_value "$ENV_FILE" MYSQL_PASSWORD "$(random_password)"
+    set_env_value "$ENV_FILE" CLICKHOUSE_PASSWORD "$(random_password)"
+    set_env_value "$ENV_FILE" REDIS_PASSWORD "$(random_password)"
+    set_env_value "$ENV_FILE" KAFKA_CLUSTER_ID "$(random_kafka_cluster_id)"
+    set_env_value "$ENV_FILE" API_BEARER_TOKEN "sk-zenvis-$(random_hex 24)"
+    set_env_value "$ENV_FILE" MCP_BEARER_TOKEN "sk-mcp-$(random_hex 24)"
+    set_env_value "$ENV_FILE" VECTUM_AUTH_TOKEN "sk-vectum-$(random_hex 24)"
+    set_env_value "$ENV_FILE" ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD "$(random_password)"
+    set_env_value "$ENV_FILE" ZENVIS_BOOTSTRAP_ADMIN_PASSWORD "$(random_password)"
+    chmod 600 "$ENV_FILE"
+
+    info "已创建 deploy/.env（权限 600）。初始化账号密码仅在账号不存在时生效："
+    printf '  super@admin.com  %s\n' "$(env_value ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD)"
+    printf '  admin@admin.com  %s\n' "$(env_value ZENVIS_BOOTSTRAP_ADMIN_PASSWORD)"
+    warn "请立即保存以上密码，并在首次登录后修改。"
+}
+
+validate_required_env() {
+    local key
+    local missing=""
+    for key in ARCH ZENVIS_IMAGE_REGISTRY MYSQL_ROOT_PASSWORD MYSQL_PASSWORD \
+        CLICKHOUSE_PASSWORD REDIS_PASSWORD KAFKA_CLUSTER_ID API_BEARER_TOKEN \
+        MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD \
+        ZENVIS_BOOTSTRAP_ADMIN_PASSWORD; do
+        if [[ -z "$(env_value "$key")" ]]; then
+            missing="${missing} ${key}"
+        fi
+    done
+    [[ -z "$missing" ]] || die "deploy/.env 缺少必填项：$missing"
+}
+
+compose_doctor() {
+    [[ -f "$ENV_FILE" ]] || die "deploy/.env 不存在，请先运行 ./zenvisctl compose init"
+    select_compose_command
+    docker info >/dev/null 2>&1 || die "Docker 服务不可用"
+    validate_required_env
+    compose config --quiet
+    case "$(env_value ARCH)" in amd64|arm64) ;; *) die "ARCH 只支持 amd64 或 arm64" ;; esac
+    info "Compose 配置解析成功，共 $(compose config --services | wc -l | tr -d ' ') 个服务。"
+    info "镜像版本：$(env_value ZENVIS_VERSION)，架构：$(env_value ARCH)"
+}
+
+wait_for_compose() {
+    local deadline=$((SECONDS + STARTUP_TIMEOUT))
+    local services service container_id state health total ready
+    services="$(compose config --services)"
+    total="$(printf '%s\n' "$services" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+    while (( SECONDS < deadline )); do
+        ready=0
+        for service in $services; do
+            container_id="$(compose ps -q "$service" 2>/dev/null | sed -n '1p')"
+            [[ -n "$container_id" ]] || continue
+            state="$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)"
+            if [[ "$state" == running && ( "$health" == healthy || "$health" == none ) ]]; then
+                ready=$((ready + 1))
+            elif [[ "$state" == exited || "$state" == dead ]]; then
+                compose ps -a || true
+                compose logs --tail=100 "$service" || true
+                die "服务异常退出：$service"
+            fi
+        done
+        info "等待服务就绪：${ready}/${total}"
+        [[ "$ready" -eq "$total" ]] && return
+        sleep 5
+    done
+    compose ps -a || true
+    compose logs --tail=100 || true
+    die "等待服务就绪超时（${STARTUP_TIMEOUT} 秒）"
+}
+
+compose_up() {
+    compose_doctor
+    compose up -d
+    wait_for_compose
+    info "ZenVis 已就绪：http://localhost:$(env_value ZENVIS_WEB_PORT)"
+}
+
+compose_backup_internal() {
+    local resume="$1"
+    local backup_id="compose-$(date '+%Y%m%d-%H%M%S')"
+    local backup_dir="${BACKUP_ROOT}/${backup_id}"
+    local running_services
+    mkdir -p "$backup_dir"
+    chmod 700 "$backup_dir"
+
+    running_services="$(compose ps --services --filter status=running 2>/dev/null || true)"
+    printf '%s\n' "$running_services" > "${backup_dir}/running-services.txt"
+    compose config --no-interpolate > "${backup_dir}/compose-config.yml"
+    compose images > "${backup_dir}/images.txt" 2>&1 || true
+    cp "$ENV_FILE" "${backup_dir}/env.before"
+    chmod 600 "${backup_dir}/env.before"
+
+    info "停止 Compose 服务以创建一致性冷备……"
+    compose stop
+    if ! tar -czf "${backup_dir}/payload.tar.gz" -C "$DEPLOY_DIR" \
+        .env docker-compose.yml config open_config data; then
+        [[ -n "$running_services" ]] && compose up -d $running_services || true
+        die "备份创建失败"
+    fi
+    {
+        printf 'backup_id=%s\n' "$backup_id"
+        printf 'created_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        printf 'version=%s\n' "$(env_value ZENVIS_VERSION)"
+        printf 'arch=%s\n' "$(env_value ARCH)"
+    } > "${backup_dir}/manifest.env"
+    chmod -R go-rwx "$backup_dir"
+
+    if [[ "$resume" == true && -n "$running_services" ]]; then
+        compose up -d $running_services
+        wait_for_compose
+    fi
+    LAST_BACKUP_ID="$backup_id"
+    info "备份完成：$backup_dir"
+}
+
+compose_backup() {
+    compose_doctor
+    compose_backup_internal true
+}
+
+compose_upgrade() {
+    local version=""
+    shift || true
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            --version) version="${2:-}"; shift 2 ;;
+            *) die "未知参数：$1" ;;
+        esac
+    done
+    [[ -n "$version" ]] || die "升级必须指定 --version"
+    [[ "$version" != latest ]] || die "升级禁止使用 latest；请指定可回滚的固定版本"
+    compose_doctor
+    compose_backup_internal false
+    set_env_value "$ENV_FILE" ZENVIS_VERSION "$version"
+    info "拉取 ZenVis ${version} 镜像……"
+    if ! compose pull; then
+        die "镜像拉取失败。数据未恢复启动；可执行 ./zenvisctl compose rollback --backup ${LAST_BACKUP_ID} --confirm ${LAST_BACKUP_ID}"
+    fi
+    if ! compose up -d || ! wait_for_compose; then
+        die "升级验证失败。不要直接启动旧镜像；请评估后执行显式回滚：./zenvisctl compose rollback --backup ${LAST_BACKUP_ID} --confirm ${LAST_BACKUP_ID}"
+    fi
+    info "升级完成。请继续验证登录、检索、看板、插件和推送任务。"
+}
+
+compose_rollback() {
+    local backup_id=""
+    local confirm=""
+    shift || true
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            --backup) backup_id="${2:-}"; shift 2 ;;
+            --confirm) confirm="${2:-}"; shift 2 ;;
+            *) die "未知参数：$1" ;;
+        esac
+    done
+    [[ -n "$backup_id" && "$confirm" == "$backup_id" ]] \
+        || die "回滚必须同时提供 --backup <id> --confirm <相同id>"
+    local backup_dir="${BACKUP_ROOT}/${backup_id}"
+    local payload="${backup_dir}/payload.tar.gz"
+    [[ -f "$payload" ]] || die "找不到备份：$backup_id"
+    tar -tzf "$payload" >/dev/null || die "备份压缩包损坏"
+    select_compose_command
+    [[ -f "$ENV_FILE" ]] && compose stop || true
+
+    local safety_dir="${DEPLOY_DIR}/.zenvis/rollback-safety-$(date '+%Y%m%d-%H%M%S')"
+    mkdir -p "$safety_dir"
+    local path
+    for path in data open_config config .env docker-compose.yml; do
+        [[ -e "${DEPLOY_DIR}/${path}" ]] && mv "${DEPLOY_DIR}/${path}" "$safety_dir/"
+    done
+    tar -xzf "$payload" -C "$DEPLOY_DIR"
+    chmod 600 "$ENV_FILE"
+    compose_doctor
+    compose up -d
+    wait_for_compose
+    info "已恢复备份 $backup_id。回滚前文件保存在 $safety_dir"
+}
+
+parse_k8s_options() {
+    K8S_NAMESPACE="$DEFAULT_NAMESPACE"
+    K8S_RELEASE="$DEFAULT_RELEASE"
+    K8S_VALUES="${HELM_CHART}/values-dev.yaml"
+    K8S_VERSION=""
+    K8S_EXTERNAL_REF=""
+    K8S_BACKUP_ID=""
+    K8S_CONFIRM=""
+    K8S_COMPONENT=""
+    K8S_SECRET_NAME=""
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            --namespace) K8S_NAMESPACE="${2:-}"; shift 2 ;;
+            --release) K8S_RELEASE="${2:-}"; shift 2 ;;
+            --secret-name) K8S_SECRET_NAME="${2:-}"; shift 2 ;;
+            -f|--values) K8S_VALUES="${2:-}"; shift 2 ;;
+            --version) K8S_VERSION="${2:-}"; shift 2 ;;
+            --external-ref) K8S_EXTERNAL_REF="${2:-}"; shift 2 ;;
+            --backup) K8S_BACKUP_ID="${2:-}"; shift 2 ;;
+            --confirm) K8S_CONFIRM="${2:-}"; shift 2 ;;
+            *) K8S_COMPONENT="$1"; shift ;;
+        esac
+    done
+    K8S_SECRET_NAME="${K8S_SECRET_NAME:-${K8S_RELEASE}-secrets}"
+}
+
+k8s_doctor() {
+    require_command kubectl
+    require_command helm
+    kubectl cluster-info >/dev/null 2>&1 || die "无法访问 Kubernetes 集群"
+    [[ -f "${HELM_CHART}/Chart.yaml" ]] || die "Helm Chart 不完整：$HELM_CHART"
+    helm lint "$HELM_CHART" -f "$K8S_VALUES" >/dev/null
+    info "Kubernetes 与 Helm 检查通过。"
+}
+
+copy_tracked_open_config() {
+    local target="$1"
+    local file destination
+    while IFS= read -r -d '' file; do
+        destination="${target}/${file}"
+        mkdir -p "$(dirname "$destination")"
+        cp "${SCRIPT_DIR}/${file}" "$destination"
+    done < <(git -C "$SCRIPT_DIR" ls-files -z deploy/open_config)
+}
+
+create_seed_configmaps() {
+    local temp_dir assets_dir schema_dir defaults_dir file relative archive size checksum name
+    temp_dir="$(mktemp -d)"
+    assets_dir="${temp_dir}/assets"
+    schema_dir="${temp_dir}/schema"
+    defaults_dir="${temp_dir}/defaults"
+    mkdir -p "$assets_dir" "$schema_dir" "$defaults_dir"
+    copy_tracked_open_config "${temp_dir}/tracked"
+
+    while IFS= read -r -d '' file; do
+        relative="${file#${temp_dir}/tracked/}"
+        case "$relative" in
+            deploy/open_config/web_config/schema/*) destination="${schema_dir}/${relative}" ;;
+            *.png|*.jpg|*.jpeg|*.gif|*.ico) destination="${assets_dir}/${relative}" ;;
+            *) destination="${defaults_dir}/${relative}" ;;
+        esac
+        mkdir -p "$(dirname "$destination")"
+        cp "$file" "$destination"
+    done < <(find "${temp_dir}/tracked" -type f -print0)
+
+    for name in assets schema defaults; do
+        case "$name" in
+            assets) file="$assets_dir" ;;
+            schema) file="$schema_dir" ;;
+            defaults) file="$defaults_dir" ;;
+        esac
+        archive="${temp_dir}/${name}.tgz"
+        tar -czf "$archive" -C "$file" .
+        size="$(wc -c < "$archive" | tr -d ' ')"
+        [[ "$size" -lt 700000 ]] || die "开放配置种子包 ${name} 超过 700KB，请重新拆分"
+        kubectl -n "$K8S_NAMESPACE" create configmap "${K8S_RELEASE}-open-config-seed-${name}" \
+            --from-file=seed.tgz="$archive" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    done
+    checksum="$(tar -czf - -C "${temp_dir}/tracked" . | openssl dgst -sha256 | awk '{print $NF}')"
+    for name in assets schema defaults; do
+        kubectl -n "$K8S_NAMESPACE" label configmap "${K8S_RELEASE}-open-config-seed-${name}" \
+            "zenvis.io/seed-checksum=${checksum}" --overwrite >/dev/null
+    done
+    rm -rf "$temp_dir"
+    printf '%s\n' "$checksum"
+}
+
+k8s_init() {
+    require_command git
+    require_command openssl
+    require_command tar
+    k8s_doctor
+    kubectl get namespace "$K8S_NAMESPACE" >/dev/null 2>&1 \
+        || kubectl create namespace "$K8S_NAMESPACE" >/dev/null
+    local secret_name="$K8S_SECRET_NAME"
+    if kubectl -n "$K8S_NAMESPACE" get secret "$secret_name" >/dev/null 2>&1; then
+        info "保留已有 Secret：${secret_name}"
+    else
+        local super_password admin_password
+        super_password="$(random_password)"
+        admin_password="$(random_password)"
+        kubectl -n "$K8S_NAMESPACE" create secret generic "$secret_name" \
+            --from-literal=MYSQL_ROOT_PASSWORD="$(random_password)" \
+            --from-literal=MYSQL_PASSWORD="$(random_password)" \
+            --from-literal=CLICKHOUSE_PASSWORD="$(random_password)" \
+            --from-literal=REDIS_PASSWORD="$(random_password)" \
+            --from-literal=KAFKA_CLUSTER_ID="$(random_kafka_cluster_id)" \
+            --from-literal=API_BEARER_TOKEN="sk-zenvis-$(random_hex 24)" \
+            --from-literal=MCP_BEARER_TOKEN="sk-mcp-$(random_hex 24)" \
+            --from-literal=VECTUM_AUTH_TOKEN="sk-vectum-$(random_hex 24)" \
+            --from-literal=ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD="$super_password" \
+            --from-literal=ZENVIS_BOOTSTRAP_ADMIN_PASSWORD="$admin_password" >/dev/null
+        info "已创建 Secret ${secret_name}。初始化账号密码仅显示一次："
+        printf '  super@admin.com  %s\n' "$super_password"
+        printf '  admin@admin.com  %s\n' "$admin_password"
+    fi
+    local required_key encoded_value missing_keys=""
+    for required_key in MYSQL_ROOT_PASSWORD MYSQL_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD \
+        KAFKA_CLUSTER_ID API_BEARER_TOKEN MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN \
+        ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD ZENVIS_BOOTSTRAP_ADMIN_PASSWORD; do
+        encoded_value="$(kubectl -n "$K8S_NAMESPACE" get secret "$secret_name" \
+            -o "jsonpath={.data.${required_key}}" 2>/dev/null || true)"
+        [[ -n "$encoded_value" ]] || missing_keys="${missing_keys} ${required_key}"
+    done
+    [[ -z "$missing_keys" ]] || die "Secret ${secret_name} 缺少必填键：${missing_keys}"
+    local checksum
+    checksum="$(create_seed_configmaps)"
+    info "开放配置种子已更新：${checksum}"
+}
+
+helm_common_args() {
+    printf '%s\n' \
+        --namespace "$K8S_NAMESPACE" \
+        --values "$K8S_VALUES" \
+        --set-string "secrets.existingSecret=${K8S_SECRET_NAME}" \
+        --set-string "openConfig.seedChecksum=${K8S_SEED_CHECKSUM}" \
+        --set-string "openConfig.seedConfigMaps.assets=${K8S_RELEASE}-open-config-seed-assets" \
+        --set-string "openConfig.seedConfigMaps.schema=${K8S_RELEASE}-open-config-seed-schema" \
+        --set-string "openConfig.seedConfigMaps.defaults=${K8S_RELEASE}-open-config-seed-defaults"
+}
+
+k8s_install() {
+    k8s_init
+    K8S_SEED_CHECKSUM="$(kubectl -n "$K8S_NAMESPACE" get configmap "${K8S_RELEASE}-open-config-seed-defaults" -o jsonpath='{.metadata.labels.zenvis\.io/seed-checksum}')"
+    local args=()
+    while IFS= read -r item; do args+=("$item"); done < <(helm_common_args)
+    helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" "${args[@]}" \
+        --create-namespace --wait --timeout 20m
+    info "Helm 部署完成。可运行 kubectl -n ${K8S_NAMESPACE} port-forward svc/${K8S_RELEASE}-frontend 11000:11000"
+}
+
+k8s_backup() {
+    [[ -n "$K8S_EXTERNAL_REF" ]] || die "Kubernetes 备份必须提供 --external-ref，记录外部数据库/中间件备份"
+    k8s_doctor
+    local backup_id="k8s-$(date '+%Y%m%d-%H%M%S')"
+    local backup_dir="${BACKUP_ROOT}/${backup_id}"
+    mkdir -p "$backup_dir"
+    chmod 700 "$backup_dir"
+    helm status "$K8S_RELEASE" -n "$K8S_NAMESPACE" -o json > "${backup_dir}/helm-status.json"
+    kubectl -n "$K8S_NAMESPACE" get all,pvc,configmap -l "app.kubernetes.io/instance=${K8S_RELEASE}" -o yaml \
+        > "${backup_dir}/resources.yaml"
+    kubectl -n "$K8S_NAMESPACE" exec "deployment/${K8S_RELEASE}-backend" -- \
+        tar -C /config -czf - open_config > "${backup_dir}/open-config.tgz"
+    kubectl -n "$K8S_NAMESPACE" exec "deployment/${K8S_RELEASE}-vectum" -- \
+        tar -C / -czf - workspace > "${backup_dir}/vectum-workspace.tgz"
+    {
+        printf 'backup_id=%s\n' "$backup_id"
+        printf 'namespace=%s\n' "$K8S_NAMESPACE"
+        printf 'release=%s\n' "$K8S_RELEASE"
+        printf 'external_ref=%s\n' "$K8S_EXTERNAL_REF"
+        helm list -n "$K8S_NAMESPACE" -f "^${K8S_RELEASE}$" --no-headers | awk '{print "revision=" $3}'
+    } > "${backup_dir}/manifest.env"
+    chmod -R go-rwx "$backup_dir"
+    LAST_BACKUP_ID="$backup_id"
+    info "Kubernetes 应用数据备份完成：$backup_dir"
+}
+
+k8s_upgrade() {
+    [[ -n "$K8S_VERSION" && "$K8S_VERSION" != latest ]] || die "升级必须指定非 latest 的 --version"
+    k8s_backup
+    k8s_init
+    K8S_SEED_CHECKSUM="$(kubectl -n "$K8S_NAMESPACE" get configmap "${K8S_RELEASE}-open-config-seed-defaults" -o jsonpath='{.metadata.labels.zenvis\.io/seed-checksum}')"
+    local args=()
+    while IFS= read -r item; do args+=("$item"); done < <(helm_common_args)
+    helm upgrade "$K8S_RELEASE" "$HELM_CHART" "${args[@]}" \
+        --set-string "global.version=${K8S_VERSION}" --wait --timeout 20m
+    info "Kubernetes 升级完成；备份为 ${LAST_BACKUP_ID}。"
+}
+
+k8s_rollback() {
+    [[ -n "$K8S_BACKUP_ID" && "$K8S_CONFIRM" == "$K8S_BACKUP_ID" ]] \
+        || die "回滚必须同时提供 --backup <id> --confirm <相同id>"
+    local backup_dir="${BACKUP_ROOT}/${K8S_BACKUP_ID}"
+    [[ -f "${backup_dir}/manifest.env" ]] || die "找不到备份：$K8S_BACKUP_ID"
+    local revision external_ref
+    revision="$(awk -F= '$1=="revision" {print $2}' "${backup_dir}/manifest.env")"
+    external_ref="$(awk -F= '$1=="external_ref" {sub(/^[^=]*=/, ""); print}' "${backup_dir}/manifest.env")"
+    [[ -n "$revision" && -n "$external_ref" ]] || die "备份缺少 Helm revision 或外部备份引用"
+    warn "请先确认外部依赖已恢复到引用 ${external_ref} 对应的恢复点。"
+    helm rollback "$K8S_RELEASE" "$revision" -n "$K8S_NAMESPACE" --wait --timeout 20m
+    kubectl -n "$K8S_NAMESPACE" exec -i "deployment/${K8S_RELEASE}-backend" -- \
+        tar -C /config -xzf - < "${backup_dir}/open-config.tgz"
+    kubectl -n "$K8S_NAMESPACE" exec -i "deployment/${K8S_RELEASE}-vectum" -- \
+        tar -C / -xzf - < "${backup_dir}/vectum-workspace.tgz"
+    kubectl -n "$K8S_NAMESPACE" rollout restart "deployment/${K8S_RELEASE}-backend" "deployment/${K8S_RELEASE}-vectum"
+    kubectl -n "$K8S_NAMESPACE" rollout status "deployment/${K8S_RELEASE}-backend" --timeout=15m
+    info "Kubernetes 应用卷与 Helm revision 已恢复。"
+}
+
+main() {
+    [[ "$#" -ge 2 ]] || { usage; exit 1; }
+    local platform="$1"
+    local command="$2"
+    shift 2
+
+    case "$platform" in
+        compose)
+            case "$command" in
+                init) compose_init ;;
+                doctor) compose_doctor ;;
+                up) compose_up ;;
+                status) compose_doctor; compose ps -a ;;
+                logs)
+                    compose_doctor
+                    if [[ -n "${1:-}" ]]; then
+                        compose logs -f --tail=200 "$1"
+                    else
+                        compose logs -f --tail=200
+                    fi
+                    ;;
+                down) compose_doctor; compose down ;;
+                backup) compose_backup ;;
+                upgrade) compose_upgrade "$command" "$@" ;;
+                rollback) compose_rollback "$command" "$@" ;;
+                *) usage; die "未知 Compose 命令：$command" ;;
+            esac
+            ;;
+        k8s)
+            parse_k8s_options "$@"
+            case "$command" in
+                doctor) k8s_doctor ;;
+                init) k8s_init ;;
+                install) k8s_install ;;
+                status) k8s_doctor; helm status "$K8S_RELEASE" -n "$K8S_NAMESPACE"; kubectl -n "$K8S_NAMESPACE" get pods,pvc ;;
+                logs) k8s_doctor; kubectl -n "$K8S_NAMESPACE" logs -f "deployment/${K8S_RELEASE}-${K8S_COMPONENT:-backend}" --tail=200 ;;
+                backup) k8s_backup ;;
+                upgrade) k8s_upgrade ;;
+                rollback) k8s_rollback ;;
+                *) usage; die "未知 Kubernetes 命令：$command" ;;
+            esac
+            ;;
+        *) usage; die "未知平台：$platform" ;;
+    esac
+}
+
+main "$@"

@@ -12,7 +12,7 @@ Build Zenvis plugins from source specifications while keeping entity models, Vec
 1. Locate the Zenvis workspace and intended plugin directory. Prefer `rg --files` and `rg`.
 2. Read every applicable `AGENTS.md` completely before editing files below it.
 3. Inspect the current platform contracts instead of relying on remembered schemas:
-   - `zenvis-backend/doc/设计说明/plugin-development.md`
+   - `doc/03-插件开发与集成/plugin-development.md`
    - `DashboardDto`, `PluginServiceImpl`, `MenuDto`, push-task DTOs
    - retrieval Meta models such as `DataEntity` and `DataAttribute`
    - frontend dashboard, low-code, table, copy, and URL handling

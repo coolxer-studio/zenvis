@@ -1,6 +1,6 @@
 # ZenVis
 
-![ZenVis](doc/assets/banner.jpg)
+![ZenVis](doc/_images/banner.jpg)
 
 ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数据接入、元数据管理、统一检索、可视化、插件扩展和 AI 智能分析组织在同一平台中。业务团队可以通过配置和插件快速建立数据模型、接入数据、构建应用，并复用平台提供的权限、检索、看板和智能分析能力。
 
@@ -39,8 +39,10 @@ chmod +x quick-deploy.sh
 完整环境由项目根目录的 `deploy` 目录统一编排：
 
 ```bash
-cd zenvis/deploy
-docker compose up -d
+cd zenvis
+./zenvisctl compose init
+./zenvisctl compose doctor
+./zenvisctl compose up
 ```
 
 默认服务入口：
@@ -51,11 +53,13 @@ docker compose up -d
 | ZenVis API / Swagger | `http://localhost:11001`、`http://localhost:11001/swagger-ui/index.html` |
 | Vectum 数据服务 | `http://localhost:11002` |
 
-首次部署前应在部署配置中设置数据库、API、MCP 和模型服务凭据，并在首次登录后修改初始化账号密码。完整说明见[安装部署](doc/02-快速开始与部署/安装部署.md)。
+初始化命令会为数据库、API、MCP、Vectum 和两个内置账号生成独立随机凭据。首次登录后应修改账号密码；完整说明见[快速开始](doc/02-安装部署与升级/快速开始.md)。Kubernetes 环境使用仓库内的 [Helm Chart 部署指南](doc/02-安装部署与升级/Kubernetes部署.md)。
 
 ### 本地开发
 
 后端：
+
+先按[后端开发指南](doc/07-开发指南/zenvis-backend-开发对接指南.md)准备本地基础设施和 `config/local-secrets.properties`，再运行：
 
 ```bash
 cd zenvis-backend
@@ -71,7 +75,7 @@ yarn install
 yarn server:dev
 ```
 
-前端开发服务器位于 `http://localhost:8090`，默认将 `/zenvis` 请求代理到 `http://localhost:11001`。详细步骤见[快速开始](doc/02-快速开始与部署/README.md)。
+前端开发服务器位于 `http://localhost:8090`，默认将 `/zenvis` 请求代理到 `http://localhost:11001`。详细步骤见[安装部署与升级](doc/02-安装部署与升级/README.md)。
 
 ## 核心能力
 
@@ -88,14 +92,14 @@ yarn server:dev
 
 | 主题 | 文档 |
 | --- | --- |
-| 产品与使用 | [产品与使用](doc/01-产品与使用/README.md) |
-| 启动与部署 | [快速开始与部署](doc/02-快速开始与部署/README.md) |
-| 技术设计 | [架构设计](doc/03-架构设计/README.md) |
-| 工程协作 | [开发指南](doc/04-开发指南/README.md) |
-| 接口对接 | [API 参考](doc/05-API参考/README.md) |
-| 插件扩展 | [插件开发与集成](doc/06-插件开发与集成/README.md) |
-| AI 能力 | [AI 与数据智能](doc/07-AI与数据智能/README.md) |
-| 应用接入 | [业务服务接入](doc/08-业务服务接入/README.md) |
+| 产品与使用 | [产品理念与使用](doc/01-产品理念与使用/README.md) |
+| 启动与部署 | [安装部署与升级](doc/02-安装部署与升级/README.md) |
+| 插件扩展 | [插件开发与集成](doc/03-插件开发与集成/README.md) |
+| AI 能力 | [AI 与数据智能](doc/04-AI与数据智能/README.md) |
+| 应用接入 | [业务服务接入](doc/05-业务服务接入/README.md) |
+| 技术设计 | [架构设计](doc/06-架构设计/README.md) |
+| 工程协作 | [开发指南](doc/07-开发指南/README.md) |
+| 接口对接 | [API 参考](doc/08-API参考/README.md) |
 
 ## 许可证与联系
 

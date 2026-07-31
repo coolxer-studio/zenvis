@@ -1,271 +1,227 @@
+name: zenvis
+
+x-common: &common
+  restart: unless-stopped
+  networks:
+    - zenvis-network
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 100m
+    max-file: "3"
+
 services:
   kafka-service:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/apache-kafka:4.2.0-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/apache-kafka:4.2.0-${ARCH:?ARCH is required}
     container_name: kafka-service
     user: "0:0"
     environment:
-      TZ: Asia/Shanghai
-      KAFKA_NODE_ID: 1
+      TZ: ${TZ:-Asia/Shanghai}
+      KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: controller,broker
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-service:9092,PLAINTEXT_HOST://localhost:9094
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-service:9093
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_LOG_RETENTION_HOURS: 168
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824
-      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_LOG_RETENTION_HOURS: "168"
+      KAFKA_LOG_SEGMENT_BYTES: "1073741824"
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: "300000"
+      KAFKA_LOG_DIRS: /tmp/kafka-logs
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
     ports:
-      - "9094:9094"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9094:9094"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/kafka/kafka-logs:/tmp/kafka-logs
-    restart: unless-stopped
-    networks:
-      - zenvis-network
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 60s
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 4G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 1G
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200m"
-        max-file: "5"
-    labels:
-      - "app=kafka"
-      - "version=4.2.0"
-  
+    logging: *default-logging
+
   redis-service:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/redis:7-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/redis:7-${ARCH:?ARCH is required}
     container_name: redis-signal
     environment:
-      TZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
-      - "6379:6379"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:6379:6379"
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./config/redis/redis.conf:/usr/local/redis/redis.conf
+      - ./config/redis/redis.conf:/usr/local/redis/redis.conf:ro
       - ./data/redis/data:/data
     command:
-      redis-server /usr/local/redis/redis.conf
-    restart: unless-stopped
-    networks:
-      - zenvis-network
+      - /bin/sh
+      - -ec
+      - exec redis-server /usr/local/redis/redis.conf --requirepass "$$REDIS_PASSWORD"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "3"
-    labels:
-      - "app=redis"
-      - "version=7-${ARCH}"
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    logging: *default-logging
 
   redis-stack-service:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/redis-stack-server:7.2.0-v18-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/redis-stack-server:7.2.0-v18-${ARCH:?ARCH is required}
     container_name: redis-stack-signal
     environment:
-      TZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
-      - "16379:6379"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:16379:6379"
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./config/redis-stack/redis-stack.conf:/etc/redis-stack.conf
+      - ./config/redis-stack/redis-stack.conf:/etc/redis-stack.conf:ro
       - ./data/redis-stack/data:/data
     command:
-      redis-server /etc/redis-stack.conf
-    restart: unless-stopped
-    networks:
-      - zenvis-network
+      - /bin/sh
+      - -ec
+      - exec redis-server /etc/redis-stack.conf --requirepass "$$REDIS_PASSWORD"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "3"
-    labels:
-      - "app=redis-stack"
-      - "version=7.2.0-v18-${ARCH}"
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    logging: *default-logging
 
   mysql-service:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/mysql:8.4-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/mysql:8.4-${ARCH:?ARCH is required}
     container_name: mysql8
     environment:
-      TZ: Asia/Shanghai
-      MYSQL_ROOT_PASSWORD: uEPYrBanWaRJhCKHy3FP
+      TZ: ${TZ:-Asia/Shanghai}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-zenvis}
+      MYSQL_USER: ${MYSQL_USER:-zenvis}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
     ports:
-      - "3306:3306"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:3306:3306"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/mysql/data:/var/lib/mysql:rw
-      - ./config/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
-      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: unless-stopped
-    networks:
-      - zenvis-network
+      - ./config/mysql/my.cnf:/etc/mysql/conf.d/zenvis.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 4G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 1G
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200m"
-        max-file: "5"
-    labels:
-      - "app=mysql"
-      - "version=8.4-${ARCH}"
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-puEPYrBanWaRJhCKHy3FP" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    logging: *default-logging
 
   clickhouse-service:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/clickhouse-server:25.9-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/clickhouse-server:25.9-${ARCH:?ARCH is required}
     container_name: clickhouse-service
     hostname: clickhouse-service
     environment:
-      TZ: Asia/Shanghai
-      CLICKHOUSE_DB: default
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: SFGEfSVVMcUHCBCjKmzJ
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      TZ: ${TZ:-Asia/Shanghai}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-zenvis}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
-      - "8123:8123"
-      - "9000:9000"
-      - "9009:9009"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:8123:8123"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9000:9000"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9009:9009"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/clickhouse/logs:/var/log/clickhouse-server
       - ./data/clickhouse/data:/var/lib/clickhouse
-    restart: unless-stopped
-    networks:
-      - zenvis-network
     healthcheck:
-      test: [ "CMD", "clickhouse-client", "--user", "default", "--password", "SFGEfSVVMcUHCBCjKmzJ", "--query", "SELECT 1" ]
+      test: ["CMD-SHELL", "clickhouse-client --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1' >/dev/null"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 30s
     deploy:
       resources:
         limits:
-          cpus: '4'
+          cpus: "4"
           memory: 8G
         reservations:
-          cpus: '1'
+          cpus: "1"
           memory: 2G
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "200m"
+        max-size: 200m
         max-file: "5"
-    labels:
-      - "app=clickhouse"
-      - "version=25.9-${ARCH}"
-
-  zenvis-frontend:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-frontend:latest-${ARCH}
-    container_name: zenvis-frontend
-    environment:
-      TZ: Asia/Shanghai
-    ports:
-      - "11000:11000"
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ./config/zenvis-frontend/conf.d:/etc/nginx/conf.d
-    restart: unless-stopped
-    depends_on:
-      - zenvis-backend
-    networks:
-      - zenvis-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "3"
-    labels:
-      - "app=zenvis-frontend"
-      - "version=latest-${ARCH}"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:11000" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   zenvis-backend:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-backend:latest-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/zenvis-backend:${ZENVIS_VERSION:-latest}-${ARCH:?ARCH is required}
     container_name: zenvis-backend
     environment:
-      TZ: Asia/Shanghai
-      API_BEARER_TOKEN: "${API_BEARER_TOKEN:-sk-zenvis-token}"
-      API_BEARER_USER: "${API_BEARER_USER:-admin@admin.com}"
-      MCP_BEARER_TOKEN: sk-zenvis-token
-      VECTUM_AUTH_TOKEN: "${VECTUM_AUTH_TOKEN:-sk-vectum-token}"
-      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
+      TZ: ${TZ:-Asia/Shanghai}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:?API_BEARER_TOKEN is required}
+      API_BEARER_USER: ${API_BEARER_USER:-admin@admin.com}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:?MCP_BEARER_TOKEN is required}
+      VECTUM_AUTH_TOKEN: ${VECTUM_AUTH_TOKEN:?VECTUM_AUTH_TOKEN is required}
+      ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD: ${ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD:?bootstrap password is required}
+      ZENVIS_BOOTSTRAP_ADMIN_PASSWORD: ${ZENVIS_BOOTSTRAP_ADMIN_PASSWORD:?bootstrap password is required}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-}
+      APP_AI_EMBEDDING_ENABLED: ${APP_AI_EMBEDDING_ENABLED:-false}
+      OPENAI_EMBEDDING_BASE_URL: ${OPENAI_EMBEDDING_BASE_URL:-}
+      OPENAI_EMBEDDING_API_KEY: ${OPENAI_EMBEDDING_API_KEY:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-}
+      OPENAI_COMPLETION_URL: ${OPENAI_COMPLETION_URL:-}
+      OPENAI_COMPLETION_MODEL: ${OPENAI_COMPLETION_MODEL:-}
     ports:
-      - "11001:11001"
+      - "${ZENVIS_API_BIND_ADDRESS:-127.0.0.1}:${ZENVIS_API_PORT:-11001}:11001"
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./config/zenvis-backend/config/application.properties:/app/application.properties
+      - ./config/zenvis-backend/config/application.properties:/app/application.properties:ro
       - ./open_config:/config/open_config
-    restart: unless-stopped
     depends_on:
       redis-service:
         condition: service_healthy
@@ -275,79 +231,100 @@ services:
         condition: service_healthy
       clickhouse-service:
         condition: service_healthy
-    networks:
-      - zenvis-network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:11001/actuator/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
     deploy:
       resources:
         limits:
-          cpus: '4'
+          cpus: "4"
           memory: 8G
         reservations:
-          cpus: '1'
+          cpus: "1"
           memory: 2G
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "200m"
+        max-size: 200m
         max-file: "5"
-    labels:
-      - "app=zenvis-backend"
-      - "version=latest-${ARCH}"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:11001/api/v1/system/about/info" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
   vectum-service:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum:latest-${ARCH}
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/vectum:${ZENVIS_VERSION:-latest}-${ARCH:?ARCH is required}
     container_name: vectum-service
     environment:
-      TZ: Asia/Shanghai
-      VECTUM_AUTH_TOKEN: "${VECTUM_AUTH_TOKEN:-sk-vectum-token}"
-      VECTUM_VECTOR_ALLOWED_ENV: "CLICKHOUSE_PASSWORD"
-      CLICKHOUSE_PASSWORD: "SFGEfSVVMcUHCBCjKmzJ"
+      TZ: ${TZ:-Asia/Shanghai}
+      VECTUM_AUTH_TOKEN: ${VECTUM_AUTH_TOKEN:?VECTUM_AUTH_TOKEN is required}
+      VECTUM_VECTOR_ALLOWED_ENV: CLICKHOUSE_PASSWORD,KAFKA_BOOTSTRAP_SERVERS,CLICKHOUSE_ENDPOINT,CLICKHOUSE_DATABASE,CLICKHOUSE_USER
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_ENDPOINT: http://clickhouse-service:8123
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-zenvis}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      KAFKA_BOOTSTRAP_SERVERS: kafka-service:9092
     ports:
-      - "11002:11002"
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:${VECTUM_PORT:-11002}:11002"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/vectum/workspace:/workspace
       - ./data/vectum/vector:/var/lib/vector
-    restart: unless-stopped
-    networks:
-      - zenvis-network
+    depends_on:
+      kafka-service:
+        condition: service_healthy
+      clickhouse-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:11002/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 4G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 1G
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "200m"
+        max-size: 200m
         max-file: "5"
-    labels:
-      - "app=vectum"
-      - "version=latest-${ARCH}"
+
+  zenvis-frontend:
+    <<: *common
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/zenvis-frontend:${ZENVIS_VERSION:-latest}-${ARCH:?ARCH is required}
+    container_name: zenvis-frontend
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${ZENVIS_WEB_BIND_ADDRESS:-0.0.0.0}:${ZENVIS_WEB_PORT:-11000}:11000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config/zenvis-frontend/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      zenvis-backend:
+        condition: service_healthy
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:11002/actuator/health" ]
+      test: ["CMD", "curl", "-fsS", "http://localhost:11000/"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging: *default-logging
 
 networks:
   zenvis-network:
     driver: bridge
-
-volumes:
-  mysql-data:
-    driver: local
-  clickhouse-data:
-    driver: local
-  clickhouse-logs:
-    driver: local

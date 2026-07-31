@@ -1,0 +1,12 @@
+ZenVis {{ .Values.global.version }} has been deployed as a single-replica baseline.
+
+Check status:
+  kubectl -n {{ .Release.Namespace }} get pods,pvc
+
+Local access:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "zenvis.fullname" . }}-frontend 11000:11000
+  open http://localhost:11000
+
+{{- if .Values.ingress.enabled }}
+Ingress: {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+{{- end }}

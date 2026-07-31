@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 readonly DEFAULT_REPO_URL="https://gitee.com/coolxer-studio/zenvis.git"
-readonly DEFAULT_REPO_BRANCH="feature/zenvis-1.0"
+readonly DEFAULT_REPO_BRANCH="feature/1.0.0.alpha"
 
 REPO_URL="${ZENVIS_REPO_URL:-$DEFAULT_REPO_URL}"
 REPO_BRANCH="${ZENVIS_REPO_BRANCH:-$DEFAULT_REPO_BRANCH}"

@@ -3,6 +3,8 @@ package com.coolxer.service.config.impl;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.file.FileNameUtil;
 import com.coolxer.commons.constants.ConfigConstants;
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.config.dto.ConfigDto;
 import com.coolxer.model.config.vo.ConfigVo;
@@ -21,6 +23,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -79,6 +83,7 @@ public class ConfigServiceImpl implements ConfigService {
                     }
                 }
         );
+        populateRelativePaths(configVo, Paths.get(path).toAbsolutePath().normalize());
         return Collections.singletonList(configVo);
     }
 
@@ -152,7 +157,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public String readFile(String type, String fileName) {
         try {
-            Path filePath = Paths.get(configPath(type), fileName);
+            Path filePath = resolveExistingConfigPath(type, fileName);
             return FileUtils.readFileToString(filePath.toFile(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.error("read config file failed !", e);
@@ -163,7 +168,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public void modifyConfig(String type, ConfigDto configDto) {
         try {
-            Path filePath = Paths.get(configPath(type), configDto.getFileName());
+            Path filePath = resolveExistingConfigPath(type, configDto.getFileName());
             FileUtils.writeStringToFile(filePath.toFile(), configDto.getText(),
                     StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -175,7 +180,7 @@ public class ConfigServiceImpl implements ConfigService {
     public boolean addFile(String type, String fileName) {
         // 创建文件
         try {
-            Path filePath = Paths.get(configPath(type), fileName);
+            Path filePath = resolveConfigPath(type, fileName, false);
             Files.createFile(filePath);
             return true;
         } catch (IOException e) {
@@ -187,7 +192,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public boolean deleteFile(String type, String fileName) {
         try {
-            Path filePath = Paths.get(configPath(type), fileName);
+            Path filePath = resolveExistingConfigPath(type, fileName);
             Files.deleteIfExists(filePath);
             return true;
         } catch (IOException e) {
@@ -199,8 +204,8 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public boolean renameFile(String type, String originalFile, String newFile) {
         try {
-            Path originalFilePath = Paths.get(configPath(type), originalFile);
-            Path newFilePath = Paths.get(configPath(type), newFile);
+            Path originalFilePath = resolveExistingConfigPath(type, originalFile);
+            Path newFilePath = resolveConfigPath(type, newFile, false);
             Files.move(originalFilePath, newFilePath, StandardCopyOption.REPLACE_EXISTING);
             return true;
         } catch (IOException e) {
@@ -275,30 +280,70 @@ public class ConfigServiceImpl implements ConfigService {
      */
     @Override
     public boolean fileExistsInConfigPath(String type, String fileName) {
-        String configPath = configPath(type);
-        // 创建一个表示目录的File对象
-        File directory = new File(configPath);
-        // 检查目录是否存在并且是一个目录
-        if (!directory.exists() || !directory.isDirectory()) {
-            log.error("指定的路径不是有效的目录: " + configPath);
+        try {
+            resolveExistingConfigPath(type, fileName);
+            return true;
+        } catch (ApiException e) {
             return false;
         }
-        // 获取目录中的所有文件和文件夹
-        File[] files = directory.listFiles();
-        // 如果目录为空，返回false
-        if (files == null) {
-            return false;
+    }
+
+    private void populateRelativePaths(ConfigVo node, Path root) {
+        if (node == null || StringUtils.isBlank(node.getPath())) {
+            return;
         }
-        // 遍历目录中的所有文件和文件夹
-        for (File file : files) {
-            // 检查文件名是否匹配
-            if (file.getName().equals(fileName)) {
-                // 如果匹配，返回true
-                return true;
+        Path nodePath = Paths.get(node.getPath()).toAbsolutePath().normalize();
+        if (nodePath.startsWith(root)) {
+            node.setRelativePath(root.relativize(nodePath).toString().replace(File.separatorChar, '/'));
+        }
+        if (node.getNodes() != null) {
+            node.getNodes().forEach(child -> populateRelativePaths(child, root));
+        }
+    }
+
+    private Path resolveExistingConfigPath(String type, String fileName) {
+        return resolveConfigPath(type, fileName, true);
+    }
+
+    private Path resolveConfigPath(String type, String fileName, boolean requireExisting) {
+        if (StringUtils.isBlank(fileName)) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        try {
+            Path requested = Paths.get(fileName);
+            if (requested.isAbsolute()) {
+                throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
             }
+
+            Path root = Paths.get(configPath(type)).toAbsolutePath().normalize();
+            Path resolved = root.resolve(requested).normalize();
+            if (resolved.equals(root) || !resolved.startsWith(root)) {
+                throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+            }
+            if (!Files.isDirectory(root)) {
+                throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+            }
+
+            Path realRoot = root.toRealPath();
+            if (requireExisting) {
+                if (!Files.exists(resolved, LinkOption.NOFOLLOW_LINKS)
+                        || !resolved.toRealPath().startsWith(realRoot)) {
+                    throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+                }
+            } else {
+                Path existingAncestor = resolved.getParent();
+                while (existingAncestor != null
+                        && !Files.exists(existingAncestor, LinkOption.NOFOLLOW_LINKS)) {
+                    existingAncestor = existingAncestor.getParent();
+                }
+                if (existingAncestor == null || !existingAncestor.toRealPath().startsWith(realRoot)) {
+                    throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+                }
+            }
+            return resolved;
+        } catch (InvalidPathException | IOException e) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
         }
-        // 如果遍历完所有文件都没有匹配，返回false
-        return false;
     }
 
 

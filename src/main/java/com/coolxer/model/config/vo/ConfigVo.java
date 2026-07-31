@@ -36,6 +36,11 @@ public class ConfigVo implements Serializable {
     private String path;
 
     /**
+     * Relative path from the configuration root, using '/' as separator.
+     */
+    private String relativePath;
+
+    /**
      * 文件级数
      */
     private Integer depth;
@@ -62,6 +67,7 @@ public class ConfigVo implements Serializable {
                 && StringUtils.isBlank(this.fileName)
                 && (Objects.isNull(this.size) || this.size == 0)
                 && StringUtils.isBlank(this.path)
+                && StringUtils.isBlank(this.relativePath)
                 && (Objects.isNull(this.depth) || this.depth == 0)
                 && Objects.isNull(this.isDir)
                 && Objects.isNull(this.modifiable)

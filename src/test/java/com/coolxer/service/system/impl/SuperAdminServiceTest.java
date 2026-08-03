@@ -355,6 +355,26 @@ class SuperAdminServiceTest {
     }
 
     @Test
+    void updatingUserChangesRoleAssociation() {
+        User existingUser = user(7, "user@admin.com", false);
+        UserRole userRole = new UserRole();
+        userRole.setUserId(7);
+        userRole.setRoleId(2);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(existingUser));
+        when(userRepository.findByEmail("user@admin.com")).thenReturn(existingUser);
+        when(userRoleRepository.findByUserId(7)).thenReturn(userRole);
+
+        UserDto dto = new UserDto();
+        dto.setEmail("user@admin.com");
+        dto.setName("updated-name");
+        dto.setRoleId(3);
+
+        assertThat(userService.update(7L, dto)).isTrue();
+        assertThat(userRole.getRoleId()).isEqualTo(3);
+        verify(userRoleRepository).save(userRole);
+    }
+
+    @Test
     void updatingUserRejectsEmailOwnedByAnotherUser() {
         User updatedUser = user(7, "user@admin.com", false);
         User emailOwner = user(8, "other@admin.com", false);

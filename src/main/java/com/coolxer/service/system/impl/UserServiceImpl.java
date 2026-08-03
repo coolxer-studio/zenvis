@@ -184,6 +184,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
     public Boolean update(Long id, UserDto userDto) {
         // 必填项校验
         checkCreateOrUpdate(userDto);
@@ -193,6 +194,10 @@ public class UserServiceImpl implements UserService {
             User user = optionalUser.get();
             if (SystemBuiltInConstants.isSuperAdmin(user)) {
                 throw new ApiException(ResultCodeEnum.SUPER_ADMIN_USER_NOT_ALLOWED);
+            }
+            Role role = roleRepository.findById(userDto.getRoleId());
+            if (SystemBuiltInConstants.isSuperAdmin(role)) {
+                throw new ApiException(ResultCodeEnum.SUPER_ADMIN_ROLE_ASSIGN_NOT_ALLOWED);
             }
 
             // 修改邮箱，校验邮箱，系统唯一
@@ -222,6 +227,13 @@ public class UserServiceImpl implements UserService {
             user.setName(userDto.getName());
 
             userRepository.save(user);
+            UserRole userRole = userRoleRepository.findByUserId(user.getId());
+            if (Objects.isNull(userRole)) {
+                userRole = new UserRole();
+                userRole.setUserId(user.getId());
+            }
+            userRole.setRoleId(userDto.getRoleId());
+            userRoleRepository.save(userRole);
             return true;
         } else {
             throw new ApiException(ResultCodeEnum.ERROR_USER_IS_NOT_EXIST);

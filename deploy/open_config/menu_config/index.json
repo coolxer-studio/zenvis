@@ -14,6 +14,9 @@
         "body": {
           "type": "form",
           "api": "/zenvis/api/v1/system/menu/add",
+          "data": {
+            "params": ""
+          },
           "body": [
             {
               "label": "名称",

@@ -1,69 +1,28 @@
 {
-  "id": "data-visualization-agent",
-  "name": "数据可视化",
-  "description": "系统内置数据可视化 Skill，基于元数据实体和 retrieval/entity REST API 生成临时图表、低代码页面/应用、静态 HTML、数据看板和菜单配置。",
-  "version": "1.3.6",
-  "author": "ZenVis",
-  "agentTypes": [
-    "agent_data_visualization"
-  ],
-  "tags": [
-    "builtin",
-    "agent",
-    "data-visualization",
-    "retrieval",
-    "amis"
-  ],
-  "chat": {
-    "enabled": true,
-    "label": "数据可视化",
-    "icon": "monitor",
-    "order": 20
+  "id" : "data-visualization-agent",
+  "name" : "数据可视化",
+  "description" : "系统内置数据可视化 Skill，基于元数据实体和 retrieval/entity REST API 生成临时图表、低代码页面/应用、静态 HTML、数据看板和菜单配置。",
+  "version" : "1.3.6",
+  "author" : "ZenVis",
+  "agentTypes" : [ "agent_data_visualization" ],
+  "tags" : [ "builtin", "agent", "data-visualization", "retrieval", "amis" ],
+  "chat" : {
+    "enabled" : true,
+    "label" : "数据可视化",
+    "icon" : "monitor",
+    "order" : 20
   },
-  "runtime": {
-    "tools": {
-      "local": [
-        "retrieval_search",
-        "retrieval_list_rule",
-        "retrieval_list_entity",
-        "retrieval_list_attribute",
-        "retrieval_list_candidate",
-        "retrieval_list_display_entity",
-        "retrieval_list_display_attribute",
-        "entity_overview",
-        "entity_summary",
-        "entity_trend",
-        "entity_distribution",
-        "entity_aggregate",
-        "entity_histogram",
-        "entity_scatter",
-        "entity_value_statistics",
-        "entity_relations",
-        "entity_relation_timeline",
-        "entity_list",
-        "entity_view",
-        "config_tree",
-        "config_ensure_root",
-        "config_add",
-        "config_apply",
-        "config_read",
-        "dashboard_create",
-        "dashboard_list",
-        "dashboard_view",
-        "menu_create",
-        "menu_list",
-        "menu_view",
-        "menu_type_options",
-        "menu_parent_options"
-      ]
+  "runtime" : {
+    "tools" : {
+      "local" : [ "retrieval_search", "retrieval_list_rule", "retrieval_list_entity", "retrieval_list_attribute", "retrieval_list_candidate", "retrieval_list_display_entity", "retrieval_list_display_attribute", "entity_overview", "entity_summary", "entity_trend", "entity_distribution", "entity_aggregate", "entity_histogram", "entity_scatter", "entity_value_statistics", "entity_relations", "entity_relation_timeline", "entity_list", "entity_view", "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read", "dashboard_create", "dashboard_list", "dashboard_view", "menu_create", "menu_list", "menu_view", "menu_type_options", "menu_parent_options" ]
     },
-    "limits": {
-      "maxToolCalls": 8,
-      "maxRepeatedFailures": 2,
-      "maxToolResultChars": 8000,
-      "maxAccumulatedToolResultChars": 24000
+    "limits" : {
+      "maxToolCalls" : 8,
+      "maxRepeatedFailures" : 2,
+      "maxToolResultChars" : 8000,
+      "maxAccumulatedToolResultChars" : 24000
     }
   },
-  "enabled": true,
-  "entry": "SKILL.md"
+  "enabled" : true,
+  "entry" : "SKILL.md"
 }

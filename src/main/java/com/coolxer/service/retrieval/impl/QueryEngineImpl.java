@@ -602,10 +602,27 @@ public class QueryEngineImpl implements QueryEngine {
         if (StringUtils.equalsIgnoreCase(retrievalType, "date") && isTemporalType(columnType)) {
             return temporalLiteral(value, columnType);
         }
+        if (isUuidType(columnType)) {
+            return requireUuidLiteral(value);
+        }
         if (StringUtils.equalsIgnoreCase(retrievalType, "date") || isNumericType(columnType)) {
             return requireNumberLiteral(value);
         }
         return quote(value);
+    }
+
+    private String requireUuidLiteral(String value) {
+        String normalized = StringUtils.trimToEmpty(value);
+        try {
+            UUID uuid = UUID.fromString(normalized);
+            if (!uuid.toString().equalsIgnoreCase(normalized)) {
+                throw new IllegalArgumentException("非标准UUID格式");
+            }
+            return quote(normalized);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                    "UUID条件值必须为标准UUID格式: " + value);
+        }
     }
 
     private String temporalLiteral(String value, String columnType) {
@@ -637,6 +654,14 @@ public class QueryEngineImpl implements QueryEngine {
                 || lowerType.contains("float")
                 || lowerType.contains("decimal")
                 || lowerType.contains("double");
+    }
+
+    private boolean isUuidType(String columnType) {
+        String baseType = unwrapColumnType(columnType);
+        if (StringUtils.startsWithIgnoreCase(baseType, "Array(") && baseType.endsWith(")")) {
+            baseType = unwrapColumnType(baseType.substring("Array(".length(), baseType.length() - 1));
+        }
+        return StringUtils.equalsIgnoreCase(baseType, "UUID");
     }
 
     private boolean isTemporalType(String columnType) {

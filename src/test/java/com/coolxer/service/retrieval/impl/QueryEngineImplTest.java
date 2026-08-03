@@ -84,6 +84,27 @@ class QueryEngineImplTest {
     }
 
     @Test
+    void buildCriteriaSqlValidatesUuidValuesBeforeExecutingClickHouseQuery() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        String uuid = "8e388586-24b2-4d4b-aecc-a33151326f4d";
+
+        String criteriaSql = ReflectionTestUtils.invokeMethod(
+                queryEngine,
+                "buildCriteriaSql",
+                criteria("zenvis_id", "Nullable(UUID)", "equal", uuid)
+        );
+
+        assertThat(criteriaSql).isEqualTo("zenvis_id = '" + uuid + "'");
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                queryEngine,
+                "buildCriteriaSql",
+                criteria("zenvis_id", "Nullable(UUID)", "equal", "111")
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("UUID条件值必须为标准UUID格式");
+    }
+
+    @Test
     void buildCriteriaSqlSupportsValuelessNullOperators() {
         QueryEngineImpl queryEngine = new QueryEngineImpl();
 

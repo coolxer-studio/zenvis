@@ -45,8 +45,8 @@
 > - **不适合完全无约束的数据操作：** 高级检索不接受任意 SQL，AI 工具也必须遵循权限范围、审批策略和调用审计。
 > - **不适合脱离业务建模直接使用：** 平台提供通用框架，实体含义、字段规则、接入方式和分析口径仍需要通过 Meta、推送任务和插件明确配置。
 
-<a href="_images/zenvis-product-overview.svg" target="_blank" rel="noopener">
-  <img src="_images/zenvis-product-overview.svg" alt="ZenVis 产品全景图" />
+<a href="_images/zenvis-product-overview.png" target="_blank" rel="noopener">
+  <img src="_images/zenvis-product-overview.png" alt="ZenVis 产品全景图" />
 </a>
 
 *一张图理解 ZenVis：通过 Meta 配置和插件扩展，将多源数据转化为检索、统计、可视化与受控 AI 分析能力。点击图片可查看高清大图。*

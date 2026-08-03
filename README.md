@@ -24,7 +24,7 @@ ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数�
 脚本会自动检查 Docker 与 Docker Compose、按需拉取项目、匹配 `amd64`/`arm64` 镜像，并在全部容器健康且 Web 页面可访问后输出登录信息：
 
 ```bash
-curl -fsSL https://gitee.com/coolxer-studio/zenvis/raw/feature/zenvis-1.0/quick-deploy.sh | bash
+curl -fsSL https://gitee.com/coolxer-studio/zenvis/raw/feature/1.0.0.alpha/quick-deploy.sh | bash
 ```
 
 在已拉取的项目根目录中也可以直接执行：

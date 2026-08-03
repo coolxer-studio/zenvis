@@ -195,6 +195,12 @@ import type {
   TCriteriaList,
   TEntityListResponse,
 } from '@/types/type-retrieval';
+import {
+  isValuelessOperator,
+  valuesAfterOperatorChange,
+  valuesForRequest,
+} from './filter-criterion-values';
+import { advancedSqlValue } from './filter-query';
 
 type EditableCriterion = TCriteriaList & {
   key: number;
@@ -302,8 +308,9 @@ function modelMatchesDraft(value: RetrievalSearchRequest): boolean {
       editableCriterion
       && criterion.attribute === editableCriterion.attribute
       && criterion.operator === editableCriterion.operator
-      && modelValues.length === draftValues.length
-      && modelValues.every((item, valueIndex) => item === draftValues[valueIndex]),
+      && (isValueless(criterion.operator)
+        || (modelValues.length === draftValues.length
+          && modelValues.every((item, valueIndex) => item === draftValues[valueIndex]))),
     );
   });
 }
@@ -318,7 +325,7 @@ function toEditableCriterion(criterion: TCriteriaList): EditableCriterion {
   };
 }
 
-function buildQuery(): RetrievalSearchRequest {
+function buildQuery(normalizeAdvancedSql = false): RetrievalSearchRequest {
   return {
     ...props.modelValue,
     entity: draft.entity,
@@ -329,10 +336,10 @@ function buildQuery(): RetrievalSearchRequest {
         ? draft.criteria_list.map(({ attribute, operator, value_list }) => ({
             attribute,
             operator,
-            value_list: [...(value_list || [])],
+            value_list: valuesForRequest(operator, value_list),
           }))
         : [],
-    sql: draft.type === 'advanced' ? draft.sql.trim() : undefined,
+    sql: advancedSqlValue(draft.type, draft.sql, normalizeAdvancedSql),
   };
 }
 
@@ -386,7 +393,7 @@ function isNumberAttribute(attributeName: string): boolean {
 }
 
 function isValueless(operator: string): boolean {
-  return operator === 'isnull' || operator === 'isnotnull';
+  return isValuelessOperator(operator);
 }
 
 function supportsAutoComplete(criterion: EditableCriterion): boolean {
@@ -428,12 +435,9 @@ function handleAttributeChange(criterion: EditableCriterion) {
 }
 
 function handleOperatorChange(criterion: EditableCriterion) {
-  criterion.value_list = isValueless(criterion.operator)
-    ? []
-    : criterion.operator === 'between'
-      ? ['', '']
-      : [''];
-  criterion.value_text = '';
+  const values = valuesAfterOperatorChange(criterion.operator, criterion);
+  criterion.value_list = values.value_list;
+  criterion.value_text = values.value_text;
   notifyChange();
 }
 
@@ -451,6 +455,7 @@ function syncRangeValue(criterion: EditableCriterion, inputValue: unknown) {
   criterion.value_list = Array.isArray(inputValue)
     ? inputValue.map(value => String(value ?? ''))
     : ['', ''];
+  criterion.value_text = criterion.value_list[0] || '';
   notifyChange();
 }
 
@@ -494,7 +499,7 @@ function emitSearch() {
     ElMessage.warning('请先修复失效项并完善检索配置');
     return;
   }
-  emit('search', buildQuery());
+  emit('search', buildQuery(true));
 }
 
 function emitSave() {
@@ -502,7 +507,7 @@ function emitSave() {
     ElMessage.warning('请先修复失效项并完善检索配置');
     return;
   }
-  emit('save', buildQuery());
+  emit('save', buildQuery(true));
 }
 </script>
 

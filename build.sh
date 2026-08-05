@@ -2,7 +2,8 @@
 
 IMAGE_NAME="crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum"
 IMAGE_TAG="latest"
-DATE_TAG=$(date +%Y%m%d)
+#DATE_TAG=$(date +%Y%m%d)
+DATE_TAG="1.0.0.alpha"
 VECTOR_VERSION="0.55.0"
 VECTOR_BASE_URL="https://packages.timber.io/vector/${VECTOR_VERSION}"
 PUSH_IMAGE="${PUSH_IMAGE:-false}"

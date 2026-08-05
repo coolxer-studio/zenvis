@@ -12,6 +12,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       VECTUM_AUTH_TOKEN: sk-vectum-token
+      ZENVIS_BUSINESS_SERVICE_BASE_URL: ${ZENVIS_BUSINESS_SERVICE_BASE_URL:-http://zenvis-backend:11001}
+      ZENVIS_BUSINESS_SERVICE_INSTANCE_ID: ${ZENVIS_BUSINESS_SERVICE_INSTANCE_ID:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11002/actuator/health"]

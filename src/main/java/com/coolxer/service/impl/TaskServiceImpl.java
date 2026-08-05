@@ -1,21 +1,20 @@
 package com.coolxer.service.impl;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.TaskRepository;
 import com.coolxer.model.Task;
 import com.coolxer.model.dto.TaskDto;
 import com.coolxer.model.vo.TaskVo;
-import com.coolxer.service.VectorService;
 import com.coolxer.service.TaskService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import com.coolxer.service.VectorService;
+import com.coolxer.service.ZenvisBusinessService;
 
 /**
  * 任务服务实现类
@@ -29,10 +28,14 @@ public class TaskServiceImpl implements TaskService {
 
     private final VectorService vectorService;
     private final TaskRepository taskRepository;
+    private final ZenvisBusinessService zenvisBusinessService;
 
-    public TaskServiceImpl(VectorService vectorService, TaskRepository taskRepository) {
+    public TaskServiceImpl(VectorService vectorService,
+                           TaskRepository taskRepository,
+                           ZenvisBusinessService zenvisBusinessService) {
         this.vectorService = vectorService;
         this.taskRepository = taskRepository;
+        this.zenvisBusinessService = zenvisBusinessService;
     }
 
     /**
@@ -57,12 +60,14 @@ public class TaskServiceImpl implements TaskService {
         task.updateFromDto(taskDto);
         Task taskSaved = taskRepository.save(task);
         
-        String errorInfo = vectorService.createProcess(String.valueOf(task.getId()), task.getConfig(), task.getLuaFiles());
+        String errorInfo = vectorService.createProcess(
+                String.valueOf(task.getId()), task.getConfig(), task.getLuaFiles());
         if (errorInfo != null) {
             taskRepository.delete(task);
             throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), errorInfo);
         }
-        
+
+        zenvisBusinessService.reportTaskCreated(taskSaved);
         return new TaskVo(taskSaved, "created");
     }
 
@@ -79,12 +84,14 @@ public class TaskServiceImpl implements TaskService {
         
         task.updateFromDto(taskDto);
         
-        String errorInfo = vectorService.updateProcess(String.valueOf(task.getId()), task.getConfig(), task.getLuaFiles());
+        String errorInfo = vectorService.updateProcess(
+                String.valueOf(task.getId()), task.getConfig(), task.getLuaFiles());
         if (errorInfo != null) {
             throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), errorInfo);
         }
         
-        taskRepository.save(task);
+        Task taskSaved = taskRepository.save(task);
+        zenvisBusinessService.reportTaskUpdated(taskSaved);
         return true;
     }
 
@@ -97,6 +104,7 @@ public class TaskServiceImpl implements TaskService {
         boolean deleted = vectorService.deleteProcess(String.valueOf(id));
         if (deleted) {
             taskRepository.deleteById(id);
+            zenvisBusinessService.reportTaskDeleted(id);
         }
     }
 
@@ -142,6 +150,7 @@ public class TaskServiceImpl implements TaskService {
             if (pid > 0) {
                 task.setPid((int) pid);
                 taskRepository.save(task);
+                zenvisBusinessService.reportTaskStarted(task);
                 return true;
             }
             return false;
@@ -150,6 +159,7 @@ public class TaskServiceImpl implements TaskService {
             if (stopped) {
                 task.setPid(0);
                 taskRepository.save(task);
+                zenvisBusinessService.reportTaskStopped(task);
                 return true;
             }
             return false;

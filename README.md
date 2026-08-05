@@ -213,6 +213,23 @@ docker run -d -p 11002:11002 -e VECTUM_AUTH_TOKEN='change-me' crpi-4pdi7kz96g4v0
 | `task.file` | `/tasks.json` | 任务数据存储文件 |
 | `spring.task.execution.pool.core-size` | `10` | 异步线程池核心大小 |
 | `spring.task.execution.pool.max-size` | `20` | 异步线程池最大大小 |
+| `ZENVIS_BUSINESS_SERVICE_ENABLED` | `true` | 是否启用 Zenvis 服务注册、心跳与事件上报 |
+| `ZENVIS_BUSINESS_SERVICE_BASE_URL` | 开发环境 `http://localhost:11001` | Zenvis 后端根地址，不包含 `/api/v1` |
+| `ZENVIS_BUSINESS_SERVICE_INSTANCE_ID` | 自动推导 | 实例唯一标识，生产多实例部署时建议显式设置 |
+
+### Zenvis 业务服务对接
+
+Vectum 通过 `zenvis-business-service-spring-boot-starter` 自动向 Zenvis 注册实例、发送心跳，并在应用正常关闭时上报停止状态。任务创建、更新、删除、启动和停止也会作为异步业务事件上报；Zenvis 暂时不可用不会影响 Vectum 的任务操作。
+
+构建前请确认 `com.coolxer.zenvis:zenvis-business-service-spring-boot-starter:0.1.0-SNAPSHOT` 已发布到 Maven 仓库，或已安装到本机 Maven 仓库。
+
+生产环境至少需要配置 Zenvis 后端根地址：
+
+```bash
+export ZENVIS_BUSINESS_SERVICE_BASE_URL=http://zenvis-backend:11001
+```
+
+多个 Vectum 实例并行部署时，应为每个实例配置不同的 `ZENVIS_BUSINESS_SERVICE_INSTANCE_ID`。如需关闭对接，可设置 `ZENVIS_BUSINESS_SERVICE_ENABLED=false`。
 
 ### Vector 配置说明
 

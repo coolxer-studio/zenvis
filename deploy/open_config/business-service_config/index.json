@@ -48,8 +48,11 @@
             "interval": 10000,
             "silentPolling": true,
             "defaultParams": { "page": 1, "perPage": 20 },
+            "pageField": "page",
+            "perPageField": "perPage",
             "perPage": 20,
             "perPageAvailable": [10, 20, 50, 100],
+            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
             "filter": {
               "title": "实例检索",
               "body": [
@@ -159,6 +162,11 @@
                               "type": "crud",
                               "api": "/zenvis/api/v1/system/business-services/events?serviceCode=${service_code}&instanceId=${instance_id}",
                               "defaultParams": { "page": 1, "perPage": 20 },
+                              "pageField": "page",
+                              "perPageField": "perPage",
+                              "perPage": 20,
+                              "perPageAvailable": [10, 20, 50, 100],
+                              "footerToolbar": ["statistics", "switch-per-page", "pagination"],
                               "columns": [
                                 { "name": "occurred_time", "label": "发生时间", "type": "datetime" },
                                 { "name": "severity", "label": "级别", "type": "text" },
@@ -184,8 +192,11 @@
             "type": "crud",
             "api": "/zenvis/api/v1/system/business-services/events",
             "defaultParams": { "page": 1, "perPage": 20 },
+            "pageField": "page",
+            "perPageField": "perPage",
             "perPage": 20,
             "perPageAvailable": [10, 20, 50, 100],
+            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
             "filter": {
               "title": "事件检索",
               "body": [

@@ -89,8 +89,14 @@
 			"mode": "cards",
 			"columnsCount": 4,
 			"defaultParams": {
+				"page": 1,
 				"perPage": 12
 			},
+			"pageField": "page",
+			"perPageField": "perPage",
+			"perPage": 12,
+			"perPageAvailable": [12, 24, 48, 96],
+			"footerToolbar": ["statistics", "switch-per-page", "pagination"],
 			"filter": {
 				"title": "搜索",
 				"body": [

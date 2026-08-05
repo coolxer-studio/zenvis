@@ -26,6 +26,11 @@
               "page": 1,
               "perPage": 10
             },
+            "pageField": "page",
+            "perPageField": "perPage",
+            "perPage": 10,
+            "perPageAvailable": [10, 20, 50, 100],
+            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
             "filter": {
               "title": "搜索",
               "body": [
@@ -183,6 +188,11 @@
               "perPage": 10,
               "topK": 5
             },
+            "pageField": "page",
+            "perPageField": "perPage",
+            "perPage": 10,
+            "perPageAvailable": [10, 20, 50, 100],
+            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
             "filter": {
               "title": "搜索",
               "body": [

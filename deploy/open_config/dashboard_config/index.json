@@ -74,6 +74,15 @@
     {
       "type": "crud",
       "api": "/zenvis/api/v1/system/dashboard/list",
+      "defaultParams": {
+        "page": 1,
+        "perPage": 10
+      },
+      "pageField": "page",
+      "perPageField": "perPage",
+      "perPage": 10,
+      "perPageAvailable": [10, 20, 50, 100],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
       "autoGenerateFilter": true,
       "columns": [
         {

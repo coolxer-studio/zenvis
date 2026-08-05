@@ -2,7 +2,7 @@
 
 面向 Spring Boot 3.x、JDK 17 的 Zenvis 业务服务心跳与事件上报组件。
 
-ZenVis 整体接入、服务端配置和 REST 示例见[业务服务接入](../doc/05-业务服务接入/README.md)。本 README 保留 Starter 的最小独立使用说明。
+ZenVis 整体接入、服务端配置和 REST 示例见[业务服务接入](../../doc/05-业务服务接入/README.md)。本 README 保留 Starter 的最小独立使用说明。
 
 ## 使用
 

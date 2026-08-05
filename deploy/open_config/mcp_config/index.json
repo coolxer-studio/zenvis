@@ -133,6 +133,11 @@
             "page": 1,
             "perPage": 20
           },
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 20,
+          "perPageAvailable": [10, 20, 50, 100],
+          "footerToolbar": ["statistics", "switch-per-page", "pagination"],
           "primaryField": "tool_key",
           "multiple": true,
           "keepItemSelectionOnPageChange": true,
@@ -318,6 +323,11 @@
           "interval": 3000,
           "silentPolling": true,
           "defaultParams": { "page": 1, "perPage": 20 },
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 20,
+          "perPageAvailable": [10, 20, 50, 100],
+          "footerToolbar": ["statistics", "switch-per-page", "pagination"],
           "placeholder": "暂无待审批的 MCP 工具调用",
           "columns": [
             { "name": "request_id", "label": "请求 ID", "type": "text" },
@@ -511,6 +521,11 @@
         "page": 1,
         "perPage": 10
       },
+      "pageField": "page",
+      "perPageField": "perPage",
+      "perPage": 10,
+      "perPageAvailable": [10, 20, 50, 100],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
       "filter": {
         "title": "搜索",
         "body": [

@@ -20,11 +20,11 @@
 
 | 目录 | 包名 | 当前版本 | 作用 |
 | --- | --- | --- | --- |
-| `plugin-asset` | `com.coolxer.plugin.asset` | `1.2.1` | 资产管理 |
+| `plugin-asset` | `com.coolxer.plugin.asset` | `1.3.1` | 资产管理 |
 | `plugin-integrated` | `com.coolxer.plugin.integrated` | `1.0.0` | 探针集成 |
-| `plugin-operation` | `com.coolxer.plugin.operation` | `1.1.1` | 运营分析 |
+| `plugin-operation` | `com.coolxer.plugin.operation` | `1.2.1` | 运营分析 |
 | `plugin-probe` | `com.coolxer.plugin.probe` | `2.0.1` | 探针数据采集 |
-| `plugin-risk` | `com.coolxer.plugin.risk` | `1.1.1` | 风险监控 |
+| `plugin-risk` | `com.coolxer.plugin.risk` | `1.2.1` | 风险监控 |
 | `plugin-user-event` | `com.coolxer.plugin.user.event` | `1.0.4` | 用户事件分析与测试示例 |
 
 修改发布内容时同步更新对应插件版本和文档，不要只修改根 README 中的版本表。

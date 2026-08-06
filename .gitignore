@@ -8,6 +8,7 @@
 /zenvis-frontend/
 /zenvis-plugin/
 /zenvis-plugin-community/
+/zenvis-service/
 
 # Local deployment state and secrets
 /deploy/.env

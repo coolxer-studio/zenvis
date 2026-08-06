@@ -12,7 +12,7 @@ ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数�
 | `zenvis-frontend` | 管理控制台、检索、看板、低代码页面与 DIH 工作台 | Vue 3.5、TypeScript 6、Vite 8、Element Plus 2.14 |
 | `zenvis-plugin` | 可安装插件、插件 API 扩展与打包工具 | JSON/YAML、Java、HTML、tar.gz |
 | `zenvis-plugin-community` | 社区与客户场景插件集合 | JSON/YAML、Java、AMIS、HTML |
-| `zenvis-business-service-spring-boot-starter` | 业务应用服务心跳和事件上报组件 | Spring Boot 3.x、Java 17 |
+| `zenvis-dependencies` | Starter、SDK、客户端库等可复用依赖，当前包含业务服务接入 Starter | Spring Boot 3.x、Java 17 |
 | `agent-skills` | ZenVis 插件创建与校验技能 | Codex Skill |
 
 各子项目保留自己的 `README.md`，用于独立构建和维护。跨模块的产品、架构、部署、使用与开发说明统一维护在根目录的 [ZenVis 文档中心](doc/README.md)。

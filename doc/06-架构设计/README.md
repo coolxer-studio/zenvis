@@ -88,7 +88,7 @@ ZenVis Backend（Spring Boot）     │
 | 前端路由、页面与请求层 | `zenvis-frontend/src` |
 | 前端依赖和构建命令 | `zenvis-frontend/package.json` |
 | 插件包契约 | `zenvis-plugin`、`zenvis-plugin-community` |
-| 业务服务接入 | `zenvis-business-service-spring-boot-starter` |
+| 业务服务接入 | `zenvis-dependencies/zenvis-business-service-spring-boot-starter` |
 | 研发侧插件生成流程 | `agent-skills/create-zenvis-plugin` |
 | 服务拓扑与运行配置 | `deploy/docker-compose.yml`、`deploy/open_config` |
 

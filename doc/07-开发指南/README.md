@@ -43,7 +43,8 @@ zenvis/                                      # 根工作树
 ├── agent-skills/
 ├── deploy/
 ├── doc/
-├── zenvis-business-service-spring-boot-starter/
+├── zenvis-dependencies/
+│   └── zenvis-business-service-spring-boot-starter/
 ├── zenvis-backend/                          # 独立 Git 工作树
 ├── zenvis-frontend/                         # 独立 Git 工作树
 ├── zenvis-plugin/                           # 独立 Git 工作树

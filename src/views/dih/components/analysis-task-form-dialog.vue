@@ -50,7 +50,14 @@
         </el-col>
       </el-row>
 
-      <el-form-item label="计划执行时间" prop="scheduledTime">
+      <el-form-item label="执行方式" prop="scheduleType">
+        <el-radio-group v-model="form.scheduleType">
+          <el-radio value="ONCE">单次执行</el-radio>
+          <el-radio value="CRON">周期执行</el-radio>
+        </el-radio-group>
+      </el-form-item>
+
+      <el-form-item v-if="form.scheduleType === 'ONCE'" label="计划执行时间" prop="scheduledTime">
         <el-date-picker
           v-model="form.scheduledTime"
           type="datetime"
@@ -60,6 +67,28 @@
           clearable
           class="full-width"
         />
+      </el-form-item>
+
+      <el-form-item v-else label="执行周期" prop="cronExpression">
+        <el-select
+          v-model="form.cronExpression"
+          filterable
+          allow-create
+          default-first-option
+          placeholder="选择常用周期或输入 6 段 Cron 表达式"
+          class="full-width"
+        >
+          <el-option
+            v-for="item in cronOptions"
+            :key="item.value"
+            :label="`${item.label}（${item.value}）`"
+            :value="item.value"
+          />
+        </el-select>
+        <div class="form-help">
+          使用 Spring Cron 格式：秒 分 时 日 月
+          周。创建后将在下一次匹配时间执行，成功或失败后继续下一周期。
+        </div>
       </el-form-item>
 
       <el-form-item label="MCP审批模式" prop="approvalMode">
@@ -159,7 +188,9 @@ const emptyForm = (): TAnalysisTaskForm => ({
   model: 'auto',
   prompt: '',
   priority: 0,
+  scheduleType: 'ONCE',
   scheduledTime: '',
+  cronExpression: '',
   approvalMode: 'MANUAL',
   skillIds: [],
 });
@@ -168,10 +199,32 @@ const formRef = ref<FormInstance>();
 const form = reactive<TAnalysisTaskForm>(emptyForm());
 const submitting = ref(false);
 
+const cronOptions = [
+  { label: '每10分钟', value: '0 */10 * * * *' },
+  { label: '每小时整点', value: '0 0 * * * *' },
+  { label: '每天09:00', value: '0 0 9 * * *' },
+  { label: '每周一09:00', value: '0 0 9 * * MON' },
+  { label: '每月1日09:00', value: '0 0 9 1 * *' },
+];
+
 const rules: FormRules<TAnalysisTaskForm> = {
   name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   model: [{ required: true, message: '请选择模型', trigger: 'change' }],
   approvalMode: [{ required: true, message: '请选择MCP审批模式', trigger: 'change' }],
+  cronExpression: [
+    {
+      validator: (_rule, value, callback) => {
+        if (form.scheduleType !== 'CRON') return callback();
+        const fields = String(value || '')
+          .trim()
+          .split(/\s+/);
+        return fields.length === 6
+          ? callback()
+          : callback(new Error('请输入包含秒的 6 段 Cron 表达式'));
+      },
+      trigger: ['blur', 'change'],
+    },
+  ],
   prompt: [{ required: true, message: '请输入分析提示词', trigger: 'blur' }],
 };
 
@@ -192,7 +245,9 @@ const fillForm = () => {
           model: task.model || 'auto',
           prompt: task.prompt,
           priority: task.priority,
+          scheduleType: task.cronExpression ? 'CRON' : 'ONCE',
           scheduledTime: task.scheduledTime,
+          cronExpression: task.cronExpression,
           approvalMode: task.approvalMode,
           skillIds: [...task.skillIds],
         }

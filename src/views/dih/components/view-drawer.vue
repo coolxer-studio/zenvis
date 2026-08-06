@@ -178,10 +178,13 @@
               </template>
             </el-table-column>
             <el-table-column prop="runCount" label="执行次数" width="88" align="center" />
-            <el-table-column label="计划时间" width="170">
-              <template #default="{ row }">{{
-                formatTime(row.scheduledTime, '立即执行')
-              }}</template>
+            <el-table-column label="执行计划" width="190">
+              <template #default="{ row }">
+                <div>{{ formatTime(row.scheduledTime, '立即执行') }}</div>
+                <el-tag v-if="row.cronExpression" size="small" type="info">
+                  {{ row.cronExpression }}
+                </el-tag>
+              </template>
             </el-table-column>
             <el-table-column label="更新时间" width="170">
               <template #default="{ row }">{{ formatTime(row.updateTime) }}</template>

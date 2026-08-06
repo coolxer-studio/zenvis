@@ -48,9 +48,16 @@ const normalizeTask = (data: RawData): TAnalysisTask => ({
   approvalMode: (textValue(data, 'approval_mode', 'approvalMode') ||
     'MANUAL') as TAnalysisTask['approvalMode'],
   executionId: textValue(data, 'execution_id', 'executionId'),
+  lastExecutionId: textValue(data, 'last_execution_id', 'lastExecutionId'),
+  lastRunStatus: textValue(
+    data,
+    'last_run_status',
+    'lastRunStatus',
+  ) as TAnalysisTask['lastRunStatus'],
   skillIds: ((data.skill_ids ?? data.skillIds ?? []) as unknown[]).map(String),
   pendingApprovalCount: numberValue(data, 'pending_approval_count', 'pendingApprovalCount'),
   scheduledTime: textValue(data, 'scheduled_time', 'scheduledTime'),
+  cronExpression: textValue(data, 'cron_expression', 'cronExpression'),
   startTime: textValue(data, 'start_time', 'startTime'),
   finishTime: textValue(data, 'finish_time', 'finishTime'),
   runCount: numberValue(data, 'run_count', 'runCount'),
@@ -69,11 +76,8 @@ const normalizeInvocation = (data: RawData): TMcpInvocation => ({
   approvalScope: textValue(data, 'approval_scope', 'approvalScope'),
   status: textValue(data, 'status'),
   arguments:
-    textValue(data, 'arguments') ||
-    textValue(data, 'arguments_summary', 'argumentsSummary'),
-  result:
-    textValue(data, 'result') ||
-    textValue(data, 'result_summary', 'resultSummary'),
+    textValue(data, 'arguments') || textValue(data, 'arguments_summary', 'argumentsSummary'),
+  result: textValue(data, 'result') || textValue(data, 'result_summary', 'resultSummary'),
   resultLength:
     data.result_length == null && data.resultLength == null
       ? undefined
@@ -89,7 +93,8 @@ const taskPayload = (data: TAnalysisTaskForm) => ({
   model: data.model || 'auto',
   prompt: data.prompt.trim(),
   priority: data.priority ?? 0,
-  scheduled_time: data.scheduledTime || null,
+  scheduled_time: data.scheduleType === 'ONCE' ? data.scheduledTime || null : null,
+  cron_expression: data.scheduleType === 'CRON' ? data.cronExpression.trim() || null : null,
   approval_mode: data.approvalMode,
   skill_ids: data.skillIds,
 });

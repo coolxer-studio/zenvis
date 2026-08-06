@@ -11,6 +11,8 @@ export type TAnalysisTaskStatus =
 
 export type TAnalysisTaskApprovalMode = 'AUTO' | 'MANUAL';
 
+export type TAnalysisTaskScheduleType = 'ONCE' | 'CRON';
+
 export type TAnalysisTask = {
   id: number;
   name: string;
@@ -25,9 +27,12 @@ export type TAnalysisTask = {
   priority: number;
   approvalMode: TAnalysisTaskApprovalMode;
   executionId: string;
+  lastExecutionId: string;
+  lastRunStatus: TAnalysisTaskStatus | '';
   skillIds: string[];
   pendingApprovalCount: number;
   scheduledTime: string;
+  cronExpression: string;
   startTime: string;
   finishTime: string;
   runCount: number;
@@ -42,7 +47,9 @@ export type TAnalysisTaskForm = {
   model: string;
   prompt: string;
   priority: number;
+  scheduleType: TAnalysisTaskScheduleType;
   scheduledTime: string;
+  cronExpression: string;
   approvalMode: TAnalysisTaskApprovalMode;
   skillIds: string[];
 };

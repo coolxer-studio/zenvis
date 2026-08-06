@@ -30,12 +30,22 @@
           <el-descriptions-item label="待审批">{{
             task.pendingApprovalCount
           }}</el-descriptions-item>
-          <el-descriptions-item label="Execution ID" :span="2">
+          <el-descriptions-item label="当前 Execution ID" :span="2">
             <span class="mono-text">{{ task.executionId || '-' }}</span>
           </el-descriptions-item>
+          <el-descriptions-item label="上次 Execution ID" :span="2">
+            <span class="mono-text">{{ task.lastExecutionId || '-' }}</span>
+          </el-descriptions-item>
           <el-descriptions-item label="执行次数">{{ task.runCount }}</el-descriptions-item>
-          <el-descriptions-item label="计划时间">
+          <el-descriptions-item label="执行方式">
+            {{ task.cronExpression ? '周期执行' : '单次执行' }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="task.cronExpression ? '下次执行' : '计划时间'">
             {{ formatTime(task.scheduledTime, '立即执行') }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Cron">{{ task.cronExpression || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="上次执行状态">
+            {{ task.lastRunStatus ? statusLabel(task.lastRunStatus) : '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="开始时间">
             {{ formatTime(task.startTime) }}
@@ -96,9 +106,7 @@
                 <template #default="{ row }">
                   <el-popover placement="left" :width="520" trigger="click">
                     <template #reference>
-                      <el-button link type="primary" :disabled="!row.result"
-                        >查看结果</el-button
-                      >
+                      <el-button link type="primary" :disabled="!row.result">查看结果</el-button>
                     </template>
                     <pre class="json-content">{{ formatJson(row.result) }}</pre>
                   </el-popover>
@@ -178,7 +186,9 @@ const auditLoading = ref(false);
 const resultMessage = computed<ChatMessage | null>(() => {
   if (!task.value?.result) return null;
   return {
-    id: `analysis-task-${task.value.id}-${task.value.executionId || 'result'}`,
+    id: `analysis-task-${task.value.id}-${
+      task.value.lastExecutionId || task.value.executionId || 'result'
+    }`,
     sender: 'ai',
     content: task.value.result,
     time: task.value.finishTime || task.value.updateTime,
@@ -245,7 +255,7 @@ const loadAudit = async () => {
   try {
     const response = await AnalysisTaskService.getInvocations(
       task.value.id,
-      task.value.executionId,
+      auditExecutionId(task.value),
       auditPage.value,
       auditPageSize.value,
     );
@@ -256,6 +266,11 @@ const loadAudit = async () => {
   } finally {
     auditLoading.value = false;
   }
+};
+
+const auditExecutionId = (value: TAnalysisTask) => {
+  const active = ['RUNNING', 'WAITING_APPROVAL', 'CANCELING'].includes(value.status);
+  return active ? value.executionId : value.lastExecutionId || value.executionId;
 };
 
 const handleAuditSizeChange = () => {

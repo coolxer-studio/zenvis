@@ -19,6 +19,7 @@ import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.dao.mysql.repository.PluginRepository;
 import com.coolxer.dao.mysql.repository.RolePermissionRepository;
 import com.coolxer.model.dih.dto.McpServerDto;
+import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.base.vo.FileTreeNodeVo;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.retrieval.meta.MetaData;
@@ -92,6 +93,7 @@ public class PluginServiceImpl implements PluginService {
     private static final Pattern URI_SCHEME_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
     private static final int LOG_QUEUE_CAPACITY = 512;
     private static final long LOG_POLL_TIMEOUT_SECONDS = 2L;
+    private static final int MCP_CONNECTION_ERROR_LOG_MAX_CHARS = 500;
 
     @Autowired
     private PluginRepository pluginRepository;
@@ -1034,7 +1036,9 @@ public class PluginServiceImpl implements PluginService {
             reconcilePluginDashboards(id, plugin.getPackageName(), activePack);
 
             writeLog(id, "7 更新MCP服务配置......");
-            reconcilePluginMcpServers(plugin.getPackageName(), snapshot, activePack);
+            List<String> disconnectedMcpCodes = reconcilePluginMcpServers(
+                    id, plugin.getPackageName(), snapshot, activePack);
+            addMcpConnectionWarning(warnings, disconnectedMcpCodes);
 
             writeLog(id, "8 更新插件Skill和RAG......");
             updatePluginSkillAndRag(id, plugin.getPackageName(), snapshot, activePack, warnings);
@@ -1288,9 +1292,10 @@ public class PluginServiceImpl implements PluginService {
         }
     }
 
-    private void reconcilePluginMcpServers(String packageName,
-                                           UpgradeSnapshot snapshot,
-                                           PluginPackTool newPack) {
+    private List<String> reconcilePluginMcpServers(Long id,
+                                                   String packageName,
+                                                   UpgradeSnapshot snapshot,
+                                                   PluginPackTool newPack) {
         PluginPackTool oldPack = new PluginPackTool()
                 .buildFromDirectory(snapshotRoot(packageName, snapshot).resolve("installed")).init();
         Map<String, McpServerDto> oldDefaults = readMcpDefinitions(oldPack).stream()
@@ -1298,13 +1303,13 @@ public class PluginServiceImpl implements PluginService {
                 .collect(java.util.stream.Collectors.toMap(McpServerDto::getCode, item -> item));
         List<McpServerDto> newDefinitions = readMcpDefinitions(newPack);
         Set<String> nextCodes = new HashSet<>();
+        List<McpServerDto> preparedDefinitions = new ArrayList<>();
         for (McpServerDto next : newDefinitions) {
             next.setCode(normalizeMcpCode(next.getCode()));
-            next.setSource(packageName);
             nextCodes.add(next.getCode());
             McpServerConfig live = mcpServerConfigRepository.findByCode(next.getCode()).orElse(null);
             if (live == null) {
-                mcpClientService.create(next);
+                preparedDefinitions.add(next);
                 continue;
             }
             McpServerDto oldDefault = oldDefaults.get(next.getCode());
@@ -1322,15 +1327,15 @@ public class PluginServiceImpl implements PluginService {
             next.setConnectTimeoutSeconds(preserveRuntimeValue(
                     oldDefault == null ? null : oldDefault.getConnectTimeoutSeconds(),
                     live.getConnectTimeoutSeconds(), next.getConnectTimeoutSeconds(), oldDefault == null));
-            if (!mcpClientService.update(live.getId(), next)) {
-                throw new IllegalStateException("更新MCP服务失败: " + next.getCode());
-            }
+            preparedDefinitions.add(next);
         }
+        List<String> disconnectedCodes = registerPluginMcpServers(id, packageName, preparedDefinitions);
         for (McpServerConfig existing : new ArrayList<>(mcpServerConfigRepository.findBySource(packageName))) {
             if (!nextCodes.contains(existing.getCode())) {
                 mcpClientService.delete(existing.getId());
             }
         }
+        return disconnectedCodes;
     }
 
     private <T> T preserveRuntimeValue(T oldDefault, T liveValue, T newDefault, boolean unknownOldDefault) {
@@ -1745,7 +1750,8 @@ public class PluginServiceImpl implements PluginService {
 
             writeLog(id, "8 存储MCP服务配置......");
             compensationStack.add("删除MCP服务配置", () -> cleanupPluginMcpServers(packageName));
-            createPluginMcpServers(id, packageName, pluginPackTool);
+            List<String> disconnectedMcpCodes = createPluginMcpServers(id, packageName, pluginPackTool);
+            addMcpConnectionWarning(warnings, disconnectedMcpCodes);
 
             writeLog(id, "9 文档加载到RAG......");
             boolean ragLoaded = isPluginRagAvailable(id, packageName, "安装")
@@ -2551,36 +2557,74 @@ public class PluginServiceImpl implements PluginService {
         deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
     }
 
-    private void createPluginMcpServers(Long id, String packageName, PluginPackTool pluginPackTool) {
+    private List<String> createPluginMcpServers(Long id, String packageName, PluginPackTool pluginPackTool) {
         String mcpConfig = pluginPackTool.readMcpConfigFile();
         List<McpServerDto> mcpServerDtoList = JacksonUtil.toList(mcpConfig, new TypeReference<List<McpServerDto>>() {
         });
         if (mcpServerDtoList.isEmpty()) {
             writeLog(id, "未发现MCP服务配置，跳过");
-            return;
+            return List.of();
         }
         try {
-            for (McpServerDto mcpServerDto : mcpServerDtoList) {
-                if (mcpServerDto == null) {
-                    throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
-                }
-                String code = normalizeMcpCode(mcpServerDto.getCode());
-                mcpServerDto.setCode(code);
-                mcpServerDto.setSource(packageName);
-                Optional<McpServerConfig> existing = mcpServerConfigRepository.findByCode(code);
-                if (existing.isPresent() && !Objects.equals(packageName, existing.get().getSource())) {
-                    throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "MCP服务标识已被其他来源占用: " + code);
-                }
-                if (existing.isPresent()) {
-                    mcpClientService.update(existing.get().getId(), mcpServerDto);
-                } else {
-                    mcpClientService.create(mcpServerDto);
-                }
-            }
+            return registerPluginMcpServers(id, packageName, mcpServerDtoList);
         } catch (Exception e) {
             cleanupPluginMcpServers(packageName);
             throw e;
         }
+    }
+
+    private List<String> registerPluginMcpServers(Long id,
+                                                  String packageName,
+                                                  List<McpServerDto> definitions) {
+        Set<String> disconnectedCodes = new LinkedHashSet<>();
+        for (McpServerDto definition : definitions) {
+            if (definition == null) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
+            }
+            String code = normalizeMcpCode(definition.getCode());
+            definition.setCode(code);
+            definition.setSource(packageName);
+            Optional<McpServerConfig> existing = mcpServerConfigRepository.findByCode(code);
+            if (existing.isPresent() && !Objects.equals(packageName, existing.get().getSource())) {
+                throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(),
+                        "MCP服务标识已被其他来源占用: " + code);
+            }
+
+            McpServerVo connectionState;
+            if (existing.isPresent()) {
+                Integer serverId = existing.get().getId();
+                if (!Boolean.TRUE.equals(mcpClientService.update(serverId, definition))) {
+                    throw new IllegalStateException("更新MCP服务失败: " + code);
+                }
+                connectionState = mcpClientService.info(serverId);
+            } else {
+                connectionState = mcpClientService.create(definition);
+            }
+            if (connectionState == null) {
+                throw new IllegalStateException("注册MCP服务未返回状态: " + code);
+            }
+            if (Boolean.TRUE.equals(connectionState.getEnabled())
+                    && !Boolean.TRUE.equals(connectionState.getConnected())) {
+                disconnectedCodes.add(code);
+                String error = summarizeMcpConnectionError(connectionState.getLastError());
+                writeLog(id, "MCP服务连接失败，已保留配置并继续：" + code + "（" + error + "）");
+            }
+        }
+        return new ArrayList<>(disconnectedCodes);
+    }
+
+    private static void addMcpConnectionWarning(List<String> warnings, List<String> disconnectedCodes) {
+        if (disconnectedCodes != null && !disconnectedCodes.isEmpty()) {
+            warnings.add("MCP服务连接失败：" + String.join("、", disconnectedCodes));
+        }
+    }
+
+    private static String summarizeMcpConnectionError(String error) {
+        String normalized = StringUtils.normalizeSpace(error);
+        if (StringUtils.isBlank(normalized)) {
+            return "未返回错误详情";
+        }
+        return StringUtils.left(normalized, MCP_CONNECTION_ERROR_LOG_MAX_CHARS);
     }
 
     private void exportPluginMcpServers(String packageName, PluginPackTool pluginPackTool) {

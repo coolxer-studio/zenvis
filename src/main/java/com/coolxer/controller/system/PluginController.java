@@ -12,6 +12,7 @@ import com.coolxer.model.system.dto.PluginUpgradeDto;
 import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.service.system.PluginService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -23,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -33,6 +35,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/system/plugin")
 public class PluginController extends BaseController {
+
+    private static final long PLUGIN_LOG_STREAM_TIMEOUT_MILLIS = Duration.ofMinutes(30).toMillis();
 
     @Autowired
     private PluginService pluginService;
@@ -169,8 +173,10 @@ public class PluginController extends BaseController {
     }
 
     @GetMapping("/{id}/logs")
-    public ResponseEntity<StreamingResponseBody> handleLog(@PathVariable("id") Long id) {
+    public ResponseEntity<StreamingResponseBody> handleLog(@PathVariable("id") Long id,
+                                                           HttpServletRequest request) {
         StreamingResponseBody stream = out -> {
+            request.getAsyncContext().setTimeout(PLUGIN_LOG_STREAM_TIMEOUT_MILLIS);
             while (true) {
                 String logInfo = pluginService.getLogs(id);
                 if (logInfo != null) {

@@ -7,7 +7,10 @@ import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.dao.mysql.entity.Dashboard;
+import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.dao.mysql.entity.Menu;
+import com.coolxer.model.dih.dto.McpServerDto;
+import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.system.dto.DashboardDto;
 import com.coolxer.model.system.dto.MenuDto;
 import com.coolxer.model.retrieval.meta.DataAttribute;
@@ -20,6 +23,7 @@ import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.dao.mysql.repository.PluginRepository;
 import com.coolxer.dao.mysql.repository.RolePermissionRepository;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.rag.VectorStoreInitializerService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
@@ -239,6 +243,138 @@ class PluginServiceImplTest {
         String code = ReflectionTestUtils.invokeMethod(service, "normalizeMcpCode", "risk system");
 
         assertThat(code).isEqualTo("risk_system");
+    }
+
+    @Test
+    void pluginMcpRegistrationKeepsDisconnectedEnabledServicesAndWarns() {
+        PluginServiceImpl service = newService();
+        McpServerConfigRepository repository = mock(McpServerConfigRepository.class);
+        McpClientService mcpClientService = mock(McpClientService.class);
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", repository);
+        ReflectionTestUtils.setField(service, "mcpClientService", mcpClientService);
+        when(repository.findByCode(anyString())).thenReturn(Optional.empty());
+
+        McpServerDto disconnected = mcpDefinition("offline", true);
+        McpServerDto secondDisconnected = mcpDefinition("offline-two", true);
+        McpServerDto disabled = mcpDefinition("disabled", false);
+        McpServerDto connected = mcpDefinition("connected", true);
+        String longError = "SSE\nstream closed " + "x".repeat(600);
+        when(mcpClientService.create(disconnected))
+                .thenReturn(mcpState("offline", true, false, longError));
+        when(mcpClientService.create(secondDisconnected))
+                .thenReturn(mcpState("offline-two", true, false, "connection refused"));
+        when(mcpClientService.create(disabled))
+                .thenReturn(mcpState("disabled", false, false, "MCP服务未启用"));
+        when(mcpClientService.create(connected))
+                .thenReturn(mcpState("connected", true, true, null));
+
+        List<String> disconnectedCodes = ReflectionTestUtils.invokeMethod(
+                service,
+                "registerPluginMcpServers",
+                46L,
+                "com.acme.demo",
+                List.of(disconnected, secondDisconnected, disabled, connected)
+        );
+        List<String> warnings = new ArrayList<>();
+        ReflectionTestUtils.invokeMethod(service, "addMcpConnectionWarning", warnings, disconnectedCodes);
+
+        assertThat(disconnectedCodes).containsExactly("offline", "offline-two");
+        assertThat(warnings).containsExactly("MCP服务连接失败：offline、offline-two");
+        String firstInstallLog = service.getLogs(46L);
+        assertThat(firstInstallLog)
+                .contains("MCP服务连接失败，已保留配置并继续：offline")
+                .contains("SSE stream closed")
+                .doesNotContain("\n");
+        assertThat(firstInstallLog.length()).isLessThan(600);
+        assertThat(service.getLogs(46L))
+                .contains("MCP服务连接失败，已保留配置并继续：offline-two")
+                .contains("connection refused");
+        assertThat(disconnected.getSource()).isEqualTo("com.acme.demo");
+    }
+
+    @Test
+    void pluginMcpRegistrationReadsUpdatedConnectionState() {
+        PluginServiceImpl service = newService();
+        McpServerConfigRepository repository = mock(McpServerConfigRepository.class);
+        McpClientService mcpClientService = mock(McpClientService.class);
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", repository);
+        ReflectionTestUtils.setField(service, "mcpClientService", mcpClientService);
+        McpServerConfig existing = new McpServerConfig()
+                .setCode("existing")
+                .setSource("com.acme.demo");
+        existing.setId(52);
+        McpServerDto definition = mcpDefinition("existing", true);
+        when(repository.findByCode("existing")).thenReturn(Optional.of(existing));
+        when(mcpClientService.update(52, definition)).thenReturn(true);
+        when(mcpClientService.info(52))
+                .thenReturn(mcpState("existing", true, false, "connection refused"));
+
+        List<String> disconnectedCodes = ReflectionTestUtils.invokeMethod(
+                service,
+                "registerPluginMcpServers",
+                47L,
+                "com.acme.demo",
+                List.of(definition)
+        );
+
+        assertThat(disconnectedCodes).containsExactly("existing");
+        verify(mcpClientService).update(52, definition);
+        verify(mcpClientService).info(52);
+    }
+
+    @Test
+    void pluginMcpRegistrationStillRejectsConfigurationConflictsAndUpdateFailures() {
+        PluginServiceImpl service = newService();
+        McpServerConfigRepository repository = mock(McpServerConfigRepository.class);
+        McpClientService mcpClientService = mock(McpClientService.class);
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", repository);
+        ReflectionTestUtils.setField(service, "mcpClientService", mcpClientService);
+        McpServerConfig conflicting = new McpServerConfig()
+                .setCode("conflict")
+                .setSource("another.plugin");
+        conflicting.setId(53);
+        when(repository.findByCode("conflict")).thenReturn(Optional.of(conflicting));
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "registerPluginMcpServers",
+                48L,
+                "com.acme.demo",
+                List.of(mcpDefinition("conflict", true))
+        )).isInstanceOf(ApiException.class)
+                .hasMessageContaining("已被其他来源占用");
+        verify(mcpClientService, never()).create(any(McpServerDto.class));
+
+        McpServerConfig existing = new McpServerConfig()
+                .setCode("update-failed")
+                .setSource("com.acme.demo");
+        existing.setId(54);
+        McpServerDto updateFailed = mcpDefinition("update-failed", true);
+        when(repository.findByCode("update-failed")).thenReturn(Optional.of(existing));
+        when(mcpClientService.update(54, updateFailed)).thenReturn(false);
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "registerPluginMcpServers",
+                49L,
+                "com.acme.demo",
+                List.of(updateFailed)
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("更新MCP服务失败");
+        verify(mcpClientService, never()).info(54);
+
+        McpServerDto createFailed = mcpDefinition("create-failed", true);
+        when(repository.findByCode("create-failed")).thenReturn(Optional.empty());
+        when(mcpClientService.create(createFailed)).thenThrow(new IllegalStateException("database unavailable"));
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "registerPluginMcpServers",
+                50L,
+                "com.acme.demo",
+                List.of(createFailed)
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("database unavailable");
     }
 
     @Test
@@ -732,6 +868,26 @@ class PluginServiceImplTest {
         dto.setType(DashboardType.LINK);
         dto.setUrl("https://example.com/dashboard");
         return dto;
+    }
+
+    private McpServerDto mcpDefinition(String code, boolean enabled) {
+        McpServerDto dto = new McpServerDto();
+        dto.setCode(code);
+        dto.setName(code);
+        dto.setBaseUrl("http://mcp.example.com");
+        dto.setEnabled(enabled);
+        return dto;
+    }
+
+    private McpServerVo mcpState(String code, boolean enabled, boolean connected, String lastError) {
+        McpServerConfig config = new McpServerConfig()
+                .setCode(code)
+                .setName(code)
+                .setBaseUrl("http://mcp.example.com")
+                .setEnabled(enabled)
+                .setConnected(connected)
+                .setLastError(lastError);
+        return new McpServerVo(config, 0);
     }
 
     private MetaData metaData(DataEntity entity, DataAttribute attribute) {

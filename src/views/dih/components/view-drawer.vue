@@ -6,8 +6,15 @@
         <small>后台 Agent 分析队列</small>
       </div>
       <div class="header-actions">
-        <el-button type="primary" :icon="Plus" @click="openCreate">创建任务</el-button>
-        <el-button :icon="VideoPlay" :loading="runningOnce" @click="runQueueOnce">
+        <el-button type="primary" :icon="Plus" @click="openCreate">
+          {{ activeSection === 'tasks' ? '创建任务' : '创建周期配置' }}
+        </el-button>
+        <el-button
+          v-if="activeSection === 'tasks'"
+          :icon="VideoPlay"
+          :loading="runningOnce"
+          @click="runQueueOnce"
+        >
           执行一次队列
         </el-button>
         <el-button :icon="Refresh" :loading="refreshing" @click="refreshAll(false)">刷新</el-button>
@@ -16,7 +23,12 @@
     </header>
 
     <main class="drawer-content">
-      <section class="queue-section">
+      <el-tabs v-model="activeSection" class="drawer-tabs">
+        <el-tab-pane label="执行队列" name="tasks" />
+        <el-tab-pane label="周期配置" name="schedules" />
+      </el-tabs>
+
+      <section v-if="activeSection === 'tasks'" class="queue-section">
         <div class="queue-cards">
           <div v-for="item in queueCards" :key="item.label" class="queue-card">
             <span class="queue-label">{{ item.label }}</span>
@@ -30,7 +42,7 @@
         </div>
       </section>
 
-      <section class="task-section">
+      <section v-if="activeSection === 'tasks'" class="task-section">
         <el-form :model="filters" inline class="filter-form" @submit.prevent="handleSearch">
           <el-form-item label="任务名称">
             <el-input
@@ -84,6 +96,9 @@
               />
             </el-select>
           </el-form-item>
+          <el-form-item v-if="filters.scheduleId" label="来源周期">
+            <el-tag closable @close="clearScheduleFilter">#{{ filters.scheduleId }}</el-tag>
+          </el-form-item>
           <el-form-item class="filter-actions">
             <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
             <el-button :icon="RefreshLeft" @click="resetFilters">重置</el-button>
@@ -126,6 +141,17 @@
             <el-table-column label="审批模式" width="118">
               <template #default="{ row }">
                 {{ row.approvalMode === 'AUTO' ? '自动批准 ASK' : '人工审批' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="来源周期" width="150">
+              <template #default="{ row }">
+                <template v-if="row.scheduleId">
+                  <el-link type="primary" @click="showSchedule(row.scheduleId)">
+                    #{{ row.scheduleId }}
+                  </el-link>
+                  <div class="source-fire-time">{{ formatTime(row.scheduleFireTime) }}</div>
+                </template>
+                <span v-else>手动创建</span>
               </template>
             </el-table-column>
             <el-table-column label="Skill" min-width="140" show-overflow-tooltip>
@@ -178,12 +204,9 @@
               </template>
             </el-table-column>
             <el-table-column prop="runCount" label="执行次数" width="88" align="center" />
-            <el-table-column label="执行计划" width="190">
+            <el-table-column label="计划时间" width="170">
               <template #default="{ row }">
-                <div>{{ formatTime(row.scheduledTime, '立即执行') }}</div>
-                <el-tag v-if="row.cronExpression" size="small" type="info">
-                  {{ row.cronExpression }}
-                </el-tag>
+                {{ formatTime(row.scheduledTime, '立即执行') }}
               </template>
             </el-table-column>
             <el-table-column label="更新时间" width="170">
@@ -258,14 +281,24 @@
           />
         </div>
       </section>
+
+      <section v-else class="schedule-panel">
+        <AnalysisTaskScheduleList
+          ref="scheduleListRef"
+          @edit="openScheduleEdit"
+          @view-tasks="viewScheduleTasks"
+        />
+      </section>
     </main>
 
     <AnalysisTaskFormDialog
       v-model:visible="formVisible"
       :task="editingTask"
+      :schedule="editingSchedule"
+      :initial-schedule-type="initialScheduleType"
       :model-options="modelOptions"
       :skill-options="skillOptions"
-      @saved="refreshAll(false)"
+      @saved="handleFormSaved"
     />
     <AnalysisTaskDetailDialog v-model:visible="detailVisible" :task-id="detailTaskId" />
     <AnalysisTaskApprovalDialog
@@ -300,6 +333,8 @@ import type {
   TAnalysisTask,
   TAnalysisTaskModelOption,
   TAnalysisTaskQueue,
+  TAnalysisTaskSchedule,
+  TAnalysisTaskScheduleType,
   TAnalysisTaskSearch,
   TAnalysisTaskSkillOption,
   TAnalysisTaskStatus,
@@ -307,6 +342,7 @@ import type {
 import AnalysisTaskApprovalDialog from './analysis-task-approval-dialog.vue';
 import AnalysisTaskDetailDialog from './analysis-task-detail-dialog.vue';
 import AnalysisTaskFormDialog from './analysis-task-form-dialog.vue';
+import AnalysisTaskScheduleList from './analysis-task-schedule-list.vue';
 
 defineOptions({ name: 'ViewDrawer' });
 
@@ -344,12 +380,16 @@ const filters = reactive<TAnalysisTaskSearch>({
   page: 1,
   perPage: 10,
 });
+const activeSection = ref<'tasks' | 'schedules'>('tasks');
 
 const modelOptions = ref<TAnalysisTaskModelOption[]>([]);
 const skillOptions = ref<TAnalysisTaskSkillOption[]>([]);
 const referenceOptionsLoaded = ref(false);
 const formVisible = ref(false);
 const editingTask = ref<TAnalysisTask | null>(null);
+const editingSchedule = ref<TAnalysisTaskSchedule | null>(null);
+const initialScheduleType = ref<TAnalysisTaskScheduleType>('ONCE');
+const scheduleListRef = ref<InstanceType<typeof AnalysisTaskScheduleList>>();
 const detailVisible = ref(false);
 const detailTaskId = ref<number | null>(null);
 const approvalVisible = ref(false);
@@ -435,7 +475,11 @@ const refreshAll = async (silent = false) => {
   refreshInFlight = true;
   if (!silent) refreshing.value = true;
   try {
-    await Promise.all([loadTasks(silent), loadQueueStatus(silent)]);
+    await Promise.all([
+      loadTasks(silent),
+      loadQueueStatus(silent),
+      scheduleListRef.value?.refresh(),
+    ]);
   } finally {
     refreshInFlight = false;
     if (!silent) refreshing.value = false;
@@ -464,6 +508,7 @@ const resetFilters = () => {
     status: '',
     model: '',
     approvalMode: '',
+    scheduleId: undefined,
     page: 1,
     perPage: filters.perPage,
   });
@@ -477,6 +522,8 @@ const handlePageSizeChange = () => {
 
 const openCreate = () => {
   editingTask.value = null;
+  editingSchedule.value = null;
+  initialScheduleType.value = activeSection.value === 'schedules' ? 'CRON' : 'ONCE';
   loadReferenceOptions();
   formVisible.value = true;
 };
@@ -485,11 +532,44 @@ const openEdit = async (task: TAnalysisTask) => {
   if (isActive(task.status)) return;
   try {
     editingTask.value = await AnalysisTaskService.getView(task.id);
+    editingSchedule.value = null;
+    initialScheduleType.value = 'ONCE';
     await loadReferenceOptions();
     formVisible.value = true;
   } catch (error) {
     console.error('获取AI分析任务详情失败:', error);
   }
+};
+
+const openScheduleEdit = async (schedule: TAnalysisTaskSchedule) => {
+  editingTask.value = null;
+  editingSchedule.value = schedule;
+  initialScheduleType.value = 'CRON';
+  await loadReferenceOptions();
+  formVisible.value = true;
+};
+
+const viewScheduleTasks = (schedule: TAnalysisTaskSchedule) => {
+  activeSection.value = 'tasks';
+  filters.scheduleId = schedule.id;
+  filters.page = 1;
+  loadTasks(false);
+};
+
+const clearScheduleFilter = () => {
+  filters.scheduleId = undefined;
+  filters.page = 1;
+  loadTasks(false);
+};
+
+const handleFormSaved = (kind: 'task' | 'schedule') => {
+  if (kind === 'schedule') activeSection.value = 'schedules';
+  refreshAll(false);
+};
+
+const showSchedule = (scheduleId: number) => {
+  activeSection.value = 'schedules';
+  ElMessage.info(`已切换到周期配置，来源周期 ID：${scheduleId}`);
 };
 
 const openDetail = (task: TAnalysisTask) => {
@@ -680,12 +760,35 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.drawer-tabs {
+  flex-shrink: 0;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+
+  :deep(.el-tabs__header) {
+    margin: 0;
+  }
+
+  :deep(.el-tabs__content) {
+    display: none;
+  }
+}
+
 .queue-section,
-.task-section {
+.task-section,
+.schedule-panel {
   background: #fff;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
+}
+
+.schedule-panel {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
 }
 
 .queue-section {
@@ -813,6 +916,13 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: default;
+}
+
+.source-fire-time {
+  margin-top: 2px;
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 :global(.analysis-result-markdown-popover.el-popper) {

@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="task ? '编辑AI分析任务' : '创建AI分析任务'"
+    :title="dialogTitle"
     width="760px"
     destroy-on-close
     append-to-body
@@ -50,14 +50,7 @@
         </el-col>
       </el-row>
 
-      <el-form-item label="执行方式" prop="scheduleType">
-        <el-radio-group v-model="form.scheduleType">
-          <el-radio value="ONCE">单次执行</el-radio>
-          <el-radio value="CRON">周期执行</el-radio>
-        </el-radio-group>
-      </el-form-item>
-
-      <el-form-item v-if="form.scheduleType === 'ONCE'" label="计划执行时间" prop="scheduledTime">
+      <el-form-item v-if="!isScheduleForm" label="计划执行时间" prop="scheduledTime">
         <el-date-picker
           v-model="form.scheduledTime"
           type="datetime"
@@ -70,24 +63,24 @@
       </el-form-item>
 
       <el-form-item v-else label="执行周期" prop="cronExpression">
-        <el-select
+        <el-autocomplete
           v-model="form.cronExpression"
-          filterable
-          allow-create
-          default-first-option
-          placeholder="选择常用周期或输入 6 段 Cron 表达式"
+          :fetch-suggestions="queryCronOptions"
+          value-key="value"
+          clearable
+          placeholder="选择常用周期或直接输入 6 段 Cron 表达式"
           class="full-width"
         >
-          <el-option
-            v-for="item in cronOptions"
-            :key="item.value"
-            :label="`${item.label}（${item.value}）`"
-            :value="item.value"
-          />
-        </el-select>
+          <template #default="{ item }">
+            <div class="cron-option">
+              <span>{{ item.label }}</span>
+              <code>{{ item.value }}</code>
+            </div>
+          </template>
+        </el-autocomplete>
         <div class="form-help">
-          使用 Spring Cron 格式：秒 分 时 日 月
-          周。创建后将在下一次匹配时间执行，成功或失败后继续下一周期。
+          必填。使用 Spring Cron 格式：秒 分 时 日 月 周；可选择常用周期，也可直接输入。
+          每次到点会创建一条独立任务进入执行队列。
         </div>
       </el-form-item>
 
@@ -149,7 +142,7 @@
     <template #footer>
       <el-button :disabled="submitting" @click="emit('update:visible', false)">取消</el-button>
       <el-button type="primary" :loading="submitting" @click="submitForm">
-        {{ task ? '保存修改' : '创建并入队' }}
+        {{ submitLabel }}
       </el-button>
     </template>
   </el-dialog>
@@ -159,11 +152,13 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
-import { AnalysisTaskService } from '@/service/api';
+import { AnalysisTaskScheduleService, AnalysisTaskService } from '@/service/api';
 import type {
   TAnalysisTask,
   TAnalysisTaskForm,
   TAnalysisTaskModelOption,
+  TAnalysisTaskSchedule,
+  TAnalysisTaskScheduleType,
   TAnalysisTaskSkillOption,
 } from '@/types/type-analysis-task';
 
@@ -172,25 +167,28 @@ defineOptions({ name: 'AnalysisTaskFormDialog' });
 type Props = {
   visible: boolean;
   task: TAnalysisTask | null;
+  schedule: TAnalysisTaskSchedule | null;
+  initialScheduleType?: TAnalysisTaskScheduleType;
   modelOptions: TAnalysisTaskModelOption[];
   skillOptions: TAnalysisTaskSkillOption[];
 };
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { initialScheduleType: 'ONCE' });
 const emit = defineEmits<{
   (event: 'update:visible', value: boolean): void;
-  (event: 'saved'): void;
+  (event: 'saved', kind: 'task' | 'schedule'): void;
 }>();
 
-const emptyForm = (): TAnalysisTaskForm => ({
+const emptyForm = (scheduleType: TAnalysisTaskScheduleType = 'ONCE'): TAnalysisTaskForm => ({
   name: '',
   description: '',
   model: 'auto',
   prompt: '',
   priority: 0,
-  scheduleType: 'ONCE',
+  scheduleType,
   scheduledTime: '',
   cronExpression: '',
+  enabled: true,
   approvalMode: 'MANUAL',
   skillIds: [],
 });
@@ -198,6 +196,18 @@ const emptyForm = (): TAnalysisTaskForm => ({
 const formRef = ref<FormInstance>();
 const form = reactive<TAnalysisTaskForm>(emptyForm());
 const submitting = ref(false);
+const isScheduleForm = computed(
+  () => Boolean(props.schedule) || (!props.task && form.scheduleType === 'CRON'),
+);
+const dialogTitle = computed(() => {
+  if (props.task) return '编辑AI分析任务';
+  if (props.schedule) return '编辑AI分析周期任务';
+  return isScheduleForm.value ? '创建AI分析周期配置' : '创建AI分析任务';
+});
+const submitLabel = computed(() => {
+  if (props.task || props.schedule) return '保存修改';
+  return isScheduleForm.value ? '创建周期配置' : '创建并入队';
+});
 
 const cronOptions = [
   { label: '每10分钟', value: '0 */10 * * * *' },
@@ -207,14 +217,32 @@ const cronOptions = [
   { label: '每月1日09:00', value: '0 0 9 1 * *' },
 ];
 
+const queryCronOptions = (query: string, callback: (options: typeof cronOptions) => void) => {
+  const keyword = query.trim().toLowerCase();
+  callback(
+    keyword
+      ? cronOptions.filter(
+          item =>
+            item.label.toLowerCase().includes(keyword) ||
+            item.value.toLowerCase().includes(keyword),
+        )
+      : cronOptions,
+  );
+};
+
 const rules: FormRules<TAnalysisTaskForm> = {
   name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   model: [{ required: true, message: '请选择模型', trigger: 'change' }],
   approvalMode: [{ required: true, message: '请选择MCP审批模式', trigger: 'change' }],
   cronExpression: [
     {
+      required: true,
+      message: '请选择或输入执行周期',
+      trigger: ['blur', 'change'],
+    },
+    {
       validator: (_rule, value, callback) => {
-        if (form.scheduleType !== 'CRON') return callback();
+        if (!isScheduleForm.value) return callback();
         const fields = String(value || '')
           .trim()
           .split(/\s+/);
@@ -236,28 +264,44 @@ const normalizedModels = computed<TAnalysisTaskModelOption[]>(() => {
 
 const fillForm = () => {
   const task = props.task;
+  const schedule = props.schedule;
   Object.assign(
     form,
-    task
+    schedule
+      ? {
+          name: schedule.name,
+          description: schedule.description,
+          model: schedule.model || 'auto',
+          prompt: schedule.prompt,
+          priority: schedule.priority,
+          scheduleType: 'CRON',
+          scheduledTime: '',
+          cronExpression: schedule.cronExpression,
+          enabled: schedule.enabled,
+          approvalMode: schedule.approvalMode,
+          skillIds: [...schedule.skillIds],
+        }
+      : task
       ? {
           name: task.name,
           description: task.description,
           model: task.model || 'auto',
           prompt: task.prompt,
           priority: task.priority,
-          scheduleType: task.cronExpression ? 'CRON' : 'ONCE',
+          scheduleType: 'ONCE',
           scheduledTime: task.scheduledTime,
-          cronExpression: task.cronExpression,
+          cronExpression: '',
+          enabled: true,
           approvalMode: task.approvalMode,
           skillIds: [...task.skillIds],
         }
-      : emptyForm(),
+      : emptyForm(props.initialScheduleType),
   );
   nextTick(() => formRef.value?.clearValidate());
 };
 
 const resetForm = () => {
-  Object.assign(form, emptyForm());
+  Object.assign(form, emptyForm(props.initialScheduleType));
   formRef.value?.clearValidate();
 };
 
@@ -271,12 +315,18 @@ const submitForm = async () => {
     if (props.task) {
       await AnalysisTaskService.update(props.task.id, form);
       ElMessage.success('AI分析任务已更新');
+    } else if (props.schedule) {
+      await AnalysisTaskScheduleService.update(props.schedule.id, form);
+      ElMessage.success('AI分析周期任务已更新');
+    } else if (isScheduleForm.value) {
+      await AnalysisTaskScheduleService.create(form);
+      ElMessage.success('周期配置已创建，将在下一个Cron时间生成任务');
     } else {
       await AnalysisTaskService.create(form);
       ElMessage.success('AI分析任务已创建并进入队列');
     }
     emit('update:visible', false);
-    emit('saved');
+    emit('saved', props.schedule || isScheduleForm.value ? 'schedule' : 'task');
   } catch (error) {
     console.error(`保存AI分析任务失败:`, error);
   } finally {
@@ -320,6 +370,18 @@ watch(
     color: var(--el-text-color-secondary);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+.cron-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+
+  code {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
   }
 }
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 IMAGE_NAME="crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-frontend"
-IMAGE_TAG="latest"
+IMAGE_TAG="1.0.0.alpha"
 DATE_TAG=$(date +%Y%m%d)
 PUSH_IMAGE="${PUSH_IMAGE:-false}"
 

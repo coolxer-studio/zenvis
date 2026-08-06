@@ -37,7 +37,9 @@ spec:
             - name: TZ
               value: {{ .Values.global.timezone | quote }}
             - name: VECTUM_VECTOR_ALLOWED_ENV
-              value: CLICKHOUSE_PASSWORD,KAFKA_BOOTSTRAP_SERVERS,CLICKHOUSE_ENDPOINT,CLICKHOUSE_DATABASE,CLICKHOUSE_USER
+              value: CLICKHOUSE_PASSWORD,KAFKA_BOOTSTRAP_SERVERS,CLICKHOUSE_ENDPOINT,CLICKHOUSE_DATABASE,CLICKHOUSE_USER,API_BEARER_TOKEN,ZENVIS_BUSINESS_SERVICE_BASE_URL
+            - name: ZENVIS_BUSINESS_SERVICE_BASE_URL
+              value: {{ printf "http://%s-backend:11001" (include "zenvis.fullname" .) | quote }}
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: {{ include "zenvis.kafkaServers" . | quote }}
             - name: CLICKHOUSE_ENDPOINT

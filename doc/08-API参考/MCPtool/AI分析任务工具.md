@@ -1,12 +1,12 @@
 # AI 分析任务 MCP 工具
 
-`AnalysisTaskMcpTool` 注册 10 个工具，用于由 Agent 创建、维护和检查后台 AI 分析任务。工具与 [AnalysisTask REST API](/08-API参考/RestfulAPI/DIH与AI.md#analysistaskcontroller) 使用同一服务和数据模型。
+`AnalysisTaskMcpTool` 注册 10 个一次性任务工具，`AnalysisTaskScheduleMcpTool` 注册 6 个周期配置工具。周期工具按 Cron 创建独立任务，不复用同一任务行。
 
 ## 工具清单
 
 | 工具名 | 参数 | 返回 | 默认策略 | 风险 | 用途 |
 | --- | --- | --- | --- | --- | --- |
-| `analysis_task_create` | `request: AnalysisTaskDto` | `AnalysisTaskVo` | `ASK` | `HIGH` | 创建并按计划时间/优先级排队 |
+| `analysis_task_create` | `request: AnalysisTaskDto` | `AnalysisTaskVo` | `ASK` | `HIGH` | 创建一次性任务并排队 |
 | `analysis_task_update` | `id: Long`、`request: AnalysisTaskDto` | Boolean | `ASK` | `HIGH` | 更新非活动任务 |
 | `analysis_task_delete` | `id: Long` | Boolean | `ASK` | `HIGH` | 删除非活动任务 |
 | `analysis_task_bulk_delete` | `ids: List<Long>` | Boolean | `ASK` | `HIGH` | 批量删除非活动任务 |
@@ -16,6 +16,12 @@
 | `analysis_task_cancel` | `id: Long` | `AnalysisTaskVo` | `ASK` | `HIGH` | 取消等待、执行或待审批任务 |
 | `analysis_task_run_once` | 无 | `AnalysisTaskVo` 或空 | `ASK` | `HIGH` | 提交下一个到期任务，不等待完成 |
 | `analysis_task_queue_status` | 无 | `AnalysisTaskQueueVo` | `ALLOW` | `LOW` | 查询执行槽、队列和挂起容量 |
+| `analysis_task_schedule_create` | `request: AnalysisTaskScheduleDto` | `AnalysisTaskScheduleVo` | `ASK` | `HIGH` | 创建周期配置 |
+| `analysis_task_schedule_update` | `id`、`request` | Boolean | `ASK` | `HIGH` | 更新未来任务模板和 Cron |
+| `analysis_task_schedule_set_enabled` | `id`、`enabled` | `AnalysisTaskScheduleVo` | `ASK` | `HIGH` | 启用或停用未来投递 |
+| `analysis_task_schedule_delete` | `id` | Boolean | `ASK` | `HIGH` | 删除周期配置，不影响已生成任务 |
+| `analysis_task_schedule_list` | `request` | `PageRowsVo<AnalysisTaskScheduleVo>` | `ALLOW` | `LOW` | 分页查询周期配置 |
+| `analysis_task_schedule_view` | `id` | `AnalysisTaskScheduleVo` | `ALLOW` | `LOW` | 查询周期配置详情 |
 
 ## 任务请求
 
@@ -45,7 +51,9 @@
 | `approval_mode` | 必填，`AUTO` 或 `MANUAL` |
 | `skill_ids` | 已扫描且启用的 Skill ID |
 
-更新是完整替换语义，`scheduled_time` 和 `skill_ids` 可以显式清空，`approval_mode` 不能省略。
+更新是完整替换语义，`scheduled_time` 和 `skill_ids` 可以显式清空，`approval_mode` 不能省略。任务完成后保持终态。
+
+周期请求使用 `AnalysisTaskScheduleDto`，包含相同的任务模板字段以及必填 `cron_expression`、可选 `enabled`，不包含 `scheduled_time`。新建配置从下一个 Cron 时间开始；每次触发生成不同的任务 ID 和 execution ID。停用或删除配置不会取消已生成任务。
 
 ## 查询参数
 
@@ -59,12 +67,13 @@
     "name": "指标",
     "status": "WAITING_APPROVAL",
     "model": "auto",
-    "approval_mode": "MANUAL"
+    "approval_mode": "MANUAL",
+    "schedule_id": 12
   }
 }
 ```
 
-任务详情包含状态、提示词、原始结果、结构化 `result_parts`、错误、执行 ID、Skill、审批数量和时间信息。
+任务详情包含状态、提示词、原始结果、结构化 `result_parts`、错误、执行 ID、Skill、审批数量和时间信息；周期生成任务还包含 `schedule_id` 和 `schedule_fire_time`。
 
 ## 生命周期
 

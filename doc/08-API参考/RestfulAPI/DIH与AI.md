@@ -180,6 +180,8 @@
 }
 ```
 
+该接口只管理一次性任务。`scheduled_time` 为空时立即进入队列；任务完成后保持终态。`list` 可用 `scheduleId` 筛选某个周期配置生成的任务，生成任务详情包含 `schedule_id` 和 `schedule_fire_time`。
+
 `approval_mode` 必填：
 
 - `AUTO`：`ALLOW` 直接执行，`ASK` 自动批准并记录，`DENY` 禁止。
@@ -188,6 +190,21 @@
 任务状态包括 `PENDING`、`RUNNING`、`WAITING_APPROVAL`、`CANCELING`、`SUCCESS`、`FAILED`、`CANCELED`。活动任务不能编辑或删除。重新入队会生成新的 `execution_id`，清除旧结果、错误、执行时间和旧 execution 工具授权。
 
 任务审批决定支持 `approved`、`approved_task`、`rejected`。`approved_task` 仅对当前 execution 和精确 `tool_key` 持续有效。取消任务会终止待审批请求。任务对应的 MCP 工具见 [AI 分析任务工具](/08-API参考/MCPtool/AI分析任务工具.md)。
+
+## AnalysisTaskScheduleController
+
+基础路径：`/api/v1/system/analysis-task-schedule`
+
+| 方法 | 路径 | 输入 | 返回/用途 |
+| --- | --- | --- | --- |
+| POST | `/add` | `AnalysisTaskScheduleDto` | 创建周期配置，从下一个 Cron 时间开始 |
+| POST | `/{id}/update` | `AnalysisTaskScheduleDto` | 更新模板和下次触发时间 |
+| GET | `/list` | `name?`、`enabled?`、分页 | 分页查询周期配置 |
+| GET | `/{id}/view` | 配置 ID | 查询详情 |
+| POST | `/{id}/enabled` | `{ "enabled": true }` | 启用或停用未来投递 |
+| DELETE | `/{id}` | 配置 ID | 删除配置，不影响已生成任务 |
+
+`AnalysisTaskScheduleDto` 包含名称、描述、模型、Prompt、优先级、审批模式、Skill、`cron_expression` 和 `enabled`。Cron 使用部署实例时区与 Spring 6 段格式。响应同时提供 `next_fire_time`、`last_fire_time`、`generated_count` 和 `last_error`。
 
 ## 相关使用与运维
 

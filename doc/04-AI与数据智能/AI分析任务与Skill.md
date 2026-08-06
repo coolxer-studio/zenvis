@@ -27,7 +27,15 @@ Skill 不是工具权限本身，也不是后台任务。任务可以选择已�
 | `approval_mode` | 必填，`AUTO` 或 `MANUAL` |
 | Skill | 当前已扫描且启用的一个或多个 Skill |
 
-任务不是周期调度。填写 `scheduled_time` 表示到期后执行一次；需要周期任务时应由外部调度或后续专用能力触发。
+`scheduled_time` 为空时任务立即进入队列。任务是一次性执行实例，完成后保持终态，不承担周期续排。
+
+### 周期配置
+
+周期配置保存任务模板、`cron_expression`、启用状态、上下次触发时间、生成次数和最近错误。Cron 使用部署实例时区和包含秒的 Spring 6 段格式。新建或重新启用时从下一个匹配时间开始，不立即创建任务。
+
+调度器默认每 5 秒扫描一次。到点后在数据库锁保护的事务中创建新的 `AnalysisTask`，复制名称、Prompt、模型、优先级、审批模式、Skill 和创建人，并写入 `schedule_id`、`schedule_fire_time`。同一周期触发时间有唯一约束；上一任务未完成也不妨碍下一周期创建，由队列控制并发。
+
+默认误触发宽限为 60 秒，超过宽限的历史触发会跳过并推进到下一个未来时间。Skill 不可用或任务生成失败时不反复热重试，而是记录错误并推进周期。停用或删除配置只阻止未来投递，不修改或取消已生成任务。
 
 ### 调度顺序
 
@@ -47,6 +55,8 @@ Skill 不是工具权限本身，也不是后台任务。任务可以选择已�
 | `app.ai.analysis-task.max-concurrency` | `1` | 同时运行的普通任务数 |
 | `app.ai.analysis-task.max-suspended` | `20` | 等待审批任务容量 |
 | `app.ai.analysis-task.dispatch-delay-ms` | `5000` | 调度扫描间隔 |
+| `app.ai.analysis-task.schedule-dispatch-delay-ms` | `5000` | 周期配置扫描间隔 |
+| `app.ai.analysis-task.schedule-misfire-grace-ms` | `60000` | 周期误触发宽限 |
 
 等待人工审批的任务释放普通执行槽，但仍占用挂起容量。
 
@@ -66,14 +76,14 @@ Skill 不是工具权限本身，也不是后台任务。任务可以选择已�
 
 ### `execution_id`
 
-每次入队或恢复执行都使用新的 `execution_id`。它用于隔离：
+每个新任务、重新入队或恢复执行都使用新的 `execution_id`。它用于隔离：
 
 - 本次工具调用与审计；
 - 本次待审批请求；
 - `approved_task` 工具授权；
 - 本次结果、错误和执行时间。
 
-重新入队会清理旧结果并创建新的 execution。旧 execution 的审批和工具授权不能复用。
+重新入队会清理旧结果并创建新的 execution。旧 execution 的审批和工具授权不能复用。周期配置每次生成不同的任务 ID 和 execution ID，因此各轮结果、错误和 MCP 审计天然独立。
 
 ### 审批模式
 

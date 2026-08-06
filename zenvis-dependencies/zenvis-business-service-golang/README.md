@@ -23,7 +23,7 @@ SDK **仅使用 Go 标准库**，不依赖 Web 框架、日志框架或第三方
 在业务服务的 `go.mod` 中引用：
 
 ```bash
-go get gitee.com/coolxer-studio/zenvis/zenvis-business-service-golang
+go get gitee.com/coolxer-studio/zenvis/zenvis-dependencies/zenvis-business-service-golang
 ```
 
 代码包名为 `businessservice`。
@@ -40,7 +40,7 @@ import (
     "syscall"
     "time"
 
-    businessservice "gitee.com/coolxer-studio/zenvis/zenvis-business-service-golang"
+    businessservice "gitee.com/coolxer-studio/zenvis/zenvis-dependencies/zenvis-business-service-golang"
 )
 
 func main() {

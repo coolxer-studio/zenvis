@@ -36,7 +36,7 @@ public class AnalysisTaskMcpTool {
      */
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "analysis_task_create", description = "创建一个新的AI分析任务，任务创建后在后台按计划时间或优先级排队执行")
-    public AnalysisTaskVo create(@ToolParam(description = "AI分析任务参数，包含名称、描述、模型、分析提示词、优先级、计划时间、必填审批模式approvalMode(AUTO/MANUAL)和可选的已启用skillIds") AnalysisTaskDto request) {
+    public AnalysisTaskVo create(@ToolParam(description = "AI分析任务参数，包含名称、描述、模型、分析提示词、优先级、单次计划时间、可选的6段cronExpression周期配置、必填审批模式approvalMode(AUTO/MANUAL)和可选的已启用skillIds") AnalysisTaskDto request) {
         return new AnalysisTaskVo(analysisTaskService().create(request));
     }
 
@@ -46,7 +46,7 @@ public class AnalysisTaskMcpTool {
     @McpToolApproval(value = ASK, risk = HIGH)
     @Tool(name = "analysis_task_update", description = "更新指定AI分析任务；执行中的任务不能更新")
     public Boolean update(@ToolParam(description = "AI分析任务ID") Long id,
-                          @ToolParam(description = "AI分析任务参数，包含名称、描述、模型、分析提示词、优先级、计划时间、必填审批模式approvalMode(AUTO/MANUAL)和可选skillIds") AnalysisTaskDto request) {
+                          @ToolParam(description = "AI分析任务参数，包含名称、描述、模型、分析提示词、优先级、单次计划时间、可选的6段cronExpression周期配置、必填审批模式approvalMode(AUTO/MANUAL)和可选skillIds") AnalysisTaskDto request) {
         return analysisTaskService().update(id, request);
     }
 

@@ -48,6 +48,11 @@ public class AnalysisTaskDto {
     private Date scheduledTime;
 
     /**
+     * 周期执行 Cron 表达式（Spring 6 段格式，包含秒）。为空表示仅执行一次。
+     */
+    private String cronExpression;
+
+    /**
      * MCP 工具审批模式，创建和编辑时必须明确设置。
      */
     @NotNull(message = "请选择MCP审批模式")

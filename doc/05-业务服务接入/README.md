@@ -9,15 +9,15 @@
 | 应用类型 | 推荐方式 | 适用说明 |
 | --- | --- | --- |
 | Spring Boot 3.x、JDK 17 | `zenvis-business-service-spring-boot-starter` | 自动完成身份推导、心跳调度、启动/停止事件和异步自定义事件上报 |
-| 其他 Java 框架 | REST API | 由应用自行管理实例身份、心跳调度、重试和关闭处理 |
-| Go、Python、Node.js 等其他技术栈 | REST API | 按公开 JSON 协议直接上报心跳和事件 |
+| Go 1.22+ | `zenvis-business-service-golang` | 仅依赖标准库，提供与 Starter 对齐的注册、心跳、生命周期和异步事件能力 |
+| 其他 Java 框架、Python、Node.js 等 | REST API | 由应用自行管理实例身份、心跳调度、重试和关闭处理 |
 
 无论采用哪种方式，都应先确定稳定的 `service_code` 和实例间唯一的 `instance_id`，并确保业务应用可以访问 ZenVis 后端。
 
 ## 接入流程
 
 1. 阅读[接入模型与运行机制](/05-业务服务接入/接入模型与运行机制.md)，确定服务、实例和状态模型。
-2. Spring Boot 应用按照[Spring Boot Starter 接入](/05-业务服务接入/Spring-Boot-Starter接入.md)配置；其他应用按照[REST API 直连接入](/05-业务服务接入/REST-API直连接入.md)实现。
+2. Spring Boot 应用按照[Spring Boot Starter 接入](/05-业务服务接入/Spring-Boot-Starter接入.md)配置；Go 应用使用 [Go SDK](../../zenvis-business-service-golang/README.md)；其他应用按照[REST API 直连接入](/05-业务服务接入/REST-API直连接入.md)实现。
 3. 在生产部署前完成[生产部署与验收](/05-业务服务接入/生产部署与验收.md)中的网络保护、可靠性和验收检查。
 4. 登录 ZenVis，在“服务管理 → 业务应用服务”查看实例状态和事件。
 
@@ -38,6 +38,7 @@
 | --- | --- |
 | [接入模型与运行机制](/05-业务服务接入/接入模型与运行机制.md) | 身份、心跳、状态、事件、时间、幂等与保留机制 |
 | [Spring Boot Starter 接入](/05-业务服务接入/Spring-Boot-Starter接入.md) | 依赖、配置、身份推导、生命周期和自定义事件 |
+| [Go SDK](../../zenvis-business-service-golang/README.md) | Go SDK 安装、配置、生命周期、事件上报和可靠性说明 |
 | [REST API 直连接入](/05-业务服务接入/REST-API直连接入.md) | 非 Spring Boot 应用的最小请求、响应判断和重试边界 |
 | [生产部署与验收](/05-业务服务接入/生产部署与验收.md) | 网络安全、可靠性、服务端配置、验收和故障排查 |
 

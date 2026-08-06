@@ -13,6 +13,7 @@ ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数�
 | `zenvis-plugin` | 可安装插件、插件 API 扩展与打包工具 | JSON/YAML、Java、HTML、tar.gz |
 | `zenvis-plugin-community` | 社区与客户场景插件集合 | JSON/YAML、Java、AMIS、HTML |
 | `zenvis-business-service-spring-boot-starter` | 业务应用服务心跳和事件上报组件 | Spring Boot 3.x、Java 17 |
+| `zenvis-business-service-golang` | 业务应用服务心跳和事件上报 SDK | Go 1.22+、标准库 |
 | `agent-skills` | ZenVis 插件创建与校验技能 | Codex Skill |
 
 各子项目保留自己的 `README.md`，用于独立构建和维护。跨模块的产品、架构、部署、使用与开发说明统一维护在根目录的 [ZenVis 文档中心](doc/README.md)。
@@ -85,7 +86,7 @@ yarn server:dev
 - 通过内置、低代码、HTML 与外链四类看板组织可视化应用。
 - 通过插件安装 Meta、推送任务、动态 API、UI、看板、MCP、Skill 和菜单。
 - 通过 DIH 提供知识问答、数据接入、数据可视化、专项 Skill、报表和后台 AI 分析任务。
-- 通过业务服务 Starter 采集业务应用实例心跳和事件。
+- 通过 Spring Boot Starter 或 Go SDK 采集业务应用实例心跳和事件。
 - 通过社区插件仓库和插件创建 Skill 复用行业接入实现与代码一致性校验流程。
 
 ## 文档

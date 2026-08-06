@@ -97,6 +97,16 @@ public class MysqlFinalTableName {
     public static final String T_AI_ANALYSIS_TASK_SKILL = TABLE_PREFIX + "ai_analysis_task_skill";
 
     /**
+     * AI分析周期任务配置
+     */
+    public static final String T_AI_ANALYSIS_TASK_SCHEDULE = TABLE_PREFIX + "ai_analysis_task_schedule";
+
+    /**
+     * AI分析周期任务配置与 Skill 关联
+     */
+    public static final String T_AI_ANALYSIS_TASK_SCHEDULE_SKILL = TABLE_PREFIX + "ai_analysis_task_schedule_skill";
+
+    /**
      * MCP客户端服务配置
      */
     public static final String T_AI_MCP_SERVER = TABLE_PREFIX + "ai_mcp_server";

@@ -22,7 +22,11 @@ import java.util.Set;
 @Accessors(chain = true)
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = MysqlFinalTableName.T_AI_ANALYSIS_TASK)
+@Table(name = MysqlFinalTableName.T_AI_ANALYSIS_TASK,
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_analysis_task_schedule_fire",
+                columnNames = {"schedule_id", "schedule_fire_time"}
+        ))
 public class AnalysisTask extends BaseEntity {
 
     /**
@@ -88,19 +92,6 @@ public class AnalysisTask extends BaseEntity {
     private String executionId;
 
     /**
-     * 最近一次已结束执行的唯一标识，供周期任务查询上一轮审计记录。
-     */
-    @Column(name = "last_execution_id", length = 64)
-    private String lastExecutionId;
-
-    /**
-     * 最近一次已结束执行的状态。
-     */
-    @Enumerated(EnumType.STRING)
-    @Column(name = "last_run_status", length = 32)
-    private AnalysisTaskStatus lastRunStatus;
-
-    /**
      * 任务明确选择的 Skill。
      */
     @ElementCollection(fetch = FetchType.EAGER)
@@ -120,10 +111,16 @@ public class AnalysisTask extends BaseEntity {
     private Date scheduledTime;
 
     /**
-     * Spring Cron 表达式（6 段，包含秒）。为空表示仅执行一次。
+     * 来源周期配置 ID；手工创建的任务为空。
      */
-    @Column(name = "cron_expression", length = 128)
-    private String cronExpression;
+    @Column(name = "schedule_id")
+    private Integer scheduleId;
+
+    /**
+     * 周期配置本次触发时间；手工创建的任务为空。
+     */
+    @Column(name = "schedule_fire_time")
+    private Date scheduleFireTime;
 
     /**
      * 开始执行时间
@@ -156,7 +153,6 @@ public class AnalysisTask extends BaseEntity {
             this.priority = analysisTaskDto.getPriority();
         }
         this.scheduledTime = analysisTaskDto.getScheduledTime();
-        this.cronExpression = analysisTaskDto.getCronExpression();
         this.approvalMode = analysisTaskDto.getApprovalMode();
         this.skillIds = analysisTaskDto.getSkillIds() == null
                 ? new LinkedHashSet<>() : new LinkedHashSet<>(analysisTaskDto.getSkillIds());

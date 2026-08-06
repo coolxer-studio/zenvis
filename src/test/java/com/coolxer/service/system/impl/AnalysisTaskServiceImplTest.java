@@ -2,12 +2,9 @@ package com.coolxer.service.system.impl;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.JacksonConfig;
-import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
 import com.coolxer.commons.enums.AnalysisTaskStatus;
-import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
 import com.coolxer.dao.mysql.repository.AnalysisTaskRepository;
-import com.coolxer.model.system.dto.AnalysisTaskDto;
 import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AgentLlmService;
@@ -176,31 +173,11 @@ class AnalysisTaskServiceImplTest {
     }
 
     @Test
-    void normalizeScheduleCalculatesFirstCronExecutionAndRejectsInvalidExpression() {
-        AnalysisTaskDto dto = validTaskDto();
-        dto.setCronExpression(" 0 0 9 * * * ");
-
-        ReflectionTestUtils.invokeMethod(AnalysisTaskServiceImpl.class, "normalizeSchedule", dto);
-
-        assertThat(dto.getCronExpression()).isEqualTo("0 0 9 * * *");
-        assertThat(dto.getScheduledTime()).isNotNull();
-        assertThat(dto.getScheduledTime()).isAfter(new java.util.Date());
-
-        AnalysisTaskDto invalid = validTaskDto();
-        invalid.setCronExpression("not-a-cron");
-        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
-                AnalysisTaskServiceImpl.class, "normalizeSchedule", invalid))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("Cron");
-    }
-
-    @Test
-    void completedCronTaskIsQueuedForItsNextExecution() {
+    void completedTaskRemainsTerminal() {
         AnalysisTaskRepository repository = mock(AnalysisTaskRepository.class);
         AnalysisTask task = new AnalysisTask()
                 .setStatus(AnalysisTaskStatus.RUNNING)
-                .setExecutionId("execution-1")
-                .setCronExpression("* * * * * *");
+                .setExecutionId("execution-1");
         task.setId(7);
         when(repository.findById(7)).thenReturn(Optional.of(task));
         when(repository.save(any(AnalysisTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -212,20 +189,10 @@ class AnalysisTaskServiceImplTest {
                 7, "execution-1", AnalysisTaskStatus.SUCCESS, "result", null);
 
         verify(repository).save(task);
-        assertThat(task.getStatus()).isEqualTo(AnalysisTaskStatus.PENDING);
-        assertThat(task.getLastRunStatus()).isEqualTo(AnalysisTaskStatus.SUCCESS);
-        assertThat(task.getLastExecutionId()).isEqualTo("execution-1");
-        assertThat(task.getExecutionId()).isNotEqualTo("execution-1");
-        assertThat(task.getScheduledTime()).isAfter(task.getFinishTime());
+        assertThat(task.getStatus()).isEqualTo(AnalysisTaskStatus.SUCCESS);
+        assertThat(task.getExecutionId()).isEqualTo("execution-1");
+        assertThat(task.getFinishTime()).isNotNull();
         assertThat(task.getResult()).isEqualTo("result");
-    }
-
-    private static AnalysisTaskDto validTaskDto() {
-        AnalysisTaskDto dto = new AnalysisTaskDto();
-        dto.setName("周期分析");
-        dto.setPrompt("分析风险");
-        dto.setApprovalMode(AnalysisTaskApprovalMode.MANUAL);
-        return dto;
     }
 
     private void createSkill(String id, boolean enabled, String agentType, String content) throws Exception {

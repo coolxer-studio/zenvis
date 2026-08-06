@@ -46,17 +46,15 @@ public class AnalysisTaskVo implements Serializable {
 
     private String executionId;
 
-    private String lastExecutionId;
-
-    private AnalysisTaskStatus lastRunStatus;
-
     private List<String> skillIds;
 
     private long pendingApprovalCount;
 
     private Date scheduledTime;
 
-    private String cronExpression;
+    private Integer scheduleId;
+
+    private Date scheduleFireTime;
 
     private Date startTime;
 
@@ -84,12 +82,11 @@ public class AnalysisTaskVo implements Serializable {
         this.approvalMode = analysisTask.getApprovalMode() == null
                 ? AnalysisTaskApprovalMode.MANUAL : analysisTask.getApprovalMode();
         this.executionId = analysisTask.getExecutionId();
-        this.lastExecutionId = analysisTask.getLastExecutionId();
-        this.lastRunStatus = analysisTask.getLastRunStatus();
         this.skillIds = analysisTask.getSkillIds() == null
                 ? new ArrayList<>() : new ArrayList<>(analysisTask.getSkillIds());
         this.scheduledTime = analysisTask.getScheduledTime();
-        this.cronExpression = analysisTask.getCronExpression();
+        this.scheduleId = analysisTask.getScheduleId();
+        this.scheduleFireTime = analysisTask.getScheduleFireTime();
         this.startTime = analysisTask.getStartTime();
         this.finishTime = analysisTask.getFinishTime();
         this.runCount = analysisTask.getRunCount();

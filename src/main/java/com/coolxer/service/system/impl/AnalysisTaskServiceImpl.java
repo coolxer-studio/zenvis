@@ -37,11 +37,8 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -63,7 +60,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Persistent AI analysis task queue with optional Cron recurrence.
+ * Persistent, one-shot AI analysis task queue.
  */
 @Slf4j
 @Service
@@ -158,7 +155,8 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
                     blankToNull(search.getName()),
                     search.getStatus(),
                     blankToNull(search.getModel()),
-                    search.getApprovalMode()
+                    search.getApprovalMode(),
+                    search.getScheduleId()
             );
             return new PageRowsVo<>(page.getContent().stream().map(this::toVo).toList(), page.getTotalElements());
         } catch (Exception e) {
@@ -170,7 +168,6 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     @Override
     public AnalysisTask create(AnalysisTaskDto dto) {
         checkCreateOrUpdate(dto);
-        normalizeSchedule(dto);
         List<String> skillIds = normalizeSkillIds(dto.getSkillIds());
         skillService.validateEnabledSkillIds(skillIds);
         dto.setSkillIds(skillIds);
@@ -186,7 +183,6 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     @Override
     public Boolean update(Long id, AnalysisTaskDto dto) {
         checkCreateOrUpdate(dto);
-        normalizeSchedule(dto);
         List<String> skillIds = normalizeSkillIds(dto.getSkillIds());
         skillService.validateEnabledSkillIds(skillIds);
         dto.setSkillIds(skillIds);
@@ -242,11 +238,6 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         task.setErrorMessage(null);
         task.setStartTime(null);
         task.setFinishTime(null);
-        task.setLastExecutionId(null);
-        task.setLastRunStatus(null);
-        if (StringUtils.isNotBlank(task.getCronExpression())) {
-            task.setScheduledTime(nextCronTime(task.getCronExpression(), new Date()));
-        }
         return toVo(analysisTaskRepository.save(task));
     }
 
@@ -436,25 +427,11 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
                     || (task.getStatus() == AnalysisTaskStatus.CANCELING && status != AnalysisTaskStatus.CANCELED)) {
                 return;
             }
-            Date finishTime = new Date();
             task.setStatus(status)
-                    .setFinishTime(finishTime)
-                    .setLastExecutionId(executionId)
-                    .setLastRunStatus(status)
+                    .setFinishTime(new Date())
                     .setErrorMessage(error);
             if (status == AnalysisTaskStatus.SUCCESS) {
                 task.setResult(result);
-            }
-            if ((status == AnalysisTaskStatus.SUCCESS || status == AnalysisTaskStatus.FAILED)
-                    && StringUtils.isNotBlank(task.getCronExpression())) {
-                Date nextTime = nextCronTime(task.getCronExpression(), finishTime);
-                if (nextTime != null) {
-                    task.setStatus(AnalysisTaskStatus.PENDING)
-                            .setExecutionId(UUID.randomUUID().toString())
-                            .setScheduledTime(nextTime);
-                } else {
-                    task.setErrorMessage(appendError(error, "Cron 表达式没有可用的下一次执行时间，周期任务已停止"));
-                }
             }
             analysisTaskRepository.save(task);
         } catch (OptimisticLockingFailureException e) {
@@ -616,36 +593,6 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         if (dto.getApprovalMode() == null) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "请选择MCP审批模式");
         }
-    }
-
-    private static void normalizeSchedule(AnalysisTaskDto dto) {
-        String cronExpression = StringUtils.trimToNull(dto.getCronExpression());
-        dto.setCronExpression(cronExpression);
-        if (cronExpression == null) {
-            return;
-        }
-        Date nextTime;
-        try {
-            nextTime = nextCronTime(cronExpression, new Date());
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
-                    "周期执行 Cron 表达式无效，请使用包含秒的 6 段格式");
-        }
-        if (nextTime == null) {
-            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
-                    "周期执行 Cron 表达式没有可用的下一次执行时间");
-        }
-        dto.setScheduledTime(nextTime);
-    }
-
-    private static Date nextCronTime(String cronExpression, Date after) {
-        ZonedDateTime base = ZonedDateTime.ofInstant(after.toInstant(), ZoneId.systemDefault());
-        ZonedDateTime next = CronExpression.parse(cronExpression).next(base);
-        return next == null ? null : Date.from(next.toInstant());
-    }
-
-    private static String appendError(String error, String suffix) {
-        return StringUtils.isBlank(error) ? suffix : error + "；" + suffix;
     }
 
     private static void checkNotRunning(AnalysisTask task, String message) {

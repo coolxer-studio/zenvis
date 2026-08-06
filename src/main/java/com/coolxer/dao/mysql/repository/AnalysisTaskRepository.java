@@ -47,13 +47,15 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
               AND (:status IS NULL OR a.status = :status)
               AND (:model IS NULL OR a.model = :model)
               AND (:approvalMode IS NULL OR a.approvalMode = :approvalMode)
+              AND (:scheduleId IS NULL OR a.scheduleId = :scheduleId)
             ORDER BY a.updateTime DESC
             """)
     Page<AnalysisTask> findByPage(Pageable pageable,
                                   @Param("name") String name,
                                   @Param("status") AnalysisTaskStatus status,
                                   @Param("model") String model,
-                                  @Param("approvalMode") AnalysisTaskApprovalMode approvalMode);
+                                  @Param("approvalMode") AnalysisTaskApprovalMode approvalMode,
+                                  @Param("scheduleId") Integer scheduleId);
 
     @Query(nativeQuery = true,
             value = "SELECT a.* FROM " + MysqlFinalTableName.T_AI_ANALYSIS_TASK + " a " +

@@ -29,4 +29,9 @@ public class AnalysisTaskSearchDto extends SortPageDto {
     private String model;
 
     private AnalysisTaskApprovalMode approvalMode;
+
+    /**
+     * 来源周期配置 ID。
+     */
+    private Integer scheduleId;
 }

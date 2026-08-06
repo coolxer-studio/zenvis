@@ -85,7 +85,7 @@ yarn server:dev
 - 通过内置、低代码、HTML 与外链四类看板组织可视化应用。
 - 通过插件安装 Meta、推送任务、动态 API、UI、看板、MCP、Skill 和菜单。
 - 通过 DIH 提供知识问答、数据接入、数据可视化、专项 Skill、报表和后台 AI 分析任务。
-- 通过业务服务 Starter 采集业务应用实例心跳和事件。
+- 通过 Spring Boot Starter 或 Go SDK 采集业务应用实例心跳和事件。
 - 通过社区插件仓库和插件创建 Skill 复用行业接入实现与代码一致性校验流程。
 
 ## 文档

@@ -16,7 +16,7 @@ SDK **仅使用 Go 标准库**，不依赖 Web 框架、日志框架或第三方
 - 对服务身份、事件类型和文本字段做与 Java Starter 一致的规范化和限长；
 - 心跳 `metadata` 限制为 16 KiB，事件 `data` 限制为 64 KiB；
 - 网络失败、业务响应失败和队列满不会向业务调用方传播异常；
-- 支持 `ZENVIS_BUSINESS_SERVICE_*` 环境变量。
+- 配置由宿主应用构造并注入，SDK 不绑定环境变量、配置文件或配置中心。
 
 ## 安装
 
@@ -82,45 +82,19 @@ func main() {
 
 `Start` 和 `Close` 均可重复调用。建议将 `Client` 作为单例注入业务组件；业务组件也可以只依赖较小的 `businessservice.Reporter` 接口。
 
-## 环境变量配置
+## 配置注入
 
-```go
-config, err := businessservice.ConfigFromEnv()
-if err != nil {
-    // 配置格式非法，按宿主应用的启动失败策略处理。
-    panic(err)
-}
-client := businessservice.New(config)
-```
-
-支持的环境变量：
-
-| 环境变量 | 默认值/说明 |
-| --- | --- |
-| `ZENVIS_BUSINESS_SERVICE_ENABLED` | `true`；设为 `false` 后全部调用安全 no-op |
-| `ZENVIS_BUSINESS_SERVICE_BASE_URL` | `http://localhost:11001`，不包含 `/api/v1` |
-| `ZENVIS_BUSINESS_SERVICE_SERVICE_CODE` | `go-service` |
-| `ZENVIS_BUSINESS_SERVICE_SERVICE_NAME` | 默认使用 `service-code` |
-| `ZENVIS_BUSINESS_SERVICE_INSTANCE_ID` | 默认 `<service-code>-<host>-<port>` |
-| `ZENVIS_BUSINESS_SERVICE_VERSION` | 空 |
-| `ZENVIS_BUSINESS_SERVICE_ENVIRONMENT` | `default` |
-| `ZENVIS_BUSINESS_SERVICE_HOST` | 本机主机名，失败时使用 `localhost` |
-| `ZENVIS_BUSINESS_SERVICE_PORT` | 空；有效范围 1～65535 |
-| `ZENVIS_BUSINESS_SERVICE_MANAGEMENT_URL` | 空 |
-| `ZENVIS_BUSINESS_SERVICE_HEARTBEAT_INTERVAL_MILLIS` | `30000` |
-| `ZENVIS_BUSINESS_SERVICE_CONNECT_TIMEOUT_MILLIS` | `2000` |
-| `ZENVIS_BUSINESS_SERVICE_READ_TIMEOUT_MILLIS` | `3000` |
-| `ZENVIS_BUSINESS_SERVICE_EVENT_QUEUE_CAPACITY` | `100` |
-| `ZENVIS_BUSINESS_SERVICE_TIME_ZONE` | `Asia/Shanghai` |
-| `ZENVIS_BUSINESS_SERVICE_METADATA` | JSON 对象，例如 `{"zone":"az-1"}` |
-
-也可以直接构造 `Config`。未填写的基础参数会在 `New` 中补齐默认值；需要完整默认配置再局部修改时，可使用：
+SDK 不读取环境变量、配置文件或配置中心。宿主应用负责获取和校验配置，再构造 `Config`：
 
 ```go
 config := businessservice.DefaultConfig()
-config.ServiceCode = "order-api"
-config.Port = 8080
+config.BaseURL = appConfig.Zenvis.BaseURL
+config.ServiceCode = appConfig.ServiceCode
+config.Port = appConfig.HTTP.Port
+client := businessservice.New(config)
 ```
+
+`Config` 的零值可直接传给 `New`，未填写的基础参数会由 SDK 补齐默认值。使用 `DefaultConfig` 适合宿主应用先取得完整默认配置再局部覆盖。
 
 ## 与 Spring Boot Starter 的映射
 
@@ -132,8 +106,8 @@ config.Port = 8080
 | `RestTemplate` | 标准库 `net/http` 独立客户端 |
 | 单线程 `TaskExecutor` | 单 goroutine + 有界 channel |
 | 固定延迟 `TaskScheduler` | `time.Timer` 固定延迟循环 |
-| Spring relaxed binding | `ConfigFromEnv()` |
-| `BuildProperties` / active profile / server port | Go 无框架级对应能力，需要通过 `Config` 或环境变量显式传入 |
+| Spring relaxed binding | 由宿主应用读取配置并构造 `Config` |
+| `BuildProperties` / active profile / server port | Go 无框架级对应能力，需要由宿主应用通过 `Config` 显式传入 |
 
 ## 失败与可靠性
 

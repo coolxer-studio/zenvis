@@ -1,0 +1,7 @@
+[
+  {
+    "name": "探针 Kafka 消息入库",
+    "description": "消费 Android、H5、iOS、Host 和 WeChat 探针事实主题，结构化 Host 审计、传输上下文与 H5/WeChat 风险评估并写入 ClickHouse；异常记录发送到插件专属 DLQ。",
+    "config": "probe-kafka-to-clickhouse.yaml"
+  }
+]

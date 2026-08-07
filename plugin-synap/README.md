@@ -95,7 +95,7 @@ DLQ 由 Kafka 运维侧负责保留策略。修复数据后，应将原始 `mess
 
 ## 安装
 
-1. 在 `zenvis-plugin` 仓库执行 `bash build.sh zenvis-plugin-synap/plugin-synap`。
+1. 在本仓库执行 `./build.sh`。
 2. 在 Zenvis 的“插件管理”上传 `com-coolxer-plugin-probe.tar.gz`。
 3. 安装插件。平台会自动创建 Meta、ClickHouse 表、推送任务和独立低代码页面；插件不注册菜单或看板。
 4. 在“数据推送服务”确认“探针 Kafka 消息入库”已启动。

@@ -1,0 +1,159 @@
+{
+  "type": "page",
+  "title": "风险 IP 命中调查",
+  "remark": "在同一实体的多个 IP 字段间执行 OR 匹配，每条记录最多计数一次。",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "body": "可从列表中的 IP 链接进入，也可手工输入 IPv4 地址。"
+    },
+    {
+      "type": "form",
+      "name": "risk-ip-search-form",
+      "mode": "inline",
+      "target": "risk-ip-statistics-service",
+      "wrapWithPanel": true,
+      "data": {
+        "ip": "${ip}"
+      },
+      "body": [
+        {
+          "type": "input-text",
+          "name": "ip",
+          "label": "IP 地址",
+          "placeholder": "例如 192.168.1.10",
+          "required": true,
+          "clearable": true,
+          "size": "lg"
+        }
+      ],
+      "actions": [
+        {
+          "type": "submit",
+          "label": "查询",
+          "level": "primary"
+        },
+        {
+          "type": "reset",
+          "label": "清空"
+        }
+      ]
+    },
+    {
+      "type": "service",
+      "name": "risk-ip-statistics-service",
+      "initFetchOn": "!!this.ip",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/value-statistics/query",
+        "data": {
+          "focus_value": "${ip}",
+          "mappings": [
+            {
+              "entity": "risk_event",
+              "label": "风险事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "risk_data",
+              "label": "数据风险",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "risk_vulnerability",
+              "label": "漏洞风险",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "risk_baseline",
+              "label": "基线风险",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "risk_weak",
+              "label": "弱口令风险",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "risk_attack",
+              "label": "攻击风险",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            }
+          ],
+          "time_range": {
+            "preset": "ALL_TIME"
+          }
+        }
+      },
+      "messages": {
+        "fetchFailed": "IP 统计查询失败，请检查地址、权限或服务状态"
+      },
+      "body": [
+        {
+          "type": "cards",
+          "source": "${result.rows}",
+          "placeholder": "未查询到匹配记录",
+          "card": {
+            "header": {
+              "title": "${label}",
+              "subTitle": "匹配字段：${match_fields}"
+            },
+            "body": [
+              {
+                "type": "property",
+                "column": 2,
+                "items": [
+                  {
+                    "label": "目标 IP",
+                    "content": "${value}"
+                  },
+                  {
+                    "label": "命中记录数",
+                    "content": "${count}"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

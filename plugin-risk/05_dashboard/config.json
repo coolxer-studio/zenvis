@@ -1,0 +1,8 @@
+[
+  {
+    "name": "安全风险态势",
+    "code": "com.coolxer.plugin.risk.dashboard.risk-overview",
+    "type": "HTML_PAGE",
+    "html_path": "risk-governance-overview.html"
+  }
+]

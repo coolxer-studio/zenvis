@@ -1,0 +1,329 @@
+---
+# 测试用途：默认每 5 秒随机生成一条风险样例。可在平台推送任务页面停用。
+sources:
+  generator_risk_samples:
+    type: "demo_logs"
+    format: "shuffle"
+    interval: ${RISK_DEMO_INTERVAL_SECONDS:-5}
+    lines:
+      - '{"risk_type":"risk_event","user_id":"user001","start_id":"start001","asset_id":"asset001","type":"恶意软件","detail":"检测到恶意软件活动","label":["安全","高危"],"risk_level":"HIGH","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10"}'
+      - '{"risk_type":"risk_event","user_id":"user002","start_id":"start002","asset_id":"asset002","type":"异常登录","detail":"多地同时登录","label":["异常","登录"],"risk_level":"MEDIUM","net_type":"ETHERNET","lan_ip":"192.168.1.11","wan_ip":"43.129.1.11"}'
+      - '{"risk_type":"risk_event","user_id":"user003","start_id":"start003","asset_id":"asset003","type":"数据泄露","detail":"敏感数据外传","label":["数据","泄露"],"risk_level":"CRITICAL","net_type":"4G","lan_ip":"192.168.1.12","wan_ip":"43.129.1.12"}'
+      - '{"risk_type":"risk_data","user_id":"user101","start_id":"start101","asset_id":"asset101","type":"权限过宽","detail":"数据库权限配置不当","verification_method":"自动检测","verification_result":"FAIL","label":["权限","数据库"],"risk_level":"HIGH","net_type":"WIFI","lan_ip":"192.168.2.10","wan_ip":"43.129.2.10"}'
+      - '{"risk_type":"risk_data","user_id":"user102","start_id":"start102","asset_id":"asset102","type":"明文存储","detail":"密码明文存储","verification_method":"人工审核","verification_result":"FAIL","label":["明文","密码"],"risk_level":"CRITICAL","net_type":"ETHERNET","lan_ip":"192.168.2.11","wan_ip":"43.129.2.11"}'
+      - '{"risk_type":"risk_data","user_id":"user103","start_id":"start103","asset_id":"asset103","type":"数据备份","detail":"未加密备份","verification_method":"自动检测","verification_result":"PASS","label":["备份","加密"],"risk_level":"MEDIUM","net_type":"4G","lan_ip":"192.168.2.12","wan_ip":"43.129.2.12"}'
+      - '{"risk_type":"risk_vulnerability","user_id":"user201","start_id":"start201","asset_id":"asset201","vulnerability_name":"远程代码执行","vulnerability_id":"CVE-2023-0001","vulnerability_category":"RCE","vulnerability_description":"可被远程利用执行任意代码","cvss_score":9.8,"cvss_vector":"AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H","affected_scope":"全网","affected_component":"Web服务","affected_version":"1.0.0","fixed_version":"1.0.1","fix_suggestion":"升级到1.0.1","vulnerability_status":"未修复","verification_method":"自动检测","verification_result":"FAIL","label":["漏洞","高危"],"risk_level":"CRITICAL","net_type":"WIFI","lan_ip":"192.168.3.10","wan_ip":"43.129.3.10"}'
+      - '{"risk_type":"risk_vulnerability","user_id":"user202","start_id":"start202","asset_id":"asset202","vulnerability_name":"信息泄露","vulnerability_id":"CNVD-2023-0002","vulnerability_category":"信息泄露","vulnerability_description":"敏感信息可被读取","cvss_score":7.5,"cvss_vector":"AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N","affected_scope":"部分用户","affected_component":"API接口","affected_version":"2.3.4","fixed_version":"2.3.5","fix_suggestion":"关闭调试模式","vulnerability_status":"已修复","verification_method":"人工审核","verification_result":"PASS","label":["信息","泄露"],"risk_level":"HIGH","net_type":"ETHERNET","lan_ip":"192.168.3.11","wan_ip":"43.129.3.11"}'
+      - '{"risk_type":"risk_vulnerability","user_id":"user203","start_id":"start203","asset_id":"asset203","vulnerability_name":"弱加密算法","vulnerability_id":"CVE-2023-0003","vulnerability_category":"加密","vulnerability_description":"使用了弱加密算法","cvss_score":5.0,"cvss_vector":"AV:L/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:N","affected_scope":"本地","affected_component":"加密模块","affected_version":"3.2.1","fixed_version":"3.2.2","fix_suggestion":"更换为强加密算法","vulnerability_status":"未修复","verification_method":"自动检测","verification_result":"FAIL","label":["加密","弱算法"],"risk_level":"MEDIUM","net_type":"4G","lan_ip":"192.168.3.12","wan_ip":"43.129.3.12"}'
+      - '{"risk_type":"risk_baseline","user_id":"user301","start_id":"start301","asset_id":"asset301","configuration_name":"SSH端口","expected_value":"22","current_value":"2222","verification_method":"自动检测","verification_result":"FAIL","label":["端口","SSH"],"risk_level":"MEDIUM","net_type":"WIFI","lan_ip":"192.168.4.10","wan_ip":"43.129.4.10"}'
+      - '{"risk_type":"risk_baseline","user_id":"user302","start_id":"start302","asset_id":"asset302","configuration_name":"密码复杂度","expected_value":"强","current_value":"弱","verification_method":"人工审核","verification_result":"FAIL","label":["密码","复杂度"],"risk_level":"HIGH","net_type":"ETHERNET","lan_ip":"192.168.4.11","wan_ip":"43.129.4.11"}'
+      - '{"risk_type":"risk_baseline","user_id":"user303","start_id":"start303","asset_id":"asset303","configuration_name":"日志保留天数","expected_value":"180","current_value":"90","verification_method":"自动检测","verification_result":"PASS","label":["日志","保留"],"risk_level":"LOW","net_type":"4G","lan_ip":"192.168.4.12","wan_ip":"43.129.4.12"}'
+      - '{"risk_type":"risk_weak","user_id":"user401","start_id":"start401","asset_id":"asset401","username":"admin","password":"admin123","password_type":"默认口令","verification_method":"自动检测","verification_result":"FAIL","label":["弱口令","默认"],"risk_level":"HIGH","net_type":"WIFI","lan_ip":"192.168.5.10","wan_ip":"43.129.5.10"}'
+      - '{"risk_type":"risk_weak","user_id":"user402","start_id":"start402","asset_id":"asset402","username":"root","password":"123456","password_type":"弱口令","verification_method":"人工审核","verification_result":"FAIL","label":["弱口令","常见"],"risk_level":"CRITICAL","net_type":"ETHERNET","lan_ip":"192.168.5.11","wan_ip":"43.129.5.11"}'
+      - '{"risk_type":"risk_weak","user_id":"user403","start_id":"start403","asset_id":"asset403","username":"guest","password":"guest","password_type":"弱口令","verification_method":"自动检测","verification_result":"PASS","label":["弱口令","guest"],"risk_level":"MEDIUM","net_type":"4G","lan_ip":"192.168.5.12","wan_ip":"43.129.5.12"}'
+      - '{"risk_type":"risk_attack","user_id":"user501","start_id":"start501","asset_id":"asset501","type":"暴力破解","detail":"检测到多次密码尝试","verification_method":"自动检测","verification_result":"FAIL","label":["攻击","暴力破解"],"risk_level":"HIGH","net_type":"WIFI","lan_ip":"192.168.6.10","wan_ip":"43.129.6.10"}'
+      - '{"risk_type":"risk_attack","user_id":"user502","start_id":"start502","asset_id":"asset502","type":"SQL注入","detail":"存在SQL注入风险","verification_method":"人工审核","verification_result":"FAIL","label":["攻击","SQL注入"],"risk_level":"CRITICAL","net_type":"ETHERNET","lan_ip":"192.168.6.11","wan_ip":"43.129.6.11"}'
+      - '{"risk_type":"risk_attack","user_id":"user503","start_id":"start503","asset_id":"asset503","type":"XSS攻击","detail":"检测到跨站脚本攻击","verification_method":"自动检测","verification_result":"PASS","label":["攻击","XSS"],"risk_level":"MEDIUM","net_type":"4G","lan_ip":"192.168.6.12","wan_ip":"43.129.6.12"}'
+
+transforms:
+  parse_risk_sample:
+    type: "remap"
+    inputs:
+      - "generator_risk_samples"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw_message = to_string(.message) ?? ""
+      parsed, parse_error = parse_json(raw_message)
+      assert_eq!(parse_error, null, message: "risk 模拟数据必须是合法 JSON")
+      assert!(is_object(parsed), message: "risk 模拟数据 JSON 根节点必须是对象")
+      . = object!(parsed)
+      assert!(
+        .risk_type == "risk_event" ||
+        .risk_type == "risk_data" ||
+        .risk_type == "risk_vulnerability" ||
+        .risk_type == "risk_baseline" ||
+        .risk_type == "risk_weak" ||
+        .risk_type == "risk_attack",
+        message: "risk 模拟数据 risk_type 不受支持"
+      )
+      .id = uuid_v4()
+      current_time = format_timestamp!(now(), format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+      .update_time = current_time
+      .insert_time = current_time
+
+  route_risk_sample:
+    type: "route"
+    inputs:
+      - "parse_risk_sample"
+    route:
+      risk_event: '.risk_type == "risk_event"'
+      risk_data: '.risk_type == "risk_data"'
+      risk_vulnerability: '.risk_type == "risk_vulnerability"'
+      risk_baseline: '.risk_type == "risk_baseline"'
+      risk_weak: '.risk_type == "risk_weak"'
+      risk_attack: '.risk_type == "risk_attack"'
+
+  prepare_risk_event:
+    type: "remap"
+    inputs:
+      - "route_risk_sample.risk_event"
+    source: |-
+      del(.risk_type)
+
+  prepare_risk_data:
+    type: "remap"
+    inputs:
+      - "route_risk_sample.risk_data"
+    source: |-
+      del(.risk_type)
+
+  prepare_risk_vulnerability:
+    type: "remap"
+    inputs:
+      - "route_risk_sample.risk_vulnerability"
+    source: |-
+      del(.risk_type)
+
+  prepare_risk_baseline:
+    type: "remap"
+    inputs:
+      - "route_risk_sample.risk_baseline"
+    source: |-
+      del(.risk_type)
+
+  prepare_risk_weak:
+    type: "remap"
+    inputs:
+      - "route_risk_sample.risk_weak"
+    source: |-
+      del(.risk_type)
+
+  prepare_risk_attack:
+    type: "remap"
+    inputs:
+      - "route_risk_sample.risk_attack"
+    source: |-
+      del(.risk_type)
+
+sinks:
+  risk_sample_invalid_console:
+    type: "console"
+    inputs:
+      - "parse_risk_sample.dropped"
+      - "route_risk_sample._unmatched"
+    encoding:
+      codec: "json"
+
+  risk_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_risk_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "risk_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  risk_data_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_risk_data"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "risk_data"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  risk_vulnerability_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_risk_vulnerability"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "risk_vulnerability"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  risk_baseline_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_risk_baseline"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "risk_baseline"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  risk_weak_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_risk_weak"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "risk_weak"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  risk_attack_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_risk_attack"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "risk_attack"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+tests:
+  - name: "合法样例应完成补充并进入 risk_event 分支"
+    inputs:
+      - insert_at: "parse_risk_sample"
+        type: "log"
+        log_fields:
+          message: '{"risk_type":"risk_event","user_id":"user001","start_id":"start001","asset_id":"asset001","type":"恶意软件","detail":"检测到恶意软件活动","label":["安全","高危"],"risk_level":"HIGH","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10"}'
+    outputs:
+      - extract_from: "route_risk_sample.risk_event"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.risk_type, "risk_event")
+              assert!(is_string(.id))
+              assert!(is_string(.update_time))
+              assert!(is_string(.insert_time))
+              true
+
+  - name: "非法 JSON 应进入 dropped 并保留原文"
+    inputs:
+      - insert_at: "parse_risk_sample"
+        type: "log"
+        log_fields:
+          message: "{not-json"
+    outputs:
+      - extract_from: "parse_risk_sample.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(to_string!(.message), "{not-json")
+              assert!(contains(to_string!(.metadata.dropped.message), "合法 JSON"))
+              true

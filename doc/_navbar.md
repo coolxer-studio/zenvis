@@ -1,5 +1,4 @@
 - [文档首页](/)
-- [产品理念与使用](/01-产品理念与使用/README.md)
-- [安装部署与升级](/02-安装部署与升级/README.md)
+- [快速开始](/02-安装部署与升级/快速开始.md)
 - [API 参考](/08-API参考/README.md)
 - [源码仓库](https://gitee.com/coolxer-studio/zenvis)

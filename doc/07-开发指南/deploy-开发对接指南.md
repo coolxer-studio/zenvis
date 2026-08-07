@@ -166,7 +166,7 @@ curl -fsS http://localhost:11002/actuator/health
 3. 明确配置是静态基线、插件安装产物还是运行时数据。
 4. 修改后解析 JSON，并通过后端配置接口或目标功能验证重载。
 
-插件源码不在 `open_config/plugin-package_config` 中直接开发。应在 `zenvis-plugin` 或 `zenvis-plugin-community` 修改、校验和打包，再通过插件生命周期安装。
+插件源码不在 `open_config/plugin-package_config` 中直接开发。应在 `zenvis-plugin` 的根插件目录或目标 `zenvis-plugin-*` 子工作树修改、校验和打包，再通过插件生命周期安装。
 
 ### 与本地开发的配合
 

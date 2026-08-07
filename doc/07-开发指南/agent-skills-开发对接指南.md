@@ -37,7 +37,7 @@ create-zenvis-plugin
         ↓
 zenvis-backend + zenvis-frontend 当前契约
         ↓
-zenvis-plugin 或 zenvis-plugin-community
+zenvis-plugin 根插件目录或 zenvis-plugin-* 子工作树
         ↓
 插件归档与安装验证
 ```
@@ -179,5 +179,4 @@ interface:
 
 - [插件开发与集成](/03-插件开发与集成/README.md)
 - [`zenvis-plugin` 开发对接指南](/07-开发指南/zenvis-plugin-开发对接指南.md)
-- [`zenvis-plugin-community` 开发对接指南](/07-开发指南/zenvis-plugin-community-开发对接指南.md)
 - [AI 与数据智能](/04-AI与数据智能/README.md)

@@ -2,15 +2,18 @@
 
 ## 项目定位
 
-`zenvis-plugin` 保存 ZenVis 平台内置插件、正式动态 API 源码和跨平台打包脚本。每个 `plugin-*` 目录是独立发布单元，可以生成 `.tar.gz` 并通过插件管理页面安装或升级。
+`zenvis-plugin` 是 ZenVis 唯一的插件源项目，统一容纳平台、社区和企业插件、正式动态 API 源码及跨平台打包脚本。父仓库直接维护通用 `plugin-*`，场景或产品插件位于 `zenvis-plugin-*` 独立 Git 子工作树；每个 `plugin-*` 仍是独立发布单元，可以生成 `.tar.gz` 并通过插件管理页面安装或升级。
 
 平台核心只提供插件运行框架；业务数据模型、接入任务、API、页面、看板、MCP、Skill 和菜单应在插件内共同交付。
+
+平台、社区和企业是维护与交付分类，不对应不同目录契约或安装通道。企业插件在统一契约之外还需要明确产品责任、兼容周期、安全评审、可观测性、升级回滚和生产验收要求。
 
 ## 上下游关系
 
 - 上游：数据字典、对接规范、后端插件/Meta/动态 API 契约、前端低代码与看板契约。
 - 下游：插件归档、后端安装生命周期、Vectum/Kafka/ClickHouse 数据链路、前端菜单与页面。
 - 发布边界：插件是独立版本单元；契约变化需要同步 `index.json`、实现、测试、`00_doc` 和发布说明，不直接修改平台公开 API。
+- Git 边界：父仓库与 `zenvis-plugin-*` 子仓库分别检查、测试和提交；不要从父仓库提交子工作树内容。
 
 ## 技术栈与当前插件
 
@@ -23,11 +26,22 @@
 | `plugin-asset` | `com.coolxer.plugin.asset` | `1.3.1` | 资产管理 |
 | `plugin-integrated` | `com.coolxer.plugin.integrated` | `1.0.0` | 探针集成 |
 | `plugin-operation` | `com.coolxer.plugin.operation` | `1.2.1` | 运营分析 |
-| `plugin-probe` | `com.coolxer.plugin.probe` | `2.0.1` | 探针数据采集 |
 | `plugin-risk` | `com.coolxer.plugin.risk` | `1.2.1` | 风险监控 |
+| `plugin-security-operation` | `com.coolxer.plugin.security.operation` | `1.0.2` | 安全运营态势与工单工作台 |
 | `plugin-user-event` | `com.coolxer.plugin.user.event` | `1.0.4` | 用户事件分析与测试示例 |
 
 修改发布内容时同步更新对应插件版本和文档，不要只修改根 README 中的版本表。
+
+场景与产品子仓库：
+
+| 目录 | Git 边界 | 作用 |
+| --- | --- | --- |
+| `zenvis-plugin-btw` | 独立子工作树 | BTW 僵尸网络、木马与蠕虫检测分析场景插件 |
+| `zenvis-plugin-lubinsun` | 独立子工作树 | Lubinsun 场景插件，具体插件和版本以子仓库 README 为准 |
+| `zenvis-plugin-onesoc` | 独立子工作树 | OneSOC 产品插件，具体插件和版本以子仓库 README 为准 |
+| `zenvis-plugin-synap` | 待建立独立子工作树 | Synap 探针数据采集插件，插件目录为 `plugin-synap` |
+
+子仓库的插件清单、动态 API、构建命令、部署顺序和版本以各自 README、`index.json` 与 `00_doc` 为准。目录名称不改变统一的 ZenVis 插件包契约。
 
 ## 仓库结构
 
@@ -42,12 +56,28 @@ zenvis-plugin/
 ├── plugin-asset/
 ├── plugin-integrated/
 ├── plugin-operation/
-├── plugin-probe/
 ├── plugin-risk/
-└── plugin-user-event/
+├── plugin-security-operation/
+├── plugin-user-event/
+├── zenvis-plugin-btw/              # 独立 Git 子工作树
+├── zenvis-plugin-lubinsun/         # 独立 Git 子工作树
+├── zenvis-plugin-onesoc/           # 独立 Git 子工作树
+└── zenvis-plugin-synap/            # Synap 产品目录（内含 plugin-synap/）
 ```
 
 根 Maven reactor 当前管理 `api-common` 以及资产、风险、运营插件的 `api-src` 模块。新增正式 API 模块时需要同时更新根 `pom.xml`。
+
+开始工作前按实际目标检查状态：
+
+```bash
+git -C zenvis-plugin status --short
+git -C zenvis-plugin/zenvis-plugin-btw status --short
+git -C zenvis-plugin/zenvis-plugin-lubinsun status --short
+git -C zenvis-plugin/zenvis-plugin-onesoc status --short
+git -C zenvis-plugin/zenvis-plugin-synap status --short
+```
+
+只修改目标工作树。父仓库的构建产物、子仓库的未发布 Jar、迁移和归档不能跨工作树复用。
 
 ## 插件目录契约
 
@@ -104,7 +134,8 @@ plugin-xxx/
 
 新增插件前确认：
 
-- 插件应进入内置仓库还是社区仓库；
+- 插件由父仓库直接维护，还是进入现有或新的场景/产品子工作树；
+- 插件属于平台、社区还是企业交付分类，以及对应的维护和验收责任；
 - `package_name`、Entity、表、Kafka topic、菜单和看板 code 全局不冲突；
 - 结构化数据定义数量和字段顺序；
 - 非结构化附件是否需要独立存储；
@@ -227,6 +258,20 @@ powershell -ExecutionPolicy Bypass -File build.ps1 plugin-asset plugin-risk
 
 打包脚本会构建 API、删除 `03_api` 中旧 Jar、复制新 Jar并在仓库根目录生成归档。这些操作会改变工作树或生成文件；只在明确准备发布时执行。
 
+### 场景与产品子仓库
+
+进入目标子工作树后运行其 README 声明的测试和构建命令。例如 BTW：
+
+```bash
+cd zenvis-plugin/zenvis-plugin-btw
+mvn -f extend-btw/pom.xml test
+bash build.sh plugin-btw
+```
+
+`zenvis-plugin-lubinsun` 与 `zenvis-plugin-onesoc` 的插件组合和发布节奏可能不同，不从父仓库命令机械推断；以各自当前 README、`index.json` 和构建脚本为准。
+
+企业分类插件除通用归档验证外，还必须提供兼容矩阵、安全与依赖检查、运行指标和告警、容量基线、备份恢复、升级回滚及目标环境验收记录。
+
 ## 归档验证
 
 生成归档后不能只检查源码目录。至少验证：
@@ -276,7 +321,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 plugin-asset plugin-risk
 - 无重复 ID、Entity、表、topic、配置索引和菜单 code；
 - 异常记录进入 DLQ，正常记录不会写入错误实体；
 - 版本、迁移和归档内容正确；
-- 在 `zenvis-plugin` 独立工作树检查状态，不覆盖其他未提交插件修改。
+- 在实际父仓库或 `zenvis-plugin-*` 子工作树检查状态，不覆盖其他工作树的未提交修改。
 
 ## 关联文档
 
@@ -284,5 +329,4 @@ powershell -ExecutionPolicy Bypass -File build.ps1 plugin-asset plugin-risk
 - [插件包规范](/03-插件开发与集成/插件包规范.md)
 - [生命周期与发布验证](/03-插件开发与集成/生命周期与发布验证.md)
 - [`agent-skills` 开发对接指南](/07-开发指南/agent-skills-开发对接指南.md)
-- [`zenvis-plugin-community` 开发对接指南](/07-开发指南/zenvis-plugin-community-开发对接指南.md)
 - [`zenvis-backend` 开发对接指南](/07-开发指南/zenvis-backend-开发对接指南.md)

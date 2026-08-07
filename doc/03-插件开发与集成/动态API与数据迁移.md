@@ -18,7 +18,7 @@ plugin-example/
         └── V002__add_status_index.sql
 ```
 
-内置插件通常把源码放在插件的 `api-src/`，并由 `zenvis-plugin` 根 Maven Reactor 管理。社区插件也可以维护独立的 `extend-*` Maven 工程，但最终归档仍只包含 `03_api` 下的一个运行 JAR。
+`zenvis-plugin` 根插件通常把源码放在插件的 `api-src/`，并由根 Maven Reactor 管理。嵌套场景或产品子仓库也可以维护独立的 `extend-*` Maven 工程，但最终归档仍只包含 `03_api` 下的一个运行 JAR。
 
 ## 动态加载契约
 
@@ -213,7 +213,7 @@ ClickHouse 分析表由 `01_meta` 管理，不要用 MySQL 迁移替代 Meta 自
 
 ## 构建
 
-在内置插件仓库执行：
+构建父仓库直接维护的插件时执行：
 
 ```bash
 cd zenvis-plugin

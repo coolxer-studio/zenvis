@@ -804,6 +804,7 @@
                 "size": "lg",
                 "body": {
                   "type": "form",
+                  "initApi": "/zenvis/api/v1/dih/mcp/servers/${id}/view",
                   "api": "/zenvis/api/v1/dih/mcp/servers/$id/update",
                   "reload": "mcp_server_list",
                   "body": [

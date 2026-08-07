@@ -1,0 +1,8 @@
+[
+  {
+    "name": "资产治理态势",
+    "code": "com.coolxer.plugin.asset.dashboard.asset-governance-overview",
+    "type": "HTML_PAGE",
+    "html_path": "asset-governance-overview.html"
+  }
+]

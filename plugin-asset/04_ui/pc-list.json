@@ -1,0 +1,446 @@
+{
+  "type": "page",
+  "title": "列表",
+  "remark": null,
+  "name": "page-p c",
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "link",
+      "link": "/entity/asset_pc/new",
+      "label": "手动录入",
+      "primary": true
+    }
+  ],
+  "body": [
+    {
+      "type": "crud",
+      "name": "sample",
+      "primaryField": "zenvis_id",
+      "api": "/zenvis/api/v1/entity/asset_pc/list",
+      "quickSaveItemApi": "/zenvis/api/v1/entity/asset_pc/$zenvis_id/update",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "update_time",
+        "orderDir": "desc"
+      },
+      "bulkActions": [
+        {
+          "label": "批量修改",
+          "type": "button",
+          "actionType": "dialog",
+          "level": "light",
+          "dialog": {
+            "title": "批量编辑",
+            "name": "sample-bulk-edit",
+            "body": {
+              "type": "form",
+              "api": "/zenvis/api/v1/entity/asset_pc/$ids/bulk_update",
+              "controls": [
+                {
+                  "type": "input-tag",
+                  "name": "label",
+                  "searchable": true,
+                  "clearable": true,
+                  "source": "/zenvis/api/v1/entity/asset_pc/label/list"
+                },
+                {
+                  "type": "select",
+                  "name": "level",
+                  "label": "资产等级",
+                  "searchable": true,
+                  "source": "/zenvis/api/v1/entity/asset_pc/level/list"
+                },
+                {
+                  "type": "select",
+                  "name": "type",
+                  "label": "资产类型",
+                  "searchable": true,
+                  "source": "/zenvis/api/v1/entity/asset_pc/type/list"
+                },
+                {
+                  "type": "select",
+                  "name": "owner",
+                  "label": "资产归属",
+                  "searchable": true,
+                  "source": "/zenvis/api/v1/entity/asset_pc/owner/list"
+                },
+                {
+                  "type": "select",
+                  "name": "status",
+                  "label": "状态",
+                  "searchable": true,
+                  "source": "/zenvis/api/v1/entity/asset_pc/status/list"
+                },
+                {
+                  "type": "switch",
+                  "name": "access",
+                  "label": "是否可见"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "label": "批量删除",
+          "type": "button",
+          "level": "danger",
+          "actionType": "ajax",
+          "api": "delete:/zenvis/api/v1/entity/asset_pc/bulk/$ids",
+          "confirmText": "确定要批量删除?"
+        }
+      ],
+      "columns": [
+        {
+          "type": "link",
+          "href": "/#/device/index?id=${id}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${id|truncate:14}"
+          },
+          "name": "id",
+          "label": "资产ID",
+          "copyable": true
+        },
+        {
+          "name": "update_time",
+          "label": "活跃时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "updateTime"
+          }
+        },
+        {
+          "name": "label",
+          "label": "标签",
+          "type": "tpl",
+          "tpl": "<% if (data.label) { data.label.split(',').forEach(function(item) { %> <span class='label label-info m-l-sm'><%- item %></span> <% });} %>",
+          "quickEdit": {
+            "type": "input-tag",
+            "placeholder": "",
+            "clearable": true,
+            "saveImmediately": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/label/list"
+          },
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/label/list"
+          }
+        },
+        {
+          "name": "manufacturer",
+          "label": "厂商",
+          "searchable": {
+            "type": "input-text",
+            "autoComplete": "/zenvis/api/v1/entity/asset_pc/manufacturer/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "model",
+          "label": "型号",
+          "searchable": {
+            "type": "input-text",
+            "autoComplete": "/zenvis/api/v1/entity/asset_pc/model/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "system_name",
+          "label": "操作系统",
+          "searchable": {
+            "type": "input-text",
+            "name": "systemName",
+            "autoComplete": "/zenvis/api/v1/entity/asset_pc/system_name/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "system_version",
+          "label": "系统版本",
+          "searchable": {
+            "type": "input-text",
+            "name": "systemVersion",
+            "autoComplete": "/zenvis/api/v1/entity/asset_pc/system_version/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "architecture",
+          "label": "架构"
+        },
+        {
+          "name": "cpu_model",
+          "label": "CPU型号"
+        },
+        {
+          "name": "cpu_cores",
+          "label": "CPU核心",
+          "toggled": false
+        },
+        {
+          "name": "memory_size",
+          "label": "内存",
+          "toggled": false
+        },
+        {
+          "name": "disk_size",
+          "label": "硬盘",
+          "toggled": false
+        },
+        {
+          "name": "location",
+          "label": "位置",
+          "searchable": {
+            "name": "areaCode",
+            "type": "input-city",
+            "itemClassName": "min-w-xs",
+            "size": "full",
+            "searchable": true
+          },
+          "toggled": false
+        },
+        {
+          "name": "monitor_brand",
+          "label": "显示器品牌",
+          "searchable": {
+            "type": "input-text",
+            "name": "monitorBrand",
+            "autoComplete": "/zenvis/api/v1/entity/asset_pc/monitor_brand/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "monitor_model",
+          "label": "显示器型号",
+          "searchable": {
+            "type": "input-text",
+            "name": "monitorModel",
+            "autoComplete": "/zenvis/api/v1/entity/asset_pc/monitor_model/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "monitor_resolution",
+          "label": "显示器分辨率",
+          "toggled": false
+        },
+        {
+          "name": "monitor_interface",
+          "label": "显示器接口类型",
+          "toggled": false
+        },
+        {
+          "name": "gpu_brand",
+          "label": "显卡品牌",
+          "toggled": false
+        },
+        {
+          "name": "gpu_model",
+          "label": "显卡型号",
+          "toggled": false
+        },
+        {
+          "name": "gpu_memory_size",
+          "label": "显存容量(GB)",
+          "toggled": false
+        },
+        {
+          "name": "gpu_memory_type",
+          "label": "显存类型",
+          "toggled": false
+        },
+        {
+          "name": "wan_ip",
+          "label": "外网IP",
+          "copyable": true,
+          "searchable": {
+            "type": "input-text",
+            "name": "wanIp"
+          }
+        },
+        {
+          "name": "lan_ip",
+          "label": "内网IP",
+          "copyable": true,
+          "searchable": {
+            "type": "input-text",
+            "name": "lanIp"
+          }
+        },
+        {
+          "name": "level",
+          "label": "重要等级",
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/level/list"
+          }
+        },
+        {
+          "name": "risk",
+          "label": "风险等级",
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/risk/list"
+          }
+        },
+        {
+          "type": "tpl",
+          "tpl": "${risk_info|truncate:2}",
+          "name": "risk_info",
+          "label": "风险详情",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${risk_info}"
+            }
+          },
+          "toggled": false
+        },
+        {
+          "name": "net_type",
+          "label": "网络类型",
+          "toggled": false
+        },
+        {
+          "name": "source",
+          "label": "来源",
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/source/list"
+          },
+          "toggled": false
+        },
+        {
+          "name": "owner",
+          "label": "属主",
+          "toggled": false,
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/owner/list"
+          }
+        },
+        {
+          "name": "access",
+          "label": "是否开放",
+          "type": "mapping",
+          "map": {
+            "true": "<span class='label label-warning'>开放</span>",
+            "false": "<span class='label label-info'>不开放</span>",
+            "*": "其他：${type}"
+          },
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "options": [
+              {
+                "value": 1,
+                "label": "开放"
+              },
+              {
+                "value": 0,
+                "label": "不开放"
+              }
+            ]
+          },
+          "toggled": false
+        },
+        {
+          "name": "type",
+          "label": "资产类型",
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/type/list"
+          },
+          "toggled": false
+        },
+        {
+          "name": "status",
+          "label": "状态",
+          "searchable": {
+            "type": "select",
+            "searchable": true,
+            "clearable": true,
+            "source": "/zenvis/api/v1/entity/asset_pc/status/list"
+          },
+          "toggled": false
+        },
+        {
+          "name": "insert_time",
+          "label": "入库时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "insertTime"
+          },
+          "toggled": false
+        },
+        {
+          "type": "tpl",
+          "tpl": "${info|truncate:2}",
+          "name": "info",
+          "label": "资产详情",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${info}"
+            }
+          },
+          "toggled": false
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": "",
+          "buttons": [
+            {
+              "type": "button-group",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "查看",
+                  "level": "info",
+                  "actionType": "link",
+                  "link": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-pc?record_id=${zenvis_id}"
+                },
+                {
+                  "type": "button",
+                  "label": "修改",
+                  "level": "warning",
+                  "actionType": "link",
+                  "link": "/asset/asset_pc/${zenvis_id}/edit"
+                },
+                {
+                  "type": "button",
+                  "label": "删除",
+                  "level": "danger",
+                  "actionType": "ajax",
+                  "confirmText": "您确认要删除?",
+                  "api": "delete:/zenvis/api/v1/entity/asset_pc/$zenvis_id"
+                }
+              ]
+            }
+          ],
+          "placeholder": "-",
+          "fixed": "right"
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无数据",
+      "tableClassName": "table-db table-striped",
+      "headerClassName": "crud-table-header",
+      "footerClassName": "crud-table-footer",
+      "toolbarClassName": "crud-table-toolbar",
+      "combineNum": 0,
+      "bodyClassName": "panel-default"
+    }
+  ]
+}

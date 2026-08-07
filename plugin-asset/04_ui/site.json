@@ -1,0 +1,129 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/index"
+      },
+      {
+        "children": [
+          {
+            "label": "资产总览",
+            "url": "index",
+            "icon": "fa-solid fa-house",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=index.json"
+          },
+          {
+            "label": "设备资产",
+            "icon": "fa-solid fa-hard-drive",
+            "children": [
+              {
+                "label": "服务器设备管理",
+                "url": "/hardware/host/list",
+                "icon": "fa-solid fa-server",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=host-list.json"
+              },
+              {
+                "label": "修改",
+                "url": "/host/:id/edit",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=host-edit.json"
+              },
+              {
+                "label": "移动端设备管理",
+                "url": "/hardware/mobile/list",
+                "icon": "fa-solid fa-mobile",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=mobile-list.json"
+              },
+              {
+                "label": "修改",
+                "url": "/asset/:entity/:id/edit",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=asset-edit.json"
+              },
+              {
+                "label": "PC端设备管理",
+                "url": "/hardware/pc/list",
+                "icon": "fa-solid fa-laptop",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=pc-list.json"
+              },
+              {
+                "label": "IOT设备管理",
+                "url": "/hardware/iot/list",
+                "icon": "fa-solid fa-vector-square",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=iot-list.json"
+              }
+            ]
+          },
+          {
+            "label": "软件资产",
+            "icon": "fa-solid fa-cube",
+            "children": [
+              {
+                "label": "探针管理",
+                "url": "/software/probe/list",
+                "icon": "fa-solid fa-atom",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=probe-list.json"
+              },
+              {
+                "label": "应用管理",
+                "url": "/software/app/list",
+                "icon": "fa-brands fa-dropbox",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=app-list.json"
+              },
+              {
+                "label": "服务管理",
+                "url": "/software/service/list",
+                "icon": "fa-solid fa-layer-group",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=service-list.json"
+              },
+              {
+                "label": "API管理",
+                "url": "/software/api/list",
+                "icon": "fa-solid fa-shuffle",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=api-list.json"
+              }
+            ]
+          },
+          {
+            "label": "数据资产",
+            "icon": "fa-solid fa-database",
+            "children": [
+              {
+                "label": "日志资产列表",
+                "url": "/data/log/list",
+                "icon": "fa-regular fa-file-lines",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=log-list.json"
+              },
+              {
+                "label": "文件资产列表",
+                "url": "/data/file/list",
+                "icon": "fa-regular fa-file",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=file-list.json"
+              }
+            ]
+          },
+          {
+            "label": "资管规则配置",
+            "url": "/asset/rule/list",
+            "icon": "fas fa-water",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=rule-list.json"
+          },
+          {
+            "label": "添加规则",
+            "url": "/asset/rule/new",
+            "icon": "fas fa-tint",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=rule-new.json"
+          },
+          {
+            "label": "手动录入",
+            "url": "/asset/new",
+            "icon": "fa fa-plus",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.asset/get?file_name=asset-new.json"
+          }
+        ]
+      }
+    ]
+  }
+}

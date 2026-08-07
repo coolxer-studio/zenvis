@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>资产治理态势</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07101d;--panel:#0d1d30e8;--line:#55c9ff33;--text:#eef8ff;--muted:#88a8bb;--cyan:#54d6ff;--teal:#3ce6c1;--amber:#ffc766;--rose:#ff718f}
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}body{min-width:1180px;min-height:680px;overflow:hidden;color:var(--text);font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:radial-gradient(circle at 50% -20%,#1a6ca03d,transparent 44%),linear-gradient(135deg,#040a12,#081827 55%,#07101d)}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.28;background-image:linear-gradient(#54d6ff12 1px,transparent 1px),linear-gradient(90deg,#54d6ff12 1px,transparent 1px);background-size:40px 40px}
+    button{font:inherit}.screen{position:relative;width:100vw;height:100vh;padding:18px 22px 22px;display:grid;grid-template-rows:64px 110px minmax(0,1fr);gap:14px}.top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}.brand{color:var(--muted);font-size:12px;letter-spacing:.12em}.title{text-align:center}.title h1{margin:0;font-size:29px;letter-spacing:.16em;text-shadow:0 0 24px #54d6ff55}.title p{margin:4px 0 0;color:var(--muted);font-size:11px}.actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;color:var(--muted);font-size:11px}.clock{color:var(--cyan);font:18px monospace}.refresh{border:1px solid #54d6ff66;border-radius:7px;padding:7px 12px;background:#54d6ff16;color:var(--text);cursor:pointer}.refresh:disabled{opacity:.55;cursor:wait}
+    .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.kpi,.panel{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:9px;background:linear-gradient(155deg,#102a42d9,var(--panel));box-shadow:0 18px 44px #0005}.kpi:before,.panel:before{content:"";position:absolute;top:0;left:0;width:68px;height:2px;background:linear-gradient(90deg,var(--cyan),transparent)}.kpi{padding:13px 15px;display:flex;flex-direction:column;justify-content:space-between}.kpi span{color:var(--muted);font-size:12px}.kpi strong{font:800 30px/34px "DIN Alternate",monospace}.kpi small{color:var(--muted)}
+    .main{min-height:0;display:grid;grid-template-columns:1.2fr 1.8fr 1.2fr;grid-template-rows:1fr 1fr;gap:14px}.panel{padding:14px;min-height:0;display:flex;flex-direction:column}.panel.tall{grid-row:span 2}.head{display:flex;align-items:center;justify-content:space-between;height:28px;margin-bottom:8px}.head b{font-size:14px}.head small{color:var(--muted)}.chart{flex:1;min-height:0}.asset-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;height:100%;overflow:auto}.asset-card{padding:9px 10px;border:1px solid #54d6ff20;border-radius:7px;background:#06111e66}.asset-card span{display:block;color:var(--muted);font-size:10px}.asset-card strong{font:700 21px monospace}.bars{display:grid;gap:8px;align-content:center;height:100%}.bar{display:grid;grid-template-columns:72px 1fr 48px;align-items:center;gap:8px;font-size:11px}.bar label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9dbea}.track{height:8px;border-radius:99px;background:#7897a822;overflow:hidden}.fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--cyan),var(--teal))}.bar em{text-align:right;font-style:normal;color:#c9dbea}.trend{width:100%;height:100%}.empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+    .state{position:fixed;z-index:5;inset:0;display:none;align-items:center;justify-content:center;background:#040a12aa}.state.visible{display:flex}.spinner{width:42px;height:42px;border:3px solid #54d6ff33;border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.error{position:fixed;z-index:6;top:88px;left:50%;display:none;max-width:760px;padding:10px 14px;border:1px solid #ff718f88;border-radius:8px;background:#50152beF;color:#ffe2e9;transform:translateX(-50%);font-size:12px}.error.visible{display:block}
+    @media(max-height:760px){.screen{padding:12px 16px 16px;grid-template-rows:56px 94px minmax(0,1fr);gap:10px}.kpi{padding:9px 12px}.panel{padding:10px}}
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <header class="top"><div class="brand">ZENVIS / ASSET GOVERNANCE</div><div class="title"><h1>资产治理态势</h1><p>十类资产规模、风险、状态与变化趋势</p></div><div class="actions"><span id="updated">尚未更新</span><span class="clock" id="clock">--:--:--</span><button class="refresh" id="refresh">刷新</button></div></header>
+    <section class="kpis">
+      <article class="kpi"><span>累计资产</span><strong id="total">—</strong><small>十类资产总量</small></article>
+      <article class="kpi"><span>今日新增</span><strong id="today">—</strong><small>按平台入库时间</small></article>
+      <article class="kpi"><span>在线资产</span><strong id="online">—</strong><small>状态为 ONLINE</small></article>
+      <article class="kpi"><span>高风险资产</span><strong id="highRisk">—</strong><small>风险为 HIGH / EXTREME</small></article>
+      <article class="kpi"><span>有数据类型</span><strong id="activeTypes">—</strong><small>共 10 类实体</small></article>
+    </section>
+    <section class="main">
+      <article class="panel tall"><div class="head"><b>资产类型规模</b><small>ALL TIME</small></div><div class="asset-grid chart" id="assets"></div></article>
+      <article class="panel tall"><div class="head"><b>近 7 日新增趋势</b><small>按日聚合 · ZENVIS_INSERT_TIME</small></div><canvas class="trend chart" id="trend"></canvas></article>
+      <article class="panel"><div class="head"><b>风险分布</b><small>全部资产</small></div><div class="bars chart" id="risks"></div></article>
+      <article class="panel"><div class="head"><b>生命周期状态</b><small>全部资产</small></div><div class="bars chart" id="statuses"></div></article>
+    </section>
+  </main>
+  <div class="state visible" id="loading"><div class="spinner"></div></div><div class="error" id="error"></div>
+  <script>
+    (()=>{'use strict';
+      const ENTITIES=['asset_host','asset_pc','asset_iot','asset_mobile','asset_probe','asset_app','asset_service','asset_api','asset_log','asset_file'];
+      const LABELS={asset_host:'主机',asset_pc:'PC 终端',asset_iot:'IoT 设备',asset_mobile:'移动端',asset_probe:'探针',asset_app:'应用',asset_service:'服务',asset_api:'API',asset_log:'日志',asset_file:'文件'};
+      const primary=location.pathname.startsWith('/zenvis/')?'/zenvis/api/v1':'/api/v1',bases=[primary,primary==='/api/v1'?'/zenvis/api/v1':'/api/v1'];let busy=false,timer;
+      const $=id=>document.getElementById(id),num=v=>Number.isFinite(Number(v))?Number(v):0,fmt=new Intl.NumberFormat('zh-CN');
+      async function request(path,body){let last;for(const base of bases){try{const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'same-origin'});if(r.status===404)continue;if(!r.ok)throw new Error(`HTTP ${r.status}`);const p=await r.json();if(!p||p.status!==0)throw new Error(p&&p.msg||'接口返回业务错误');return p.data}catch(e){last=e}}throw last||new Error('无法访问 Zenvis API')}
+      const rows=d=>d&&d.result&&Array.isArray(d.result.rows)?d.result.rows:[];
+      function mappings(dimension){return ENTITIES.map(entity=>({entity,dimension,label:LABELS[entity]}))}
+      function aggregateDistribution(data){const out={};rows(data).forEach(r=>out[r.bucket]=(out[r.bucket]||0)+num(r.value));return out}
+      function bars(id,data,empty){const el=$(id),items=Object.entries(data).sort((a,b)=>b[1]-a[1]);if(!items.length){el.innerHTML=`<div class="empty">${empty}</div>`;return}const max=Math.max(...items.map(x=>x[1]),1);el.innerHTML=items.map(([label,value])=>`<div class="bar"><label title="${label}">${label}</label><span class="track"><span class="fill" style="width:${Math.max(2,value/max*100)}%"></span></span><em>${fmt.format(value)}</em></div>`).join('')}
+      function drawTrend(data){const canvas=$('trend'),rect=canvas.getBoundingClientRect(),ratio=devicePixelRatio||1,w=Math.max(420,rect.width),h=Math.max(260,rect.height);canvas.width=w*ratio;canvas.height=h*ratio;const c=canvas.getContext('2d');c.setTransform(ratio,0,0,ratio,0,0);c.clearRect(0,0,w,h);const grouped={};rows(data).forEach(r=>grouped[r.bucket]=(grouped[r.bucket]||0)+num(r.value));const entries=Object.entries(grouped);if(!entries.length){c.fillStyle='#88a8bb';c.textAlign='center';c.fillText('近 7 日暂无新增资产',w/2,h/2);return}const p={l:48,r:18,t:22,b:38},max=Math.max(...entries.map(x=>x[1]),1),cw=w-p.l-p.r,ch=h-p.t-p.b;c.font='11px sans-serif';for(let i=0;i<=4;i++){const y=p.t+ch*i/4;c.strokeStyle='#88a8bb22';c.beginPath();c.moveTo(p.l,y);c.lineTo(w-p.r,y);c.stroke();c.fillStyle='#7897a8';c.textAlign='right';c.fillText(fmt.format(Math.round(max*(4-i)/4)),p.l-8,y+3)}const pts=entries.map(([label,value],i)=>({label,value,x:p.l+(entries.length===1?cw/2:cw*i/(entries.length-1)),y:p.t+ch-ch*value/max}));const g=c.createLinearGradient(0,p.t,0,p.t+ch);g.addColorStop(0,'#54d6ff55');g.addColorStop(1,'#54d6ff05');c.beginPath();pts.forEach((x,i)=>i?c.lineTo(x.x,x.y):c.moveTo(x.x,x.y));c.lineTo(pts.at(-1).x,p.t+ch);c.lineTo(pts[0].x,p.t+ch);c.closePath();c.fillStyle=g;c.fill();c.beginPath();pts.forEach((x,i)=>i?c.lineTo(x.x,x.y):c.moveTo(x.x,x.y));c.strokeStyle='#54d6ff';c.lineWidth=2.5;c.stroke();pts.forEach(x=>{c.fillStyle='#3ce6c1';c.beginPath();c.arc(x.x,x.y,3,0,Math.PI*2);c.fill();c.fillStyle='#88a8bb';c.textAlign='center';c.fillText(String(x.label).slice(5,10),x.x,p.t+ch+19)})}
+      async function load(){if(busy)return;busy=true;$('refresh').disabled=true;$('loading').classList.add('visible');$('error').classList.remove('visible');try{const [overview,trend,risk,status]=await Promise.all([
+        request('/entity/overview/query',{entities:ENTITIES,time_range:{preset:'TODAY'},comparison:'NONE'}),
+        request('/entity/trend/query',{entities:ENTITIES,time_range:{preset:'LAST_7_DAYS'},granularity:'DAY'}),
+        request('/entity/distribution/query',{mappings:mappings('risk'),time_range:{preset:'ALL_TIME'},limit:10}),
+        request('/entity/distribution/query',{mappings:mappings('status'),time_range:{preset:'ALL_TIME'},limit:10})]);
+        const overviewRows=rows(overview),riskMap=aggregateDistribution(risk),statusMap=aggregateDistribution(status);$('total').textContent=fmt.format(overviewRows.reduce((s,r)=>s+num(r.all_time_count),0));$('today').textContent=fmt.format(overviewRows.reduce((s,r)=>s+num(r.current_value),0));$('online').textContent=fmt.format(statusMap.ONLINE||0);$('highRisk').textContent=fmt.format((riskMap.HIGH||0)+(riskMap.EXTREME||0));$('activeTypes').textContent=`${overviewRows.filter(r=>num(r.all_time_count)>0).length} / 10`;
+        $('assets').innerHTML=overviewRows.map(r=>`<div class="asset-card"><span>${LABELS[r.entity]||r.label||r.entity}</span><strong>${fmt.format(num(r.all_time_count))}</strong><span>今日 +${fmt.format(num(r.current_value))}</span></div>`).join('')||'<div class="empty">暂无资产数据</div>';bars('risks',riskMap,'暂无风险数据');bars('statuses',statusMap,'暂无状态数据');drawTrend(trend);$('updated').textContent=`更新于 ${new Date().toLocaleTimeString('zh-CN',{hour12:false})}`
+      }catch(e){$('error').textContent=`数据刷新失败：${e.message||e}`;$('error').classList.add('visible')}finally{busy=false;$('refresh').disabled=false;$('loading').classList.remove('visible')}}
+      function clock(){$('clock').textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false})}$('refresh').addEventListener('click',load);addEventListener('resize',()=>load());clock();setInterval(clock,1000);load();timer=setInterval(load,60000);addEventListener('beforeunload',()=>clearInterval(timer));
+    })();
+  </script>
+</body>
+</html>

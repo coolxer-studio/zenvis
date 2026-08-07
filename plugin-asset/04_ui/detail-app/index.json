@@ -1,0 +1,228 @@
+{
+  "type": "page",
+  "title": "应用资产详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/asset_app/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "应用资产记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "平台记录",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的实际接收时间。",
+              "span": 2
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产治理信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "应用ID",
+              "content": "${id | default:'-'}",
+              "remark": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。"
+            },
+            {
+              "label": "来源",
+              "content": "${source | default:'-'}",
+              "remark": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。"
+            },
+            {
+              "label": "类型",
+              "content": "${type | default:'-'}",
+              "remark": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。"
+            },
+            {
+              "label": "负责人",
+              "content": "${owner | default:'-'}",
+              "remark": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。"
+            },
+            {
+              "label": "状态",
+              "content": "${status | default:'-'}",
+              "remark": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。"
+            },
+            {
+              "label": "标签",
+              "content": "${label | default:'-'}",
+              "remark": "业务标签列表"
+            },
+            {
+              "label": "可访问性",
+              "content": "${access | default:'-'}",
+              "remark": "是否允许访问：1 表示开放，0 表示不开放。"
+            },
+            {
+              "label": "重要等级",
+              "content": "${level | default:'-'}",
+              "remark": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。"
+            },
+            {
+              "label": "风险等级",
+              "content": "${risk | default:'-'}",
+              "remark": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。"
+            },
+            {
+              "label": "风险详情",
+              "content": "${risk_info | default:'-'}",
+              "remark": "风险描述"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "资产在来源系统中的最后更新时间，精确到毫秒。"
+            },
+            {
+              "label": "入库时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产详细属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "扩展信息",
+              "content": "${info | default:'-'}",
+              "remark": "其他 JSON 扩展信息"
+            },
+            {
+              "label": "应用名称",
+              "content": "${app_name | default:'-'}",
+              "remark": "应用名称"
+            },
+            {
+              "label": "应用版本",
+              "content": "${app_version | default:'-'}",
+              "remark": "应用版本号"
+            },
+            {
+              "label": "应用类型",
+              "content": "${app_type | default:'-'}",
+              "remark": "应用分类（如原生/H5/小程序）"
+            },
+            {
+              "label": "平台",
+              "content": "${platform | default:'-'}",
+              "remark": "目标平台（iOS/Android/Web）"
+            },
+            {
+              "label": "包名",
+              "content": "${package_name | default:'-'}",
+              "remark": "应用包名/Bundle ID"
+            },
+            {
+              "label": "开发者",
+              "content": "${developer | default:'-'}",
+              "remark": "应用开发者"
+            },
+            {
+              "label": "发布时间",
+              "content": "${publish_time | default:'-'}",
+              "remark": "应用发布时间"
+            },
+            {
+              "label": "更新渠道",
+              "content": "${update_channel | default:'-'}",
+              "remark": "应用更新渠道"
+            },
+            {
+              "label": "最低OS版本",
+              "content": "${min_os_version | default:'-'}",
+              "remark": "最低支持系统版本"
+            },
+            {
+              "label": "目标OS版本",
+              "content": "${target_os_version | default:'-'}",
+              "remark": "推荐系统版本"
+            },
+            {
+              "label": "权限列表",
+              "content": "${permissions | default:'-'}",
+              "remark": "应用权限清单"
+            },
+            {
+              "label": "依赖库",
+              "content": "${dependencies | default:'-'}",
+              "remark": "依赖库/框架列表"
+            },
+            {
+              "label": "文件MD5",
+              "content": "${file_md5 | default:'-'}",
+              "remark": "安装包MD5哈希"
+            },
+            {
+              "label": "签名方式",
+              "content": "${signature_method | default:'-'}",
+              "remark": "签名算法"
+            },
+            {
+              "label": "证书MD5",
+              "content": "${certificate_md5 | default:'-'}",
+              "remark": "签名证书MD5"
+            },
+            {
+              "label": "证书详情",
+              "content": "${certificate_details | default:'-'}",
+              "remark": "签名证书详情"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

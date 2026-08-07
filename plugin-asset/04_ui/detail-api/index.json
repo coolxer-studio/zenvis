@@ -1,0 +1,208 @@
+{
+  "type": "page",
+  "title": "API 资产详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/asset_api/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "API 资产记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "平台记录",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的实际接收时间。",
+              "span": 2
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产治理信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "API ID",
+              "content": "${id | default:'-'}",
+              "remark": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。"
+            },
+            {
+              "label": "来源",
+              "content": "${source | default:'-'}",
+              "remark": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。"
+            },
+            {
+              "label": "类型",
+              "content": "${type | default:'-'}",
+              "remark": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。"
+            },
+            {
+              "label": "负责人",
+              "content": "${owner | default:'-'}",
+              "remark": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。"
+            },
+            {
+              "label": "状态",
+              "content": "${status | default:'-'}",
+              "remark": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。"
+            },
+            {
+              "label": "标签",
+              "content": "${label | default:'-'}",
+              "remark": "业务标签列表"
+            },
+            {
+              "label": "可访问性",
+              "content": "${access | default:'-'}",
+              "remark": "是否允许访问：1 表示开放，0 表示不开放。"
+            },
+            {
+              "label": "重要等级",
+              "content": "${level | default:'-'}",
+              "remark": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。"
+            },
+            {
+              "label": "风险等级",
+              "content": "${risk | default:'-'}",
+              "remark": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。"
+            },
+            {
+              "label": "风险详情",
+              "content": "${risk_info | default:'-'}",
+              "remark": "风险描述"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "资产在来源系统中的最后更新时间，精确到毫秒。"
+            },
+            {
+              "label": "入库时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产详细属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "扩展信息",
+              "content": "${info | default:'-'}",
+              "remark": "其他 JSON 扩展信息"
+            },
+            {
+              "label": "API名称",
+              "content": "${api_name | default:'-'}",
+              "remark": "接口名称"
+            },
+            {
+              "label": "API版本",
+              "content": "${api_version | default:'-'}",
+              "remark": "接口版本号"
+            },
+            {
+              "label": "API路径",
+              "content": "${api_path | default:'-'}",
+              "remark": "接口URL路径"
+            },
+            {
+              "label": "HTTP方法",
+              "content": "${http_method | default:'-'}",
+              "remark": "HTTP方法（GET/POST/PUT/DELETE）"
+            },
+            {
+              "label": "内容类型",
+              "content": "${content_type | default:'-'}",
+              "remark": "请求/响应内容类型"
+            },
+            {
+              "label": "请求参数",
+              "content": "${request_parameters | default:'-'}",
+              "remark": "请求参数说明"
+            },
+            {
+              "label": "响应格式",
+              "content": "${response_format | default:'-'}",
+              "remark": "响应数据格式说明"
+            },
+            {
+              "label": "认证方式",
+              "content": "${authentication_type | default:'-'}",
+              "remark": "接口认证方式（如 OAuth、JWT）"
+            },
+            {
+              "label": "限流阈值",
+              "content": "${rate_limit | default:'-'}",
+              "remark": "每秒最大请求次数（QPS）"
+            },
+            {
+              "label": "文档地址",
+              "content": "${documentation_url | default:'-'}",
+              "remark": "在线文档URL"
+            },
+            {
+              "label": "服务ID",
+              "content": "${service_id | default:'-'}",
+              "remark": "所属服务系统ID"
+            },
+            {
+              "label": "已废弃",
+              "content": "${is_deprecated | default:'-'}",
+              "remark": "接口是否已废弃 0/1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,237 @@
+{
+  "type": "page",
+  "body": [
+    {
+      "name": "hiddenOn",
+      "type": "form",
+      "mode": "horizontal",
+      "api": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/add",
+      "redirect": "/asset/rule/list",
+      "title": "新增规则",
+      "body": [
+        {
+          "name": "name",
+          "type": "input-text",
+          "label": "规则名称",
+          "placeholder": "请输入"
+        },
+        {
+          "name": "description",
+          "type": "textarea",
+          "label": "规则描述",
+          "showCounter": true,
+          "placeholder": "请输入",
+          "clearable": true
+        },
+        {
+          "type": "radios",
+          "name": "asset",
+          "label": "资产类型",
+          "inline": true,
+          "value": "HOST",
+          "options": [
+            {
+              "label": "服务器设备",
+              "value": "HOST"
+            },
+            {
+              "label": "移动端设备",
+              "value": "MOBILE"
+            },
+            {
+              "label": "PC端设备",
+              "value": "PC"
+            },
+            {
+              "label": "IOT端设备",
+              "value": "IOT"
+            },
+            {
+              "label": "探针资产",
+              "value": "PROBE"
+            },
+            {
+              "label": "APP资产",
+              "value": "APP"
+            },
+            {
+              "label": "服务资产",
+              "value": "SERVICE"
+            },
+            {
+              "label": "API资产",
+              "value": "API"
+            },
+            {
+              "label": "日志资产",
+              "value": "LOG"
+            },
+            {
+              "label": "文件资产",
+              "value": "FILE"
+            }
+          ]
+        },
+        {
+          "type": "condition-builder",
+          "hiddenOn": "data.asset != 'HOST'",
+          "label": "条件组件",
+          "name": "conditions",
+          "description": "可根据需求拼接查询条件",
+          "searchable": true,
+          "fields": [
+            {
+              "type": "select",
+              "name": "level",
+              "label": "资产等级",
+              "searchable": true,
+              "source": "/zenvis/api/v1/entity/asset_host/level/list"
+            },
+            {
+              "type": "select",
+              "name": "type",
+              "label": "资产类型",
+              "searchable": true,
+              "source": "/zenvis/api/v1/entity/asset_host/type/list"
+            },
+            {
+              "type": "select",
+              "name": "owner",
+              "label": "资产归属",
+              "searchable": true,
+              "source": "/zenvis/api/v1/entity/asset_host/owner/list"
+            },
+            {
+              "type": "select",
+              "name": "status",
+              "label": "状态",
+              "searchable": true,
+              "source": "/zenvis/api/v1/entity/asset_host/status/list"
+            },
+            {
+              "type": "select",
+              "name": "access",
+              "label": "是否开放",
+              "searchable": true,
+              "clearable": true,
+              "options": [
+                {
+                  "value": 1,
+                  "label": "开放"
+                },
+                {
+                  "value": 0,
+                  "label": "不开放"
+                }
+              ]
+            },
+            {
+              "label": "机房",
+              "type": "text",
+              "name": "room"
+            },
+            {
+              "label": "机柜号",
+              "type": "number",
+              "name": "cabinet_no"
+            },
+            {
+              "label": "机位号",
+              "type": "number",
+              "name": "cabinet_no"
+            },
+            {
+              "label": "厂商",
+              "type": "text",
+              "name": "manufacturer"
+            },
+            {
+              "label": "型号",
+              "type": "text",
+              "name": "model"
+            },
+            {
+              "label": "架构",
+              "type": "text",
+              "name": "architecture"
+            },
+            {
+              "label": "系统名称",
+              "type": "text",
+              "name": "system_name"
+            },
+            {
+              "label": "系统版本",
+              "type": "text",
+              "name": "system_version"
+            },
+            {
+              "label": "局域网IP",
+              "type": "text",
+              "name": "lan_ip"
+            },
+            {
+              "label": "外网IP",
+              "type": "text",
+              "name": "wan_ip"
+            },
+            {
+              "label": "风险信息",
+              "type": "text",
+              "name": "risk_info"
+            },
+            {
+              "label": "资产详情",
+              "type": "text",
+              "name": "info"
+            },
+            {
+              "label": "时间",
+              "children": [
+                {
+                  "label": "活跃日期",
+                  "type": "datetime",
+                  "name": "update_time"
+                },
+                {
+                  "label": "首次日期",
+                  "type": "datetime",
+                  "name": "insert_time"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "radios",
+          "name": "action",
+          "label": "操作选择",
+          "inline": true,
+          "searchable": true,
+          "required": true,
+          "value": "MERGE",
+          "source": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/action/list"
+        },
+        {
+          "label": "标签",
+          "hiddenOn": "data.action != 'MARK'",
+          "type": "select",
+          "name": "result",
+          "searchable": true,
+          "checkAll": true,
+          "multiple": true,
+          "clearable": true,
+          "source": "/zenvis/api/v1/entity/asset_${asset | lowerCase}/label/list"
+        },
+        {
+          "name": "result",
+          "hiddenOn": "data.action != 'MERGE'",
+          "type": "input-text",
+          "label": "自动补全",
+          "autoComplete": "/zenvis/api/v1/entity/asset_${asset | lowerCase}/id/auto-complete?term=$term",
+          "placeholder": "请输入"
+        }
+      ]
+    }
+  ]
+}

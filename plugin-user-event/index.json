@@ -1,0 +1,8 @@
+{
+  "name": "用户事件分析插件（测试）",
+  "package_name": "com.coolxer.plugin.user.event",
+  "version": "1.0.5",
+  "description": "用于测试插件功能的一个示例插件，定义了用户操作的事件日志收集、入库、展示、菜单配置等功能",
+  "author": "CoolXer",
+  "icon": "icon.png"
+}

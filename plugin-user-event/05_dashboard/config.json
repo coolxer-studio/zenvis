@@ -1,0 +1,8 @@
+[
+  {
+    "name": "用户事件数据态势看板",
+    "code": "com.coolxer.plugin.user.event.dashboard.user-event-overview",
+    "type": "HTML_PAGE",
+    "html_path": "user-event-dashboard.html"
+  }
+]

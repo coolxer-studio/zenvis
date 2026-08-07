@@ -1,0 +1,231 @@
+{
+  "type": "page",
+  "title": "资源利用状态详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/operation_performance_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "事件属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。"
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 实际接收时间。"
+            },
+            {
+              "label": "事件唯一标识",
+              "content": "${id | default:'-'}",
+              "remark": "事件唯一标识"
+            },
+            {
+              "label": "用户ID",
+              "content": "${user_id | default:'-'}",
+              "remark": "用户ID"
+            },
+            {
+              "label": "启动ID",
+              "content": "${start_id | default:'-'}",
+              "remark": "启动ID"
+            },
+            {
+              "label": "CPU总利用率",
+              "content": "${cpu_usage | default:'-'}",
+              "remark": "CPU总利用率"
+            },
+            {
+              "label": "CPU用户态利用率",
+              "content": "${cpu_user | default:'-'}",
+              "remark": "CPU用户态利用率"
+            },
+            {
+              "label": "CPU系统态利用率",
+              "content": "${cpu_system | default:'-'}",
+              "remark": "CPU系统态利用率"
+            },
+            {
+              "label": "CPU空闲率",
+              "content": "${cpu_idle | default:'-'}",
+              "remark": "CPU空闲率"
+            },
+            {
+              "label": "物理内存总量(KB)",
+              "content": "${memory_total | default:'-'}",
+              "remark": "物理内存总量(KB)"
+            },
+            {
+              "label": "物理内存使用量(KB)",
+              "content": "${memory_used | default:'-'}",
+              "remark": "物理内存使用量(KB)"
+            },
+            {
+              "label": "物理内存利用率",
+              "content": "${memory_usage | default:'-'}",
+              "remark": "物理内存利用率"
+            },
+            {
+              "label": "虚拟内存总量(KB)",
+              "content": "${virtual_memory_total | default:'-'}",
+              "remark": "虚拟内存总量(KB)"
+            },
+            {
+              "label": "虚拟内存使用量(KB)",
+              "content": "${virtual_memory_used | default:'-'}",
+              "remark": "虚拟内存使用量(KB)"
+            },
+            {
+              "label": "交换空间总量(KB)",
+              "content": "${swap_total | default:'-'}",
+              "remark": "交换空间总量(KB)"
+            },
+            {
+              "label": "交换空间使用量(KB)",
+              "content": "${swap_used | default:'-'}",
+              "remark": "交换空间使用量(KB)"
+            },
+            {
+              "label": "磁盘读取速度(KB/s)",
+              "content": "${disk_read_speed | default:'-'}",
+              "remark": "磁盘读取速度(KB/s)"
+            },
+            {
+              "label": "磁盘写入速度(KB/s)",
+              "content": "${disk_write_speed | default:'-'}",
+              "remark": "磁盘写入速度(KB/s)"
+            },
+            {
+              "label": "磁盘总吞吐量(KB/s)",
+              "content": "${disk_throughput | default:'-'}",
+              "remark": "磁盘总吞吐量(KB/s)"
+            },
+            {
+              "label": "磁盘IOPS",
+              "content": "${disk_iops | default:'-'}",
+              "remark": "磁盘IOPS"
+            },
+            {
+              "label": "网络发送速率(KB/s)",
+              "content": "${network_send_rate | default:'-'}",
+              "remark": "网络发送速率(KB/s)"
+            },
+            {
+              "label": "网络接收速率(KB/s)",
+              "content": "${network_receive_rate | default:'-'}",
+              "remark": "网络接收速率(KB/s)"
+            },
+            {
+              "label": "网络丢包率",
+              "content": "${network_packet_loss | default:'-'}",
+              "remark": "网络丢包率"
+            },
+            {
+              "label": "网络延迟(ms)",
+              "content": "${network_latency | default:'-'}",
+              "remark": "网络延迟(ms)"
+            },
+            {
+              "label": "经度",
+              "content": "${longitude | default:'-'}",
+              "remark": "经度"
+            },
+            {
+              "label": "纬度",
+              "content": "${latitude | default:'-'}",
+              "remark": "纬度"
+            },
+            {
+              "label": "国家",
+              "content": "${country | default:'-'}",
+              "remark": "国家"
+            },
+            {
+              "label": "省份",
+              "content": "${province | default:'-'}",
+              "remark": "省份"
+            },
+            {
+              "label": "城市",
+              "content": "${city | default:'-'}",
+              "remark": "城市"
+            },
+            {
+              "label": "区县",
+              "content": "${county | default:'-'}",
+              "remark": "区县"
+            },
+            {
+              "label": "网络类型",
+              "content": "${net_type | default:'-'}",
+              "remark": "网络类型"
+            },
+            {
+              "label": "局域网IP",
+              "content": "${lan_ip | default:'-'}",
+              "remark": "局域网IP"
+            },
+            {
+              "label": "因特网IP",
+              "content": "${wan_ip | default:'-'}",
+              "remark": "因特网IP"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "更新时间"
+            },
+            {
+              "label": "创建时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "创建时间"
+            },
+            {
+              "label": "事件发生时间",
+              "content": "${event_time | default:'-'}",
+              "remark": "事件发生时间"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

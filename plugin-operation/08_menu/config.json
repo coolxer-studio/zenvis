@@ -1,0 +1,17 @@
+[
+  {
+    "name": "运营可视化配置",
+    "type": "POLICY_CONFIG",
+    "params": "com.coolxer.plugin.operation"
+  },
+  {
+    "name": "运营分析",
+    "type": "LOW_CODE_APP",
+    "params": "com.coolxer.plugin.operation"
+  },
+  {
+    "name": "运营 IP 命中调查",
+    "type": "LOW_CODE_PAGE",
+    "params": "com.coolxer.plugin.operation.ip-statistics"
+  }
+]

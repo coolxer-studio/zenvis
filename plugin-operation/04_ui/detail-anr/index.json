@@ -1,0 +1,151 @@
+{
+  "type": "page",
+  "title": "无响应事件详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/operation_anr_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "事件属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。"
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 实际接收时间。"
+            },
+            {
+              "label": "事件唯一标识",
+              "content": "${id | default:'-'}",
+              "remark": "事件唯一标识"
+            },
+            {
+              "label": "用户ID",
+              "content": "${user_id | default:'-'}",
+              "remark": "用户ID"
+            },
+            {
+              "label": "启动ID",
+              "content": "${start_id | default:'-'}",
+              "remark": "启动ID"
+            },
+            {
+              "label": "页面路径",
+              "content": "${page_path | default:'-'}",
+              "remark": "页面路径"
+            },
+            {
+              "label": "页面名称",
+              "content": "${page_name | default:'-'}",
+              "remark": "页面名称"
+            },
+            {
+              "label": "无响应时长",
+              "content": "${anr_gap | default:'-'}",
+              "remark": "无响应时长"
+            },
+            {
+              "label": "经度",
+              "content": "${longitude | default:'-'}",
+              "remark": "经度"
+            },
+            {
+              "label": "纬度",
+              "content": "${latitude | default:'-'}",
+              "remark": "纬度"
+            },
+            {
+              "label": "国家",
+              "content": "${country | default:'-'}",
+              "remark": "国家"
+            },
+            {
+              "label": "省份",
+              "content": "${province | default:'-'}",
+              "remark": "省份"
+            },
+            {
+              "label": "城市",
+              "content": "${city | default:'-'}",
+              "remark": "城市"
+            },
+            {
+              "label": "区县",
+              "content": "${county | default:'-'}",
+              "remark": "区县"
+            },
+            {
+              "label": "网络类型",
+              "content": "${net_type | default:'-'}",
+              "remark": "网络类型"
+            },
+            {
+              "label": "局域网IP",
+              "content": "${lan_ip | default:'-'}",
+              "remark": "局域网IP"
+            },
+            {
+              "label": "因特网IP",
+              "content": "${wan_ip | default:'-'}",
+              "remark": "因特网IP"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "更新时间"
+            },
+            {
+              "label": "创建时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "创建时间"
+            },
+            {
+              "label": "事件发生时间",
+              "content": "${event_time | default:'-'}",
+              "remark": "事件发生时间"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+[
+  {
+    "name": "运营模拟数据生成与入库",
+    "description": "测试用途：默认每 5 秒随机生成覆盖10类实体的样例并直接写入对应 ClickHouse 表，可在推送任务页面停用。",
+    "config": "push_operation.yaml"
+  }
+]

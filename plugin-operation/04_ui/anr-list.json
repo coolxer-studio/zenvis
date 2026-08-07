@@ -1,0 +1,188 @@
+{
+  "type": "page",
+  "title": "无响应事件列表",
+  "remark": "无响应事件表，记录应用无响应（ANR）详情",
+  "body": [
+    {
+      "type": "crud",
+      "name": "crud-anr",
+      "primaryField": "zenvis_id",
+      "api": "/zenvis/api/v1/entity/operation_anr_event/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "event_time",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "label": "事件唯一标识",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.operation.detail-anr?record_id=${zenvis_id}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${id | default:'-'}"
+          },
+          "copyable": true
+        },
+        {
+          "name": "user_id",
+          "label": "用户ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "start_id",
+          "label": "启动ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "page_path",
+          "label": "页面路径",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "page_name",
+          "label": "页面名称",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "anr_gap",
+          "label": "无响应时长",
+          "sortable": true
+        },
+        {
+          "name": "longitude",
+          "label": "经度",
+          "sortable": true
+        },
+        {
+          "name": "latitude",
+          "label": "纬度",
+          "sortable": true
+        },
+        {
+          "name": "country",
+          "label": "国家",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "province",
+          "label": "省份",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "city",
+          "label": "城市",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "county",
+          "label": "区县",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "net_type",
+          "label": "网络类型",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "lan_ip",
+          "label": "局域网IP",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.operation.ip-statistics?ip=${lan_ip}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${lan_ip | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "wan_ip",
+          "label": "因特网IP",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.operation.ip-statistics?ip=${wan_ip}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${wan_ip | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "name": "insert_time",
+          "label": "创建时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "name": "event_time",
+          "label": "事件发生时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "width": 160,
+          "buttons": [
+            {
+              "type": "button-group",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "查看",
+                  "level": "info",
+                  "actionType": "link",
+                  "link": "/#/service/low-code-page/com.coolxer.plugin.operation.detail-anr?record_id=${zenvis_id}"
+                },
+                {
+                  "type": "button",
+                  "label": "删除",
+                  "level": "danger",
+                  "actionType": "ajax",
+                  "confirmText": "确认删除这条记录？",
+                  "api": "delete:/zenvis/api/v1/entity/operation_anr_event/$zenvis_id"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无数据"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "name": "运营行为态势",
+    "code": "com.coolxer.plugin.operation.dashboard.operation-overview",
+    "type": "HTML_PAGE",
+    "html_path": "operation-governance-overview.html"
+  }
+]

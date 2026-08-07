@@ -21,4 +21,14 @@ class McpServerVoTest {
         assertThat(vo.getHeaders()).isNull();
         assertThat(vo.getHeaderNames()).containsExactly("Authorization", "X-Tenant");
     }
+
+    @Test
+    void exposesRawHeadersOnlyWhenExplicitlyRequestedForEditing() {
+        McpServerConfig config = new McpServerConfig();
+        config.setHeaders("{\"Authorization\":\"Bearer ${MCP_TOKEN}\"}");
+
+        McpServerVo vo = new McpServerVo(config, null, true);
+
+        assertThat(vo.getHeaders()).isEqualTo("{\"Authorization\":\"Bearer ${MCP_TOKEN}\"}");
+    }
 }

@@ -210,7 +210,7 @@ public class McpClientServiceImpl implements McpClientService {
     @Override
     public McpServerVo info(Integer id) {
         McpServerConfig config = getConfig(id);
-        return new McpServerVo(config, toolCount(id));
+        return new McpServerVo(config, toolCount(id), true);
     }
 
     @Override

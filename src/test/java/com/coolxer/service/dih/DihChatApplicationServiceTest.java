@@ -710,6 +710,95 @@ class DihChatApplicationServiceTest {
                         "实际数据 MCP 查询参数与已批准方案不一致，图表不能验证或入库");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void skillChartPreviewUsesSuccessfulCurrentTurnMcpAsItsProvenance() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Class<?> streamType = java.util.Arrays.stream(
+                        DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("create");
+        var emit = streamType.getDeclaredMethod(
+                "emit", McpToolCallLoggingProvider.McpToolCallLog.class);
+        create.setAccessible(true);
+        emit.setAccessible(true);
+
+        Object evidence = create.invoke(null);
+        emitSuccessfulCall(emit, evidence,
+                "btw_security_snapshot",
+                "{\"range_mode\":\"LATEST_DATA\",\"window_days\":14,\"top_n\":10}",
+                "{\"text\":\"{\\\"status\\\":\\\"completed\\\"}\"}");
+        Map<String, Object> option = Map.of(
+                "xAxis", Map.of("type", "value"),
+                "yAxis", Map.of("type", "value"),
+                "series", List.of(Map.of("type", "scatter", "data", List.of())));
+        ChatMessagePart preview = ChatMessagePart.builder()
+                .type("visualization-chart-preview")
+                .status("temporary")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "source", "btw_security_snapshot.device_analysis",
+                        "chartType", "scatter",
+                        "echartsOption", option)))
+                .build();
+        ChatSession session = new ChatSession();
+        session.setType("skill:btw-security-posture-analysis");
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(preview), evidence);
+
+        assertThat(preview.getStatus()).isEqualTo("temporary");
+        assertThat(preview.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("validated", true)
+                .containsEntry("echartsOption", option)
+                .containsKey("queriedAt");
+        Map<String, Object> amisConfig =
+                (Map<String, Object>) preview.getMetadata().get("amisConfig");
+        assertThat(amisConfig)
+                .containsEntry("type", "chart")
+                .containsEntry("config", option);
+
+        Map<String, Object> legacyAmisConfig = Map.of(
+                "type", "chart",
+                "config", Map.of(
+                        "animation", false,
+                        "dataset", Map.of("source", List.of())),
+                "xAxis", Map.of("type", "value"),
+                "yAxis", Map.of("type", "value"),
+                "series", List.of(Map.of("type", "scatter")));
+        ChatMessagePart legacyPreview = ChatMessagePart.builder()
+                .type("visualization-chart-preview")
+                .status("temporary")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "source", "btw_security_snapshot.device_analysis",
+                        "amisConfig", legacyAmisConfig)))
+                .build();
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(legacyPreview), evidence);
+        assertThat(legacyPreview.getMetadata())
+                .containsEntry("validationStatus", "success");
+        Map<String, Object> normalizedLegacyOption =
+                (Map<String, Object>) legacyPreview.getMetadata().get("echartsOption");
+        assertThat(normalizedLegacyOption)
+                .containsKeys("dataset", "xAxis", "yAxis", "series");
+
+        ChatMessagePart unverified = ChatMessagePart.builder()
+                .type("visualization-chart-preview")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "source", "missing_tool.device_analysis",
+                        "echartsOption", option)))
+                .build();
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(unverified), evidence);
+        assertThat(unverified.getStatus()).isEqualTo("blocked");
+        assertThat(unverified.getMetadata())
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("validationMessage",
+                        "图表 source 未指向本轮成功的 MCP 工具调用，图表不能验证");
+    }
+
     private void emitSuccessfulCall(java.lang.reflect.Method emit,
                                     Object evidence,
                                     String tool,

@@ -2796,6 +2796,7 @@ public class DihChatApplicationService {
                 && VISUALIZATION_META_ATTRIBUTE_TOOLS.stream()
                 .anyMatch(evidence::hasSuccessfulTool);
         boolean visualizationSession = chatSession == null
+                || !StringUtils.hasText(chatSession.getType())
                 || DataVisualizationAgent.AGENT_TYPE.equals(chatSession.getType());
         for (ChatMessagePart part : parts) {
             Map<String, Object> raw = part.getMetadata() == null
@@ -2849,8 +2850,81 @@ public class DihChatApplicationService {
                     .contains(part.getType())) {
                 continue;
             }
+            if (!visualizationSession
+                    && "visualization-chart-preview".equals(part.getType())) {
+                validateSkillVisualizationChartArtifact(part, raw, evidence);
+                continue;
+            }
             validateVisualizationChartArtifact(chatSession, part, raw, evidence);
         }
+    }
+
+    private void validateSkillVisualizationChartArtifact(
+            ChatMessagePart part,
+            Map<String, Object> raw,
+            McpToolLogStream evidence) {
+        String source = stringValue(raw, "source", "");
+        int separator = source.indexOf('.');
+        String tool = separator > 0 ? source.substring(0, separator) : "";
+        McpToolLogStream.SuccessfulToolCall call = evidence.successfulCall(tool);
+        if (!StringUtils.hasText(tool) || call == null) {
+            blockVisualizationPart(part, raw,
+                    "图表 source 未指向本轮成功的 MCP 工具调用，图表不能验证");
+            return;
+        }
+        if (StringUtils.hasText(stringValue(raw, "action", ""))) {
+            blockVisualizationPart(part, raw,
+                    "Skill 原生图表只允许临时预览，不能声明图表库写入动作");
+            return;
+        }
+
+        Object echartsOption = raw.get("echartsOption");
+        Map<String, Object> amisConfig = mapValue(raw.get("amisConfig"));
+        Object amisOption = amisConfig.get("config");
+        Map<String, Object> option = echartsOption instanceof Map<?, ?>
+                ? new LinkedHashMap<>(mapValue(echartsOption))
+                : amisOption instanceof Map<?, ?>
+                ? new LinkedHashMap<>(mapValue(amisOption))
+                : new LinkedHashMap<>();
+        if (!(echartsOption instanceof Map<?, ?>) && !option.isEmpty()) {
+            for (String key : List.of(
+                    "title", "legend", "grid", "tooltip", "axisPointer",
+                    "dataZoom", "visualMap", "dataset", "xAxis", "yAxis",
+                    "polar", "radiusAxis", "angleAxis", "radar", "geo",
+                    "calendar", "parallel", "parallelAxis", "singleAxis",
+                    "series", "color", "animation")) {
+                if (!option.containsKey(key) && amisConfig.containsKey(key)) {
+                    option.put(key, amisConfig.get(key));
+                }
+            }
+        }
+        if (option.isEmpty()) {
+            blockVisualizationPart(part, raw,
+                    "Skill 原生图表缺少合法的 echartsOption");
+            return;
+        }
+        if (echartsOption instanceof Map<?, ?>
+                && amisOption instanceof Map<?, ?>
+                && !echartsOption.equals(amisOption)) {
+            blockVisualizationPart(part, raw,
+                    "echartsOption 与 amisConfig.config 不一致，图表不能验证");
+            return;
+        }
+        if (!(option.get("series") instanceof List<?> series) || series.isEmpty()) {
+            blockVisualizationPart(part, raw,
+                    "Skill 原生图表的 echartsOption.series 必须是非空数组");
+            return;
+        }
+
+        raw.put("echartsOption", option);
+        raw.put("amisConfig", Map.of("type", "chart", "config", option));
+        raw.put("queriedAt", call.time() == null ? "" : call.time().toString());
+        raw.put("validationStatus", "success");
+        raw.put("validated", true);
+        raw.remove("api");
+        raw.remove("url");
+        raw.remove("echarts");
+        raw.remove("option");
     }
 
     private void validateVisualizationPersistencePart(

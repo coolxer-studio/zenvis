@@ -17,6 +17,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -28,6 +29,26 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class McpClientServiceImplTest {
+
+    @Test
+    void infoIncludesHeadersForEditing() {
+        McpServerConfigRepository repository = mock(McpServerConfigRepository.class);
+        McpServerConfig config = new McpServerConfig();
+        config.setId(52);
+        config.setHeaders("{\"Authorization\":\"Bearer ${MCP_TOKEN}\"}");
+        when(repository.findById(52)).thenReturn(Optional.of(config));
+        McpClientServiceImpl service = new McpClientServiceImpl(
+                repository,
+                new ObjectMapper(),
+                "1.0.0",
+                true,
+                false
+        );
+
+        McpServerVo result = service.info(52);
+
+        assertThat(result.getHeaders()).isEqualTo("{\"Authorization\":\"Bearer ${MCP_TOKEN}\"}");
+    }
 
     @Test
     void createRejectsLocalhostBaseUrlWhenPrivateUrlsDisabled() {

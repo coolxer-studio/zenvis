@@ -55,6 +55,10 @@ public class McpServerVo implements Serializable {
     }
 
     public McpServerVo(McpServerConfig config, Integer toolCount) {
+        this(config, toolCount, false);
+    }
+
+    public McpServerVo(McpServerConfig config, Integer toolCount, boolean includeHeaders) {
         if (config == null) {
             return;
         }
@@ -64,6 +68,7 @@ public class McpServerVo implements Serializable {
         this.description = config.getDescription();
         this.baseUrl = config.getBaseUrl();
         this.sseEndpoint = config.getSseEndpoint();
+        this.headers = includeHeaders ? config.getHeaders() : null;
         this.headerNames = resolveHeaderNames(config.getHeaders());
         this.enabled = config.getEnabled();
         this.requestTimeoutSeconds = config.getRequestTimeoutSeconds();

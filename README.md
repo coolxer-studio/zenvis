@@ -380,6 +380,20 @@ zenvis/
 | 插件接口 | `/api/v1/plugin/{package_name}` | 已安装插件的动态业务接口 |
 | DIH  | `/api/v1/dih`       | AI 相关接口   |
 | 检索引擎 | `/api/v1/retrieval` | 数据检索接口    |
+| Meta 实体 | `/api/v1/entity/{entity}` | 实体数据增删改查及通用 CSV 导入导出 |
+
+Meta 实体 CSV 接口作用于任意已加载的实体对象：
+
+```text
+POST /api/v1/entity/{entity}/import
+GET  /api/v1/entity/{entity}/import-template
+GET  /api/v1/entity/{entity}/export
+```
+
+导入文件使用 UTF-8 CSV，表头可以是字段 `name` 或实体内唯一的中文 `label`；
+`required: true` 字段必须存在且逐行非空，`must_candidate: true` 字段必须使用 Meta
+`mapping` 的值。单次导入限制为 5 MiB、10000 行。导出复用实体列表查询参数，最多
+输出 50000 条，并在响应头返回 `X-Exported-Rows` 与 `X-Export-Truncated`。
 
 ### 接口访问
 

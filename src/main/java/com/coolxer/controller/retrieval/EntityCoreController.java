@@ -5,12 +5,18 @@ import com.coolxer.controller.BaseController;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.service.retrieval.EntityCoreService;
+import com.coolxer.service.retrieval.EntityCsvService;
 import com.coolxer.utils.CommonUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -27,6 +33,9 @@ public class EntityCoreController extends BaseController {
 
     @Autowired
     private EntityCoreService entityCoreService;
+
+    @Autowired
+    private EntityCsvService entityCsvService;
 
     @PostMapping({"/add"})
     public ResponseWrap<?> add(@PathVariable("entity") String entity, @RequestBody Map<String, Object> mapDto) {
@@ -92,6 +101,66 @@ public class EntityCoreController extends BaseController {
             return ResponseWrap.fail(e);
         }
 
+    }
+
+    @PostMapping(value = "/import", consumes = "multipart/form-data")
+    public ResponseWrap<?> importCsv(
+            @PathVariable("entity") String entity,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            EntityCsvService.ImportResult result = entityCsvService.importCsv(entity, file);
+            return ResponseWrap.success("成功导入 " + result.imported() + " 条记录", Map.of(
+                    "value", result.filename(),
+                    "filename", result.filename(),
+                    "imported", result.imported()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseWrap.fail(400, e.getMessage());
+        } catch (Exception e) {
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping(value = "/import-template", produces = "text/csv;charset=UTF-8")
+    public ResponseEntity<?> importTemplate(@PathVariable("entity") String entity) {
+        try {
+            return csvResponse(entityCsvService.importTemplate(entity), entity + "-template.csv");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ResponseWrap.fail(400, e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ResponseWrap.fail(e));
+        }
+    }
+
+    @GetMapping(value = "/export", produces = "text/csv;charset=UTF-8")
+    public ResponseEntity<?> exportCsv(
+            @PathVariable("entity") String entity,
+            @RequestParam Map<String, Object> mapDto) {
+        try {
+            EntityCsvService.ExportResult result = entityCsvService.exportCsv(entity, mapDto);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", attachmentFilename(entity + ".csv"))
+                    .header("X-Exported-Rows", String.valueOf(result.exported()))
+                    .header("X-Export-Truncated", String.valueOf(result.truncated()))
+                    .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                    .body(result.content());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ResponseWrap.fail(400, e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ResponseWrap.fail(e));
+        }
+    }
+
+    private ResponseEntity<byte[]> csvResponse(byte[] content, String filename) {
+        return ResponseEntity.ok()
+                .header("Content-Disposition", attachmentFilename(filename))
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(content);
+    }
+
+    private String attachmentFilename(String filename) {
+        return "attachment; filename*=UTF-8''" + URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 
     @GetMapping({"/{id}/view"})

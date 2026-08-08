@@ -43,6 +43,7 @@ class EntityCoreServiceImplTest {
         when(metaDataService.getDataEntityByName("asset")).thenReturn(entity);
 
         DataAttribute name = attribute("name", "name", "String");
+        name.setRequired(true);
         DataAttribute insertTime = attribute(
                 MetaDataConstants.INSERT_TIME_ATTRIBUTE,
                 MetaDataConstants.INSERT_TIME_COLUMN,
@@ -81,6 +82,17 @@ class EntityCoreServiceImplTest {
     }
 
     @Test
+    void addRejectsMissingRequiredMetaAttribute() {
+        assertThatThrownBy(() -> service.add("asset", Map.of()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("name");
+        verify(queryEngine, never()).save(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
     void crudUsesPlatformRecordIdAndKeepsBusinessIdAsOrdinaryData() {
         service.getOne("asset", RECORD_ID);
         service.update("asset", RECORD_ID, Map.of("id", "business-002"));
@@ -110,6 +122,18 @@ class EntityCoreServiceImplTest {
                 "asset", List.of(RECORD_ID, "not-a-uuid"), Map.of("name", "router")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("标准UUID格式");
+        verify(queryEngine, never()).update(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyMap(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void updateRejectsClearingARequiredMetaAttribute() {
+        assertThatThrownBy(() -> service.update("asset", RECORD_ID, Map.of("name", "")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("name");
         verify(queryEngine, never()).update(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyMap(),

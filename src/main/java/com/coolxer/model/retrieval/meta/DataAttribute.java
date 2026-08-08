@@ -103,6 +103,11 @@ public class DataAttribute {
     private boolean copyable;
 
     /**
+     * 新增及批量导入时是否必填；默认 false，保持既有 Meta 兼容性。
+     */
+    private boolean required;
+
+    /**
      * 属性字典映射关系
      */
     private Map<String, Object> mapping;

@@ -33,7 +33,9 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         if (dataEntity != null) {
             List<String> columnList = new ArrayList<>();
             List<String> valueList = new ArrayList<>();
-            getColumnValueMap(entityName, mapDto).entrySet().stream().forEach(entry -> {
+            Map<String, String> columnValueMap = getColumnValueMap(entityName, mapDto);
+            validateRequiredValues(dataEntity, mapDto);
+            columnValueMap.entrySet().stream().forEach(entry -> {
                 columnList.add(entry.getKey());
                 valueList.add(entry.getValue());
             });
@@ -42,6 +44,19 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         }
 
         return false;
+    }
+
+    private void validateRequiredValues(DataEntity dataEntity, Map<String, Object> values) {
+        for (DataAttribute attribute : metaDataService.getAllDataAttributeByEntity(dataEntity)) {
+            if (!attribute.isRequired() || MetaDataConstants.isSystemMaintained(attribute)) {
+                continue;
+            }
+            Object value = values.get(attribute.getName());
+            if (value == null || value.toString().isBlank()) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(),
+                        "字段不能为空: " + attribute.getName());
+            }
+        }
     }
 
     @Override
@@ -72,6 +87,7 @@ public class EntityCoreServiceImpl implements EntityCoreService {
         if (dataEntity != null) {
             String recordId = requireRecordId(id);
             Map<String, String> columnValueMap = getColumnValueMap(entityName, mapDto);
+            validateProvidedRequiredValues(dataEntity, mapDto);
             // 剔除orderBy的主键字段
             if (dataEntity.getAutoCreate() != null) {
                 dataEntity.getAutoCreate().getOrderBy().forEach(orderBy -> {
@@ -94,6 +110,20 @@ public class EntityCoreServiceImpl implements EntityCoreService {
             return true;
         }
         return false;
+    }
+
+    private void validateProvidedRequiredValues(DataEntity dataEntity, Map<String, Object> values) {
+        for (DataAttribute attribute : metaDataService.getAllDataAttributeByEntity(dataEntity)) {
+            if (!attribute.isRequired() || MetaDataConstants.isSystemMaintained(attribute)
+                    || !values.containsKey(attribute.getName())) {
+                continue;
+            }
+            Object value = values.get(attribute.getName());
+            if (value == null || value.toString().isBlank()) {
+                throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(),
+                        "字段不能为空: " + attribute.getName());
+            }
+        }
     }
 
     @Override

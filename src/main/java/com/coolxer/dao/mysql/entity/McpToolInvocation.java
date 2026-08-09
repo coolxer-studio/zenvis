@@ -37,6 +37,9 @@ public class McpToolInvocation extends BaseEntity {
     @Column(name = "server_name", length = 128)
     private String serverName;
 
+    @Column(name = "server_code", length = 64)
+    private String serverCode;
+
     @Column(name = "description", length = 2000)
     private String description;
 

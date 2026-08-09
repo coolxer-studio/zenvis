@@ -32,6 +32,8 @@ public class AuthorityInterceptor extends AbstractInterceptor {
 
     public static final String API_BEARER_USER_ID_ATTR = "zenvis.apiBearer.userId";
     public static final String API_BEARER_USER_NAME_ATTR = "zenvis.apiBearer.userName";
+    public static final String AUTHENTICATED_USER_ID_ATTR = "zenvis.authenticated.userId";
+    public static final String AUTHENTICATED_USER_NAME_ATTR = "zenvis.authenticated.userName";
 
     private static final String BEARER_SCHEME = "Bearer";
 
@@ -112,9 +114,21 @@ public class AuthorityInterceptor extends AbstractInterceptor {
                 return false;
             } else {
 
-                if (Boolean.FALSE.equals(stringRedisTemplate.hasKey(request.getRequestedSessionId()))) {
+                String sessionId = request.getRequestedSessionId();
+                if (Boolean.FALSE.equals(stringRedisTemplate.hasKey(sessionId))) {
                     writErrorInfoToResponse(response, ResultCodeEnum.PLEASE_LOGIN);
                     return false;
+                }
+
+                Object sessionUserId = stringRedisTemplate.opsForHash().get(sessionId, "strUid");
+                if (sessionUserId == null || !StringUtils.hasText(sessionUserId.toString())) {
+                    writErrorInfoToResponse(response, ResultCodeEnum.PLEASE_LOGIN);
+                    return false;
+                }
+                request.setAttribute(AUTHENTICATED_USER_ID_ATTR, sessionUserId.toString());
+                Object sessionUserName = stringRedisTemplate.opsForHash().get(sessionId, "strUname");
+                if (sessionUserName != null && StringUtils.hasText(sessionUserName.toString())) {
+                    request.setAttribute(AUTHENTICATED_USER_NAME_ATTR, sessionUserName.toString());
                 }
 
             }
@@ -154,6 +168,8 @@ public class AuthorityInterceptor extends AbstractInterceptor {
 
         request.setAttribute(API_BEARER_USER_ID_ATTR, user.getId());
         request.setAttribute(API_BEARER_USER_NAME_ATTR, user.getName());
+        request.setAttribute(AUTHENTICATED_USER_ID_ATTR, user.getId());
+        request.setAttribute(AUTHENTICATED_USER_NAME_ATTR, user.getName());
         return BearerAuthResult.AUTHENTICATED;
     }
 

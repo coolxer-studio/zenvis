@@ -19,9 +19,14 @@ public interface ClickhouseSchemeService {
     public void loadSchemeFromMetaData(MetaData metaData);
 
     /**
-     * 仅创建缺失表和字段。任一语句失败时抛出异常，且绝不删除或修改既有字段。
+     * 创建缺失表和字段，并将表级 TTL 与 Meta 同步。任一语句失败时抛出异常。
      */
     void applyAdditiveScheme(MetaData metaData);
+
+    /**
+     * 将已存在 ClickHouse 表的 TTL 与 Meta 定义同步，不创建表或修改字段。
+     */
+    void synchronizeTableTtl(MetaData metaData);
 
     /**
      * 删除表

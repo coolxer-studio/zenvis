@@ -58,7 +58,8 @@ class DihChatExecutionPolicyTest {
                 ));
         SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
                 "skill_only",
-                new SkillRuntimeToolsVo(List.of("retrieval_search"), Map.of()),
+                new SkillRuntimeToolsVo(
+                        Map.of("retrieval", List.of("retrieval_search")), Map.of()),
                 null
         );
         when(skillService.resolveRuntimeConfig(List.of("jmr-analysis"))).thenReturn(runtime);

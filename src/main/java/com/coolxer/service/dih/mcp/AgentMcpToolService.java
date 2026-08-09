@@ -134,9 +134,9 @@ public class AgentMcpToolService {
         SkillRuntimeToolsVo runtimeTools = runtime == null ? null : runtime.getTools();
         boolean selectedSkillMissingToolBoundary =
                 selectedSkillIds != null && !selectedSkillIds.isEmpty() && runtimeTools == null;
-        Set<String> localAllowlist = runtimeTools == null
-                ? (dataVisualizationAgent || selectedSkillMissingToolBoundary ? Set.of() : null)
-                : normalizeToolNames(runtimeTools.getLocal());
+        Map<String, Set<String>> localAllowlist = runtimeTools == null
+                ? (dataVisualizationAgent || selectedSkillMissingToolBoundary ? Map.of() : null)
+                : normalizeLocalToolNames(runtimeTools);
         Map<String, Set<String>> externalAllowlist = selectedSkillMissingToolBoundary
                 ? Map.of()
                 : normalizeExternalToolNames(runtimeTools);
@@ -165,45 +165,72 @@ public class AgentMcpToolService {
     private void appendLocalTools(List<ToolCallback> toolCallbacks,
                                   Set<String> addedToolNames,
                                   StringBuilder prompt,
-                                  Set<String> allowedToolNames,
+                                  Map<String, Set<String>> allowedToolsByService,
                                   boolean dataVisualizationAgent) {
         ToolCallback[] callbacks = localToolCallbackProvider == null ? null : localToolCallbackProvider.getToolCallbacks();
         if (callbacks == null || callbacks.length == 0) {
             return;
         }
-        StringBuilder localPrompt = new StringBuilder("### MCP服务：ZenVis 内置工具 (local)\n");
-        boolean added = false;
-        for (ToolCallback callback : callbacks) {
-            if (callback == null || callback.getToolDefinition() == null) {
+        Map<String, ToolCallback> callbacksByName = Arrays.stream(callbacks)
+                .filter(java.util.Objects::nonNull)
+                .filter(callback -> callback.getToolDefinition() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        callback -> callback.getToolDefinition().name(),
+                        callback -> callback,
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+        List<BuiltinMcpServiceDefinition> selectedServices = allowedToolsByService == null
+                ? BuiltinMcpServiceDefinition.orderedValues()
+                : allowedToolsByService.keySet().stream()
+                .map(BuiltinMcpServiceDefinition::findByCode)
+                .flatMap(java.util.Optional::stream)
+                .toList();
+        for (BuiltinMcpServiceDefinition service : selectedServices) {
+            Set<String> allowedToolNames = allowedToolsByService == null
+                    ? null : allowedToolsByService.get(service.code());
+            if (allowedToolsByService != null && allowedToolNames == null) {
                 continue;
             }
-            String toolName = callback.getToolDefinition().name();
-            if (!dataVisualizationAgent
-                    && DATA_VISUALIZATION_ONLY_TOOLS.contains(toolName)) {
-                continue;
+            boolean allowAll = allowedToolNames == null || allowedToolNames.contains("*");
+            StringBuilder localPrompt = new StringBuilder("### MCP服务：")
+                    .append(service.serviceName())
+                    .append(" (").append(service.code()).append(")\n");
+            boolean added = false;
+            Iterable<String> candidateToolNames = allowAll
+                    ? service.toolNames() : allowedToolNames;
+            for (String toolName : candidateToolNames) {
+                ToolCallback callback = callbacksByName.get(toolName);
+                if (callback == null) {
+                    continue;
+                }
+                if (!dataVisualizationAgent
+                        && DATA_VISUALIZATION_ONLY_TOOLS.contains(toolName)) {
+                    continue;
+                }
+                if (!allowAll && !allowedToolNames.contains(toolName)) {
+                    continue;
+                }
+                if (!addedToolNames.add(toolName)) {
+                    continue;
+                }
+                com.coolxer.commons.enums.McpApprovalPolicy policy = policyService == null
+                        ? com.coolxer.commons.enums.McpApprovalPolicy.ALLOW
+                        : policyService.effectivePolicy(McpToolDescriptor.localKey(toolName),
+                        com.coolxer.commons.enums.McpApprovalPolicy.ASK);
+                if (policy == com.coolxer.commons.enums.McpApprovalPolicy.DENY) {
+                    addedToolNames.remove(toolName);
+                    continue;
+                }
+                toolCallbacks.add(callback);
+                added = true;
+                localPrompt.append("- ").append(toolName)
+                        .append(policy == com.coolxer.commons.enums.McpApprovalPolicy.ASK
+                                ? "（调用前需要用户审批）" : "")
+                        .append("\n");
             }
-            if (allowedToolNames != null && !allowedToolNames.contains(toolName)) {
-                continue;
+            if (added) {
+                prompt.append(localPrompt).append("\n");
             }
-            if (!addedToolNames.add(toolName)) {
-                continue;
-            }
-            com.coolxer.commons.enums.McpApprovalPolicy policy = policyService == null
-                    ? com.coolxer.commons.enums.McpApprovalPolicy.ALLOW
-                    : policyService.effectivePolicy(McpToolDescriptor.localKey(toolName),
-                    com.coolxer.commons.enums.McpApprovalPolicy.ASK);
-            if (policy == com.coolxer.commons.enums.McpApprovalPolicy.DENY) {
-                addedToolNames.remove(toolName);
-                continue;
-            }
-            toolCallbacks.add(callback);
-            added = true;
-            localPrompt.append("- ").append(toolName)
-                    .append(policy == com.coolxer.commons.enums.McpApprovalPolicy.ASK ? "（调用前需要用户审批）" : "")
-                    .append("\n");
-        }
-        if (added) {
-            prompt.append(localPrompt).append("\n");
         }
     }
 
@@ -315,6 +342,20 @@ public class AgentMcpToolService {
                 .filter(StringUtils::isNotBlank)
                 .map(String::trim)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Map<String, Set<String>> normalizeLocalToolNames(SkillRuntimeToolsVo runtimeTools) {
+        if (runtimeTools == null || runtimeTools.getLocal() == null) {
+            return Map.of();
+        }
+        Map<String, Set<String>> normalized = new LinkedHashMap<>();
+        runtimeTools.getLocal().forEach((serviceCode, toolNames) -> {
+            if (StringUtils.isBlank(serviceCode) || toolNames == null) {
+                return;
+            }
+            normalized.put(serviceCode.trim(), normalizeToolNames(toolNames));
+        });
+        return normalized;
     }
 
     private Map<String, Set<String>> normalizeExternalToolNames(SkillRuntimeToolsVo runtimeTools) {

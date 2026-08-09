@@ -12,6 +12,7 @@ import com.coolxer.controller.system.MenuMcpTool;
 import com.coolxer.controller.system.PushTaskMcpTool;
 import com.coolxer.service.dih.mcp.McpApprovalService;
 import com.coolxer.service.dih.mcp.McpApprovalToolCallbackProvider;
+import com.coolxer.service.dih.mcp.BuiltinMcpServiceDefinition;
 import com.coolxer.service.dih.mcp.McpToolApproval;
 import com.coolxer.service.dih.mcp.McpToolDescriptor;
 import com.coolxer.service.dih.mcp.McpToolPolicyService;
@@ -35,7 +36,7 @@ import java.util.Map;
 public class McpServerToolConfiguration {
 
     @Bean
-    public ToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool,
+    public McpApprovalToolCallbackProvider retrievalToolCallbackProvider(RetrievalMcpTool retrievalMcpTool,
                                                                     AnalysisTaskMcpTool analysisTaskMcpTool,
                                                                     AnalysisTaskScheduleMcpTool analysisTaskScheduleMcpTool,
                                                                     PushTaskMcpTool pushTaskMcpTool,
@@ -98,12 +99,14 @@ public class McpServerToolConfiguration {
             McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
             McpApprovalPolicy defaultPolicy = approval == null ? McpApprovalPolicy.ASK : approval.value();
             String name = tool.name();
+            BuiltinMcpServiceDefinition service = BuiltinMcpServiceDefinition.findByTool(name)
+                    .orElseThrow(() -> new IllegalStateException("内置 MCP 工具未分组: " + name));
             descriptors.put(name, new McpToolDescriptor(
                     McpToolDescriptor.localKey(name),
                     McpToolSourceType.LOCAL,
                     null,
-                    "local",
-                    "ZenVis 内置工具",
+                    service.code(),
+                    service.serviceName(),
                     name,
                     name,
                     null,

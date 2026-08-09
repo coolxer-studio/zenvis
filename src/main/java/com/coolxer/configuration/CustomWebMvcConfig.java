@@ -4,15 +4,10 @@ import com.coolxer.aop.AuthorityInterceptor;
 import com.coolxer.aop.McpBearerTokenInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import java.util.ArrayList;
-import java.util.List;
-
 
 /**
  * web配置类
@@ -30,22 +25,12 @@ public class CustomWebMvcConfig implements WebMvcConfigurer {
     @Autowired
     private CustomWebConfig customWebConfig;
 
-    @Value("${spring.ai.mcp.server.sse-endpoint:/sse}")
-    private String mcpSseEndpoint;
-
-    @Value("${spring.ai.mcp.server.sse-message-endpoint:/mcp/message}")
-    private String mcpMessageEndpoint;
-
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-
-        List<String> mcpPatterns = mcpEndpointPatterns();
-        if (!mcpPatterns.isEmpty()) {
-            registry
-                    .addInterceptor(mcpBearerTokenInterceptor)
-                    .addPathPatterns(mcpPatterns)
-                    .order(1);
-        }
+        registry
+                .addInterceptor(mcpBearerTokenInterceptor)
+                .addPathPatterns("/mcp/**")
+                .order(1);
 
         registry
                 .addInterceptor(authorityInterceptor)
@@ -59,43 +44,6 @@ public class CustomWebMvcConfig implements WebMvcConfigurer {
                         "/actuator/**"
                 );
 
-    }
-
-    private List<String> mcpEndpointPatterns() {
-        List<String> patterns = new ArrayList<>();
-        addEndpointPattern(patterns, mcpSseEndpoint);
-        addEndpointPattern(patterns, mcpMessageEndpoint);
-        return patterns;
-    }
-
-    private void addEndpointPattern(List<String> patterns, String endpoint) {
-        String path = normalizeEndpoint(endpoint);
-        if (path.isEmpty()) {
-            return;
-        }
-
-        patterns.add(path);
-        if (!"/".equals(path)) {
-            patterns.add(path + "/**");
-        }
-    }
-
-    private String normalizeEndpoint(String endpoint) {
-        if (endpoint == null) {
-            return "";
-        }
-
-        String path = endpoint.trim();
-        if (path.isEmpty()) {
-            return "";
-        }
-        if (!path.startsWith("/")) {
-            path = "/" + path;
-        }
-        while (path.length() > 1 && path.endsWith("/")) {
-            path = path.substring(0, path.length() - 1);
-        }
-        return path;
     }
 
     @Override

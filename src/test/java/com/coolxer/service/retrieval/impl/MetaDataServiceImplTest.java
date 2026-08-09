@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -456,6 +457,61 @@ class MetaDataServiceImplTest {
         assertThat(service.getDataEntityByName("asset").getTableName()).isEqualTo("asset_table");
     }
 
+    @Test
+    void validatesStructuredTtlAndAllowsBuiltInInsertTime() throws Exception {
+        Path metadata = tempDir.resolve("ttl.json");
+        Files.writeString(metadata, metadataWithTtl(
+                "zenvis_insert_time", "String", 30, "DAY", ""));
+
+        MetaData validated = new MetaDataServiceImpl().validateMetaDataFiles(List.of(metadata));
+
+        assertThat(validated.getEntity().get(0).getAutoCreate().getTtl().getColumn())
+                .isEqualTo("zenvis_insert_time");
+        assertThat(validated.getEntity().get(0).getAutoCreate().getTtl().getExpireAfter())
+                .isEqualTo(30);
+    }
+
+    @Test
+    void rejectsInvalidTtlColumnTypeAndRetention() throws Exception {
+        Path nullable = tempDir.resolve("nullable.json");
+        Files.writeString(nullable, metadataWithTtl("event_time", "Nullable(DateTime64(3))", 30, "DAY", ""));
+        Path zero = tempDir.resolve("zero.json");
+        Files.writeString(zero, metadataWithTtl("event_time", "DateTime64(3)", 0, "DAY", ""));
+
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        assertThatThrownBy(() -> service.validateMetaDataFiles(List.of(nullable)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("TTL列必须是非Nullable");
+        assertThatThrownBy(() -> service.validateMetaDataFiles(List.of(zero)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expire_after必须大于0");
+    }
+
+    @Test
+    void rejectsMissingTtlColumnAndUnsupportedUnit() throws Exception {
+        Path missing = tempDir.resolve("missing.json");
+        Files.writeString(missing, metadataWithTtl("missing_time", "DateTime64(3)", 30, "DAY", ""));
+        Path unsupportedUnit = tempDir.resolve("unit.json");
+        Files.writeString(unsupportedUnit, metadataWithTtl("event_time", "DateTime64(3)", 30, "MINUTE", ""));
+
+        MetaDataServiceImpl service = new MetaDataServiceImpl();
+        assertThatThrownBy(() -> service.validateMetaDataFiles(List.of(missing)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("TTL列不存在");
+        assertThatThrownBy(() -> service.validateMetaDataFiles(List.of(unsupportedUnit)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("TTL unit不支持或为空");
+    }
+
+    @Test
+    void rejectsUnknownStructuredTtlProperty() {
+        assertThatThrownBy(() -> JacksonUtil.toObject(
+                metadataWithTtl("event_time", "DateTime64(3)", 30, "DAY", ", \"days\": 30"),
+                MetaData.class))
+                .isInstanceOf(com.coolxer.commons.exception.ApiException.class)
+                .hasMessageContaining("json解析失败");
+    }
+
     private DataAttribute attribute(String name, String columnType, String retrievalType, List<String> operators) {
         DataAttribute attribute = new DataAttribute();
         attribute.setEntity("asset");
@@ -494,5 +550,34 @@ class MetaDataServiceImplTest {
                   ]
                 }
                 """.formatted(linkProperty);
+    }
+
+    private String metadataWithTtl(String ttlColumn, String columnType, long expireAfter,
+                                   String unit, String extraTtlProperty) {
+        return """
+                {
+                  "entity": [{
+                    "id": 1,
+                    "name": "asset",
+                    "table_name": "asset",
+                    "auto_create": {
+                      "engine": "MergeTree()",
+                      "order_by": ["event_time"],
+                      "ttl": {
+                        "column": "%s",
+                        "expire_after": %d,
+                        "unit": "%s"%s
+                      }
+                    }
+                  }],
+                  "attribute": [{
+                    "id": 10,
+                    "entity": "asset",
+                    "name": "event_time",
+                    "column_name": "event_time",
+                    "column_type": "%s"
+                  }]
+                }
+                """.formatted(ttlColumn, expireAfter, unit, extraTtlProperty, columnType);
     }
 }

@@ -66,7 +66,7 @@ class ClickhouseSchemeServiceImplTest {
         service.loadSchemeFromMetaData(metaData);
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(entityManager, org.mockito.Mockito.times(5)).createNativeQuery(sql.capture());
+        verify(entityManager, org.mockito.Mockito.times(6)).createNativeQuery(sql.capture());
         assertThat(sql.getAllValues().get(0)).contains(
                 "CREATE TABLE IF NOT EXISTS zenvis.asset",
                 "zenvis_id Nullable(UUID) DEFAULT generateUUIDv4()",
@@ -82,6 +82,7 @@ class ClickhouseSchemeServiceImplTest {
         assertThat(sql.getAllValues().get(4)).isEqualTo(
                 "ALTER TABLE zenvis.asset MODIFY COLUMN "
                         + "zenvis_id Nullable(UUID) DEFAULT generateUUIDv4()");
+        assertThat(sql.getAllValues().get(5)).startsWith("SELECT engine_full FROM system.tables");
     }
 
     @Test
@@ -156,5 +157,146 @@ class ClickhouseSchemeServiceImplTest {
         assertThat(sql.getAllValues()).anyMatch(statement -> statement.startsWith("CREATE TABLE IF NOT EXISTS"));
         assertThat(sql.getAllValues()).anyMatch(statement -> statement.contains("ADD COLUMN IF NOT EXISTS severity UInt8"));
         assertThat(sql.getAllValues()).noneMatch(statement -> statement.toUpperCase().contains("DROP TABLE"));
+    }
+
+    @Test
+    void additiveUpgradeAllowsEntityWithoutPartitionKey() {
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+        ClickhouseSchemeServiceImpl service = new ClickhouseSchemeServiceImpl();
+        ReflectionTestUtils.setField(service, "entityManager", entityManager);
+
+        DataEntity entity = new DataEntity();
+        entity.setName("asset");
+        entity.setTableName("onesoc_asset_inventory");
+        entity.setDataSource("clickhouse");
+        DataEntity.DbCreate autoCreate = entity.new DbCreate();
+        autoCreate.setEngine("ReplacingMergeTree(updated_at)");
+        autoCreate.setOrderBy(List.of("asset_id"));
+        entity.setAutoCreate(autoCreate);
+
+        DataAttribute assetId = new DataAttribute();
+        assetId.setEntity("asset");
+        assetId.setName("asset_id");
+        assetId.setColumnName("asset_id");
+        assetId.setColumnType("String");
+        MetaData metaData = new MetaData();
+        metaData.setEntity(List.of(entity));
+        metaData.setAttribute(List.of(assetId));
+
+        service.applyAdditiveScheme(metaData);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager, org.mockito.Mockito.atLeastOnce()).createNativeQuery(sql.capture());
+        assertThat(sql.getAllValues())
+                .anyMatch(statement -> statement.startsWith(
+                        "CREATE TABLE IF NOT EXISTS onesoc_asset_inventory"));
+        assertThat(sql.getAllValues())
+                .noneMatch(statement -> statement.toUpperCase().contains("PARTITION BY"));
+    }
+
+    @Test
+    void createsTableWithStructuredTtl() {
+        EntityManager entityManager = metadataAwareEntityManager(null);
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+        MetaData metaData = ttlMeta(30, DataEntity.TtlUnit.DAY);
+        metaData.setAttribute(List.of(attribute("event", "event_time", "DateTime64(3)")));
+
+        service.applyAdditiveScheme(metaData);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager, org.mockito.Mockito.atLeastOnce()).createNativeQuery(sql.capture());
+        assertThat(sql.getAllValues()).anyMatch(statement -> statement.contains(
+                "TTL event_time + INTERVAL 30 DAY"));
+        assertThat(sql.getAllValues()).noneMatch(statement -> statement.contains("MATERIALIZE TTL"));
+    }
+
+    @Test
+    void modifiesExistingTableWhenTtlDiffersOrCannotBeParsed() {
+        EntityManager entityManager = metadataAwareEntityManager(
+                "MergeTree() ORDER BY event_time TTL event_time + INTERVAL 7 DAY DELETE WHERE severity > 1");
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+
+        service.synchronizeTableTtl(ttlMeta(30, DataEntity.TtlUnit.DAY));
+
+        verify(entityManager).createNativeQuery(
+                "ALTER TABLE zenvis.event MODIFY TTL event_time + INTERVAL 30 DAY");
+        verify(entityManager, never()).createNativeQuery(
+                org.mockito.ArgumentMatchers.contains("MATERIALIZE TTL"));
+    }
+
+    @Test
+    void removesExistingTtlWhenMetaOmitsIt() {
+        EntityManager entityManager = metadataAwareEntityManager(
+                "MergeTree() ORDER BY event_time TTL event_time + INTERVAL 30 DAY");
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+        MetaData metaData = ttlMeta(30, DataEntity.TtlUnit.DAY);
+        metaData.getEntity().get(0).getAutoCreate().setTtl(null);
+
+        service.synchronizeTableTtl(metaData);
+
+        verify(entityManager).createNativeQuery("ALTER TABLE zenvis.event REMOVE TTL");
+    }
+
+    @Test
+    void skipsDdlWhenFunctionFormattedTtlIsSemanticallyEqual() {
+        EntityManager entityManager = metadataAwareEntityManager(
+                "MergeTree() ORDER BY event_time TTL `event_time` + toIntervalDay(30) SETTINGS index_granularity = 8192");
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+
+        service.synchronizeTableTtl(ttlMeta(30, DataEntity.TtlUnit.DAY));
+
+        verify(entityManager, never()).createNativeQuery(
+                org.mockito.ArgumentMatchers.startsWith("ALTER TABLE"));
+    }
+
+    private ClickhouseSchemeServiceImpl service(EntityManager entityManager) {
+        ClickhouseSchemeServiceImpl service = new ClickhouseSchemeServiceImpl();
+        ReflectionTestUtils.setField(service, "entityManager", entityManager);
+        return service;
+    }
+
+    private EntityManager metadataAwareEntityManager(String engineFull) {
+        EntityManager entityManager = mock(EntityManager.class);
+        when(entityManager.createNativeQuery(anyString())).thenAnswer(invocation -> {
+            String statement = invocation.getArgument(0);
+            Query query = mock(Query.class);
+            when(query.getResultList()).thenReturn(statement.startsWith("SELECT engine_full")
+                    ? engineFull == null ? List.of() : List.of(engineFull)
+                    : List.of());
+            return query;
+        });
+        return entityManager;
+    }
+
+    private MetaData ttlMeta(long expireAfter, DataEntity.TtlUnit unit) {
+        DataEntity entity = new DataEntity();
+        entity.setName("event");
+        entity.setTableName("zenvis.event");
+        entity.setDataSource("clickhouse");
+        DataEntity.DbCreate autoCreate = entity.new DbCreate();
+        autoCreate.setEngine("MergeTree()");
+        autoCreate.setOrderBy(List.of("event_time"));
+        DataEntity.Ttl ttl = new DataEntity.Ttl();
+        ttl.setColumn("event_time");
+        ttl.setExpireAfter(expireAfter);
+        ttl.setUnit(unit);
+        autoCreate.setTtl(ttl);
+        entity.setAutoCreate(autoCreate);
+        MetaData metaData = new MetaData();
+        metaData.setEntity(List.of(entity));
+        metaData.setAttribute(List.of());
+        return metaData;
+    }
+
+    private DataAttribute attribute(String entity, String column, String type) {
+        DataAttribute attribute = new DataAttribute();
+        attribute.setEntity(entity);
+        attribute.setName(column);
+        attribute.setColumnName(column);
+        attribute.setColumnType(type);
+        return attribute;
     }
 }

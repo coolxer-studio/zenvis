@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class McpToolPolicyService {
@@ -57,6 +58,10 @@ public class McpToolPolicyService {
         return repository.findByToolKey(toolKey)
                 .map(McpToolPolicyConfig::effectivePolicy)
                 .orElse(fallback == null ? McpApprovalPolicy.ASK : fallback);
+    }
+
+    public Optional<McpToolPolicyConfig> findByToolKey(String toolKey) {
+        return repository.findByToolKey(toolKey);
     }
 
     @Transactional(transactionManager = "mysqlTransactionManager")

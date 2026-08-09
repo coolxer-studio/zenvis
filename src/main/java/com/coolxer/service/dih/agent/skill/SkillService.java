@@ -10,11 +10,13 @@ import com.coolxer.model.dih.vo.SkillChatEntryVo;
 import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
 import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
+import com.coolxer.service.dih.mcp.BuiltinMcpServiceDefinition;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.utils.WalkFileUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
@@ -361,17 +363,14 @@ public class SkillService {
                 .findFirst()
                 .orElse(null));
 
-        LinkedHashSet<String> localTools = new LinkedHashSet<>();
+        Map<String, LinkedHashSet<String>> localTools = new LinkedHashMap<>();
         Map<String, LinkedHashSet<String>> mcpTools = new LinkedHashMap<>();
         for (SkillRuntimeConfigVo runtime : runtimes) {
             if (runtime.getTools() == null) {
                 continue;
             }
             if (runtime.getTools().getLocal() != null) {
-                runtime.getTools().getLocal().stream()
-                        .filter(StringUtils::isNotBlank)
-                        .map(String::trim)
-                        .forEach(localTools::add);
+                mergeToolMap(localTools, runtime.getTools().getLocal());
             }
             if (runtime.getTools().getMcp() != null) {
                 runtime.getTools().getMcp().forEach((serverCode, toolNames) -> {
@@ -388,7 +387,10 @@ public class SkillService {
             }
         }
         SkillRuntimeToolsVo tools = new SkillRuntimeToolsVo();
-        tools.setLocal(new ArrayList<>(localTools));
+        Map<String, List<String>> local = new LinkedHashMap<>();
+        localTools.forEach((serverCode, toolNames) ->
+                local.put(serverCode, new ArrayList<>(toolNames)));
+        tools.setLocal(local);
         Map<String, List<String>> external = new LinkedHashMap<>();
         mcpTools.forEach((serverCode, toolNames) ->
                 external.put(serverCode, new ArrayList<>(toolNames)));
@@ -408,6 +410,21 @@ public class SkillService {
                 runtime.getLimits() == null ? null : runtime.getLimits().getMaxAccumulatedToolResultTokens()));
         merged.setLimits(limits);
         return merged;
+    }
+
+    private void mergeToolMap(Map<String, LinkedHashSet<String>> destination,
+                              Map<String, List<String>> source) {
+        source.forEach((serverCode, toolNames) -> {
+            if (StringUtils.isBlank(serverCode) || toolNames == null) {
+                return;
+            }
+            LinkedHashSet<String> mergedNames = destination.computeIfAbsent(
+                    serverCode.trim(), ignored -> new LinkedHashSet<>());
+            toolNames.stream()
+                    .filter(StringUtils::isNotBlank)
+                    .map(String::trim)
+                    .forEach(mergedNames::add);
+        });
     }
 
     private Integer minPositive(List<SkillRuntimeConfigVo> runtimes,
@@ -618,6 +635,7 @@ public class SkillService {
             if (skill.getEnabled() == null) {
                 skill.setEnabled(false);
             }
+            validateRuntimeTools(skill);
             skill.setEntry(StringUtils.defaultIfBlank(skill.getEntry(), DEFAULT_ENTRY_FILE));
             Path entryPath = safeResolve(skillDir, skill.getEntry());
             if (!Files.exists(entryPath) || !Files.isRegularFile(entryPath)) {
@@ -628,7 +646,50 @@ public class SkillService {
             skill.setUpdateTime(resolveUpdateTime(manifestPath, entryPath));
             nextCache.put(skill.getId(), new SkillRecord(skill, skillDir, manifestPath, entryPath));
         } catch (Exception e) {
-            log.warn("加载 Skill 失败: {}", skillDir, e);
+            log.warn("加载 Skill 失败: {}, reason={}", skillDir, e.getMessage(), e);
+        }
+    }
+
+    private void validateRuntimeTools(SkillVo skill) {
+        if (skill.getRuntime() == null || skill.getRuntime().getTools() == null) {
+            return;
+        }
+        Map<String, List<String>> local = skill.getRuntime().getTools().getLocal();
+        if (local == null) {
+            return;
+        }
+        for (Map.Entry<String, List<String>> entry : local.entrySet()) {
+            String serviceCode = StringUtils.trimToEmpty(entry.getKey());
+            BuiltinMcpServiceDefinition service = BuiltinMcpServiceDefinition.findByCode(serviceCode)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Skill 声明未知内置 MCP 服务: " + serviceCode));
+            List<String> toolNames = entry.getValue();
+            if (toolNames == null) {
+                throw new IllegalArgumentException(
+                        "Skill 内置 MCP 服务工具列表不能为空: " + serviceCode);
+            }
+            if (toolNames.stream().anyMatch(StringUtils::isBlank)) {
+                throw new IllegalArgumentException(
+                        "Skill 内置 MCP 服务工具名不能为空: " + serviceCode);
+            }
+            List<String> normalized = toolNames.stream()
+                    .map(String::trim)
+                    .distinct()
+                    .toList();
+            if (normalized.contains("*")
+                    && (toolNames.size() != 1 || normalized.size() != 1)) {
+                throw new IllegalArgumentException(
+                        "Skill 内置 MCP 服务的 * 不能与具体工具混用: " + serviceCode);
+            }
+            normalized.stream()
+                    .filter(toolName -> !"*".equals(toolName))
+                    .filter(toolName -> !service.containsTool(toolName))
+                    .findFirst()
+                    .ifPresent(toolName -> {
+                        throw new IllegalArgumentException(
+                                "Skill 工具不属于内置 MCP 服务: "
+                                        + serviceCode + " -> " + toolName);
+                    });
         }
     }
 
@@ -714,9 +775,15 @@ public class SkillService {
         if (!Files.exists(manifestPath)) {
             return new SkillVo();
         }
+        JsonNode manifest = objectMapper.readTree(manifestPath.toFile());
+        JsonNode localTools = manifest.path("runtime").path("tools").get("local");
+        if (localTools != null && localTools.isArray()) {
+            throw new IllegalArgumentException(
+                    "Skill runtime.tools.local 旧数组格式已不支持，必须改为内置 MCP 服务映射");
+        }
         return objectMapper.readerFor(SkillVo.class)
                 .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .readValue(manifestPath.toFile());
+                .readValue(manifest);
     }
 
     private Map<String, Object> readManifestAsMap(SkillRecord record) throws IOException {

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.HashOperations;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -28,6 +29,9 @@ class AuthorityInterceptorTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private HashOperations<String, Object, Object> hashOperations;
 
     private AuthorityInterceptor interceptor;
 
@@ -58,6 +62,27 @@ class AuthorityInterceptorTest {
         assertThat(result).isTrue();
         assertThat(request.getAttribute(AuthorityInterceptor.API_BEARER_USER_ID_ATTR)).isEqualTo(7);
         assertThat(request.getAttribute(AuthorityInterceptor.API_BEARER_USER_NAME_ATTR)).isEqualTo("API User");
+        assertThat(request.getAttribute(AuthorityInterceptor.AUTHENTICATED_USER_ID_ATTR)).isEqualTo(7);
+        assertThat(request.getAttribute(AuthorityInterceptor.AUTHENTICATED_USER_NAME_ATTR)).isEqualTo("API User");
+    }
+
+    @Test
+    void shouldExposeAuthenticatedSessionUserToDynamicPlugins() throws Exception {
+        when(customWebConfig.getNeedCheckPath()).thenReturn("/api/v1");
+        when(stringRedisTemplate.hasKey("session-7")).thenReturn(true);
+        when(stringRedisTemplate.opsForHash()).thenReturn(hashOperations);
+        when(hashOperations.get("session-7", "strUid")).thenReturn("7");
+        when(hashOperations.get("session-7", "strUname")).thenReturn("Session User");
+
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/api/v1/plugin/com.coolxer.plugin.onesoc/security-operation/users");
+        request.setRequestedSessionId("session-7");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(request.getAttribute(AuthorityInterceptor.AUTHENTICATED_USER_ID_ATTR)).isEqualTo("7");
+        assertThat(request.getAttribute(AuthorityInterceptor.AUTHENTICATED_USER_NAME_ATTR))
+                .isEqualTo("Session User");
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.coolxer.service.retrieval.MetaDataService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceContextType;
+import jakarta.persistence.Query;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -21,6 +22,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -29,6 +32,15 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
+
+    private static final Pattern INTERVAL_TTL_PATTERN = Pattern.compile(
+            "^`?([A-Za-z_][A-Za-z0-9_]*)`?\\s*\\+\\s*INTERVAL\\s+(\\d+)\\s+"
+                    + "(HOUR|DAY|WEEK|MONTH|YEAR)$",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern FUNCTION_TTL_PATTERN = Pattern.compile(
+            "^`?([A-Za-z_][A-Za-z0-9_]*)`?\\s*\\+\\s*toInterval"
+                    + "(Hour|Day|Week|Month|Year)\\s*\\(\\s*(\\d+)\\s*\\)$",
+            Pattern.CASE_INSENSITIVE);
 
     @Autowired
     private ResourceLoader resourceLoader;
@@ -100,6 +112,7 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
             String partitionBy = StringUtils.isEmpty(dataEntity.getAutoCreate().getPartitionBy()) ? "" :
                     String.format(" PARTITION BY %s", dataEntity.getAutoCreate().getPartitionBy());
             createTableSql.append(")").append(engine).append(orderBy).append(partitionBy)
+                    .append(ttlClause(dataEntity.getAutoCreate().getTtl()))
                     .append(";");
         });
 
@@ -114,6 +127,7 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                             + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
                     migrateRecordIdColumn(dataEntity);
                 });
+        synchronizeTableTtl(metaData);
         log.info("clickhouse scheme init successfully.");
     }
 
@@ -135,7 +149,10 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
             }
             validateSafeSqlFragment(entity.getTableName(), "表名");
             validateSafeSqlFragment(entity.getAutoCreate().getEngine(), "引擎");
-            validateSafeSqlFragment(entity.getAutoCreate().getPartitionBy(), "分区键");
+            String partitionBy = entity.getAutoCreate().getPartitionBy();
+            if (StringUtils.isNotBlank(partitionBy)) {
+                validateSafeSqlFragment(partitionBy, "分区键");
+            }
             entity.getAutoCreate().getOrderBy().forEach(value -> validateSafeSqlFragment(value, "排序键"));
             attributes.forEach(attribute -> {
                 validateSafeSqlFragment(attribute.getColumnName(), "列名");
@@ -155,13 +172,13 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                         + MetaDataConstants.INSERT_TIME_COLUMN_TYPE + " DEFAULT "
                         + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION;
             }
-            String partition = StringUtils.isBlank(entity.getAutoCreate().getPartitionBy())
+            String partition = StringUtils.isBlank(partitionBy)
                     ? ""
-                    : " PARTITION BY " + entity.getAutoCreate().getPartitionBy();
+                    : " PARTITION BY " + partitionBy;
             executeRequiredSql("CREATE TABLE IF NOT EXISTS " + entity.getTableName()
                     + " (" + columns + ") ENGINE = " + entity.getAutoCreate().getEngine()
                     + " ORDER BY (" + String.join(",", entity.getAutoCreate().getOrderBy()) + ")"
-                    + partition);
+                    + partition + ttlClause(entity.getAutoCreate().getTtl()));
 
             for (DataAttribute attribute : attributes) {
                 executeRequiredSql("ALTER TABLE " + entity.getTableName()
@@ -176,7 +193,176 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                     + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
                     + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION);
         }
+        synchronizeTableTtl(metaData);
         log.info("ClickHouse additive schema upgrade completed");
+    }
+
+    @Override
+    public void synchronizeTableTtl(MetaData metaData) {
+        if (metaData == null || CollectionUtils.isEmpty(metaData.getEntity())) {
+            return;
+        }
+        for (DataEntity entity : metaData.getEntity()) {
+            if (!isClickHouseEntity(entity) || entity.getAutoCreate() == null) {
+                continue;
+            }
+            validateSafeSqlFragment(entity.getTableName(), "表名");
+            DataEntity.Ttl desired = entity.getAutoCreate().getTtl();
+            validateTtlDefinition(desired);
+            CurrentTableTtl current = readCurrentTableTtl(entity.getTableName());
+            if (!current.tableExists()) {
+                log.warn("跳过不存在表的TTL同步: {}", entity.getTableName());
+                continue;
+            }
+            if (desired == null) {
+                if (current.hasTtl()) {
+                    executeRequiredSql("ALTER TABLE " + entity.getTableName() + " REMOVE TTL",
+                            "ClickHouse TTL移除失败");
+                }
+                continue;
+            }
+            if (!desired.equals(current.parsedTtl())) {
+                executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                                + " MODIFY TTL " + ttlExpression(desired),
+                        "ClickHouse TTL同步失败");
+            }
+        }
+    }
+
+    private String ttlClause(DataEntity.Ttl ttl) {
+        return ttl == null ? "" : " TTL " + ttlExpression(ttl);
+    }
+
+    private String ttlExpression(DataEntity.Ttl ttl) {
+        validateTtlDefinition(ttl);
+        return ttl.getColumn() + " + INTERVAL " + ttl.getExpireAfter() + " " + ttl.getUnit().name();
+    }
+
+    private void validateTtlDefinition(DataEntity.Ttl ttl) {
+        if (ttl == null) {
+            return;
+        }
+        if (StringUtils.isBlank(ttl.getColumn())
+                || !ttl.getColumn().matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new IllegalArgumentException("ClickHouse TTL列不合法: " + ttl.getColumn());
+        }
+        if (ttl.getExpireAfter() <= 0 || ttl.getUnit() == null) {
+            throw new IllegalArgumentException("ClickHouse TTL保留期不合法");
+        }
+    }
+
+    private CurrentTableTtl readCurrentTableTtl(String qualifiedTableName) {
+        TableReference table = TableReference.parse(qualifiedTableName);
+        String sql = table.database() == null
+                ? "SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = :tableName"
+                : "SELECT engine_full FROM system.tables WHERE database = :databaseName AND name = :tableName";
+        try {
+            Query query = entityManager.createNativeQuery(sql);
+            query.setParameter("tableName", table.table());
+            if (table.database() != null) {
+                query.setParameter("databaseName", table.database());
+            }
+            List<?> rows = query.getResultList();
+            if (rows.isEmpty()) {
+                return CurrentTableTtl.missing();
+            }
+            return parseCurrentTableTtl(String.valueOf(rows.get(0)));
+        } catch (Exception e) {
+            throw new IllegalStateException("读取ClickHouse表TTL失败: " + qualifiedTableName, e);
+        }
+    }
+
+    private CurrentTableTtl parseCurrentTableTtl(String engineFull) {
+        int ttlStart = indexOfTopLevelKeyword(engineFull, "TTL", 0);
+        if (ttlStart < 0) {
+            return CurrentTableTtl.withoutTtl();
+        }
+        int expressionStart = ttlStart + 3;
+        int settingsStart = indexOfTopLevelKeyword(engineFull, "SETTINGS", expressionStart);
+        String expression = engineFull.substring(expressionStart,
+                settingsStart < 0 ? engineFull.length() : settingsStart).trim();
+        return new CurrentTableTtl(true, true, parseStructuredTtl(expression));
+    }
+
+    private DataEntity.Ttl parseStructuredTtl(String expression) {
+        Matcher intervalMatcher = INTERVAL_TTL_PATTERN.matcher(expression);
+        if (intervalMatcher.matches()) {
+            return ttl(intervalMatcher.group(1), intervalMatcher.group(2), intervalMatcher.group(3));
+        }
+        Matcher functionMatcher = FUNCTION_TTL_PATTERN.matcher(expression);
+        if (functionMatcher.matches()) {
+            return ttl(functionMatcher.group(1), functionMatcher.group(3), functionMatcher.group(2));
+        }
+        return null;
+    }
+
+    private DataEntity.Ttl ttl(String column, String expireAfter, String unit) {
+        try {
+            DataEntity.Ttl ttl = new DataEntity.Ttl();
+            ttl.setColumn(column);
+            ttl.setExpireAfter(Long.parseLong(expireAfter));
+            ttl.setUnit(DataEntity.TtlUnit.valueOf(unit.toUpperCase(java.util.Locale.ROOT)));
+            return ttl;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private int indexOfTopLevelKeyword(String sql, String keyword, int fromIndex) {
+        int depth = 0;
+        char quote = 0;
+        for (int index = Math.max(0, fromIndex); index <= sql.length() - keyword.length(); index++) {
+            char current = sql.charAt(index);
+            if (quote != 0) {
+                if (current == quote && (index == 0 || sql.charAt(index - 1) != '\\')) {
+                    quote = 0;
+                }
+                continue;
+            }
+            if (current == '\'' || current == '`' || current == '"') {
+                quote = current;
+                continue;
+            }
+            if (current == '(') {
+                depth++;
+                continue;
+            }
+            if (current == ')') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth == 0 && sql.regionMatches(true, index, keyword, 0, keyword.length())
+                    && isKeywordBoundary(sql, index - 1)
+                    && isKeywordBoundary(sql, index + keyword.length())) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private boolean isKeywordBoundary(String text, int index) {
+        return index < 0 || index >= text.length()
+                || !(Character.isLetterOrDigit(text.charAt(index)) || text.charAt(index) == '_');
+    }
+
+    private record CurrentTableTtl(boolean tableExists, boolean hasTtl, DataEntity.Ttl parsedTtl) {
+        private static CurrentTableTtl missing() {
+            return new CurrentTableTtl(false, false, null);
+        }
+
+        private static CurrentTableTtl withoutTtl() {
+            return new CurrentTableTtl(true, false, null);
+        }
+    }
+
+    private record TableReference(String database, String table) {
+        private static TableReference parse(String qualifiedTableName) {
+            int separator = qualifiedTableName.indexOf('.');
+            return separator < 0
+                    ? new TableReference(null, qualifiedTableName)
+                    : new TableReference(qualifiedTableName.substring(0, separator),
+                    qualifiedTableName.substring(separator + 1));
+        }
     }
 
     private void validateSafeSqlFragment(String value, String field) {

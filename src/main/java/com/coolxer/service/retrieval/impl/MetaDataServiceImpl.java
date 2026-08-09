@@ -217,6 +217,7 @@ public class MetaDataServiceImpl implements MetaDataService {
                     throw invalid(itemSource, "实体" + entity.getName() + "的默认排序字段不存在: " + entity.getSortColumn());
                 }
             }
+            validateTableTtl(entity, attributesByEntity, itemSource);
         }
 
         MetaData immutableMetaData = new MetaData();
@@ -235,6 +236,42 @@ public class MetaDataServiceImpl implements MetaDataService {
                 Collections.unmodifiableMap(attributesById),
                 Collections.unmodifiableMap(operatorsByName)
         );
+    }
+
+    private void validateTableTtl(DataEntity entity,
+                                  Map<String, Map<String, DataAttribute>> attributesByEntity,
+                                  String sourcePath) {
+        if (entity.getAutoCreate() == null || entity.getAutoCreate().getTtl() == null) {
+            return;
+        }
+        DataEntity.Ttl ttl = entity.getAutoCreate().getTtl();
+        requireIdentifier(ttl.getColumn(), "实体" + entity.getName() + "的TTL列", sourcePath,
+                LOGICAL_IDENTIFIER);
+        if (ttl.getExpireAfter() <= 0) {
+            throw invalid(sourcePath, "实体" + entity.getName() + "的TTL expire_after必须大于0");
+        }
+        if (ttl.getUnit() == null) {
+            throw invalid(sourcePath, "实体" + entity.getName() + "的TTL unit不支持或为空");
+        }
+        DataAttribute ttlAttribute = attributesByEntity.getOrDefault(entity.getName(), Map.of()).values().stream()
+                .filter(attribute -> ttl.getColumn().equals(attribute.getColumnName()))
+                .findFirst()
+                .orElseThrow(() -> invalid(sourcePath,
+                        "实体" + entity.getName() + "的TTL列不存在: " + ttl.getColumn()));
+        if (!isNonNullableTemporalType(ttlAttribute.getColumnType())) {
+            throw invalid(sourcePath, "实体" + entity.getName()
+                    + "的TTL列必须是非Nullable的Date、Date32、DateTime或DateTime64: " + ttl.getColumn());
+        }
+    }
+
+    private boolean isNonNullableTemporalType(String columnType) {
+        String type = StringUtils.trimToEmpty(columnType).replace(" ", "").toLowerCase(Locale.ROOT);
+        return type.equals("date")
+                || type.equals("date32")
+                || type.equals("datetime")
+                || type.startsWith("datetime(")
+                || type.equals("datetime64")
+                || type.startsWith("datetime64(");
     }
 
     private <K, V> void putUnique(Map<K, V> map, K key, V value, String message, String sourcePath) {

@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +18,10 @@ import java.util.Map;
 public class SkillRuntimeToolsVo implements Serializable {
 
     /**
-     * ZenVis 本地工具名。
+     * ZenVis 内置 MCP 服务 code 到工具名列表的映射。列表只包含 "*"
+     * 时表示允许该服务的全部工具。
      */
-    private List<String> local = new ArrayList<>();
+    private Map<String, List<String>> local = new LinkedHashMap<>();
 
     /**
      * MCP 服务 code 到原始工具名列表的映射。

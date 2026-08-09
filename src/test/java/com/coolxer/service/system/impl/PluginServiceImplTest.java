@@ -506,6 +506,31 @@ class PluginServiceImplTest {
     }
 
     @Test
+    void additiveMetaUpgradeAllowsAddingChangingAndRemovingTtl() {
+        PluginServiceImpl service = newService();
+        DataEntity currentEntity = entity(1, "event", "zenvis.event");
+        MetaData current = metaData(currentEntity,
+                attribute(1, "event", "event_id", "event_id", "String"));
+        for (DataEntity.Ttl ttl : List.of(ttl(30, DataEntity.TtlUnit.DAY),
+                ttl(2, DataEntity.TtlUnit.MONTH))) {
+            DataEntity candidateEntity = entity(1, "event", "zenvis.event");
+            candidateEntity.getAutoCreate().setTtl(ttl);
+            MetaData candidate = metaData(candidateEntity,
+                    attribute(1, "event", "event_id", "event_id", "String"));
+            MetaData previous = current;
+            assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                    service, "validateAdditiveMetaChange", previous, candidate)).doesNotThrowAnyException();
+            current = candidate;
+        }
+        DataEntity removedEntity = entity(1, "event", "zenvis.event");
+        MetaData removed = metaData(removedEntity,
+                attribute(1, "event", "event_id", "event_id", "String"));
+        MetaData currentWithTtl = current;
+        assertThatCode(() -> ReflectionTestUtils.invokeMethod(
+                service, "validateAdditiveMetaChange", currentWithTtl, removed)).doesNotThrowAnyException();
+    }
+
+    @Test
     void additiveMetaUpgradeRejectsDeletionRenameAndTypeChanges() {
         PluginServiceImpl service = newService();
         MetaData current = metaData(entity(1, "event", "zenvis.event"),
@@ -927,6 +952,14 @@ class PluginServiceImplTest {
         attribute.setColumnName(columnName);
         attribute.setColumnType(columnType);
         return attribute;
+    }
+
+    private DataEntity.Ttl ttl(long expireAfter, DataEntity.TtlUnit unit) {
+        DataEntity.Ttl ttl = new DataEntity.Ttl();
+        ttl.setColumn("zenvis_insert_time");
+        ttl.setExpireAfter(expireAfter);
+        ttl.setUnit(unit);
+        return ttl;
     }
 
     private MockMultipartFile packageFile(String filename, byte[] bytes) {

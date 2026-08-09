@@ -14,6 +14,7 @@ import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.dih.vo.McpToolVo;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.model.dih.vo.McpToolPolicyVo;
+import com.coolxer.model.dih.vo.BuiltinMcpServiceVo;
 import com.coolxer.commons.enums.McpApprovalPolicy;
 import com.coolxer.commons.enums.McpToolSourceType;
 import com.coolxer.commons.enums.ResultCodeEnum;
@@ -24,6 +25,7 @@ import com.coolxer.service.dih.mcp.McpApprovalService;
 import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.mcp.McpToolPolicyService;
 import com.coolxer.service.dih.mcp.McpToolContext;
+import com.coolxer.service.dih.mcp.BuiltinMcpServiceCatalog;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -60,6 +62,21 @@ public class McpController extends BaseController {
 
     @Autowired
     private McpToolPolicyService mcpToolPolicyService;
+
+    @Autowired
+    private BuiltinMcpServiceCatalog builtinMcpServiceCatalog;
+
+    @GetMapping("/local-services")
+    @Operation(summary = "内置 MCP 服务目录")
+    public ResponseWrap<List<BuiltinMcpServiceVo>> localServices() {
+        return ResponseWrap.success(builtinMcpServiceCatalog.listServices());
+    }
+
+    @GetMapping("/local-services/{code}/tools")
+    @Operation(summary = "内置 MCP 服务工具列表")
+    public ResponseWrap<List<McpToolVo>> localServiceTools(@PathVariable("code") String code) {
+        return ResponseWrap.success(builtinMcpServiceCatalog.listTools(code));
+    }
 
     @GetMapping("/servers/list")
     @Operation(summary = "MCP服务列表", description = "分页查询外部MCP服务配置")

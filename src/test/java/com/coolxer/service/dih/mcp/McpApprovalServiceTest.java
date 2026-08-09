@@ -98,6 +98,7 @@ class McpApprovalServiceTest {
             assertThat(invocation.getArguments()).isEqualTo("{\"id\":1}");
             assertThat(invocation.getResult()).isEqualTo("ok");
             assertThat(invocation.getResultLength()).isEqualTo(2L);
+            assertThat(invocation.getServerCode()).isEqualTo("local");
         });
     }
 

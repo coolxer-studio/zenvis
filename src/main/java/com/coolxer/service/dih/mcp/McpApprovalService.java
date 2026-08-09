@@ -546,6 +546,7 @@ public class McpApprovalService {
                         builder.like(builder.lower(root.get("requestId")), pattern),
                         builder.like(builder.lower(root.get("toolKey")), pattern),
                         builder.like(builder.lower(root.get("toolName")), pattern),
+                        builder.like(builder.lower(root.get("serverCode")), pattern),
                         builder.like(builder.lower(root.get("serverName")), pattern),
                         builder.like(builder.lower(root.get("chatId")), pattern),
                         builder.like(builder.lower(root.get("agentType")), pattern)
@@ -687,6 +688,7 @@ public class McpApprovalService {
                 .setRequestId(UUID.randomUUID().toString())
                 .setToolKey(descriptor.toolKey())
                 .setToolName(StringUtils.defaultIfBlank(descriptor.aiToolName(), descriptor.toolName()))
+                .setServerCode(descriptor.serverCode())
                 .setServerName(descriptor.serverName())
                 .setDescription(descriptor.description())
                 .setRiskLevel(descriptor.riskLevel() == null

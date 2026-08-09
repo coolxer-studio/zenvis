@@ -3,6 +3,7 @@ package com.coolxer.service.dih.agent.skill;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.model.dih.dto.SkillSearchDto;
+import com.coolxer.model.dih.vo.SkillVo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -105,7 +106,9 @@ class SkillServiceTest {
                           "runtime": {
                             "promptMode": "skill_only",
                             "tools": {
-                              "local": ["retrieval_search", "retrieval_list_attribute"],
+                              "local": {
+                                "retrieval": ["retrieval_search", "retrieval_list_attribute"]
+                              },
                               "mcp": {
                                 "jmr": ["dictionary_lookup", "payload_decode_base64", "ioc_lookup"]
                               }
@@ -143,7 +146,7 @@ class SkillServiceTest {
         assertThat(service.resolveRuntimeConfig(List.of("jmr-runtime")))
                 .satisfies(runtime -> {
                     assertThat(runtime.getPromptMode()).isEqualTo("skill_only");
-                    assertThat(runtime.getTools().getLocal())
+                    assertThat(runtime.getTools().getLocal().get("retrieval"))
                             .containsExactly("retrieval_search", "retrieval_list_attribute");
                     assertThat(runtime.getTools().getMcp().get("jmr"))
                             .containsExactly("dictionary_lookup", "payload_decode_base64", "ioc_lookup");
@@ -153,6 +156,87 @@ class SkillServiceTest {
                     assertThat(runtime.getLimits().getMaxAccumulatedToolResultChars()).isEqualTo(48000);
                     assertThat(runtime.getLimits().getMaxAccumulatedToolResultTokens()).isEqualTo(12000);
                 });
+    }
+
+    @Test
+    void rejectsLegacyOrInvalidLocalServiceMappingsAndAcceptsWildcard() throws Exception {
+        writeSkill(
+                skillRoot.resolve("legacy-local-array"),
+                """
+                        {"id":"legacy-local-array","name":"legacy","enabled":true,
+                         "runtime":{"tools":{"local":["retrieval_search"]}},"entry":"SKILL.md"}
+                        """,
+                "legacy"
+        );
+        writeSkill(
+                skillRoot.resolve("unknown-local-service"),
+                """
+                        {"id":"unknown-local-service","name":"unknown","enabled":true,
+                         "runtime":{"tools":{"local":{"unknown":["retrieval_search"]}}},"entry":"SKILL.md"}
+                        """,
+                "unknown"
+        );
+        writeSkill(
+                skillRoot.resolve("wrong-service-tool"),
+                """
+                        {"id":"wrong-service-tool","name":"wrong","enabled":true,
+                         "runtime":{"tools":{"local":{"entity":["retrieval_search"]}}},"entry":"SKILL.md"}
+                        """,
+                "wrong"
+        );
+        writeSkill(
+                skillRoot.resolve("wildcard-service"),
+                """
+                        {"id":"wildcard-service","name":"wildcard","enabled":true,
+                         "runtime":{"tools":{"local":{"retrieval":["*"]}}},"entry":"SKILL.md"}
+                        """,
+                "wildcard"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        assertThat(service.getPageList(new SkillSearchDto()).getRows())
+                .extracting(SkillVo::getId)
+                .containsExactly("wildcard-service");
+        assertThat(service.resolveRuntimeConfig(List.of("wildcard-service"))
+                .getTools().getLocal().get("retrieval")).containsExactly("*");
+    }
+
+    @Test
+    void mergesLocalToolsByServiceAndUsesStrictestPositiveLimits() throws Exception {
+        writeSkill(
+                skillRoot.resolve("retrieval-a"),
+                """
+                        {"id":"retrieval-a","name":"A","enabled":true,
+                         "runtime":{"tools":{"local":{"retrieval":["retrieval_search"]}},
+                         "limits":{"maxToolCalls":12,"maxToolResultChars":12000}},
+                         "entry":"SKILL.md"}
+                        """,
+                "A"
+        );
+        writeSkill(
+                skillRoot.resolve("retrieval-b"),
+                """
+                        {"id":"retrieval-b","name":"B","enabled":true,
+                         "runtime":{"tools":{"local":{"retrieval":["entity_view"],
+                         "config":["config_read"]}},
+                         "limits":{"maxToolCalls":8,"maxToolResultChars":16000}},
+                         "entry":"SKILL.md"}
+                        """,
+                "B"
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        var runtime = service.resolveRuntimeConfig(List.of("retrieval-a", "retrieval-b"));
+        assertThat(runtime.getTools().getLocal().get("retrieval"))
+                .containsExactly("retrieval_search", "entity_view");
+        assertThat(runtime.getTools().getLocal().get("config"))
+                .containsExactly("config_read");
+        assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(8);
+        assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(12_000);
     }
 
     @Test
@@ -533,11 +617,13 @@ class SkillServiceTest {
         var runtime = service.resolveRuntimeConfig(List.of("data-access-agent"));
         assertThat(runtime).isNotNull();
         assertThat(runtime.getPromptMode()).isNull();
-        assertThat(runtime.getTools().getLocal()).containsExactly(
+        assertThat(runtime.getTools().getLocal().get("config")).containsExactly(
                 "config_tree",
                 "config_add",
                 "config_apply",
-                "config_read",
+                "config_read"
+        );
+        assertThat(runtime.getTools().getLocal().get("push-task")).containsExactly(
                 "push_task_detect_format",
                 "push_task_list_by_source_mark",
                 "push_task_create_and_start",
@@ -565,7 +651,9 @@ class SkillServiceTest {
         SkillService service = newSkillService();
         service.reload();
 
-        String prompt = service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
+        String prompt = service.buildAgentSkillPrompt(
+                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                List.of("data-visualization-agent"));
 
         assertThat(prompt)
                 .contains("意图确认")

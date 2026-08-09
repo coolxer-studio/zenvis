@@ -20,6 +20,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -101,7 +103,7 @@ class AgentMcpToolServiceTest {
         when(skillService.resolveRuntimeConfig(List.of("data-visualization-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
-                        new SkillRuntimeToolsVo(allowedTools, Map.of()),
+                        new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
                         new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
@@ -168,7 +170,7 @@ class AgentMcpToolServiceTest {
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
                         new SkillRuntimeToolsVo(
-                                List.of("config_tree", "dashboard_create"), Map.of()),
+                                localTools(List.of("config_tree", "dashboard_create")), Map.of()),
                         new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
@@ -215,26 +217,26 @@ class AgentMcpToolServiceTest {
     void resolveOmitsDeniedToolsAndMarksAskTools() {
         McpToolPolicyService policyService = mock(McpToolPolicyService.class);
         when(policyService.effectivePolicy(anyString(), any()))
-                .thenAnswer(call -> call.getArgument(0, String.class).endsWith("write")
+                .thenAnswer(call -> call.getArgument(0, String.class).endsWith("config_apply")
                         ? com.coolxer.commons.enums.McpApprovalPolicy.ASK
                         : com.coolxer.commons.enums.McpApprovalPolicy.DENY);
         AgentMcpToolService service = new AgentMcpToolService(
                 new EmptyMcpClientService(),
                 new MockEnvironment(),
                 ToolCallbackProvider.from(
-                        new FakeToolCallback("local_read", "read"),
-                        new FakeToolCallback("local_write", "write")),
+                        new FakeToolCallback("config_tree", "read"),
+                        new FakeToolCallback("config_apply", "write")),
                 policyService
         );
 
         McpToolContext context = service.resolve("agent_data_access");
 
         assertThat(context.systemPrompt())
-                .contains("local_write", "调用前需要用户审批")
-                .doesNotContain("local_read");
+                .contains("config_apply", "调用前需要用户审批")
+                .doesNotContain("config_tree");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("local_write");
+                .containsExactly("config_apply");
     }
 
     @Test
@@ -243,7 +245,7 @@ class AgentMcpToolServiceTest {
         SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
                 SkillRuntimeConfigVo.PROMPT_MODE_SKILL_ONLY,
                 new SkillRuntimeToolsVo(
-                        List.of("retrieval_search", "retrieval_list_attribute"),
+                        localTools(List.of("retrieval_search", "retrieval_list_attribute")),
                         Map.of("jmr", List.of(
                                 "dictionary_lookup",
                                 "payload_decode_base64",
@@ -314,7 +316,7 @@ class AgentMcpToolServiceTest {
         SkillService skillService = mock(SkillService.class);
         SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
                 null,
-                new SkillRuntimeToolsVo(allowedTools, Map.of()),
+                new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
                 new SkillRuntimeLimitsVo(32, 2, 8000, 64000, 48000)
         );
         when(skillService.resolveRuntimeConfig(List.of("data-access-agent"))).thenReturn(runtime);
@@ -403,7 +405,7 @@ class AgentMcpToolServiceTest {
         when(skillService.resolveRuntimeConfig(List.of("report-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
-                        new SkillRuntimeToolsVo(readOnlyTools, Map.of()),
+                        new SkillRuntimeToolsVo(localTools(readOnlyTools), Map.of()),
                         new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(
@@ -457,6 +459,17 @@ class AgentMcpToolServiceTest {
         public String call(String toolInput, ToolContext toolContext) {
             return call(toolInput);
         }
+    }
+
+    private static Map<String, List<String>> localTools(List<String> toolNames) {
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
+        for (String toolName : toolNames) {
+            String serviceCode = BuiltinMcpServiceDefinition.findByTool(toolName)
+                    .map(BuiltinMcpServiceDefinition::code)
+                    .orElseThrow(() -> new IllegalArgumentException("测试工具未分组: " + toolName));
+            grouped.computeIfAbsent(serviceCode, ignored -> new ArrayList<>()).add(toolName);
+        }
+        return grouped;
     }
 
     private static class EmptyMcpClientService implements McpClientService {

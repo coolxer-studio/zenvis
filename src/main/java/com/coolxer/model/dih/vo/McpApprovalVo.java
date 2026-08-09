@@ -18,6 +18,7 @@ public class McpApprovalVo {
     private String toolKey;
     private String toolName;
     private McpToolSourceType sourceType;
+    private String serverCode;
     private String serverName;
     private String description;
     private McpInvocationChannel channel;
@@ -50,6 +51,7 @@ public class McpApprovalVo {
         this.toolName = invocation.getToolName();
         this.sourceType = invocation.getToolKey() != null && invocation.getToolKey().startsWith("external::")
                 ? McpToolSourceType.EXTERNAL : McpToolSourceType.LOCAL;
+        this.serverCode = invocation.getServerCode();
         this.serverName = invocation.getServerName();
         this.description = invocation.getDescription();
         this.channel = invocation.getChannel();

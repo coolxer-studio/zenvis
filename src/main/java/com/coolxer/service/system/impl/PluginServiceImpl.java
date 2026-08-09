@@ -1020,7 +1020,7 @@ public class PluginServiceImpl implements PluginService {
             pluginMigrationService.migrateMysql(plugin.getPackageName(),
                     candidate.pluginPackTool().listMysqlMigrationFiles());
 
-            writeLog(id, "3 应用ClickHouse新增表和字段......");
+            writeLog(id, "3 应用ClickHouse新增表、字段和TTL......");
             clickhouseSchemeService.applyAdditiveScheme(candidate.pluginMeta());
 
             writeLog(id, "4 原子切换插件目录和Meta......");
@@ -1545,9 +1545,11 @@ public class PluginServiceImpl implements PluginService {
                 }
             }
         }
-        if (metaDataService.loadMetaData() == null) {
+        MetaData restoredMetaData = metaDataService.loadMetaData();
+        if (restoredMetaData == null) {
             throw new IllegalStateException("恢复旧Meta失败");
         }
+        clickhouseSchemeService.synchronizeTableTtl(restoredMetaData);
 
         restoreConfigDirectories(snapshotRoot);
         restoreDashboards(packageName, snapshot.dashboards());

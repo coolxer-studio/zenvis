@@ -160,6 +160,12 @@ Controller 只声明插件内相对路径，不重复写平台前缀。请求和
 
 插件 API 的平台认证、权限过滤和完整 REST 接入方式见 [RESTful API 概览](/08-API参考/RestfulAPI/概览与接入.md)。
 
+动态 Controller 在主程序全局认证拦截器之后执行。认证成功时，请求属性
+`zenvis.authenticated.userId` 包含当前 Zenvis 用户 ID，Session 与普通 REST Bearer Token
+均使用这一属性；`zenvis.authenticated.userName` 可用于提示展示。插件应以用户 ID 做权限
+判断并按需从受控用户目录读取快照，不要依赖 `Principal`，也不要自行解析 Redis Session、
+Cookie 或 Token。
+
 ## MySQL 迁移
 
 迁移文件位于：

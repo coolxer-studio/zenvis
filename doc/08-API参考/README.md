@@ -7,7 +7,7 @@
 | 类型 | 调用方 | 传输与入口 | 主要用途 |
 | --- | --- | --- | --- |
 | [RESTful API](/08-API参考/RestfulAPI/概览与接入.md) | 浏览器、前端应用、第三方业务系统 | HTTP `/api/v1/**` | 登录、配置、检索、实体、看板、插件、DIH、报表和系统管理 |
-| [MCP Tool](/08-API参考/MCPtool/总览与接入.md) | MCP Client、ZenVis Agent、Skill | SSE `/sse`、消息端点 `/mcp/message` | 让大模型以结构化工具调用方式查询数据或执行受控动作 |
+| [MCP Tool](/08-API参考/MCPtool/总览与接入.md) | MCP Client、ZenVis Agent、Skill | 六组 `/mcp/{serviceCode}/sse` 与 `/mcp/{serviceCode}/message` | 让大模型以结构化工具调用方式查询数据或执行受控动作 |
 
 `McpController` 虽然名称中包含 MCP，但它暴露的是用于管理 MCP 服务、策略、审批和审计的 REST API，详见 [MCP 服务管理](/08-API参考/RestfulAPI/MCP服务管理.md)。真正通过 MCP 协议暴露的工具见 [MCP Tool 文档](/08-API参考/MCPtool/总览与接入.md)。
 
@@ -27,8 +27,8 @@
 
 ## 当前代码覆盖
 
-- REST：23 个 Controller，共 183 个方法级映射。
-- MCP：7 个内置工具类，共 71 个工具。
+- REST：23 个 Controller，共 185 个方法级映射。
+- MCP：8 个内置工具类、6 个内置服务，共 77 个工具。
 - 前端：8 个 API 服务模块及报表导出等页面内调用。
 
 本目录只维护 API 契约。产品使用方法见[产品理念与使用](/01-产品理念与使用/README.md)，MCP 与 Agent 的整体设计见[AI 与数据智能](/04-AI与数据智能/README.md)，插件扩展见[插件开发与集成](/03-插件开发与集成/README.md)。
@@ -40,7 +40,7 @@
 | REST Controller | `zenvis-backend/src/main/java/com/coolxer/controller` |
 | 请求与响应模型 | `zenvis-backend/src/main/java/com/coolxer/model` |
 | REST 认证 | `AuthorityInterceptor`、`OpenApiConfig` |
-| MCP Server 工具注册 | `McpServerToolConfiguration` |
-| MCP 工具实现 | `ConfigMcpTool`、`ConfigValidationMcpTool`、`RetrievalMcpTool`、`AnalysisTaskMcpTool`、`DashboardMcpTool`、`MenuMcpTool`、`PushTaskMcpTool` |
+| MCP Server 工具注册 | `McpServerToolConfiguration`、`BuiltinMcpServerConfiguration` |
+| MCP 工具实现 | `ConfigMcpTool`、`ConfigValidationMcpTool`、`RetrievalMcpTool`、`AnalysisTaskMcpTool`、`AnalysisTaskScheduleMcpTool`、`DashboardMcpTool`、`MenuMcpTool`、`PushTaskMcpTool` |
 | Agent 工具范围 | `AgentMcpToolService` |
 | 前端调用封装 | `zenvis-frontend/src/service/api` |

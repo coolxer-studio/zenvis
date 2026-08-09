@@ -161,7 +161,7 @@ skill_config/
 - 稳定 `id`、名称、说明和启用状态；
 - 适用的 `agentTypes`；
 - 是否提供聊天入口、显示名称、图标和顺序；
-- `runtime.tools.local` 本地工具 allowlist；
+- `runtime.tools.local` 内置服务 code 到本服务工具 allowlist 的映射；
 - `runtime.tools.mcp` 外部 MCP Server 与原始工具名 allowlist；
 - 可选 `runtime.limits`。
 

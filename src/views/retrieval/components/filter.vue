@@ -24,7 +24,13 @@
 
     <div class="toolbar">
       <span>实体：</span>
-      <el-select v-model="draft.entity" class="entity-select" @change="handleEntityChange">
+      <el-select
+        v-model="draft.entity"
+        class="entity-select"
+        filterable
+        no-match-text="未找到实体"
+        @change="handleEntityChange"
+      >
         <el-option v-for="entity in entities" :key="entity.name" :value="entity.name" :label="entity.label" />
       </el-select>
       <el-segmented v-model="draft.type" :options="typeOptions" @change="handleTypeChange" />

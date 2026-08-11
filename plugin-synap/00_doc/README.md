@@ -1,12 +1,12 @@
 # 探针消息数据契约与运维说明
 
-本文档是 `com.coolxer.plugin.probe` 1.1.0 的权威接入契约。插件面向首次安装和 additive schema 升级，不包含旧 `msg` 表、网关 Syslog 或业务日志文件兼容逻辑。
+本文档是 `com.coolxer.plugin.synap` 1.1.2 的权威接入契约。插件面向首次安装和 additive schema 升级，不包含旧 `msg` 表、网关 Syslog 或业务日志文件兼容逻辑。
 
 ## 契约矩阵
 
 | 数据定义 | 代码 | 实体 | ClickHouse 表 | Kafka 主题 | UI 页面 | 结构化 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 探针标准事实消息 | `agent-message` | `probe_agent_message` | `zenvis.probe_agent_message` | `^(android\|h5\|ios\|host\|wechat)_fact_.*$` | `detail-message`、`parameter-analytics` | 是 |
+| 探针标准事实消息 | `agent-message` | `synap_agent_message` | `zenvis.synap_agent_message` | `^(android\|h5\|ios\|host\|wechat)_fact_.*$` | `detail-message`、`parameter-analytics` | 是 |
 
 所有匹配主题使用相同的 `{fact:{common,type}, agendas, punishes, rule, risk}` Checkpoint 信封，因此对应一个实体和一张表。Kafka 主题、分区和偏移量作为来源坐标随记录保存。Host AuditData 与 WeChat 新 Fact 是 `fact` 的载荷变体，不是新的 Kafka 信封定义：通用字段提升为列，业务载荷继续完整保存在 `fact` JSON。
 
@@ -198,18 +198,18 @@ Zenvis 另外注入 `zenvis_id Nullable(UUID)` 和 `zenvis_insert_time DateTime6
 ^(android|h5|ios|host|wechat)_fact_.*$
 ```
 
-Vector Kafka Source 支持以 `^` 开头的主题正则。需要限制到固定主题时，可覆盖 `PROBE_KAFKA_TOPIC_PATTERN`。
+Vector Kafka Source 支持以 `^` 开头的主题正则。需要限制到固定主题时，可覆盖 `SYNAP_KAFKA_TOPIC_PATTERN`。
 
 主题过滤与消息校验的边界如下：
 
 - 主题名不匹配正则：Kafka Source 不订阅，消息不会进入本任务、ClickHouse 或 DLQ，仍按原主题的 Kafka 保留策略保存。
-- 主题名匹配且消息合法：转换为 63 个业务字段并写入 `zenvis.probe_agent_message`。
-- 主题名匹配但消息解析或校验失败：通过 `map_probe_agent_message.dropped` 写入插件 DLQ。
+- 主题名匹配且消息合法：转换为 63 个业务字段并写入 `zenvis.synap_agent_message`。
+- 主题名匹配但消息解析或校验失败：通过 `map_synap_agent_message.dropped` 写入插件 DLQ。
 - `fact.type` 没有固定枚举白名单；任意非空值都可以入库，但消息仍须满足其余契约。
 
 若以后扩大正则，同一消费组对新纳入且没有已提交位点的分区会受 `auto_offset_reset: earliest` 控制，从 Kafka 当前仍保留的最早位置开始消费。
 
-`probe-kafka-to-clickhouse.yaml` 必须以且仅以三个短横线 `---` 开头。该合法 YAML 文档头用于确保 Vectum 将任务写成 `push.yaml`；缺失时复杂 VRL 内容可能干扰格式探测，四个短横线 `----` 则会导致 YAML 解析失败。
+`synap-kafka-to-clickhouse.yaml` 必须以且仅以三个短横线 `---` 开头。该合法 YAML 文档头用于确保 Vectum 将任务写成 `push.yaml`；缺失时复杂 VRL 内容可能干扰格式探测，四个短横线 `----` 则会导致 YAML 解析失败。
 
 ClickHouse 表由 Meta 自动创建：
 
@@ -226,7 +226,7 @@ PARTITION BY toYYYYMM(zenvis_insert_time)
 默认 DLQ：
 
 ```text
-com.coolxer.plugin.probe.dead-letter
+com.coolxer.plugin.synap.dead-letter
 ```
 
 会进入 DLQ 的情况包括：
@@ -252,15 +252,15 @@ DLQ Sink 开启：
 1. 根据 `metadata.dropped.message` 修复产生异常的字段。
 2. 从 DLQ 事件提取原始 `message`、`topic`、`partition` 和 `offset`。
 3. 把修复后的业务 JSON 发送回原始 `topic`。
-4. 确认消息进入 `zenvis.probe_agent_message`。
+4. 确认消息进入 `zenvis.synap_agent_message`。
 5. 使用来源主题、分区和偏移量记录重放审计。
 
 不要把整个 DLQ JSON 信封重放到源主题。重放是至少一次语义，重复记录需通过来源坐标识别。
 
 ## UI
 
-- `com.coolxer.plugin.probe.detail-message`：按 `record_id` 调用 `/api/v1/entity/probe_agent_message/{record_id}/view`。
-- `com.coolxer.plugin.probe.parameter-analytics`：调用值统计、趋势、检索和分布接口，支持 IP 与启动 ID 两种聚合模式；页面不注册菜单。
+- `com.coolxer.plugin.synap.detail-message`：按 `record_id` 调用 `/api/v1/entity/synap_agent_message/{record_id}/view`。
+- `com.coolxer.plugin.synap.parameter-analytics`：调用值统计、趋势、检索和分布接口，支持 IP 与启动 ID 两种聚合模式；页面不注册菜单。
 
 插件不提供探针消息管理低代码应用，不注册任何插件菜单或数据看板。记录列表、筛选和复制使用平台通用实体检索能力。
 

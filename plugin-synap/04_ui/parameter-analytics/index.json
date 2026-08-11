@@ -1,17 +1,17 @@
 {
   "type": "page",
   "title": "探针参数聚合分析",
-  "remark": "支持按 IP 地址或启动 ID 分析探针消息，并从命中总量、时间趋势、时间轴以及事实类型、探针 SDK、识别标签和处置类型分布等视角展示聚合结果。",
+  "remark": "支持按设备 ID、IP 地址或启动 ID 分析探针消息，并从命中总量、时间趋势、时间轴以及事实类型、探针 SDK、识别标签和处置类型分布等视角展示聚合结果。",
   "data": {
-    "query_type": "${start_id ? 'start_id' : 'ip'}",
-    "query_value": "${start_id || ip || ''}",
+    "query_type": "${guid ? 'guid' : start_id ? 'start_id' : 'ip'}",
+    "query_value": "${guid || start_id || ip || ''}",
     "time_preset": "LAST_7_DAYS"
   },
   "body": [
     {
       "type": "alert",
       "level": "info",
-      "body": "从 IP 或启动 ID 链接进入时会自动查询；也可以修改参数类型、参数值和统计周期后重新聚合。"
+      "body": "从设备 ID、IP 或启动 ID 链接进入时会自动查询；也可以修改参数类型、参数值和统计周期后重新聚合。"
     },
     {
       "type": "form",
@@ -29,6 +29,10 @@
           "clearable": false,
           "options": [
             {
+              "label": "设备 ID",
+              "value": "guid"
+            },
+            {
               "label": "IP 地址",
               "value": "ip"
             },
@@ -41,8 +45,8 @@
         {
           "type": "input-text",
           "name": "query_value",
-          "label": "${query_type === 'start_id' ? '启动 ID' : 'IP 地址'}",
-          "placeholder": "${query_type === 'start_id' ? '例如 1785883324589' : '例如 192.168.1.10 或 2001:db8::10'}",
+          "label": "${query_type === 'guid' ? '设备 ID' : query_type === 'start_id' ? '启动 ID' : 'IP 地址'}",
+          "placeholder": "${query_type === 'guid' ? '例如 device-001' : query_type === 'start_id' ? '例如 1785883324589' : '例如 192.168.1.10 或 2001:db8::10'}",
           "required": true,
           "clearable": true,
           "size": "lg"
@@ -84,16 +88,16 @@
     {
       "type": "service",
       "name": "parameter-analytics-service",
-      "initFetchOn": "!!(this.query_value || this.start_id || this.ip)",
+      "initFetchOn": "!!(this.query_value || this.guid || this.start_id || this.ip)",
       "api": {
         "method": "post",
         "url": "/zenvis/api/v1/entity/value-statistics/query",
         "data": {
-          "query_type": "${query_type || (start_id ? 'start_id' : 'ip')}",
-          "focus_value": "${query_value || start_id || ip}",
+          "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+          "focus_value": "${query_value || guid || start_id || ip}",
           "time_preset": "${time_preset || 'LAST_7_DAYS'}"
         },
-        "requestAdaptor": "var type=api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';api.data={focus_value:value,mappings:[{entity:'probe_agent_message',label:type==='start_id'?'启动 ID 命中':'IP 地址命中',match_fields:type==='start_id'?['start_id']:['lan_ip','wan_ip'],time_field:'zenvis_insert_time',criteria_list:[],criteria_logic:'or'}],time_range:{preset:preset}};return api;",
+        "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';api.data={focus_value:value,mappings:[{entity:'synap_agent_message',label:type==='guid'?'设备 ID 命中':type==='start_id'?'启动 ID 命中':'IP 地址命中',match_fields:type==='guid'?['guid']:type==='start_id'?['start_id']:['lan_ip','wan_ip'],time_field:'zenvis_insert_time',criteria_list:[],criteria_logic:'or'}],time_range:{preset:preset}};return api;",
         "adaptor": "var d=payload&&payload.data?payload.data:{};var r=d.result||{};var row=r.rows&&r.rows[0]?r.rows[0]:{};return {status:0,msg:'',data:{total:r.total||0,focus_value:r.focus_value||'',match_fields:(row.match_fields||[]).join('、')}};"
       },
       "messages": {
@@ -108,7 +112,7 @@
               "body": {
                 "type": "panel",
                 "title": "聚合参数",
-                "body": "<div style='height:72px;display:flex;flex-direction:column;justify-content:center'><div style='font-size:22px;line-height:32px;font-weight:700;color:#2563eb;word-break:break-all'>${focus_value}</div><div class='text-muted' style='line-height:22px'>${query_type === 'start_id' ? '启动 ID' : 'IP 地址'}</div></div>"
+                "body": "<div style='height:72px;display:flex;flex-direction:column;justify-content:center'><div style='font-size:22px;line-height:32px;font-weight:700;color:#2563eb;word-break:break-all'>${focus_value}</div><div class='text-muted' style='line-height:22px'>${query_type === 'guid' ? '设备 ID' : query_type === 'start_id' ? '启动 ID' : 'IP 地址'}</div></div>"
               }
             },
             {
@@ -136,11 +140,11 @@
             "method": "post",
             "url": "/zenvis/api/v1/entity/trend/query",
             "data": {
-              "query_type": "${query_type || (start_id ? 'start_id' : 'ip')}",
-              "focus_value": "${query_value || start_id || ip}",
+              "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+              "focus_value": "${query_value || guid || start_id || ip}",
               "time_preset": "${time_preset || 'LAST_7_DAYS'}"
             },
-            "requestAdaptor": "var type=api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var criteria=type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={series:[{entity:'probe_agent_message',label:type==='start_id'?'启动 ID 命中':'IP 地址命中',metric:{name:'hit_count',operation:'COUNT',label:'命中消息数'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or'}],time_range:{preset:preset},granularity:preset==='LAST_30_DAYS'?'DAY':'HOUR',comparison:'NONE',criteria_list:[],criteria_logic:'and'};return api;",
+            "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var criteria=type==='guid'?[{attribute:'guid',operator:'equal',value_list:[value]}]:type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={series:[{entity:'synap_agent_message',label:type==='guid'?'设备 ID 命中':type==='start_id'?'启动 ID 命中':'IP 地址命中',metric:{name:'hit_count',operation:'COUNT',label:'命中消息数'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or'}],time_range:{preset:preset},granularity:preset==='LAST_30_DAYS'?'DAY':'HOUR',comparison:'NONE',criteria_list:[],criteria_logic:'and'};return api;",
             "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};var rows=d.result&&d.result.rows?d.result.rows:[];var series=(o.series||[]).map(function(item){return Object.assign({},item,{smooth:true,showSymbol:false,areaStyle:{opacity:0.12}});});return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:series,trend_rows:rows}};"
           },
           "body": {
@@ -156,12 +160,12 @@
                     "method": "post",
                     "url": "/zenvis/api/v1/retrieval/do",
                     "data": {
-                      "query_type": "${query_type || (start_id ? 'start_id' : 'ip')}",
-                      "focus_value": "${query_value || start_id || ip}",
+                      "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                      "focus_value": "${query_value || guid || start_id || ip}",
                       "time_preset": "${time_preset || 'LAST_7_DAYS'}",
                       "trend_rows": "${trend_rows}"
                     },
-                    "requestAdaptor": "var type=api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var hours=preset==='LAST_24_HOURS'?24:preset==='LAST_30_DAYS'?720:168;var end=new Date();var start=new Date(end.getTime()-hours*60*60*1000);function pad(n){return String(n).padStart(2,'0');}function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}var q=String.fromCharCode(39);var safe=value.split(q).join(q+q);var match=type==='start_id'?'start_id = '+q+safe+q:'(lan_ip = '+q+safe+q+' or wan_ip = '+q+safe+q+')';api.trendRows=Array.isArray(api.data.trend_rows)?api.data.trend_rows:[];api.timelinePreset=preset;api.data={type:'advanced',entity:'probe_agent_message',sql:match+' and zenvis_insert_time >= '+q+fmt(start)+q+' and zenvis_insert_time < '+q+fmt(end)+q,display_list:[{entity:'probe_agent_message',attribute_list:['zenvis_insert_time','fact_type','agenda_tags','punish_types']}],page:1,size:100,sort_by:'zenvis_insert_time',order:'desc'};return api;",
+                    "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var hours=preset==='LAST_24_HOURS'?24:preset==='LAST_30_DAYS'?720:168;var end=new Date();var start=new Date(end.getTime()-hours*60*60*1000);function pad(n){return String(n).padStart(2,'0');}function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}var q=String.fromCharCode(39);var safe=value.split(q).join(q+q);var match=type==='guid'?'guid = '+q+safe+q:type==='start_id'?'start_id = '+q+safe+q:'(lan_ip = '+q+safe+q+' or wan_ip = '+q+safe+q+')';api.trendRows=Array.isArray(api.data.trend_rows)?api.data.trend_rows:[];api.timelinePreset=preset;api.data={type:'advanced',entity:'synap_agent_message',sql:match+' and zenvis_insert_time >= '+q+fmt(start)+q+' and zenvis_insert_time < '+q+fmt(end)+q,display_list:[{entity:'synap_agent_message',attribute_list:['zenvis_insert_time','fact_type','agenda_tags','punish_types']}],page:1,size:100,sort_by:'zenvis_insert_time',order:'desc'};return api;",
                     "adaptor": "var d=payload&&payload.data?payload.data:{};var records=Array.isArray(d.datalist)?d.datalist:[];var total=Number(d.total||0);var trend=api&&Array.isArray(api.trendRows)?api.trendRows:[];var preset=api&&api.timelinePreset?api.timelinePreset:'LAST_7_DAYS';var groups=Object.create(null);var agendaCounts=Object.create(null);var punishCounts=Object.create(null);function add(list,value){var text=value===undefined||value===null?'':String(value).trim();if(text&&list.indexOf(text)<0){list.push(text);}}function values(value){if(Array.isArray(value)){return value;}if(value===undefined||value===null||value===''){return [];}if(typeof value==='string'){try{var parsed=JSON.parse(value);if(Array.isArray(parsed)){return parsed;}}catch(e){}return value.split(',');}return [value];}function countDistinct(target,value){var seen=Object.create(null);values(value).forEach(function(item){var text=item===undefined||item===null?'':String(item).trim();if(text&&!seen[text]){seen[text]=true;target[text]=(target[text]||0)+1;}});}function topRows(target){return Object.keys(target).map(function(name){return {name:name,value:target[name]};}).sort(function(a,b){return b.value-a.value||String(a.name).localeCompare(String(b.name));}).slice(0,10);}function group(bucket){if(!groups[bucket]){groups[bucket]={count:0,categories:[],tags:[],punishes:[]};}return groups[bucket];}trend.forEach(function(row){var count=Number(row.value||0);if(count>0){group(String(row.bucket||'')).count=count;}});records.forEach(function(record){var raw=String(record.zenvis_insert_time||'').replace('T',' ');var bucket=preset==='LAST_30_DAYS'?raw.slice(0,10):raw.slice(0,13)+':00:00';if(bucket){var item=group(bucket);if(!item.count){item.count+=1;}add(item.categories,record.fact_type);values(record.agenda_tags).forEach(function(value){add(item.tags,value);});values(record.punish_types).forEach(function(value){add(item.punishes,value);});}countDistinct(agendaCounts,record.agenda_tags);countDistinct(punishCounts,record.punish_types);});var timeline=Object.keys(groups).filter(function(bucket){return bucket&&groups[bucket].count>0;}).sort().map(function(bucket){var item=groups[bucket];var category=item.categories.length?item.categories.join('、'):'无';var tags=item.tags.length?item.tags.join('、'):'无';var punishes=item.punishes.length?item.punishes.join('、'):'无';return {time:bucket,title:'命中 '+item.count+' 条消息',detail:'数据类别：'+category+'；识别标签：'+tags+'；处置类型：'+punishes,color:item.count>=10?'#059669':'#2563eb'};});var agendaRows=topRows(agendaCounts);var punishRows=topRows(punishCounts);return {status:0,msg:'',data:{timeline_items:timeline,timeline_count:timeline.length,timeline_truncated:total>records.length,timeline_loaded:records.length,timeline_total:total,sample_loaded:records.length,sample_total:total,sample_truncated:total>records.length,agenda_distribution_count:agendaRows.length,punish_distribution_count:punishRows.length,agenda_dataset:{dimensions:['name','value'],source:agendaRows},punish_dataset:{dimensions:['name','value'],source:punishRows}}};"
                   },
                   "messages": {
@@ -197,12 +201,12 @@
                                 "method": "post",
                                 "url": "/zenvis/api/v1/entity/distribution/query",
                                 "data": {
-                                  "query_type": "${query_type || (start_id ? 'start_id' : 'ip')}",
-                                  "focus_value": "${query_value || start_id || ip}",
+                                  "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                                  "focus_value": "${query_value || guid || start_id || ip}",
                                   "time_preset": "${time_preset || 'LAST_7_DAYS'}",
                                   "dimension": "fact_type"
                                 },
-                                "requestAdaptor": "var type=api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var criteria=type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={entity:'probe_agent_message',dimension:api.data.dimension,label:'事实类型',time_range:{preset:api.data.time_preset||'LAST_7_DAYS'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or',limit:10,include_null:false};return api;",
+                                "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var criteria=type==='guid'?[{attribute:'guid',operator:'equal',value_list:[value]}]:type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={entity:'synap_agent_message',dimension:api.data.dimension,label:'事实类型',time_range:{preset:api.data.time_preset||'LAST_7_DAYS'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or',limit:10,include_null:false};return api;",
                                 "adaptor": "var d=payload&&payload.data?payload.data:{};var rows=d.result&&d.result.rows?d.result.rows:[];return {status:0,msg:'',data:{pie_data:rows.map(function(row){return {name:row.bucket,value:row.value};}),fact_distribution_count:rows.length}};"
                               },
                               "config": {
@@ -259,12 +263,12 @@
                                 "method": "post",
                                 "url": "/zenvis/api/v1/entity/distribution/query",
                                 "data": {
-                                  "query_type": "${query_type || (start_id ? 'start_id' : 'ip')}",
-                                  "focus_value": "${query_value || start_id || ip}",
+                                  "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                                  "focus_value": "${query_value || guid || start_id || ip}",
                                   "time_preset": "${time_preset || 'LAST_7_DAYS'}",
                                   "dimension": "sdk_version"
                                 },
-                                "requestAdaptor": "var type=api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var criteria=type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={entity:'probe_agent_message',dimension:api.data.dimension,label:'探针 SDK',time_range:{preset:api.data.time_preset||'LAST_7_DAYS'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or',limit:10,include_null:false};return api;",
+                                "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var criteria=type==='guid'?[{attribute:'guid',operator:'equal',value_list:[value]}]:type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={entity:'synap_agent_message',dimension:api.data.dimension,label:'探针 SDK',time_range:{preset:api.data.time_preset||'LAST_7_DAYS'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or',limit:10,include_null:false};return api;",
                                 "adaptor": "var d=payload&&payload.data?payload.data:{};var rows=d.result&&d.result.rows?d.result.rows:[];return {status:0,msg:'',data:{sdk_pie_data:rows.map(function(row){return {name:row.bucket,value:row.value};}),sdk_distribution_count:rows.length}};"
                               },
                               "config": {
@@ -506,12 +510,12 @@
                     "method": "post",
                     "url": "/zenvis/api/v1/retrieval/do",
                     "data": {
-                      "query_type": "${query_type || (start_id ? 'start_id' : 'ip')}",
-                      "focus_value": "${query_value || start_id || ip}",
+                      "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                      "focus_value": "${query_value || guid || start_id || ip}",
                       "time_preset": "${time_preset || 'LAST_7_DAYS'}",
                       "trend_rows": "${trend_rows}"
                     },
-                    "requestAdaptor": "var type=api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var hours=preset==='LAST_24_HOURS'?24:preset==='LAST_30_DAYS'?720:168;var end=new Date();var start=new Date(end.getTime()-hours*60*60*1000);function pad(n){return String(n).padStart(2,'0');}function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}var q=String.fromCharCode(39);var safe=value.split(q).join(q+q);var match=type==='start_id'?'start_id = '+q+safe+q:'(lan_ip = '+q+safe+q+' or wan_ip = '+q+safe+q+')';api.trendRows=Array.isArray(api.data.trend_rows)?api.data.trend_rows:[];api.timelinePreset=preset;api.data={type:'advanced',entity:'probe_agent_message',sql:match+' and zenvis_insert_time >= '+q+fmt(start)+q+' and zenvis_insert_time < '+q+fmt(end)+q,display_list:[{entity:'probe_agent_message',attribute_list:['zenvis_insert_time','fact_type','agenda_tags','punish_types']}],page:1,size:100,sort_by:'zenvis_insert_time',order:'desc'};return api;",
+                    "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var hours=preset==='LAST_24_HOURS'?24:preset==='LAST_30_DAYS'?720:168;var end=new Date();var start=new Date(end.getTime()-hours*60*60*1000);function pad(n){return String(n).padStart(2,'0');}function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}var q=String.fromCharCode(39);var safe=value.split(q).join(q+q);var match=type==='guid'?'guid = '+q+safe+q:type==='start_id'?'start_id = '+q+safe+q:'(lan_ip = '+q+safe+q+' or wan_ip = '+q+safe+q+')';api.trendRows=Array.isArray(api.data.trend_rows)?api.data.trend_rows:[];api.timelinePreset=preset;api.data={type:'advanced',entity:'synap_agent_message',sql:match+' and zenvis_insert_time >= '+q+fmt(start)+q+' and zenvis_insert_time < '+q+fmt(end)+q,display_list:[{entity:'synap_agent_message',attribute_list:['zenvis_insert_time','fact_type','agenda_tags','punish_types']}],page:1,size:100,sort_by:'zenvis_insert_time',order:'desc'};return api;",
                     "adaptor": "var d=payload&&payload.data?payload.data:{};var records=Array.isArray(d.datalist)?d.datalist:[];var total=Number(d.total||0);var trend=api&&Array.isArray(api.trendRows)?api.trendRows:[];var preset=api&&api.timelinePreset?api.timelinePreset:'LAST_7_DAYS';var groups=Object.create(null);var agendaCounts=Object.create(null);var punishCounts=Object.create(null);function add(list,value){var text=value===undefined||value===null?'':String(value).trim();if(text&&list.indexOf(text)<0){list.push(text);}}function values(value){if(Array.isArray(value)){return value;}if(value===undefined||value===null||value===''){return [];}if(typeof value==='string'){try{var parsed=JSON.parse(value);if(Array.isArray(parsed)){return parsed;}}catch(e){}return value.split(',');}return [value];}function countDistinct(target,value){var seen=Object.create(null);values(value).forEach(function(item){var text=item===undefined||item===null?'':String(item).trim();if(text&&!seen[text]){seen[text]=true;target[text]=(target[text]||0)+1;}});}function topRows(target){return Object.keys(target).map(function(name){return {name:name,value:target[name]};}).sort(function(a,b){return b.value-a.value||String(a.name).localeCompare(String(b.name));}).slice(0,10);}function group(bucket){if(!groups[bucket]){groups[bucket]={count:0,categories:[],tags:[],punishes:[]};}return groups[bucket];}trend.forEach(function(row){var count=Number(row.value||0);if(count>0){group(String(row.bucket||'')).count=count;}});records.forEach(function(record){var raw=String(record.zenvis_insert_time||'').replace('T',' ');var bucket=preset==='LAST_30_DAYS'?raw.slice(0,10):raw.slice(0,13)+':00:00';if(bucket){var item=group(bucket);if(!item.count){item.count+=1;}add(item.categories,record.fact_type);values(record.agenda_tags).forEach(function(value){add(item.tags,value);});values(record.punish_types).forEach(function(value){add(item.punishes,value);});}countDistinct(agendaCounts,record.agenda_tags);countDistinct(punishCounts,record.punish_types);});var timeline=Object.keys(groups).filter(function(bucket){return bucket&&groups[bucket].count>0;}).sort().map(function(bucket){var item=groups[bucket];var category=item.categories.length?item.categories.join('、'):'无';var tags=item.tags.length?item.tags.join('、'):'无';var punishes=item.punishes.length?item.punishes.join('、'):'无';return {time:bucket,title:'命中 '+item.count+' 条消息',detail:'数据类别：'+category+'；识别标签：'+tags+'；处置类型：'+punishes,color:item.count>=10?'#059669':'#2563eb'};});var agendaRows=topRows(agendaCounts);var punishRows=topRows(punishCounts);return {status:0,msg:'',data:{timeline_items:timeline,timeline_count:timeline.length,timeline_truncated:total>records.length,timeline_loaded:records.length,timeline_total:total,sample_loaded:records.length,sample_total:total,sample_truncated:total>records.length,agenda_distribution_count:agendaRows.length,punish_distribution_count:punishRows.length,agenda_dataset:{dimensions:['name','value'],source:agendaRows},punish_dataset:{dimensions:['name','value'],source:punishRows}}};"
                   },
                   "messages": {

@@ -1,11 +1,11 @@
 ---
 sources:
-  probe_agent_kafka:
+  synap_agent_kafka:
     type: "kafka"
     bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
-    group_id: "${PROBE_KAFKA_GROUP_ID:-zenvis-plugin-probe-agent-message-v2}"
+    group_id: "${SYNAP_KAFKA_GROUP_ID:-zenvis-plugin-synap-agent-message-v2}"
     topics:
-      - "${PROBE_KAFKA_TOPIC_PATTERN:-^(android|h5|ios|host|wechat)_fact_.*$}"
+      - "${SYNAP_KAFKA_TOPIC_PATTERN:-^(android|h5|ios|host|wechat)_fact_.*$}"
     auto_offset_reset: "earliest"
     decoding:
       codec: "bytes"
@@ -14,10 +14,10 @@ sources:
     offset_key: "offset"
 
 transforms:
-  map_probe_agent_message:
+  map_synap_agent_message:
     type: "remap"
     inputs:
-      - "probe_agent_kafka"
+      - "synap_agent_kafka"
     drop_on_error: true
     reroute_dropped: true
     source: |-
@@ -399,12 +399,12 @@ transforms:
       }
 
 sinks:
-  probe_agent_message_dead_letter:
+  synap_agent_message_dead_letter:
     type: "kafka"
     inputs:
-      - "map_probe_agent_message.dropped"
+      - "map_synap_agent_message.dropped"
     bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
-    topic: "${PROBE_DLQ_TOPIC:-com.coolxer.plugin.probe.dead-letter}"
+    topic: "${SYNAP_DLQ_TOPIC:-com.coolxer.plugin.synap.dead-letter}"
     compression: "zstd"
     encoding:
       codec: "json"
@@ -422,20 +422,20 @@ sinks:
       max_size: 268435488
       when_full: "block"
 
-  probe_agent_message_clickhouse:
+  synap_agent_message_clickhouse:
     type: "clickhouse"
     inputs:
-      - "map_probe_agent_message"
+      - "map_synap_agent_message"
     endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
     database: "${CLICKHOUSE_DATABASE:-zenvis}"
-    table: "probe_agent_message"
+    table: "synap_agent_message"
     format: "json_each_row"
     compression: "gzip"
     date_time_best_effort: true
     auth:
       strategy: "basic"
       user: "${CLICKHOUSE_USER:-default}"
-      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+      password: "${CLICKHOUSE_PASSWORD}"
     skip_unknown_fields: false
     acknowledgements:
       enabled: true
@@ -457,7 +457,7 @@ sinks:
 tests:
   - name: "合法完整探针消息应映射为 63 个业务字段"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -467,7 +467,7 @@ tests:
           offset: 99
           timestamp: "2026-07-30T02:00:02.456Z"
     outputs:
-      - extract_from: "map_probe_agent_message"
+      - extract_from: "map_synap_agent_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -486,7 +486,7 @@ tests:
 
   - name: "合法最小消息应保留空值并使用 Kafka 时间作为 server_time"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -496,7 +496,7 @@ tests:
           offset: 1
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message"
+      - extract_from: "map_synap_agent_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -512,7 +512,7 @@ tests:
 
   - name: "WeChat 风险消息应结构化传输上下文和风险评估"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -522,7 +522,7 @@ tests:
           offset: 88
           timestamp: "2026-08-05T04:00:01Z"
     outputs:
-      - extract_from: "map_probe_agent_message"
+      - extract_from: "map_synap_agent_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -544,7 +544,7 @@ tests:
 
   - name: "Host AuditData 批次应保留 18 列审计事件"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -554,7 +554,7 @@ tests:
           offset: 9
           timestamp: "2026-08-05T04:10:01Z"
     outputs:
-      - extract_from: "map_probe_agent_message"
+      - extract_from: "map_synap_agent_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -570,7 +570,7 @@ tests:
 
   - name: "非法 JSON 应进入 dropped 并保留原文"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: "{not-json"
@@ -579,18 +579,18 @@ tests:
           offset: 2
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
               assert_eq!(to_string!(.message), "{not-json")
-              assert_eq!(.metadata.dropped.component_id, "map_probe_agent_message")
+              assert_eq!(.metadata.dropped.component_id, "map_synap_agent_message")
               assert!(contains(to_string!(.metadata.dropped.message), "合法 JSON"))
               true
 
   - name: "缺失 guid 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -600,7 +600,7 @@ tests:
           offset: 3
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -609,7 +609,7 @@ tests:
 
   - name: "缺失 start_id 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -619,7 +619,7 @@ tests:
           offset: 31
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -628,7 +628,7 @@ tests:
 
   - name: "缺失 fact.type 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -638,7 +638,7 @@ tests:
           offset: 32
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -647,7 +647,7 @@ tests:
 
   - name: "缺失 client_time 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -657,7 +657,7 @@ tests:
           offset: 33
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -666,7 +666,7 @@ tests:
 
   - name: "非法 start_id 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -676,7 +676,7 @@ tests:
           offset: 4
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -685,7 +685,7 @@ tests:
 
   - name: "非法 client_time 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -695,7 +695,7 @@ tests:
           offset: 5
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -704,7 +704,7 @@ tests:
 
   - name: "非法 app_id 应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -714,7 +714,7 @@ tests:
           offset: 6
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -723,7 +723,7 @@ tests:
 
   - name: "越界经纬度应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -733,7 +733,7 @@ tests:
           offset: 7
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -742,7 +742,7 @@ tests:
 
   - name: "越界经度应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -752,7 +752,7 @@ tests:
           offset: 71
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -761,7 +761,7 @@ tests:
 
   - name: "非法 agendas 结构应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -771,7 +771,7 @@ tests:
           offset: 8
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-
@@ -780,7 +780,7 @@ tests:
 
   - name: "非法 punishes 结构应进入 dropped"
     inputs:
-      - insert_at: "map_probe_agent_message"
+      - insert_at: "map_synap_agent_message"
         type: "log"
         log_fields:
           message: |-
@@ -790,7 +790,7 @@ tests:
           offset: 9
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_probe_agent_message.dropped"
+      - extract_from: "map_synap_agent_message.dropped"
         conditions:
           - type: "vrl"
             source: |-

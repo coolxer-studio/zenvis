@@ -4,7 +4,7 @@
 
 | 目录 | 包名 | 版本 | 说明 |
 | --- | --- | --- | --- |
-| `plugin-synap` | `com.coolxer.plugin.probe` | `1.1.0` | 探针消息校验、ClickHouse 入库、DLQ、详情与参数聚合分析 |
+| `plugin-synap` | `com.coolxer.plugin.synap` | `1.1.2` | 探针消息校验、ClickHouse 入库、DLQ、详情与设备 ID、IP、启动 ID 参数聚合分析 |
 
 该插件不包含动态 API JAR。构建仅需 Bash 与 tar，Windows 使用 PowerShell 与 tar：
 
@@ -13,7 +13,7 @@
 # 或 ./build.sh plugin-synap
 ```
 
-Windows 执行 `.\build.ps1`。产物为 `com-coolxer-plugin-probe.tar.gz`。
+Windows 执行 `.\build.ps1`。产物为 `com-coolxer-plugin-synap.tar.gz`。
 详细的 Kafka Topic、环境变量、DLQ 重放和升级说明见 [plugin-synap/README.md](plugin-synap/README.md)。
 
 归档、日志、系统文件和任何 `target/` 均不提交到 Git。

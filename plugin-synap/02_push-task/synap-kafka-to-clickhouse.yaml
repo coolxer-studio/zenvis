@@ -5,7 +5,7 @@ sources:
     bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
     group_id: "${SYNAP_KAFKA_GROUP_ID:-zenvis-plugin-synap-agent-message-v2}"
     topics:
-      - "${SYNAP_KAFKA_TOPIC_PATTERN:-^(android|h5|ios|host|wechat)_fact_.*$}"
+      - "${SYNAP_KAFKA_TOPIC_PATTERN:-^((android|h5|ios|host|wechat)_fact_.*|server_fact_(start|application|runtime|api_asset|api_observation|security_config|dependency|dangerous_call|security_event|agent_health|user|action))$}"
     auto_offset_reset: "earliest"
     decoding:
       codec: "bytes"
@@ -398,11 +398,374 @@ transforms:
         "raw_message": raw_message
       }
 
+  prepare_synap_server_validation:
+    type: "remap"
+    inputs:
+      - "map_synap_agent_message"
+    source: |-
+      .message = .raw_message
+
+  validate_synap_server_message:
+    type: "remap"
+    inputs:
+      - "prepare_synap_server_validation"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      source_topic = to_string(.source_topic) ?? ""
+
+      if starts_with(source_topic, "server_fact_") {
+        platform = to_string(.platform) ?? ""
+        fact_type = to_string(.fact_type) ?? ""
+        message_id = to_string(.message_id) ?? ""
+        assert_eq!(platform, "server", message: "Server Kafka topic 要求 fact.common.platform=server")
+        expected_type = if source_topic == "server_fact_start" {
+          "StartData"
+        } else if source_topic == "server_fact_application" {
+          "ApplicationData"
+        } else if source_topic == "server_fact_runtime" {
+          "RuntimeData"
+        } else if source_topic == "server_fact_api_asset" {
+          "ApiAssetData"
+        } else if source_topic == "server_fact_api_observation" {
+          "ApiObservationData"
+        } else if source_topic == "server_fact_security_config" {
+          "SecurityConfigData"
+        } else if source_topic == "server_fact_dependency" {
+          "DependencyData"
+        } else if source_topic == "server_fact_dangerous_call" {
+          "DangerousCallData"
+        } else if source_topic == "server_fact_security_event" {
+          "SecurityEventData"
+        } else if source_topic == "server_fact_agent_health" {
+          "AgentHealthData"
+        } else if source_topic == "server_fact_user" {
+          "UserData"
+        } else if source_topic == "server_fact_action" {
+          "ActionData"
+        } else {
+          assert!(false, message: "Server Kafka topic 不在受支持列表")
+          ""
+        }
+        assert_eq!(fact_type, expected_type, message: "Server Kafka topic 与 fact.type 不匹配")
+        assert!(strip_whitespace(message_id) != "", message: "Server fact.message_id 不能为空")
+        assert!(!is_null(.observed_at), message: "Server fact.observed_at 必须是合法 Unix 毫秒时间")
+        sequence_value, sequence_error = to_int(.sequence)
+        assert_eq!(sequence_error, null, message: "Server fact.sequence 必须是正整数")
+        assert!(sequence_value > 0, message: "Server fact.sequence 必须是正整数")
+
+        server_fact = object!(.fact)
+        if expected_type == "StartData" {
+          assert!(is_object(server_fact.config), message: "StartData.config 必须是 JSON 对象")
+        } else {
+          assert!(is_object(server_fact.payload), message: "Server fact.payload 必须是 JSON 对象")
+          payload = object!(server_fact.payload)
+          schema_version, schema_version_error = to_int(payload.schemaVersion)
+          assert_eq!(schema_version_error, null, message: "Server fact.payload.schemaVersion 必须是整数")
+          assert_eq!(schema_version, 1, message: "Server fact.payload.schemaVersion 当前必须为 1")
+
+          if expected_type == "ApplicationData" {
+            if payload.processors != null {
+              processors, processors_error = to_int(payload.processors)
+              assert_eq!(processors_error, null, message: "ApplicationData.processors 必须是整数")
+              assert!(processors >= 0 && processors <= 65535, message: "ApplicationData.processors 超出 UInt16 范围")
+            }
+            if payload.pid != null {
+              pid, pid_error = to_int(payload.pid)
+              assert_eq!(pid_error, null, message: "ApplicationData.pid 必须是整数")
+              assert!(pid >= 0, message: "ApplicationData.pid 必须是非负整数")
+            }
+            if payload.startTime != null {
+              start_time, start_time_error = to_int(payload.startTime)
+              assert_eq!(start_time_error, null, message: "ApplicationData.startTime 必须是 Unix 毫秒整数")
+              _, start_timestamp_error = from_unix_timestamp(start_time, unit: "milliseconds")
+              assert_eq!(start_timestamp_error, null, message: "ApplicationData.startTime 超出时间范围")
+            }
+            if payload.inputArguments != null {
+              assert!(is_array(payload.inputArguments), message: "ApplicationData.inputArguments 必须是字符串数组")
+              for_each(array!(payload.inputArguments)) -> |index, value| {
+                assert!(is_string(value), message: "ApplicationData.inputArguments 每一项必须是字符串")
+              }
+            }
+            if payload.runtimeAgents != null {
+              assert!(is_array(payload.runtimeAgents), message: "ApplicationData.runtimeAgents 必须是字符串数组")
+              for_each(array!(payload.runtimeAgents)) -> |index, value| {
+                assert!(is_string(value), message: "ApplicationData.runtimeAgents 每一项必须是字符串")
+              }
+            }
+            if payload.profiles != null {
+              assert!(is_array(payload.profiles), message: "ApplicationData.profiles 必须是字符串数组")
+              for_each(array!(payload.profiles)) -> |index, value| {
+                assert!(is_string(value), message: "ApplicationData.profiles 每一项必须是字符串")
+              }
+            }
+          } else if expected_type == "RuntimeData" {
+            if payload.heapUsed != null {
+              value, error = to_int(payload.heapUsed)
+              assert_eq!(error, null, message: "RuntimeData.heapUsed 必须是整数")
+              assert!(value >= -1, message: "RuntimeData.heapUsed 必须大于等于 -1")
+            }
+            if payload.heapCommitted != null {
+              value, error = to_int(payload.heapCommitted)
+              assert_eq!(error, null, message: "RuntimeData.heapCommitted 必须是整数")
+              assert!(value >= -1, message: "RuntimeData.heapCommitted 必须大于等于 -1")
+            }
+            if payload.nonHeapUsed != null {
+              value, error = to_int(payload.nonHeapUsed)
+              assert_eq!(error, null, message: "RuntimeData.nonHeapUsed 必须是整数")
+              assert!(value >= -1, message: "RuntimeData.nonHeapUsed 必须大于等于 -1")
+            }
+            if payload.threadCount != null {
+              value, error = to_int(payload.threadCount)
+              assert_eq!(error, null, message: "RuntimeData.threadCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.threadCount 必须是非负整数")
+            }
+            if payload.peakThreadCount != null {
+              value, error = to_int(payload.peakThreadCount)
+              assert_eq!(error, null, message: "RuntimeData.peakThreadCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.peakThreadCount 必须是非负整数")
+            }
+            if payload.deadlockedThreadCount != null {
+              value, error = to_int(payload.deadlockedThreadCount)
+              assert_eq!(error, null, message: "RuntimeData.deadlockedThreadCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.deadlockedThreadCount 必须是非负整数")
+            }
+            if payload.loadedClassCount != null {
+              value, error = to_int(payload.loadedClassCount)
+              assert_eq!(error, null, message: "RuntimeData.loadedClassCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.loadedClassCount 必须是非负整数")
+            }
+            if payload.totalLoadedClassCount != null {
+              value, error = to_int(payload.totalLoadedClassCount)
+              assert_eq!(error, null, message: "RuntimeData.totalLoadedClassCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.totalLoadedClassCount 必须是非负整数")
+            }
+            if payload.uptimeMs != null {
+              value, error = to_int(payload.uptimeMs)
+              assert_eq!(error, null, message: "RuntimeData.uptimeMs 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.uptimeMs 必须是非负整数")
+            }
+            if payload.daemonThreadCount != null {
+              value, error = to_int(payload.daemonThreadCount)
+              assert_eq!(error, null, message: "RuntimeData.daemonThreadCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.daemonThreadCount 必须是非负整数")
+            }
+            if payload.unloadedClassCount != null {
+              value, error = to_int(payload.unloadedClassCount)
+              assert_eq!(error, null, message: "RuntimeData.unloadedClassCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.unloadedClassCount 必须是非负整数")
+            }
+            if payload.openFileDescriptorCount != null {
+              value, error = to_int(payload.openFileDescriptorCount)
+              assert_eq!(error, null, message: "RuntimeData.openFileDescriptorCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.openFileDescriptorCount 必须是非负整数")
+            }
+            if payload.maxFileDescriptorCount != null {
+              value, error = to_int(payload.maxFileDescriptorCount)
+              assert_eq!(error, null, message: "RuntimeData.maxFileDescriptorCount 必须是非负整数")
+              assert!(value >= 0, message: "RuntimeData.maxFileDescriptorCount 必须是非负整数")
+            }
+            if payload.systemLoadAverage != null {
+              value, error = to_float(payload.systemLoadAverage)
+              assert_eq!(error, null, message: "RuntimeData.systemLoadAverage 必须是数字")
+            }
+            if payload.processCpuLoad != null {
+              value, error = to_float(payload.processCpuLoad)
+              assert_eq!(error, null, message: "RuntimeData.processCpuLoad 必须是数字")
+            }
+            if payload.systemCpuLoad != null {
+              value, error = to_float(payload.systemCpuLoad)
+              assert_eq!(error, null, message: "RuntimeData.systemCpuLoad 必须是数字")
+            }
+            if payload.garbageCollectors != null {
+              assert!(is_array(payload.garbageCollectors), message: "RuntimeData.garbageCollectors 必须是 JSON 数组")
+              for_each(array!(payload.garbageCollectors)) -> |index, value| {
+                assert!(is_object(value), message: "RuntimeData.garbageCollectors 每一项必须是 JSON 对象")
+              }
+            }
+          } else if expected_type == "ApiAssetData" {
+            assert!(is_array(payload.assets), message: "ApiAssetData.assets 必须是非空对象数组")
+            assets = array!(payload.assets)
+            assert!(length(assets) > 0, message: "ApiAssetData.assets 不能为空数组")
+            for_each(assets) -> |index, value| {
+              assert!(is_object(value), message: "ApiAssetData.assets 每一项必须是 JSON 对象")
+              item = object!(value)
+              assert!(strip_whitespace(to_string(item.assetId) ?? "") != "", message: "ApiAssetData.assets[].assetId 不能为空")
+              assert!(strip_whitespace(to_string(item.method) ?? "") != "", message: "ApiAssetData.assets[].method 不能为空")
+              assert!(strip_whitespace(to_string(item.route) ?? "") != "", message: "ApiAssetData.assets[].route 不能为空")
+              assert!(strip_whitespace(to_string(item.framework) ?? "") != "", message: "ApiAssetData.assets[].framework 不能为空")
+              if item.consumes != null {
+                assert!(is_array(item.consumes), message: "ApiAssetData.assets[].consumes 必须是字符串数组")
+                for_each(array!(item.consumes)) -> |item_index, item_value| {
+                  assert!(is_string(item_value), message: "ApiAssetData.assets[].consumes 每一项必须是字符串")
+                }
+              }
+              if item.produces != null {
+                assert!(is_array(item.produces), message: "ApiAssetData.assets[].produces 必须是字符串数组")
+                for_each(array!(item.produces)) -> |item_index, item_value| {
+                  assert!(is_string(item_value), message: "ApiAssetData.assets[].produces 每一项必须是字符串")
+                }
+              }
+              if item.parameterTypes != null {
+                assert!(is_array(item.parameterTypes), message: "ApiAssetData.assets[].parameterTypes 必须是字符串数组")
+                for_each(array!(item.parameterTypes)) -> |item_index, item_value| {
+                  assert!(is_string(item_value), message: "ApiAssetData.assets[].parameterTypes 每一项必须是字符串")
+                }
+              }
+            }
+          } else if expected_type == "ApiObservationData" {
+            window_start, window_start_error = to_int(payload.windowStart)
+            assert_eq!(window_start_error, null, message: "ApiObservationData.windowStart 必须是 Unix 毫秒整数")
+            _, window_start_timestamp_error = from_unix_timestamp(window_start, unit: "milliseconds")
+            assert_eq!(window_start_timestamp_error, null, message: "ApiObservationData.windowStart 超出时间范围")
+            window_end, window_end_error = to_int(payload.windowEnd)
+            assert_eq!(window_end_error, null, message: "ApiObservationData.windowEnd 必须是 Unix 毫秒整数")
+            _, window_end_timestamp_error = from_unix_timestamp(window_end, unit: "milliseconds")
+            assert_eq!(window_end_timestamp_error, null, message: "ApiObservationData.windowEnd 超出时间范围")
+            assert!(is_array(payload.observations), message: "ApiObservationData.observations 必须是非空对象数组")
+            observations = array!(payload.observations)
+            assert!(length(observations) > 0, message: "ApiObservationData.observations 不能为空数组")
+            for_each(observations) -> |index, value| {
+              assert!(is_object(value), message: "ApiObservationData.observations 每一项必须是 JSON 对象")
+              item = object!(value)
+              assert!(strip_whitespace(to_string(item.assetId) ?? "") != "", message: "ApiObservationData.observations[].assetId 不能为空")
+              count, error = to_int(item.count)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].count 必须是非负整数")
+              assert!(count >= 0, message: "ApiObservationData.observations[].count 必须是非负整数")
+              status_2xx, error = to_int(item.status2xx)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].status2xx 必须是非负整数")
+              assert!(status_2xx >= 0, message: "ApiObservationData.observations[].status2xx 必须是非负整数")
+              status_4xx, error = to_int(item.status4xx)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].status4xx 必须是非负整数")
+              assert!(status_4xx >= 0, message: "ApiObservationData.observations[].status4xx 必须是非负整数")
+              status_5xx, error = to_int(item.status5xx)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].status5xx 必须是非负整数")
+              assert!(status_5xx >= 0, message: "ApiObservationData.observations[].status5xx 必须是非负整数")
+              denied, error = to_int(item.denied)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].denied 必须是非负整数")
+              assert!(denied >= 0, message: "ApiObservationData.observations[].denied 必须是非负整数")
+              unauthenticated, error = to_int(item.unauthenticated)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].unauthenticated 必须是非负整数")
+              assert!(unauthenticated >= 0, message: "ApiObservationData.observations[].unauthenticated 必须是非负整数")
+              average_latency, error = to_int(item.averageLatencyMs)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].averageLatencyMs 必须是非负整数")
+              assert!(average_latency >= 0, message: "ApiObservationData.observations[].averageLatencyMs 必须是非负整数")
+              request_bytes, error = to_int(item.requestBytes)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].requestBytes 必须是非负整数")
+              assert!(request_bytes >= 0, message: "ApiObservationData.observations[].requestBytes 必须是非负整数")
+              response_bytes, error = to_int(item.responseBytes)
+              assert_eq!(error, null, message: "ApiObservationData.observations[].responseBytes 必须是非负整数")
+              assert!(response_bytes >= 0, message: "ApiObservationData.observations[].responseBytes 必须是非负整数")
+              if item.latencyBuckets != null {
+                assert!(is_array(item.latencyBuckets), message: "ApiObservationData.observations[].latencyBuckets 必须是非负整数数组")
+                for_each(array!(item.latencyBuckets)) -> |bucket_index, bucket_value| {
+                  bucket, bucket_error = to_int(bucket_value)
+                  assert_eq!(bucket_error, null, message: "ApiObservationData.observations[].latencyBuckets 每一项必须是整数")
+                  assert!(bucket >= 0, message: "ApiObservationData.observations[].latencyBuckets 每一项必须是非负整数")
+                }
+              }
+            }
+          } else if expected_type == "SecurityConfigData" {
+            if payload.activeProfiles != null {
+              assert!(is_array(payload.activeProfiles), message: "SecurityConfigData.activeProfiles 必须是字符串数组")
+              for_each(array!(payload.activeProfiles)) -> |index, value| {
+                assert!(is_string(value), message: "SecurityConfigData.activeProfiles 每一项必须是字符串")
+              }
+            }
+            if payload.authenticationModes != null {
+              assert!(is_array(payload.authenticationModes), message: "SecurityConfigData.authenticationModes 必须是字符串数组")
+              for_each(array!(payload.authenticationModes)) -> |index, value| {
+                assert!(is_string(value), message: "SecurityConfigData.authenticationModes 每一项必须是字符串")
+              }
+            }
+            if payload.csrfConfigured != null { assert!(is_boolean(payload.csrfConfigured), message: "SecurityConfigData.csrfConfigured 必须是布尔值") }
+            if payload.corsConfigured != null { assert!(is_boolean(payload.corsConfigured), message: "SecurityConfigData.corsConfigured 必须是布尔值") }
+            if payload.sessionConfigured != null { assert!(is_boolean(payload.sessionConfigured), message: "SecurityConfigData.sessionConfigured 必须是布尔值") }
+            if payload.anonymousEnabled != null { assert!(is_boolean(payload.anonymousEnabled), message: "SecurityConfigData.anonymousEnabled 必须是布尔值") }
+            if payload.filterChains != null {
+              filter_chains, filter_chains_error = to_int(payload.filterChains)
+              assert_eq!(filter_chains_error, null, message: "SecurityConfigData.filterChains 必须是非负整数")
+              assert!(filter_chains >= 0, message: "SecurityConfigData.filterChains 必须是非负整数")
+            }
+          } else if expected_type == "DependencyData" {
+            assert!(is_array(payload.dependencies), message: "DependencyData.dependencies 必须是非空对象数组")
+            dependencies = array!(payload.dependencies)
+            assert!(length(dependencies) > 0, message: "DependencyData.dependencies 不能为空数组")
+            for_each(dependencies) -> |index, value| {
+              assert!(is_object(value), message: "DependencyData.dependencies 每一项必须是 JSON 对象")
+              item = object!(value)
+              assert!(strip_whitespace(to_string(item.purl) ?? "") != "", message: "DependencyData.dependencies[].purl 不能为空")
+              if item.loaded != null { assert!(is_boolean(item.loaded), message: "DependencyData.dependencies[].loaded 必须是布尔值") }
+              if item.direct != null { assert!(is_boolean(item.direct), message: "DependencyData.dependencies[].direct 必须是布尔值") }
+            }
+            if server_fact.vulnerabilities != null {
+              assert!(is_array(server_fact.vulnerabilities), message: "DependencyData.vulnerabilities 必须是 JSON 数组")
+              for_each(array!(server_fact.vulnerabilities)) -> |index, value| {
+                assert!(is_object(value), message: "DependencyData.vulnerabilities 每一项必须是 JSON 对象")
+                vulnerability = object!(value)
+                assert!(strip_whitespace(to_string(vulnerability.purl) ?? "") != "", message: "DependencyData.vulnerabilities[].purl 不能为空")
+                assert!(strip_whitespace(to_string(vulnerability.id) ?? "") != "", message: "DependencyData.vulnerabilities[].id 不能为空")
+                if vulnerability.aliases != null {
+                  assert!(is_array(vulnerability.aliases), message: "DependencyData.vulnerabilities[].aliases 必须是字符串数组")
+                  for_each(array!(vulnerability.aliases)) -> |alias_index, alias| {
+                    assert!(is_string(alias), message: "DependencyData.vulnerabilities[].aliases 每一项必须是字符串")
+                  }
+                }
+                if vulnerability.cvss != null {
+                  _, cvss_error = to_float(vulnerability.cvss)
+                  assert_eq!(cvss_error, null, message: "DependencyData.vulnerabilities[].cvss 必须是数字")
+                }
+              }
+            }
+          } else if expected_type == "DangerousCallData" {
+            assert!(strip_whitespace(to_string(payload.sinkType) ?? "") != "", message: "DangerousCallData.sinkType 不能为空")
+            if payload.correlated != null { assert!(is_boolean(payload.correlated), message: "DangerousCallData.correlated 必须是布尔值") }
+            if payload.authenticated != null { assert!(is_boolean(payload.authenticated), message: "DangerousCallData.authenticated 必须是布尔值") }
+          } else if expected_type == "SecurityEventData" {
+            assert!(strip_whitespace(to_string(payload.category) ?? "") != "", message: "SecurityEventData.category 不能为空")
+            assert!(strip_whitespace(to_string(payload.name) ?? "") != "", message: "SecurityEventData.name 不能为空")
+            assert!(strip_whitespace(to_string(payload.severity) ?? "") != "", message: "SecurityEventData.severity 不能为空")
+            if payload.attributes != null { assert!(is_object(payload.attributes), message: "SecurityEventData.attributes 必须是 JSON 对象") }
+          } else if expected_type == "AgentHealthData" {
+            assert!(strip_whitespace(to_string(payload.status) ?? "") != "", message: "AgentHealthData.status 不能为空")
+            queued, error = to_int(payload.queued)
+            assert_eq!(error, null, message: "AgentHealthData.queued 必须是非负整数")
+            assert!(queued >= 0, message: "AgentHealthData.queued 必须是非负整数")
+            dead_letters, error = to_int(payload.deadLetters)
+            assert_eq!(error, null, message: "AgentHealthData.deadLetters 必须是非负整数")
+            assert!(dead_letters >= 0, message: "AgentHealthData.deadLetters 必须是非负整数")
+            accepted, error = to_int(payload.accepted)
+            assert_eq!(error, null, message: "AgentHealthData.accepted 必须是非负整数")
+            assert!(accepted >= 0, message: "AgentHealthData.accepted 必须是非负整数")
+            rejected, error = to_int(payload.rejected)
+            assert_eq!(error, null, message: "AgentHealthData.rejected 必须是非负整数")
+            assert!(rejected >= 0, message: "AgentHealthData.rejected 必须是非负整数")
+            failures, error = to_int(payload.failures)
+            assert_eq!(error, null, message: "AgentHealthData.failures 必须是非负整数")
+            assert!(failures >= 0, message: "AgentHealthData.failures 必须是非负整数")
+            dropped, error = to_int(payload.dropped)
+            assert_eq!(error, null, message: "AgentHealthData.dropped 必须是非负整数")
+            assert!(dropped >= 0, message: "AgentHealthData.dropped 必须是非负整数")
+          } else if expected_type == "UserData" {
+            assert!(strip_whitespace(to_string(payload.userId) ?? "") != "", message: "UserData.userId 不能为空")
+            if payload.attributes != null { assert!(is_object(payload.attributes), message: "UserData.attributes 必须是 JSON 对象") }
+          } else if expected_type == "ActionData" {
+            assert!(strip_whitespace(to_string(payload.actionId) ?? "") != "", message: "ActionData.actionId 不能为空")
+            assert!(strip_whitespace(to_string(payload.name) ?? "") != "", message: "ActionData.name 不能为空")
+            assert!(strip_whitespace(to_string(payload.phase) ?? "") != "", message: "ActionData.phase 不能为空")
+            if payload.attributes != null { assert!(is_object(payload.attributes), message: "ActionData.attributes 必须是 JSON 对象") }
+          }
+        }
+      }
+
+      del(.message)
+
 sinks:
   synap_agent_message_dead_letter:
     type: "kafka"
     inputs:
       - "map_synap_agent_message.dropped"
+      - "validate_synap_server_message.dropped"
     bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
     topic: "${SYNAP_DLQ_TOPIC:-com.coolxer.plugin.synap.dead-letter}"
     compression: "zstd"
@@ -425,7 +788,7 @@ sinks:
   synap_agent_message_clickhouse:
     type: "clickhouse"
     inputs:
-      - "map_synap_agent_message"
+      - "validate_synap_server_message"
     endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
     database: "${CLICKHOUSE_DATABASE:-zenvis}"
     table: "synap_agent_message"
@@ -435,7 +798,7 @@ sinks:
     auth:
       strategy: "basic"
       user: "${CLICKHOUSE_USER:-default}"
-      password: "${CLICKHOUSE_PASSWORD}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
     skip_unknown_fields: false
     acknowledgements:
       enabled: true
@@ -467,7 +830,7 @@ tests:
           offset: 99
           timestamp: "2026-07-30T02:00:02.456Z"
     outputs:
-      - extract_from: "map_synap_agent_message"
+      - extract_from: "validate_synap_server_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -496,7 +859,7 @@ tests:
           offset: 1
           timestamp: "2026-07-30T02:00:00Z"
     outputs:
-      - extract_from: "map_synap_agent_message"
+      - extract_from: "validate_synap_server_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -522,7 +885,7 @@ tests:
           offset: 88
           timestamp: "2026-08-05T04:00:01Z"
     outputs:
-      - extract_from: "map_synap_agent_message"
+      - extract_from: "validate_synap_server_message"
         conditions:
           - type: "vrl"
             source: |-
@@ -554,15 +917,16 @@ tests:
           offset: 9
           timestamp: "2026-08-05T04:10:01Z"
     outputs:
-      - extract_from: "map_synap_agent_message"
+      - extract_from: "validate_synap_server_message"
         conditions:
           - type: "vrl"
             source: |-
               assert_eq!(length(.), 63)
               assert_eq!(.fact_type, "AuditData")
               assert_eq!(.batch_id, "123e4567-e89b-12d3-a456-426614174000")
-              assert_eq!(length(.fact.events), 1)
-              assert_eq!(length(.fact.events[0]), 18)
+              events = array!(.fact.events)
+              assert_eq!(length(events), 1)
+              assert_eq!(length(array!(events[0])), 18)
               assert_eq!(.fact.events[0][2], "config_file")
               assert_eq!(.risk_reason_codes, [])
               assert!(is_null(.risk_score))
@@ -795,4 +1159,504 @@ tests:
           - type: "vrl"
             source: |-
               assert!(contains(to_string!(.metadata.dropped.message), "UInt8"))
+              true
+
+  - name: "统一实体合法 StartData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"StartData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"config":{"mode":"observe"}}}
+          topic: "server_fact_start"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "StartData")
+              assert_eq!(.fact.config.mode, "observe")
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 ApplicationData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"ApplicationData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"javaVersion":"17.0.12","javaVendor":"Eclipse Adoptium","vmName":"OpenJDK 64-Bit Server VM","osName":"Linux","osArch":"amd64","processors":8,"pid":42,"capabilityMode":"full","inputArguments":["-Xmx512m"],"startTime":1786600000000,"runtimeAgents":["-javaagent:/opt/synap.jar"],"cgroup":"0::/app","springBootVersion":"3.2.0","springFrameworkVersion":"6.1.1","appName":"order-service","appVersion":"1.0.0","profiles":["prod"]}}}
+          topic: "server_fact_application"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "ApplicationData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 RuntimeData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "RuntimeData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 ApiAssetData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"ApiAssetData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"assets":[{"assetId":"asset-a","method":"GET","route":"/users/{id}","framework":"spring-mvc","handler":"UserController#get","consumes":[],"produces":["application/json"],"authorization":"pre-authorize","parameterTypes":["java.lang.String"]},{"assetId":"asset-b","method":"POST","route":"/orders","framework":"spring-webflux","authorization":"runtime"}]}}}
+          topic: "server_fact_api_asset"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "ApiAssetData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              assert_eq!(length(array!(.fact.payload.assets)), 2)
+              true
+
+  - name: "统一实体合法 ApiObservationData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"ApiObservationData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"windowStart":1786608000000,"windowEnd":1786608060000,"observations":[{"assetId":"asset-a","count":10,"status2xx":9,"status4xx":1,"status5xx":0,"denied":1,"unauthenticated":0,"averageLatencyMs":20,"requestBytes":1000,"responseBytes":2000,"contentType":"application/json","latencyBuckets":[1,2,3,4,0,0]},{"assetId":"asset-b","count":2,"status2xx":1,"status4xx":0,"status5xx":1,"denied":0,"unauthenticated":1,"averageLatencyMs":500,"requestBytes":200,"responseBytes":300,"contentType":"","latencyBuckets":[0,0,0,1,1,0]}]}}}
+          topic: "server_fact_api_observation"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "ApiObservationData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              assert_eq!(length(array!(.fact.payload.observations)), 2)
+              true
+
+  - name: "统一实体合法 SecurityConfigData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"SecurityConfigData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"activeProfiles":["prod"],"managementEndpointsExposed":"health,info","csrfConfigured":true,"corsConfigured":true,"sessionConfigured":false,"anonymousEnabled":false,"authenticationModes":["bearer"],"filterChains":1,"capabilityMode":"spring-security"}}}
+          topic: "server_fact_security_config"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "SecurityConfigData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 DependencyData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"DependencyData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"dependencies":[{"purl":"pkg:maven/org.example/demo@1.5.0","group":"org.example","artifact":"demo","version":"1.5.0","sha256":"abc","loaded":true,"direct":true},{"purl":"pkg:maven/org.example/safe@2.0.0","group":"org.example","artifact":"safe","version":"2.0.0","sha256":"def","loaded":true,"direct":false}]},"vulnerabilities":[{"purl":"pkg:maven/org.example/demo@1.5.0","id":"OSV-TEST-1","aliases":["CVE-2099-0001"],"cvss":9.8,"fixedVersion":"2.0.0"}]}}
+          topic: "server_fact_dependency"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "DependencyData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              assert_eq!(length(array!(.fact.payload.dependencies)), 2)
+              assert_eq!(length(array!(.fact.vulnerabilities)), 1)
+              true
+
+  - name: "统一实体合法 DangerousCallData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"DangerousCallData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"sinkType":"HTTP","operation":"java.net.URL#openConnection","targetDigest":"abc","stackFingerprint":"def","correlated":true,"confidence":"high","ruleId":"SSRF_PRIVATE_TARGET_V1","action":"blocked","correlationId":"corr-1","assetId":"asset-a","authenticated":true,"sourceIpHash":"hash"}}}
+          topic: "server_fact_dangerous_call"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "DangerousCallData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 SecurityEventData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"SecurityEventData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"category":"api-cors","name":"wildcard-with-credentials","severity":"high","assetId":"asset-a","attributes":{"mode":"observed"}}}}
+          topic: "server_fact_security_event"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "SecurityEventData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 AgentHealthData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"AgentHealthData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"status":"running","capabilityMode":"full","queued":1,"deadLetters":0,"accepted":10,"rejected":1,"failures":2,"dropped":0}}}
+          topic: "server_fact_agent_health"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "AgentHealthData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 UserData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"UserData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"userId":"opaque-user-1","attributes":{"tenant":"example"}}}}
+          topic: "server_fact_user"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "UserData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "统一实体合法 ActionData 应保留完整 fact"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"ActionData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"actionId":"checkout-1","name":"checkout","phase":"success","attributes":{"channel":"web"}}}}
+          topic: "server_fact_action"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(length(.), 63)
+              assert_eq!(.platform, "server")
+              assert_eq!(.fact_type, "ActionData")
+              assert_eq!(.fact.payload.schemaVersion, 1)
+              assert!(!exists(.item_index))
+              true
+
+  - name: "Server Topic 与 Fact 不匹配应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_application"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "不匹配"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server Topic 的非 server 平台应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"host","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "platform=server"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 错误 schemaVersion 应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":2,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "schemaVersion"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 缺失 message_id 应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "message_id"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 非法 observed_at 应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":"invalid","sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "map_synap_agent_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "observed_at"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 非正整数 sequence 应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":0,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":1024,"heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "sequence"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 非法数字字段应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"RuntimeData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"heapUsed":"many","heapCommitted":2048,"nonHeapUsed":256,"threadCount":12,"peakThreadCount":15,"deadlockedThreadCount":0,"loadedClassCount":1000,"totalLoadedClassCount":1100,"uptimeMs":5000,"garbageCollectors":[{"name":"G1","collections":3,"collectionTimeMs":4}],"daemonThreadCount":8,"unloadedClassCount":10,"systemLoadAverage":0.5,"processCpuLoad":0.1,"systemCpuLoad":0.2,"openFileDescriptorCount":20,"maxFileDescriptorCount":1024}}}
+          topic: "server_fact_runtime"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "heapUsed"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 非法布尔字段应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"SecurityConfigData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"activeProfiles":["prod"],"managementEndpointsExposed":"health,info","csrfConfigured":"yes","corsConfigured":true,"sessionConfigured":false,"anonymousEnabled":false,"authenticationModes":["bearer"],"filterChains":1,"capabilityMode":"spring-security"}}}
+          topic: "server_fact_security_config"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "csrfConfigured"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 空批次应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"ApiAssetData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"assets":[]}}}
+          topic: "server_fact_api_asset"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "不能为空数组"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 非对象数组项应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"ApiAssetData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"assets":["bad"]}}}
+          topic: "server_fact_api_asset"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "每一项必须是 JSON 对象"))
+              assert!(exists(.message))
+              true
+
+  - name: "Server 非法漏洞结构应进入 dropped"
+    inputs:
+      - insert_at: "map_synap_agent_message"
+        type: "log"
+        log_fields:
+          message: |-
+            {"rule":"ServerRule.groovy","server_time":"2026-08-13T08:00:00.100Z","agendas":[],"punishes":[],"risk":null,"fact":{"type":"DependencyData","common":{"guid":"server-device-001","start_id":1700000000000,"client_time":"2026-08-13T08:00:00.000Z","platform":"server","app_id":10001,"app_name":"order-service","app_version":"1.0.0","sdk_version":"1.0.0","lan_ip":"192.0.2.10"},"message_id":"server-message-1","batch_id":"server-batch-1","observed_at":1786608000000,"sequence":2,"request_ip":"198.51.100.10","server_received_at":1786608000100,"client_server_skew_ms":100,"payload":{"schemaVersion":1,"dependencies":[{"purl":"pkg:maven/org.example/demo@1.5.0","group":"org.example","artifact":"demo","version":"1.5.0","sha256":"abc","loaded":true,"direct":true},{"purl":"pkg:maven/org.example/safe@2.0.0","group":"org.example","artifact":"safe","version":"2.0.0","sha256":"def","loaded":true,"direct":false}]},"vulnerabilities":[{"purl":"pkg:maven/org.example/demo@1.5.0","id":"OSV-TEST-1","aliases":"CVE-2099-0001"}]}}
+          topic: "server_fact_dependency"
+          partition: 0
+          offset: 101
+          timestamp: "2026-08-13T08:00:00.100Z"
+    outputs:
+      - extract_from: "validate_synap_server_message.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(contains(to_string!(.metadata.dropped.message), "aliases"))
+              assert!(exists(.message))
               true

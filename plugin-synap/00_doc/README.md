@@ -1,14 +1,14 @@
 # 探针消息数据契约与运维说明
 
-本文档是 `com.coolxer.plugin.synap` 1.1.2 的权威接入契约。插件面向首次安装和 additive schema 升级，不包含旧 `msg` 表、网关 Syslog 或业务日志文件兼容逻辑。
+本文档是 `com.coolxer.plugin.synap` 1.2.0 的统一消息接入契约。插件面向首次安装和 additive 升级，不包含旧 `msg` 表、网关 Syslog 或业务日志文件兼容逻辑。Server 平台的严格校验和业务载荷保留语义见 [`server-data-contract.md`](server-data-contract.md)。
 
 ## 契约矩阵
 
 | 数据定义 | 代码 | 实体 | ClickHouse 表 | Kafka 主题 | UI 页面 | 结构化 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 探针标准事实消息 | `agent-message` | `synap_agent_message` | `zenvis.synap_agent_message` | `^(android\|h5\|ios\|host\|wechat)_fact_.*$` | `detail-message`、`parameter-analytics` | 是 |
+| 探针标准事实消息 | `agent-message` | `synap_agent_message` | `zenvis.synap_agent_message` | 原五端事实主题 + 12 个精确 `server_fact_*` 主题 | `detail-message`、`parameter-analytics` | 是 |
 
-所有匹配主题使用相同的 `{fact:{common,type}, agendas, punishes, rule, risk}` Checkpoint 信封，因此对应一个实体和一张表。Kafka 主题、分区和偏移量作为来源坐标随记录保存。Host AuditData 与 WeChat 新 Fact 是 `fact` 的载荷变体，不是新的 Kafka 信封定义：通用字段提升为列，业务载荷继续完整保存在 `fact` JSON。
+Android、H5、iOS、Host、WeChat 和 Server 使用相同的 `{fact:{common,type}, agendas, punishes, rule, risk}` Checkpoint 信封，因此对应一个实体和一张表。Kafka 主题、分区和偏移量作为来源坐标随记录保存。平台和 Fact 特有内容属于 `fact` 的载荷变体：通用字段提升为列，其余业务载荷完整保存在 `fact` JSON。
 
 ## 输入结构
 
@@ -129,8 +129,8 @@
 | 550035 | `punish_types` | `Array(UInt8)` | `punishes[].action.type` | 缺失为 `[]` |
 | 550036 | `punishes` | `Array(String)` | 每个 punish 对象编码为紧凑 JSON | 缺失为 `[]` |
 | 550037 | `raw_message` | `String` | 未改写的 Kafka `message` | 必填、非空 |
-| 550038 | `message_id` | `String` | `fact.message_id` | H5/WeChat 必填；其他平台缺失为空 |
-| 550039 | `batch_id` | `String` | `fact.batch_id` | H5/WeChat 传输批次或 Host 审计 UUID；缺失为空 |
+| 550038 | `message_id` | `String` | `fact.message_id` | H5/WeChat/Server 使用；Server 必填，其他平台缺失为空 |
+| 550039 | `batch_id` | `String` | `fact.batch_id` | H5/WeChat/Server 传输批次或 Host 审计 UUID；缺失为空 |
 | 550040 | `observed_at` | `Nullable(DateTime64(3))` | `fact.observed_at` Unix 毫秒 | 缺失为 null；非法进入 DLQ |
 | 550041 | `sequence` | `Nullable(UInt64)` | `fact.sequence` | 缺失为 null；必须非负 |
 | 550042 | `request_ip` | `String` | `fact.request_ip` | 服务端解析的来源 IP；缺失为空 |
@@ -177,7 +177,7 @@ Zenvis 另外注入 `zenvis_id Nullable(UUID)` 和 `zenvis_insert_time DateTime6
 - `start_id` 必须是大于 0 的 UInt64 兼容整数。
 - `app_id` 为空时为 null；非空时必须在 UInt32 范围内。
 - 经纬度为空时为 null；非空时必须是数字并满足地理范围。
-- `sequence` 必须是非负整数，`client_server_skew_ms` 允许正负整数。
+- `sequence` 存在时必须是非负整数，Server Topic 进一步要求其为正整数；`client_server_skew_ms` 允许正负整数。
 - `risk.score` 范围为 0～100，`risk.confidence` 范围为 0～1，`risk.evidence_count` 必须在 UInt32 范围，`risk.observation` 必须为布尔值。
 - `risk.reason_codes` 必须为非空字符串组成的数组。顶层 `risk` 为 null 时，风险字符串为空、数组为 `[]`、数字/布尔值为 null。
 - `agendas` 必须为数组；每项必须为对象，且 `tag`、`level` 非空。
@@ -188,14 +188,14 @@ Zenvis 另外注入 `zenvis_id Nullable(UUID)` 和 `zenvis_insert_time DateTime6
 
 - Host `AuditData` 发布到 `host_fact_audit`，`fact.batch_id` 为 UUID，`fact.events` 为 1～100 行固定 18 列数组：`eventId,eventTime,category,action,result,actor,subject,target,pid,process,localEndpoint,remoteEndpoint,protocol,digestAlgorithm,digest,source,bootId,detail`。插件将批次 ID 提升为列，并原样保留事件数组。
 - WeChat 新增 `self-app`、`runtime`、`integrity`、`session`、`error`、`behavior`、`action`、`network`、`location`、`debug` 主题；相应业务载荷在 `fact.data` 或 Fact 自有字段中保存。插件不将不同 Fact 的业务字段合并为不可靠的通用列。
-- H5/WeChat Checkpoint 可携带顶层 `risk`，插件将其 8 个字段结构化。Host 和其他平台的 `risk` 通常为 null。
+- H5/WeChat/Server Checkpoint 可携带顶层 `risk`，插件将其 8 个字段结构化。其他平台的 `risk` 通常为 null。
 
 ## Kafka 与 ClickHouse
 
 默认主题正则：
 
 ```text
-^(android|h5|ios|host|wechat)_fact_.*$
+^((android|h5|ios|host|wechat)_fact_.*|server_fact_(start|application|runtime|api_asset|api_observation|security_config|dependency|dangerous_call|security_event|agent_health|user|action))$
 ```
 
 Vector Kafka Source 支持以 `^` 开头的主题正则。需要限制到固定主题时，可覆盖 `SYNAP_KAFKA_TOPIC_PATTERN`。
@@ -204,12 +204,12 @@ Vector Kafka Source 支持以 `^` 开头的主题正则。需要限制到固定�
 
 - 主题名不匹配正则：Kafka Source 不订阅，消息不会进入本任务、ClickHouse 或 DLQ，仍按原主题的 Kafka 保留策略保存。
 - 主题名匹配且消息合法：转换为 63 个业务字段并写入 `zenvis.synap_agent_message`。
-- 主题名匹配但消息解析或校验失败：通过 `map_synap_agent_message.dropped` 写入插件 DLQ。
-- `fact.type` 没有固定枚举白名单；任意非空值都可以入库，但消息仍须满足其余契约。
+- 主题名匹配但消息解析或校验失败：通过公共映射或 Server 专属校验的 `.dropped` 输出写入插件 DLQ。
+- 原五端的 `fact.type` 只要求非空；Server Topic 必须与 12 种 Server Fact 类型严格一一对应。
 
 若以后扩大正则，同一消费组对新纳入且没有已提交位点的分区会受 `auto_offset_reset: earliest` 控制，从 Kafka 当前仍保留的最早位置开始消费。
 
-`synap-kafka-to-clickhouse.yaml` 必须以且仅以三个短横线 `---` 开头。该合法 YAML 文档头用于确保 Vectum 将任务写成 `push.yaml`；缺失时复杂 VRL 内容可能干扰格式探测，四个短横线 `----` 则会导致 YAML 解析失败。
+唯一推送任务 `synap-kafka-to-clickhouse.yaml` 必须以且仅以三个短横线 `---` 开头。该合法 YAML 文档头用于确保 Vectum 将任务写成 `push.yaml`；缺失时复杂 VRL 内容可能干扰格式探测，四个短横线 `----` 则会导致 YAML 解析失败。
 
 ClickHouse 表由 Meta 自动创建：
 

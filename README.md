@@ -4,7 +4,7 @@
 
 | 目录 | 包名 | 版本 | 说明 |
 | --- | --- | --- | --- |
-| `plugin-synap` | `com.coolxer.plugin.synap` | `1.1.2` | 探针消息校验、ClickHouse 入库、DLQ、详情与设备 ID、IP、启动 ID 参数聚合分析 |
+| `plugin-synap` | `com.coolxer.plugin.synap` | `1.2.0` | Android、H5、iOS、Host、WeChat 与 Server 事实统一入库、严格校验、DLQ、详情和参数聚合分析 |
 
 该插件不包含动态 API JAR。构建仅需 Bash 与 tar，Windows 使用 PowerShell 与 tar：
 

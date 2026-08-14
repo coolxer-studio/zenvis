@@ -45,6 +45,8 @@
 > - **不适合完全无约束的数据操作：** 高级检索不接受任意 SQL，AI 工具也必须遵循权限范围、审批策略和调用审计。
 > - **不适合脱离业务建模直接使用：** 平台提供通用框架，实体含义、字段规则、接入方式和分析口径仍需要通过 Meta、推送任务和插件明确配置。
 
+> [百闻不如一见，快速开始本地化部署体验一番吧！](/02-安装部署与升级/快速开始.md)
+
 <a href="_images/zenvis-product-overview.png" target="_blank" rel="noopener">
   <img src="_images/zenvis-product-overview.png" alt="ZenVis 产品全景图" />
 </a>

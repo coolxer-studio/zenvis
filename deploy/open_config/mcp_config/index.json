@@ -487,6 +487,7 @@
             { "name": "request_id", "label": "请求 ID", "type": "text" },
             { "name": "requester_user_id", "label": "发起用户 ID", "type": "text", "placeholder": "-" },
             { "name": "tool_key", "label": "工具", "type": "text" },
+            { "name": "server_code", "label": "服务代码", "type": "text", "placeholder": "-" },
             { "name": "analysis_task_id", "label": "AI分析任务", "type": "text", "placeholder": "-" },
             { "name": "task_execution_id", "label": "Execution ID", "type": "text", "placeholder": "-", "toggled": false },
             { "name": "channel", "label": "渠道", "type": "text" },
@@ -513,6 +514,128 @@
     }
   ],
   "body": [
+    {
+      "type": "panel",
+      "title": "内置 MCP 服务",
+      "className": "m-b-md",
+      "body": {
+        "name": "mcp_builtin_service_list",
+        "type": "crud",
+        "api": "/zenvis/api/v1/dih/mcp/local-services",
+        "syncLocation": false,
+        "loadDataOnce": true,
+        "filterTogglable": false,
+        "headerToolbar": [],
+        "footerToolbar": [],
+        "columns": [
+          {
+            "name": "code",
+            "label": "服务标识",
+            "type": "text"
+          },
+          {
+            "name": "name",
+            "label": "服务名称",
+            "type": "text"
+          },
+          {
+            "name": "description",
+            "label": "说明",
+            "type": "tpl",
+            "tpl": "${description|truncate:60|default:'-'}"
+          },
+          {
+            "name": "sse_endpoint",
+            "label": "SSE Endpoint",
+            "type": "text"
+          },
+          {
+            "name": "message_endpoint",
+            "label": "Message Endpoint",
+            "type": "text"
+          },
+          {
+            "name": "tool_count",
+            "label": "工具数",
+            "type": "text",
+            "width": 80
+          },
+          {
+            "type": "operation",
+            "label": "操作",
+            "width": 100,
+            "buttons": [
+              {
+                "type": "button",
+                "label": "工具",
+                "icon": "fa fa-wrench text-info",
+                "actionType": "dialog",
+                "dialog": {
+                  "title": "内置 MCP 工具 - ${name}",
+                  "size": "xl",
+                  "body": {
+                    "type": "crud",
+                    "api": "/zenvis/api/v1/dih/mcp/local-services/${code}/tools",
+                    "syncLocation": false,
+                    "headerToolbar": [],
+                    "footerToolbar": [],
+                    "columns": [
+                      {
+                        "name": "name",
+                        "label": "工具名",
+                        "type": "text"
+                      },
+                      {
+                        "name": "description",
+                        "label": "描述",
+                        "type": "tpl",
+                        "tpl": "${description|truncate:80|default:'-'}"
+                      },
+                      {
+                        "name": "effective_approval_policy",
+                        "label": "有效策略",
+                        "type": "mapping",
+                        "map": {
+                          "ALLOW": "<span class='label label-success'>允许</span>",
+                          "ASK": "<span class='label label-warning'>询问</span>",
+                          "DENY": "<span class='label label-danger'>禁止</span>",
+                          "*": "-"
+                        }
+                      },
+                  {
+                    "name": "risk_level",
+                    "label": "风险",
+                    "type": "text"
+                  },
+                  {
+                    "type": "operation",
+                    "label": "Schema",
+                    "width": 90,
+                    "buttons": [
+                      {
+                        "type": "button",
+                        "label": "查看",
+                        "actionType": "dialog",
+                        "dialog": {
+                          "title": "工具 Schema - ${name}",
+                          "size": "lg",
+                          "body": {
+                            "type": "json",
+                            "value": "${input_schema | json}"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
     {
       "name": "mcp_server_list",
       "type": "crud",
@@ -804,6 +927,7 @@
                 "size": "lg",
                 "body": {
                   "type": "form",
+                  "initApi": "/zenvis/api/v1/dih/mcp/servers/${id}/view",
                   "api": "/zenvis/api/v1/dih/mcp/servers/$id/update",
                   "reload": "mcp_server_list",
                   "body": [

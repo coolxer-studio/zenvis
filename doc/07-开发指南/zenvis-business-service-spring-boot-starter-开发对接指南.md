@@ -35,7 +35,7 @@ Starter 的目标是让监测链路与宿主业务解耦：ZenVis 网络异常�
 ## 目录职责
 
 ```text
-zenvis-business-service-spring-boot-starter/
+zenvis-dependencies/zenvis-business-service-spring-boot-starter/
 ├── pom.xml
 ├── README.md
 └── src/
@@ -197,7 +197,7 @@ Starter 固定调用：
 ## 构建与测试
 
 ```bash
-cd zenvis-business-service-spring-boot-starter
+cd zenvis-dependencies/zenvis-business-service-spring-boot-starter
 
 # 测试
 mvn test

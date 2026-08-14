@@ -20,18 +20,22 @@
   },
   "runtime": {
     "tools": {
-      "local": [
-        "config_tree",
-        "config_add",
-        "config_apply",
-        "config_read",
-        "push_task_detect_format",
-        "push_task_list_by_source_mark",
-        "push_task_create_and_start",
-        "push_task_get_log",
-        "push_task_repair_and_restart",
-        "push_task_delete_by_source_mark"
-      ]
+      "local": {
+        "config": [
+          "config_tree",
+          "config_add",
+          "config_apply",
+          "config_read"
+        ],
+        "push-task": [
+          "push_task_detect_format",
+          "push_task_list_by_source_mark",
+          "push_task_create_and_start",
+          "push_task_get_log",
+          "push_task_repair_and_restart",
+          "push_task_delete_by_source_mark"
+        ]
+      }
     },
     "limits": {
       "maxToolCalls": 32,

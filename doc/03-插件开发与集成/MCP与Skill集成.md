@@ -128,7 +128,9 @@ MCP `code` 是资源身份：
   "runtime": {
     "promptMode": "skill_only",
     "tools": {
-      "local": ["retrieval_search"],
+      "local": {
+        "retrieval": ["retrieval_search"]
+      },
       "mcp": {
         "example-analysis": ["lookup_indicator"]
       }
@@ -175,7 +177,10 @@ MCP `code` 是资源身份：
 
 ## 工具白名单
 
-`runtime.tools.local` 使用 ZenVis 本地工具原名。`runtime.tools.mcp` 使用：
+`runtime.tools.local` 使用固定内置服务 code 到本服务工具原名列表的映射，例如
+`retrieval → ["retrieval_search"]`。列表可使用唯一值 `"*"` 选择该服务全部工具。
+旧数组格式、未知服务、未知工具、错组工具以及 `"*"` 与具体名称混用都会使 Skill
+加载失败。`runtime.tools.mcp` 的格式保持不变，使用：
 
 ```text
 MCP Server code → 该 Server 返回的原始 Tool name 列表

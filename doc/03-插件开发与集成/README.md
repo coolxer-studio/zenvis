@@ -55,17 +55,16 @@ ZenVis 插件把数据模型、接入任务、动态 API、低代码页面、看
 
 | 位置 | 责任 |
 | --- | --- |
-| `zenvis-plugin` | 内置插件、公共插件 API 模型和统一构建脚本 |
-| `zenvis-plugin-community` | 社区或客户场景插件，按独立工作树维护 |
+| `zenvis-plugin` | 统一维护平台、社区与企业插件、公共插件 API 模型和构建脚本 |
+| `zenvis-plugin/zenvis-plugin-*` | 场景或产品子仓库；保留独立 Git、版本和发布节奏 |
 | `agent-skills/create-zenvis-plugin` | 研发侧创建、校验和打包插件的工作流 |
 | 插件的 `07_skill` | 安装到平台并供 DIH 使用的运行时 Skill |
 
 研发 Skill 与运行时 Skill 不是同一种资源：前者帮助开发插件，后者随插件安装并进入平台 Skill 注册表。
 
-内置和社区插件使用同一平台安装契约，但具体字段、数据源、部署顺序和兼容要求以目标插件自己的 `README.md` 与 `00_doc/` 为准。各仓库的构建方式见：
+平台、社区和企业插件使用同一平台安装契约，但具体字段、数据源、部署顺序和兼容要求以目标插件自己的 `README.md` 与 `00_doc/` 为准。企业插件还必须提供兼容矩阵、安全评审、运维保障和生产验收材料。统一开发入口见：
 
 - [`zenvis-plugin` 开发对接指南](/07-开发指南/zenvis-plugin-开发对接指南.md)
-- [`zenvis-plugin-community` 开发对接指南](/07-开发指南/zenvis-plugin-community-开发对接指南.md)
 - [`agent-skills` 开发对接指南](/07-开发指南/agent-skills-开发对接指南.md)
 
 ## 文档边界
@@ -84,6 +83,6 @@ ZenVis 插件把数据模型、接入任务、动态 API、低代码页面、看
 - `DataEntity`、`DataAttribute`、`DashboardDto`、`MenuDto`、`PushTaskDto`、`McpServerDto`；
 - `SkillService`、Agent 工具范围与 MCP 客户端实现；
 - 前端低代码路由、HTML 页面容器和 Dashboard 容器；
-- `zenvis-plugin` 构建脚本与当前内置、社区插件样例。
+- `zenvis-plugin` 构建脚本、根插件目录和嵌套场景/产品子仓库。
 
 样例只能说明用法。样例与当前代码冲突时，以当前运行契约为准。

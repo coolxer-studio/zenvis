@@ -8,7 +8,7 @@ ZenVis 同时具备：
 
 | 角色 | 用途 | 当前端点或来源 |
 | --- | --- | --- |
-| MCP Server | 向外部客户端暴露 ZenVis 本地工具 | `/sse`、`/mcp/message` |
+| MCP Server | 按业务域向外部客户端暴露 77 个 ZenVis 本地工具 | 六组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
 | MCP Client | 连接数据库中配置的外部 MCP Server | 当前使用 SSE Client |
 | 工具运行时 | 按 Agent、Skill 和策略组装实际工具集合 | 本地工具与已连接外部工具 |
 | 权限网关 | 统一实施策略、审批、授权、状态和审计 | Chat、后台任务、MCP Server、管理端测试 |
@@ -177,17 +177,22 @@ PENDING
 
 ## 8. MCP Server 运维
 
-ZenVis 自带 MCP Server：
+ZenVis 自带六个固定 MCP Server：
 
-| 配置 | 作用 |
-| --- | --- |
-| `spring.ai.mcp.server.name` | Server 名称 |
-| `spring.ai.mcp.server.version` | Server 版本 |
-| `spring.ai.mcp.server.sse-endpoint` | SSE 入口，当前 `/sse` |
-| `spring.ai.mcp.server.sse-message-endpoint` | 消息入口，当前 `/mcp/message` |
-| `spring.ai.mcp.server.capabilities.tool` | 是否暴露工具能力 |
+| code | 工具数 | SSE / Message |
+| --- | ---: | --- |
+| `retrieval` | 22 | `/mcp/retrieval/sse`、`/mcp/retrieval/message` |
+| `entity` | 5 | `/mcp/entity/sse`、`/mcp/entity/message` |
+| `config` | 7 | `/mcp/config/sse`、`/mcp/config/message` |
+| `push-task` | 6 | `/mcp/push-task/sse`、`/mcp/push-task/message` |
+| `visualization` | 21 | `/mcp/visualization/sse`、`/mcp/visualization/message` |
+| `analysis-task` | 16 | `/mcp/analysis-task/sse`、`/mcp/analysis-task/message` |
 
-本地 Server、外部 Client、Chat、后台任务和管理端测试调用共享工具策略与审计包装。外部客户端不能自行构造“已经审批”的状态绕过策略。
+服务端点和分组随代码固定发布；`app.ai.mcp.builtin-server.*` 只配置版本、请求超时和
+SSE 保活间隔。六组端点共享 `app.security.mcp.bearer-token`，旧聚合端点不再提供。
+
+本地 Server、外部 Client、Chat、后台任务和管理端测试调用共享工具策略与审计包装。
+内置策略键仍为 `local::<toolName>`；审计额外记录工具所属内置服务 code。外部客户端不能自行构造“已经审批”的状态绕过策略。
 
 ## 常见问题
 

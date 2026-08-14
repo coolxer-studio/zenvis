@@ -203,7 +203,7 @@ public class ExampleController {
 - 前端浏览器代理：`/zenvis/api/v1/**`，代理时移除 `/zenvis`；
 - 动态插件 API：`/api/v1/plugin/{package_name}/**`；
 - Swagger：`http://localhost:11001/swagger-ui/index.html`；
-- MCP Server：`/sse` 与 `/mcp/message`。
+- 内置 MCP Server：六组 `/mcp/{serviceCode}/sse` 与 `/mcp/{serviceCode}/message`。
 
 公开业务服务上报接口不要求 Session 或 Bearer Token，但生产环境必须在部署层限制来源、请求规模和调用频率。
 

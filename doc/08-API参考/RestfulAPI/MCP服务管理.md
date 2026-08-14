@@ -1,8 +1,20 @@
 # MCP 服务管理 REST API
 
-本页说明 `McpController` 的 19 个 HTTP 接口，用于管理外部 MCP Server、查看工具、配置审批策略、处理审批和查询调用审计。
+本页说明 `McpController` 的 21 个 HTTP 接口，用于查看内置 MCP 服务、管理外部 MCP Server、查看工具、配置审批策略、处理审批和查询调用审计。
 
-这些接口属于 RESTful API，基础路径是 `/api/v1/dih/mcp`。MCP Client 连接 ZenVis Server 时使用的是 `/sse` 和 `/mcp/message`，详见 [MCP Tool 总览与接入](/08-API参考/MCPtool/总览与接入.md)。
+这些接口属于 RESTful API，基础路径是 `/api/v1/dih/mcp`。MCP Client 连接 ZenVis
+内置 Server 时使用 `/mcp/{serviceCode}/sse` 和 `/mcp/{serviceCode}/message`，详见
+[MCP Tool 总览与接入](/08-API参考/MCPtool/总览与接入.md)。
+
+## 内置 MCP 服务目录
+
+| 方法 | 路径 | 返回/用途 |
+| --- | --- | --- |
+| GET | `/api/v1/dih/mcp/local-services` | 六个固定服务的 code、名称、说明、SSE/Message 端点和工具数 |
+| GET | `/api/v1/dih/mcp/local-services/{code}/tools` | 指定服务的工具名、说明、Schema、风险等级和有效审批策略 |
+
+这两个接口只读。内置分组不能在管理端修改；工具策略仍通过统一策略接口配置，稳定键保持
+`local::<toolName>`。管理页的“内置 MCP 服务”区域使用这两个接口展示端点和分组工具。
 
 ## 外部 MCP Server
 

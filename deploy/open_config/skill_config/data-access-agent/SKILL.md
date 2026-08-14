@@ -171,7 +171,7 @@
 - `plugin-asset`：一个 meta 文件包含 10 个资产实体，是多实体同业务域写入同一个 meta 配置的主要参考。
 - `plugin-operation`、`plugin-risk`：一个 meta 文件包含多个事件/风险实体，push-task 使用 route 分流到多个 ClickHouse sink，可参考多实体入库拓扑。
 - `plugin-probe`：一个原始消息实体对应 Kafka、syslog、file 三类数据源推送任务，可参考多数据源接入方式。
-- `zenvis-plugin-community/zenvis-plugin-xiangtanhospital/plugin-security-device-data`：其中 STA 部分包含 55 个协议实体和 `sta-kafka-to-clickhouse.yaml` 入库任务，通过 `logtype` 路由到多个 ClickHouse sink；只参考其 route 多 sink 模式，不照搬“一个实体一个 meta 文件”的拆分方式。
+- `zenvis-plugin/zenvis-plugin-lubinsun/plugin-security-device-data`：其中 STA 部分包含 55 个协议实体和 `sta-kafka-to-clickhouse.yaml` 入库任务，通过 `logtype` 路由到多个 ClickHouse sink；只参考其 route 多 sink 模式，不照搬“一个实体一个 meta 文件”的拆分方式。
 - 新生成的 meta 配置必须遵守本 Skill 的完整规则：多个实体优先合入同一个配置，顶层 `operator` 必须补齐标准定义；不能因为参考样例缺失 `operator` 或使用不同表名风格而省略或偏离规范。
 
 ## Markdown 需求模板处理规则

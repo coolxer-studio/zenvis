@@ -10,8 +10,7 @@
 | [`deploy`](/07-开发指南/deploy-开发对接指南.md) | Docker Compose、基础服务配置、开放配置和持久化目录 | 先执行 `docker compose config`，再核对架构与凭据 |
 | [`zenvis-backend`](/07-开发指南/zenvis-backend-开发对接指南.md) | 平台 API、检索、插件生命周期、DIH/MCP 和业务服务管理 | 先启动依赖并运行 Maven 测试，再按领域定位 Controller 与 Service |
 | [`zenvis-frontend`](/07-开发指南/zenvis-frontend-开发对接指南.md) | 管理控制台、检索、看板、低代码和 DIH 工作台 | 先完成类型/单元检查和生产构建，再进入具体页面 |
-| [`zenvis-plugin`](/07-开发指南/zenvis-plugin-开发对接指南.md) | 平台内置插件、动态 API 源码和打包工具 | 先确认插件目录契约，再同步修改 Meta、数据接入、UI 和文档 |
-| [`zenvis-plugin-community`](/07-开发指南/zenvis-plugin-community-开发对接指南.md) | 社区与客户场景插件集合 | 先选择目标子仓库，并确认插件间依赖和部署顺序 |
+| [`zenvis-plugin`](/07-开发指南/zenvis-plugin-开发对接指南.md) | 平台、社区与企业插件，动态 API 源码和打包工具 | 先选择根插件或目标子工作树，再同步修改 Meta、数据接入、UI 和文档 |
 | [`zenvis-business-service-spring-boot-starter`](/07-开发指南/zenvis-business-service-spring-boot-starter-开发对接指南.md) | Spring Boot 业务服务心跳与事件上报组件 | 先运行 Starter 测试，再用最小配置接入测试服务 |
 
 ## 推荐阅读路线
@@ -26,7 +25,7 @@
 ### 插件或数据接入开发
 
 1. 先阅读 [插件开发与集成](/03-插件开发与集成/README.md)。
-2. 根据归属选择[内置插件](/07-开发指南/zenvis-plugin-开发对接指南.md)或[社区插件](/07-开发指南/zenvis-plugin-community-开发对接指南.md)。
+2. 在[`zenvis-plugin` 开发对接指南](/07-开发指南/zenvis-plugin-开发对接指南.md)中确认根插件或目标 `zenvis-plugin-*` 子工作树，以及平台、社区或企业交付要求。
 3. 需要 Agent 辅助创建或校验插件时，阅读 [`agent-skills` 开发对接指南](/07-开发指南/agent-skills-开发对接指南.md)。
 4. 最后通过 [`deploy` 开发对接指南](/07-开发指南/deploy-开发对接指南.md)理解插件安装目录和运行依赖。
 
@@ -43,13 +42,15 @@ zenvis/                                      # 根工作树
 ├── agent-skills/
 ├── deploy/
 ├── doc/
-├── zenvis-business-service-spring-boot-starter/
+├── zenvis-dependencies/
+│   └── zenvis-business-service-spring-boot-starter/
 ├── zenvis-backend/                          # 独立 Git 工作树
 ├── zenvis-frontend/                         # 独立 Git 工作树
-├── zenvis-plugin/                           # 独立 Git 工作树
-└── zenvis-plugin-community/
-    ├── zenvis-plugin-jmr/                   # 独立 Git 工作树
-    └── zenvis-plugin-xiangtanhospital/      # 独立 Git 工作树
+└── zenvis-plugin/                           # 插件父工作树
+    ├── plugin-*/                            # 父工作树直接维护的插件
+    ├── zenvis-plugin-btw/                   # 独立 Git 子工作树
+    ├── zenvis-plugin-lubinsun/              # 独立 Git 子工作树
+    └── zenvis-plugin-onesoc/                # 独立 Git 子工作树
 ```
 
 修改前后应分别在实际工作树中运行 `git status --short`。不要在一个工作树的提交中混入另一个工作树的文件，也不要清理不属于当前任务的未提交内容。
@@ -79,4 +80,4 @@ zenvis/                                      # 根工作树
 npx docsify-cli serve ./doc
 ```
 
-默认访问 `http://localhost:3000`。预览时至少检查本页、侧边栏、七篇项目指南及其内部链接。
+默认访问 `http://localhost:3000`。预览时至少检查本页、侧边栏、六篇项目指南及其内部链接。

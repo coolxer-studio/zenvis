@@ -45,7 +45,12 @@ Meta 是插件数据能力的核心契约。它同时决定检索实体、ClickH
   "auto_create": {
     "engine": "MergeTree()",
     "order_by": ["event_id", "event_time"],
-    "partition_by": "toYYYYMM(zenvis_insert_time)"
+    "partition_by": "toYYYYMM(zenvis_insert_time)",
+    "ttl": {
+      "column": "zenvis_insert_time",
+      "expire_after": 30,
+      "unit": "DAY"
+    }
   }
 }
 ```
@@ -62,6 +67,10 @@ Meta 是插件数据能力的核心契约。它同时决定检索实体、ClickH
 | `auto_create` | 自动建表配置；使用已有表时可以不提供 |
 
 `auto_create` 必须包含非空引擎和排序键。排序键优先选择业务 ID 和业务时间；不要把高基数的 `zenvis_id` 作为排序键，也不要按不可靠的可选业务时间分区。
+
+`auto_create.ttl` 是可选的表级整行过期策略：`column` 必须引用当前 Entity 中非 `Nullable` 的 `Date`、`Date32`、`DateTime` 或 `DateTime64` 物理列，`expire_after` 必须为正整数，`unit` 仅支持 `HOUR`、`DAY`、`WEEK`、`MONTH`、`YEAR`。可以使用平台内置的 `zenvis_insert_time`，无需把它重复声明为 Attribute。
+
+应用 Meta 时，平台会为新表写入 TTL，并将已有表的 TTL 同步为 Meta 定义；修改配置会执行 `MODIFY TTL`，删除配置会执行 `REMOVE TTL`。TTL 变化可能导致历史数据永久删除，应在升级前确认留存策略并完成必要备份。平台不会主动执行 `MATERIALIZE TTL`，过期数据由 ClickHouse 后台合并逐步清理，不保证到期后立即消失。
 
 ## Attribute
 

@@ -45,14 +45,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 4G
-        reservations:
-          cpus: "0.5"
-          memory: 1G
     logging: *default-logging
 
   redis-service:
@@ -78,14 +70,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 2G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
     logging: *default-logging
 
   redis-stack-service:
@@ -111,14 +95,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 2G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
     logging: *default-logging
 
   mysql-service:
@@ -143,14 +119,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 45s
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 4G
-        reservations:
-          cpus: "0.5"
-          memory: 1G
     logging: *default-logging
 
   clickhouse-service:
@@ -178,14 +146,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: "4"
-          memory: 8G
-        reservations:
-          cpus: "1"
-          memory: 2G
     logging:
       driver: json-file
       options:
@@ -237,14 +197,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 90s
-    deploy:
-      resources:
-        limits:
-          cpus: "4"
-          memory: 8G
-        reservations:
-          cpus: "1"
-          memory: 2G
     logging:
       driver: json-file
       options:
@@ -258,9 +210,10 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       VECTUM_AUTH_TOKEN: ${VECTUM_AUTH_TOKEN:?VECTUM_AUTH_TOKEN is required}
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:?API_BEARER_TOKEN is required}
       ZENVIS_BUSINESS_SERVICE_BASE_URL: ${ZENVIS_BUSINESS_SERVICE_BASE_URL:-http://zenvis-backend:11001}
       ZENVIS_BUSINESS_SERVICE_INSTANCE_ID: ${ZENVIS_BUSINESS_SERVICE_INSTANCE_ID:-}
-      VECTUM_VECTOR_ALLOWED_ENV: CLICKHOUSE_PASSWORD,KAFKA_BOOTSTRAP_SERVERS,CLICKHOUSE_ENDPOINT,CLICKHOUSE_DATABASE,CLICKHOUSE_USER
+      VECTUM_VECTOR_ALLOWED_ENV: CLICKHOUSE_PASSWORD,KAFKA_BOOTSTRAP_SERVERS,CLICKHOUSE_ENDPOINT,CLICKHOUSE_DATABASE,CLICKHOUSE_USER,API_BEARER_TOKEN,ZENVIS_BUSINESS_SERVICE_BASE_URL
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_ENDPOINT: http://clickhouse-service:8123
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-zenvis}
@@ -283,14 +236,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 4G
-        reservations:
-          cpus: "0.5"
-          memory: 1G
     logging:
       driver: json-file
       options:
@@ -317,14 +262,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 1G
-        reservations:
-          cpus: "0.25"
-          memory: 256M
     logging: *default-logging
 
 networks:

@@ -39,20 +39,23 @@ public class AnalysisTaskScheduleServiceImpl implements AnalysisTaskScheduleServ
     }
 
     @Override
-    public PageRowsVo<AnalysisTaskScheduleVo> getPageList(AnalysisTaskScheduleSearchDto condition) {
+    public PageRowsVo<AnalysisTaskScheduleVo> getPageList(AnalysisTaskScheduleSearchDto condition,
+                                                          Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
         AnalysisTaskScheduleSearchDto search = condition == null
                 ? new AnalysisTaskScheduleSearchDto() : condition;
         Pageable pageable = PageRequest.of(Math.max(search.getPage(), 1) - 1,
                 Math.max(search.getPerPage(), 1));
         Page<AnalysisTaskSchedule> page = scheduleRepository.findByPage(
-                pageable, StringUtils.trimToNull(search.getName()), search.getEnabled());
+                pageable, StringUtils.trimToNull(search.getName()), search.getEnabled(), ownerId);
         return new PageRowsVo<>(page.getContent().stream().map(AnalysisTaskScheduleVo::new).toList(),
                 page.getTotalElements());
     }
 
     @Override
     @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
-    public AnalysisTaskSchedule create(AnalysisTaskScheduleDto dto) {
+    public AnalysisTaskSchedule create(AnalysisTaskScheduleDto dto, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
         normalizeAndValidate(dto);
         AnalysisTaskSchedule schedule = new AnalysisTaskSchedule();
         schedule.updateFromDto(dto);
@@ -60,44 +63,75 @@ public class AnalysisTaskScheduleServiceImpl implements AnalysisTaskScheduleServ
         schedule.setLastError(null);
         schedule.setNextFireTime(Boolean.TRUE.equals(schedule.getEnabled())
                 ? nextFireTime(schedule.getCronExpression(), new Date()) : null);
+        schedule.setCreateBy(ownerId);
+        schedule.setUpdateBy(ownerId);
         return scheduleRepository.save(schedule);
     }
 
     @Override
     @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
-    public Boolean update(Long id, AnalysisTaskScheduleDto dto) {
+    public Boolean update(Long id, AnalysisTaskScheduleDto dto, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        AnalysisTaskSchedule schedule = requireOwnedScheduleForUpdate(id, ownerId);
         normalizeAndValidate(dto);
-        AnalysisTaskSchedule schedule = scheduleRepository.findByIdForUpdate(id.intValue()).orElse(null);
-        if (schedule == null) {
-            return false;
-        }
         schedule.updateFromDto(dto);
         schedule.setLastError(null);
         schedule.setNextFireTime(Boolean.TRUE.equals(schedule.getEnabled())
                 ? nextFireTime(schedule.getCronExpression(), new Date()) : null);
+        schedule.setUpdateBy(ownerId);
         scheduleRepository.save(schedule);
         return true;
     }
 
     @Override
-    public AnalysisTaskScheduleVo info(Long id) {
-        return scheduleRepository.findById(id.intValue()).map(AnalysisTaskScheduleVo::new).orElse(null);
+    public AnalysisTaskScheduleVo info(Long id, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        if (id == null) {
+            return null;
+        }
+        try {
+            return scheduleRepository.findByIdAndCreateBy(Math.toIntExact(id), ownerId)
+                    .map(AnalysisTaskScheduleVo::new).orElse(null);
+        } catch (ArithmeticException e) {
+            return null;
+        }
     }
 
     @Override
     @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
-    public AnalysisTaskScheduleVo setEnabled(Long id, boolean enabled) {
-        AnalysisTaskSchedule schedule = scheduleRepository.findByIdForUpdate(id.intValue())
-                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "AI分析周期任务不存在"));
+    public AnalysisTaskScheduleVo setEnabled(Long id, boolean enabled, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        AnalysisTaskSchedule schedule = requireOwnedScheduleForUpdate(id, ownerId);
         schedule.setEnabled(enabled).setLastError(null);
         schedule.setNextFireTime(enabled ? nextFireTime(schedule.getCronExpression(), new Date()) : null);
+        schedule.setUpdateBy(ownerId);
         return new AnalysisTaskScheduleVo(scheduleRepository.save(schedule));
     }
 
     @Override
     @Transactional(transactionManager = "mysqlTransactionManager", rollbackFor = Exception.class)
-    public void delete(Long id) {
-        scheduleRepository.deleteById(id.intValue());
+    public void delete(Long id, Integer currentUserId) {
+        AnalysisTaskSchedule schedule = requireOwnedScheduleForUpdate(id, requireUserId(currentUserId));
+        scheduleRepository.deleteById(schedule.getId());
+    }
+
+    private AnalysisTaskSchedule requireOwnedScheduleForUpdate(Long id, Integer ownerId) {
+        if (id == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        try {
+            return scheduleRepository.findOwnedByIdForUpdate(Math.toIntExact(id), ownerId)
+                    .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_AUTHORITY));
+        } catch (ArithmeticException e) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+    }
+
+    private static Integer requireUserId(Integer currentUserId) {
+        if (currentUserId == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        return currentUserId;
     }
 
     private void normalizeAndValidate(AnalysisTaskScheduleDto dto) {

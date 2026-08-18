@@ -1,6 +1,7 @@
 package com.coolxer.service.system.impl;
 
 import com.coolxer.commons.enums.AnalysisTaskStatus;
+import com.coolxer.configuration.JpaAuditorContext;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
 import com.coolxer.dao.mysql.entity.AnalysisTaskSchedule;
 import com.coolxer.dao.mysql.repository.AnalysisTaskRepository;
@@ -70,7 +71,7 @@ public class AnalysisTaskScheduleDispatchService {
         try {
             skillService.validateEnabledSkillIds(new ArrayList<>(schedule.getSkillIds()));
             AnalysisTask task = buildTask(schedule, fireTime);
-            taskRepository.saveAndFlush(task);
+            JpaAuditorContext.callWith(schedule.getCreateBy(), () -> taskRepository.saveAndFlush(task));
             schedule.setLastFireTime(fireTime)
                     .setNextFireTime(nextTime)
                     .setGeneratedCount((schedule.getGeneratedCount() == null ? 0 : schedule.getGeneratedCount()) + 1)

@@ -47,7 +47,8 @@ public class AnalysisTaskController extends BaseController {
     @PostMapping({"/add"})
     public ResponseWrap<?> add(@Valid @RequestBody AnalysisTaskDto analysisTaskDto) {
         try {
-            return ResponseWrap.success(new AnalysisTaskVo(analysisTaskService.create(analysisTaskDto)));
+            return ResponseWrap.success(new AnalysisTaskVo(
+                    analysisTaskService.create(analysisTaskDto, currentUserId())));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -56,7 +57,7 @@ public class AnalysisTaskController extends BaseController {
     @DeleteMapping({"/{id}"})
     public ResponseWrap<?> delete(@PathVariable("id") Long id) {
         try {
-            analysisTaskService.delete(id);
+            analysisTaskService.delete(id, currentUserId());
             return ResponseWrap.success("删除成功");
         } catch (Exception e) {
             return ResponseWrap.fail(e);
@@ -66,7 +67,7 @@ public class AnalysisTaskController extends BaseController {
     @DeleteMapping({"/bulk/{ids}"})
     public ResponseWrap<?> bulkDelete(@PathVariable("ids") List<Long> ids) {
         try {
-            analysisTaskService.deleteByIds(ids);
+            analysisTaskService.deleteByIds(ids, currentUserId());
             return ResponseWrap.success("删除成功");
         } catch (Exception e) {
             return ResponseWrap.fail(e);
@@ -76,7 +77,7 @@ public class AnalysisTaskController extends BaseController {
     @PostMapping({"/{id}/update"})
     public ResponseWrap<?> update(@PathVariable("id") Long id, @Valid @RequestBody AnalysisTaskDto analysisTaskDto) {
         try {
-            if (analysisTaskService.update(id, analysisTaskDto)) {
+            if (analysisTaskService.update(id, analysisTaskDto, currentUserId())) {
                 return ResponseWrap.success("修改成功");
             }
             return ResponseWrap.fail();
@@ -88,7 +89,8 @@ public class AnalysisTaskController extends BaseController {
     @GetMapping({"/list"})
     public ResponseWrap<PageRowsVo<AnalysisTaskVo>> list(AnalysisTaskSearchDto analysisTaskSearchDto) {
         try {
-            return ResponseWrap.success(analysisTaskService.getPageList(analysisTaskSearchDto));
+            return ResponseWrap.success(
+                    analysisTaskService.getPageList(analysisTaskSearchDto, currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -97,7 +99,7 @@ public class AnalysisTaskController extends BaseController {
     @GetMapping({"/{id}/view"})
     public ResponseWrap<AnalysisTaskVo> query(@PathVariable("id") Long id) {
         try {
-            AnalysisTaskVo analysisTaskVo = analysisTaskService.detail(id);
+            AnalysisTaskVo analysisTaskVo = analysisTaskService.detail(id, currentUserId());
             if (analysisTaskVo == null) {
                 return ResponseWrap.fail();
             }
@@ -110,7 +112,7 @@ public class AnalysisTaskController extends BaseController {
     @PostMapping({"/{id}/enqueue"})
     public ResponseWrap<AnalysisTaskVo> enqueue(@PathVariable("id") Long id) {
         try {
-            return ResponseWrap.success(analysisTaskService.enqueue(id));
+            return ResponseWrap.success(analysisTaskService.enqueue(id, currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -119,7 +121,7 @@ public class AnalysisTaskController extends BaseController {
     @PostMapping({"/{id}/cancel"})
     public ResponseWrap<AnalysisTaskVo> cancel(@PathVariable("id") Long id) {
         try {
-            return ResponseWrap.success(analysisTaskService.cancel(id));
+            return ResponseWrap.success(analysisTaskService.cancel(id, currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -128,7 +130,7 @@ public class AnalysisTaskController extends BaseController {
     @PostMapping({"/queue/run-once"})
     public ResponseWrap<AnalysisTaskVo> runOnce() {
         try {
-            return ResponseWrap.success(analysisTaskService.executeNextTask());
+            return ResponseWrap.success(analysisTaskService.executeNextTask(currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(ResultCodeEnum.UNKNOWN_ERROR);
         }
@@ -137,7 +139,7 @@ public class AnalysisTaskController extends BaseController {
     @GetMapping({"/queue/status"})
     public ResponseWrap<AnalysisTaskQueueVo> queueStatus() {
         try {
-            return ResponseWrap.success(analysisTaskService.queueStatus());
+            return ResponseWrap.success(analysisTaskService.queueStatus(currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -177,16 +179,18 @@ public class AnalysisTaskController extends BaseController {
     }
 
     private AnalysisTaskVo requireTaskApprovalAccess(Long id, User currentUser) {
-        AnalysisTaskVo task = analysisTaskService.info(id);
+        AnalysisTaskVo task = analysisTaskService.info(id, currentUser == null ? null : currentUser.getId());
         if (task == null) {
             throw new ApiException(404, "AI分析任务不存在");
         }
-        boolean superAdmin = currentUser != null && Boolean.TRUE.equals(currentUser.getIsSuperAdmin());
-        boolean owner = currentUser != null && task.getCreateBy() != null
-                && currentUser.getId().equals(task.getCreateBy());
-        if (!superAdmin && !owner) {
+        return task;
+    }
+
+    private Integer currentUserId() {
+        User currentUser = getSessionUser();
+        if (currentUser == null) {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
         }
-        return task;
+        return currentUser.getId();
     }
 }

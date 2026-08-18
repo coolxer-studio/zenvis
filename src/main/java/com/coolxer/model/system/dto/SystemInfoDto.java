@@ -16,6 +16,11 @@ public class SystemInfoDto implements Serializable {
     private String systemTitle;
 
     /**
+     * 系统英文副标题
+     */
+    private String systemSubtitle;
+
+    /**
      * 产品名称
      */
     private String productName;

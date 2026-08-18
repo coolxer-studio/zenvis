@@ -11,29 +11,32 @@ import java.util.List;
 
 public interface AnalysisTaskService {
 
-    List<AnalysisTaskVo> findAll();
+    List<AnalysisTaskVo> findAll(Integer currentUserId);
 
-    PageRowsVo<AnalysisTaskVo> getPageList(AnalysisTaskSearchDto analysisTaskSearchDto);
+    PageRowsVo<AnalysisTaskVo> getPageList(AnalysisTaskSearchDto analysisTaskSearchDto,
+                                           Integer currentUserId);
 
-    AnalysisTask create(AnalysisTaskDto analysisTaskDto);
+    AnalysisTask create(AnalysisTaskDto analysisTaskDto, Integer currentUserId);
 
-    Boolean update(Long id, AnalysisTaskDto analysisTaskDto);
+    Boolean update(Long id, AnalysisTaskDto analysisTaskDto, Integer currentUserId);
 
-    void delete(Long id);
+    void delete(Long id, Integer currentUserId);
 
-    void deleteByIds(List<Long> ids);
+    void deleteByIds(List<Long> ids, Integer currentUserId);
 
-    AnalysisTaskVo info(Long id);
+    AnalysisTaskVo info(Long id, Integer currentUserId);
 
-    AnalysisTaskVo detail(Long id);
+    AnalysisTaskVo detail(Long id, Integer currentUserId);
 
-    AnalysisTaskVo enqueue(Long id);
+    AnalysisTaskVo enqueue(Long id, Integer currentUserId);
 
-    AnalysisTaskVo cancel(Long id);
+    AnalysisTaskVo cancel(Long id, Integer currentUserId);
 
     AnalysisTaskVo executeNextTask();
 
-    AnalysisTaskQueueVo queueStatus();
+    AnalysisTaskVo executeNextTask(Integer currentUserId);
+
+    AnalysisTaskQueueVo queueStatus(Integer currentUserId);
 
     void recoverRunningTasks();
 }

@@ -10,6 +10,8 @@ public class SystemInfoVo {
 
     private String systemTitle;
 
+    private String systemSubtitle;
+
     private String systemIcon;
 
     private String systemLogo;

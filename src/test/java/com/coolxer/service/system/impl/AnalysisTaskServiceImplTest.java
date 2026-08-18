@@ -1,10 +1,14 @@
 package com.coolxer.service.system.impl;
 
+import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
+import com.coolxer.commons.enums.AnalysisTaskStatus;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.JacksonConfig;
-import com.coolxer.commons.enums.AnalysisTaskStatus;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
 import com.coolxer.dao.mysql.repository.AnalysisTaskRepository;
+import com.coolxer.model.system.dto.AnalysisTaskDto;
+import com.coolxer.model.system.dto.AnalysisTaskSearchDto;
 import com.coolxer.model.system.vo.AnalysisTaskVo;
 import com.coolxer.service.dih.AIBaseService;
 import com.coolxer.service.dih.AgentLlmService;
@@ -15,6 +19,8 @@ import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
@@ -26,7 +32,9 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -193,6 +201,60 @@ class AnalysisTaskServiceImplTest {
         assertThat(task.getExecutionId()).isEqualTo("execution-1");
         assertThat(task.getFinishTime()).isNotNull();
         assertThat(task.getResult()).isEqualTo("result");
+    }
+
+    @Test
+    void pageListAndDetailAreScopedToCurrentUser() {
+        AnalysisTaskRepository repository = mock(AnalysisTaskRepository.class);
+        AnalysisTask ownedTask = new AnalysisTask().setName("我的任务");
+        ownedTask.setId(7);
+        when(repository.findByPage(any(Pageable.class), any(), any(), any(), any(), any(), eq(42)))
+                .thenReturn(new PageImpl<>(List.of(ownedTask)));
+        when(repository.findByIdAndCreateBy(7, 42)).thenReturn(Optional.of(ownedTask));
+        when(repository.findByIdAndCreateBy(7, 43)).thenReturn(Optional.empty());
+
+        AnalysisTaskServiceImpl service = new AnalysisTaskServiceImpl();
+        ReflectionTestUtils.setField(service, "analysisTaskRepository", repository);
+        ReflectionTestUtils.setField(service, "chatMessagePartParser", new ChatMessagePartParser());
+
+        assertThat(service.getPageList(new AnalysisTaskSearchDto(), 42).getRows())
+                .extracting(AnalysisTaskVo::getName)
+                .containsExactly("我的任务");
+        assertThat(service.detail(7L, 42)).isNotNull();
+        assertThat(service.detail(7L, 43)).isNull();
+        verify(repository).findByPage(any(Pageable.class), any(), any(), any(), any(), any(), eq(42));
+    }
+
+    @Test
+    void createBindsTaskToCurrentUser() {
+        AnalysisTaskRepository repository = mock(AnalysisTaskRepository.class);
+        SkillService skillService = mock(SkillService.class);
+        when(repository.save(any(AnalysisTask.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        AnalysisTaskServiceImpl service = new AnalysisTaskServiceImpl();
+        ReflectionTestUtils.setField(service, "analysisTaskRepository", repository);
+        ReflectionTestUtils.setField(service, "skillService", skillService);
+        AnalysisTaskDto dto = new AnalysisTaskDto();
+        dto.setName("我的任务");
+        dto.setPrompt("分析数据");
+        dto.setApprovalMode(AnalysisTaskApprovalMode.MANUAL);
+
+        AnalysisTask task = service.create(dto, 42);
+
+        assertThat(task.getCreateBy()).isEqualTo(42);
+        assertThat(task.getUpdateBy()).isEqualTo(42);
+    }
+
+    @Test
+    void anotherUserCannotMutateTaskById() {
+        AnalysisTaskRepository repository = mock(AnalysisTaskRepository.class);
+        when(repository.findByIdAndCreateBy(7, 43)).thenReturn(Optional.empty());
+        AnalysisTaskServiceImpl service = new AnalysisTaskServiceImpl();
+        ReflectionTestUtils.setField(service, "analysisTaskRepository", repository);
+
+        assertThatThrownBy(() -> service.delete(7L, 43))
+                .isInstanceOf(ApiException.class);
+        verify(repository, never()).deleteById(any());
     }
 
     private void createSkill(String id, boolean enabled, String agentType, String content) throws Exception {

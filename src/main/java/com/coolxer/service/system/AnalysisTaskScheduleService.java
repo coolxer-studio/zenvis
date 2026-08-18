@@ -8,15 +8,16 @@ import com.coolxer.model.system.vo.AnalysisTaskScheduleVo;
 
 public interface AnalysisTaskScheduleService {
 
-    PageRowsVo<AnalysisTaskScheduleVo> getPageList(AnalysisTaskScheduleSearchDto search);
+    PageRowsVo<AnalysisTaskScheduleVo> getPageList(AnalysisTaskScheduleSearchDto search,
+                                                   Integer currentUserId);
 
-    AnalysisTaskSchedule create(AnalysisTaskScheduleDto dto);
+    AnalysisTaskSchedule create(AnalysisTaskScheduleDto dto, Integer currentUserId);
 
-    Boolean update(Long id, AnalysisTaskScheduleDto dto);
+    Boolean update(Long id, AnalysisTaskScheduleDto dto, Integer currentUserId);
 
-    AnalysisTaskScheduleVo info(Long id);
+    AnalysisTaskScheduleVo info(Long id, Integer currentUserId);
 
-    AnalysisTaskScheduleVo setEnabled(Long id, boolean enabled);
+    AnalysisTaskScheduleVo setEnabled(Long id, boolean enabled, Integer currentUserId);
 
-    void delete(Long id);
+    void delete(Long id, Integer currentUserId);
 }

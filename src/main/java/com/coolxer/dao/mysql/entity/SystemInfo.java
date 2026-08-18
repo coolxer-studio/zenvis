@@ -29,6 +29,12 @@ public class SystemInfo extends BaseEntity {
     private String systemTitle;
 
     /**
+     * 系统英文副标题
+     */
+    @Column(name = "system_subtitle")
+    private String systemSubtitle;
+
+    /**
      * 系统Icon
      */
     @Column(name = "system_icon")

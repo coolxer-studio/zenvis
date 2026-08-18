@@ -16,15 +16,19 @@ public interface AnalysisTaskScheduleRepository extends BaseRepository<AnalysisT
 
     Optional<AnalysisTaskSchedule> findById(Integer id);
 
+    Optional<AnalysisTaskSchedule> findByIdAndCreateBy(Integer id, Integer createBy);
+
     @Query("""
             SELECT schedule FROM AnalysisTaskSchedule schedule
             WHERE (:name IS NULL OR schedule.name LIKE CONCAT('%', :name, '%'))
               AND (:enabled IS NULL OR schedule.enabled = :enabled)
+              AND schedule.createBy = :createBy
             ORDER BY schedule.updateTime DESC
             """)
     Page<AnalysisTaskSchedule> findByPage(Pageable pageable,
                                           @Param("name") String name,
-                                          @Param("enabled") Boolean enabled);
+                                          @Param("enabled") Boolean enabled,
+                                          @Param("createBy") Integer createBy);
 
     @Query("""
             SELECT schedule.id FROM AnalysisTaskSchedule schedule
@@ -38,4 +42,12 @@ public interface AnalysisTaskScheduleRepository extends BaseRepository<AnalysisT
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT schedule FROM AnalysisTaskSchedule schedule WHERE schedule.id = :id")
     Optional<AnalysisTaskSchedule> findByIdForUpdate(@Param("id") Integer id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT schedule FROM AnalysisTaskSchedule schedule
+            WHERE schedule.id = :id AND schedule.createBy = :createBy
+            """)
+    Optional<AnalysisTaskSchedule> findOwnedByIdForUpdate(
+            @Param("id") Integer id, @Param("createBy") Integer createBy);
 }

@@ -1,7 +1,7 @@
 package com.coolxer.dao.mysql.repository;
 
-import com.coolxer.commons.enums.AnalysisTaskStatus;
 import com.coolxer.commons.enums.AnalysisTaskApprovalMode;
+import com.coolxer.commons.enums.AnalysisTaskStatus;
 import com.coolxer.dao.mysql.constant.MysqlFinalTableName;
 import com.coolxer.dao.mysql.entity.AnalysisTask;
 import org.springframework.data.domain.Page;
@@ -28,9 +28,15 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
 
     Optional<AnalysisTask> findById(Integer id);
 
+    Optional<AnalysisTask> findByIdAndCreateBy(Integer id, Integer createBy);
+
+    List<AnalysisTask> findAllByCreateBy(Integer createBy);
+
     List<AnalysisTask> findByStatus(AnalysisTaskStatus status);
 
     long countByStatus(AnalysisTaskStatus status);
+
+    long countByStatusAndCreateBy(AnalysisTaskStatus status, Integer createBy);
 
     long countByStatusIn(List<AnalysisTaskStatus> statuses);
 
@@ -41,6 +47,9 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
 
     Optional<AnalysisTask> findFirstByStatusOrderByStartTimeAsc(AnalysisTaskStatus status);
 
+    Optional<AnalysisTask> findFirstByStatusAndCreateByOrderByStartTimeAsc(
+            AnalysisTaskStatus status, Integer createBy);
+
     @Query("""
             SELECT a FROM AnalysisTask a
             WHERE (:name IS NULL OR a.name LIKE CONCAT('%', :name, '%'))
@@ -48,6 +57,7 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
               AND (:model IS NULL OR a.model = :model)
               AND (:approvalMode IS NULL OR a.approvalMode = :approvalMode)
               AND (:scheduleId IS NULL OR a.scheduleId = :scheduleId)
+              AND a.createBy = :createBy
             ORDER BY a.updateTime DESC
             """)
     Page<AnalysisTask> findByPage(Pageable pageable,
@@ -55,24 +65,28 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
                                   @Param("status") AnalysisTaskStatus status,
                                   @Param("model") String model,
                                   @Param("approvalMode") AnalysisTaskApprovalMode approvalMode,
-                                  @Param("scheduleId") Integer scheduleId);
+                                  @Param("scheduleId") Integer scheduleId,
+                                  @Param("createBy") Integer createBy);
 
     @Query(nativeQuery = true,
             value = "SELECT a.* FROM " + MysqlFinalTableName.T_AI_ANALYSIS_TASK + " a " +
                     "WHERE a.status = 'PENDING' " +
+                    "AND (:createBy IS NULL OR a.create_by = :createBy) " +
                     "AND (a.scheduled_time IS NULL OR a.scheduled_time <= :now) " +
                     "ORDER BY CASE WHEN a.scheduled_time IS NULL THEN 1 ELSE 0 END ASC, " +
                     "a.scheduled_time ASC, a.priority DESC, a.create_time ASC, a.id ASC " +
                     "LIMIT 1")
-    Optional<AnalysisTask> findNextReadyTask(@Param("now") Date now);
+    Optional<AnalysisTask> findNextReadyTask(@Param("now") Date now,
+                                             @Param("createBy") Integer createBy);
 
     @Query(nativeQuery = true,
             value = "SELECT a.* FROM " + MysqlFinalTableName.T_AI_ANALYSIS_TASK + " a " +
                     "WHERE a.status = 'PENDING' " +
+                    "AND (:createBy IS NULL OR a.create_by = :createBy) " +
                     "ORDER BY CASE WHEN a.scheduled_time IS NULL THEN 1 ELSE 0 END ASC, " +
                     "a.scheduled_time ASC, a.priority DESC, a.create_time ASC, a.id ASC " +
                     "LIMIT 1")
-    Optional<AnalysisTask> findNextPendingTask();
+    Optional<AnalysisTask> findNextPendingTask(@Param("createBy") Integer createBy);
 
     @Modifying
     @Transactional(transactionManager = "mysqlTransactionManager")
@@ -81,10 +95,12 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
                     "SET status = 'RUNNING', execution_id = :executionId, start_time = :now, " +
                     "finish_time = NULL, error_message = NULL, " +
                     "run_count = COALESCE(run_count, 0) + 1, lock_version = COALESCE(lock_version, 0) + 1 " +
-                    "WHERE id = :id AND status = 'PENDING'")
+                    "WHERE id = :id AND status = 'PENDING' " +
+                    "AND (:createBy IS NULL OR create_by = :createBy)")
     int claimPendingTask(@Param("id") Integer id,
                          @Param("executionId") String executionId,
-                         @Param("now") Date now);
+                         @Param("now") Date now,
+                         @Param("createBy") Integer createBy);
 
     @Modifying
     @Transactional(transactionManager = "mysqlTransactionManager")
@@ -97,6 +113,9 @@ public interface AnalysisTaskRepository extends BaseRepository<AnalysisTask, Int
             SELECT COUNT(a) FROM AnalysisTask a
             WHERE a.status = :status
               AND (a.scheduledTime IS NULL OR a.scheduledTime <= :now)
+              AND a.createBy = :createBy
             """)
-    long countReadyTasks(@Param("status") AnalysisTaskStatus status, @Param("now") Date now);
+    long countReadyTasks(@Param("status") AnalysisTaskStatus status,
+                         @Param("now") Date now,
+                         @Param("createBy") Integer createBy);
 }

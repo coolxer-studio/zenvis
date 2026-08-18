@@ -141,12 +141,15 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     }
 
     @Override
-    public List<AnalysisTaskVo> findAll() {
-        return analysisTaskRepository.findAll().stream().map(this::toVo).toList();
+    public List<AnalysisTaskVo> findAll(Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        return analysisTaskRepository.findAllByCreateBy(ownerId).stream().map(this::toVo).toList();
     }
 
     @Override
-    public PageRowsVo<AnalysisTaskVo> getPageList(AnalysisTaskSearchDto condition) {
+    public PageRowsVo<AnalysisTaskVo> getPageList(AnalysisTaskSearchDto condition,
+                                                  Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
         try {
             AnalysisTaskSearchDto search = condition == null ? new AnalysisTaskSearchDto() : condition;
             Pageable pageable = PageRequest.of(Math.max(search.getPage(), 1) - 1, Math.max(search.getPerPage(), 1));
@@ -156,7 +159,8 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
                     search.getStatus(),
                     blankToNull(search.getModel()),
                     search.getApprovalMode(),
-                    search.getScheduleId()
+                    search.getScheduleId(),
+                    ownerId
             );
             return new PageRowsVo<>(page.getContent().stream().map(this::toVo).toList(), page.getTotalElements());
         } catch (Exception e) {
@@ -166,7 +170,8 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     }
 
     @Override
-    public AnalysisTask create(AnalysisTaskDto dto) {
+    public AnalysisTask create(AnalysisTaskDto dto, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
         checkCreateOrUpdate(dto);
         List<String> skillIds = normalizeSkillIds(dto.getSkillIds());
         skillService.validateEnabledSkillIds(skillIds);
@@ -177,58 +182,59 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         task.setPriority(defaultPriority(task.getPriority()));
         task.setRunCount(0);
         task.setExecutionId(UUID.randomUUID().toString());
+        task.setCreateBy(ownerId);
+        task.setUpdateBy(ownerId);
         return analysisTaskRepository.save(task);
     }
 
     @Override
-    public Boolean update(Long id, AnalysisTaskDto dto) {
+    public Boolean update(Long id, AnalysisTaskDto dto, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        AnalysisTask task = requireOwnedTask(id, ownerId);
         checkCreateOrUpdate(dto);
         List<String> skillIds = normalizeSkillIds(dto.getSkillIds());
         skillService.validateEnabledSkillIds(skillIds);
         dto.setSkillIds(skillIds);
-        AnalysisTask task = analysisTaskRepository.findById(id).orElse(null);
-        if (task == null) {
-            return false;
-        }
         checkNotRunning(task, "执行中或等待审批的AI分析任务不能修改");
         task.updateFromDto(dto);
         task.setPriority(defaultPriority(task.getPriority()));
+        task.setUpdateBy(ownerId);
         analysisTaskRepository.save(task);
         return true;
     }
 
     @Override
-    public void delete(Long id) {
-        AnalysisTask task = analysisTaskRepository.findById(id).orElse(null);
-        if (task == null) {
-            return;
-        }
+    public void delete(Long id, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        AnalysisTask task = requireOwnedTask(id, ownerId);
         checkNotRunning(task, "执行中或等待审批的AI分析任务不能删除");
         taskToolGrantService.revokeExecution(task.getExecutionId());
-        analysisTaskRepository.deleteById(id);
+        analysisTaskRepository.deleteById(task.getId());
     }
 
     @Override
-    public void deleteByIds(List<Long> ids) {
+    public void deleteByIds(List<Long> ids, Integer currentUserId) {
         if (ids != null) {
-            ids.forEach(this::delete);
+            ids.forEach(id -> delete(id, currentUserId));
         }
     }
 
     @Override
-    public AnalysisTaskVo info(Long id) {
-        return analysisTaskRepository.findById(id).map(this::toVo).orElse(null);
+    public AnalysisTaskVo info(Long id, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        return findOwnedTask(id, ownerId).map(this::toVo).orElse(null);
     }
 
     @Override
-    public AnalysisTaskVo detail(Long id) {
-        return analysisTaskRepository.findById(id).map(this::toDetailVo).orElse(null);
+    public AnalysisTaskVo detail(Long id, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        return findOwnedTask(id, ownerId).map(this::toDetailVo).orElse(null);
     }
 
     @Override
-    public AnalysisTaskVo enqueue(Long id) {
-        AnalysisTask task = analysisTaskRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "AI分析任务不存在"));
+    public AnalysisTaskVo enqueue(Long id, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        AnalysisTask task = requireOwnedTask(id, ownerId);
         checkNotRunning(task, "执行中或等待审批的AI分析任务不能重新入队");
         skillService.validateEnabledSkillIds(new ArrayList<>(task.getSkillIds()));
         taskToolGrantService.revokeExecution(task.getExecutionId());
@@ -238,13 +244,14 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         task.setErrorMessage(null);
         task.setStartTime(null);
         task.setFinishTime(null);
+        task.setUpdateBy(ownerId);
         return toVo(analysisTaskRepository.save(task));
     }
 
     @Override
-    public AnalysisTaskVo cancel(Long id) {
-        AnalysisTask task = analysisTaskRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "AI分析任务不存在"));
+    public AnalysisTaskVo cancel(Long id, Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
+        AnalysisTask task = requireOwnedTask(id, ownerId);
         if (task.getStatus() == AnalysisTaskStatus.CANCELED) {
             return toVo(task);
         }
@@ -269,7 +276,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
             task.setStatus(AnalysisTaskStatus.CANCELED).setFinishTime(now);
             analysisTaskRepository.save(task);
         }
-        return info(id);
+        return info(id, ownerId);
     }
 
     /**
@@ -277,6 +284,15 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
      */
     @Override
     public AnalysisTaskVo executeNextTask() {
+        return executeNextTaskForOwner(null);
+    }
+
+    @Override
+    public AnalysisTaskVo executeNextTask(Integer currentUserId) {
+        return executeNextTaskForOwner(requireUserId(currentUserId));
+    }
+
+    private AnalysisTaskVo executeNextTaskForOwner(Integer ownerId) {
         ensureExecutor();
         if (analysisTaskRepository.countByStatus(AnalysisTaskStatus.WAITING_APPROVAL) >= maxSuspended) {
             log.debug("等待审批的AI分析任务已达上限: {}", maxSuspended);
@@ -288,7 +304,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
 
         dispatchLock.lock();
         try {
-            Optional<AnalysisTask> candidate = analysisTaskRepository.findNextReadyTask(new Date());
+            Optional<AnalysisTask> candidate = analysisTaskRepository.findNextReadyTask(new Date(), ownerId);
             if (candidate.isEmpty()) {
                 runningSlots.release();
                 return null;
@@ -296,7 +312,7 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
             AnalysisTask selected = candidate.get();
             String executionId = StringUtils.defaultIfBlank(selected.getExecutionId(), UUID.randomUUID().toString());
             Date now = new Date();
-            if (analysisTaskRepository.claimPendingTask(selected.getId(), executionId, now) != 1) {
+            if (analysisTaskRepository.claimPendingTask(selected.getId(), executionId, now, ownerId) != 1) {
                 runningSlots.release();
                 return null;
             }
@@ -323,20 +339,24 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
     }
 
     @Override
-    public AnalysisTaskQueueVo queueStatus() {
+    public AnalysisTaskQueueVo queueStatus(Integer currentUserId) {
+        Integer ownerId = requireUserId(currentUserId);
         Date now = new Date();
         AnalysisTaskVo runningTask = analysisTaskRepository
-                .findFirstByStatusOrderByStartTimeAsc(AnalysisTaskStatus.RUNNING)
+                .findFirstByStatusAndCreateByOrderByStartTimeAsc(AnalysisTaskStatus.RUNNING, ownerId)
                 .map(this::toVo)
                 .orElse(null);
-        AnalysisTaskVo nextTask = analysisTaskRepository.findNextPendingTask().map(this::toVo).orElse(null);
-        long running = analysisTaskRepository.countByStatus(AnalysisTaskStatus.RUNNING);
-        long waiting = analysisTaskRepository.countByStatus(AnalysisTaskStatus.WAITING_APPROVAL);
+        AnalysisTaskVo nextTask = analysisTaskRepository.findNextPendingTask(ownerId)
+                .map(this::toVo).orElse(null);
+        long running = analysisTaskRepository.countByStatusAndCreateBy(
+                AnalysisTaskStatus.RUNNING, ownerId);
+        long waiting = analysisTaskRepository.countByStatusAndCreateBy(
+                AnalysisTaskStatus.WAITING_APPROVAL, ownerId);
         return new AnalysisTaskQueueVo(
                 runningTask,
                 nextTask,
-                analysisTaskRepository.countByStatus(AnalysisTaskStatus.PENDING),
-                analysisTaskRepository.countReadyTasks(AnalysisTaskStatus.PENDING, now),
+                analysisTaskRepository.countByStatusAndCreateBy(AnalysisTaskStatus.PENDING, ownerId),
+                analysisTaskRepository.countReadyTasks(AnalysisTaskStatus.PENDING, now, ownerId),
                 running,
                 waiting,
                 runningSlots == null ? 0 : runningSlots.availablePermits(),
@@ -593,6 +613,29 @@ public class AnalysisTaskServiceImpl implements AnalysisTaskService {
         if (dto.getApprovalMode() == null) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "请选择MCP审批模式");
         }
+    }
+
+    private Optional<AnalysisTask> findOwnedTask(Long id, Integer ownerId) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        try {
+            return analysisTaskRepository.findByIdAndCreateBy(Math.toIntExact(id), ownerId);
+        } catch (ArithmeticException e) {
+            return Optional.empty();
+        }
+    }
+
+    private AnalysisTask requireOwnedTask(Long id, Integer ownerId) {
+        return findOwnedTask(id, ownerId)
+                .orElseThrow(() -> new ApiException(ResultCodeEnum.NO_AUTHORITY));
+    }
+
+    private static Integer requireUserId(Integer currentUserId) {
+        if (currentUserId == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        return currentUserId;
     }
 
     private static void checkNotRunning(AnalysisTask task, String message) {

@@ -1,6 +1,9 @@
 package com.coolxer.controller.system;
 
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.controller.BaseController;
+import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.system.dto.AnalysisTaskScheduleDto;
@@ -32,7 +35,8 @@ public class AnalysisTaskScheduleController extends BaseController {
     @PostMapping("/add")
     public ResponseWrap<AnalysisTaskScheduleVo> add(@Valid @RequestBody AnalysisTaskScheduleDto dto) {
         try {
-            return ResponseWrap.success(new AnalysisTaskScheduleVo(scheduleService.create(dto)));
+            return ResponseWrap.success(new AnalysisTaskScheduleVo(
+                    scheduleService.create(dto, currentUserId())));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -42,7 +46,8 @@ public class AnalysisTaskScheduleController extends BaseController {
     public ResponseWrap<?> update(@PathVariable("id") Long id,
                                   @Valid @RequestBody AnalysisTaskScheduleDto dto) {
         try {
-            return scheduleService.update(id, dto) ? ResponseWrap.success("修改成功") : ResponseWrap.fail();
+            return scheduleService.update(id, dto, currentUserId())
+                    ? ResponseWrap.success("修改成功") : ResponseWrap.fail();
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -51,7 +56,7 @@ public class AnalysisTaskScheduleController extends BaseController {
     @GetMapping("/list")
     public ResponseWrap<PageRowsVo<AnalysisTaskScheduleVo>> list(AnalysisTaskScheduleSearchDto search) {
         try {
-            return ResponseWrap.success(scheduleService.getPageList(search));
+            return ResponseWrap.success(scheduleService.getPageList(search, currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -60,7 +65,7 @@ public class AnalysisTaskScheduleController extends BaseController {
     @GetMapping("/{id}/view")
     public ResponseWrap<AnalysisTaskScheduleVo> view(@PathVariable("id") Long id) {
         try {
-            AnalysisTaskScheduleVo schedule = scheduleService.info(id);
+            AnalysisTaskScheduleVo schedule = scheduleService.info(id, currentUserId());
             return schedule == null ? ResponseWrap.fail() : ResponseWrap.success(schedule);
         } catch (Exception e) {
             return ResponseWrap.fail(e);
@@ -72,7 +77,8 @@ public class AnalysisTaskScheduleController extends BaseController {
             @PathVariable("id") Long id,
             @Valid @RequestBody AnalysisTaskScheduleEnabledDto dto) {
         try {
-            return ResponseWrap.success(scheduleService.setEnabled(id, dto.getEnabled()));
+            return ResponseWrap.success(
+                    scheduleService.setEnabled(id, dto.getEnabled(), currentUserId()));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
@@ -81,10 +87,18 @@ public class AnalysisTaskScheduleController extends BaseController {
     @DeleteMapping("/{id}")
     public ResponseWrap<?> delete(@PathVariable("id") Long id) {
         try {
-            scheduleService.delete(id);
+            scheduleService.delete(id, currentUserId());
             return ResponseWrap.success("删除成功");
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }
+    }
+
+    private Integer currentUserId() {
+        User currentUser = getSessionUser();
+        if (currentUser == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        return currentUser.getId();
     }
 }

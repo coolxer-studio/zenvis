@@ -32,6 +32,10 @@ public class JpaAuditingConfiguration implements AuditorAware<Integer> {
     public Optional<Integer> getCurrentAuditor() {
 
         try {
+            Optional<Integer> backgroundAuditor = JpaAuditorContext.current();
+            if (backgroundAuditor.isPresent()) {
+                return backgroundAuditor;
+            }
             HashOperations<String, String, String> hashOperations = stringRedisTemplate.opsForHash();
             RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
             if (requestAttributes != null) {

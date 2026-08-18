@@ -90,6 +90,9 @@ public class SystemInfoServiceImpl implements SystemInfoService {
             if (systemInfoDto.getSystemTitle() != null) {
                 systemInfo.setSystemTitle(systemInfoDto.getSystemTitle());
             }
+            if (systemInfoDto.getSystemSubtitle() != null) {
+                systemInfo.setSystemSubtitle(systemInfoDto.getSystemSubtitle());
+            }
             if (systemInfoDto.getProductName() != null) {
                 systemInfo.setProductName(systemInfoDto.getProductName());
             }

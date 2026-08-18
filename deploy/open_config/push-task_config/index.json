@@ -17,7 +17,7 @@
           "api": "/zenvis/api/v1/system/push-task/add",
           "body": [
             {
-              "label": "数据推送服务名称",
+              "label": "数推服务名称",
               "name": "name",
               "type": "input-text",
               "required": true
@@ -71,7 +71,7 @@
         },
         {
           "name": "name",
-          "label": "数据推送服务名称",
+          "label": "数推服务名称",
           "type": "text",
           "searchable": true,
           "toggled": true
@@ -190,7 +190,7 @@
                   "api": "PUT:/zenvis/api/v1/system/push-task/$id",
                   "body": [
                     {
-                      "label": "数据推送服务名称",
+                      "label": "数推服务名称",
                       "name": "name",
                       "type": "input-text",
                       "required": true

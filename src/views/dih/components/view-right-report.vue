@@ -172,7 +172,7 @@
             <div class="artifact-info">
               <div class="artifact-name">{{ artifact.name || artifact.title || '报表文档' }}</div>
               <div class="artifact-meta">
-                {{ artifact.version || '未标记版本' }} · {{ artifact.createdAt || '未记录时间' }}
+                来源修订 {{ artifact.version || '未标记' }} · {{ artifact.createdAt || '未记录时间' }}
               </div>
             </div>
             <div class="artifact-actions">
@@ -280,6 +280,7 @@ import {
   emitDihEvent,
   useDihEventListener,
 } from '../events'
+import { shouldApplyIncomingReportDocument } from './report-document-sync'
 import type {
   ReportRecordEventDetail,
   SelectionRewriteCompletedEventDetail,
@@ -332,6 +333,8 @@ const isDirty = ref(false)
 const isSaving = ref(false)
 const saveConflict = ref(false)
 const isApplyingExternalDocument = ref(false)
+const persistedEditorHtml = ref('')
+const persistedReportTitle = ref('未命名报表')
 const workspaceHydrated = ref(false)
 const selectionMenuVisible = ref(false)
 const selectionMenuPosition = ref({ x: 0, y: 0 })
@@ -537,21 +540,31 @@ const generateOutline = () => {
 }
 
 const applyDocument = (document: ReportDocument | ReportArtifact) => {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+    autoSaveTimer = undefined
+  }
   isApplyingExternalDocument.value = true
   const nextTitle = document.title || document.name || '未命名报表'
+  const nextHtml = documentToHtml(document)
   currentDocument.value = {
     ...document,
     title: nextTitle,
     name: nextTitle,
   }
   reportTitle.value = nextTitle
-  valueHtml.value = documentToHtml(document)
+  valueHtml.value = nextHtml
+  persistedReportTitle.value = nextTitle
+  persistedEditorHtml.value = nextHtml
   generateOutline()
   isDirty.value = false
   saveConflict.value = false
   selectedMaterialIds.value = (document.sourceRefs || []).map(materialKey).filter(Boolean)
   activeTab.value = 'document'
   nextTick(() => {
+    persistedReportTitle.value = reportTitle.value
+    persistedEditorHtml.value = valueHtml.value
+    isDirty.value = false
     isApplyingExternalDocument.value = false
   })
 }
@@ -563,7 +576,13 @@ const applyWorkspace = (workspace: ReportWorkspace, applyIncomingDocument = true
     extraDataText.value = workspace.extraData
     emitDihEvent(REPORT_EXTRA_DATA_CHANGED_EVENT, { extraData: workspace.extraData })
   }
-  if (applyIncomingDocument && workspace.currentDocument?.content) {
+  if (applyIncomingDocument
+      && workspace.currentDocument?.content
+      && shouldApplyIncomingReportDocument(
+        currentDocument.value,
+        workspace.currentDocument,
+        isDirty.value,
+      )) {
     applyDocument(workspace.currentDocument)
   } else if (workspace.currentDocument) {
     currentDocument.value = {
@@ -581,7 +600,7 @@ const loadWorkspace = async (applyIncomingDocument = true) => {
       DihService.getReportMaterials(sessionRecordId.value).catch(() => []),
     ])
     materials.value = mergeMaterials(materials.value, availableMaterials)
-    applyWorkspace(workspace, applyIncomingDocument && !isDirty.value)
+    applyWorkspace(workspace, applyIncomingDocument)
   } catch (error) {
     console.warn('读取报表工作区失败，将使用会话摘要:', error)
   } finally {
@@ -598,10 +617,13 @@ const handleReportRecordsUpdated = async (detail: ReportRecordEventDetail) => {
   revisions.value = detail.revisions || []
   materials.value = mergeMaterials(materials.value, detail.materials || [])
   const incomingDocument = detail.currentDocument
+  const shouldApplyIncoming = shouldApplyIncomingReportDocument(
+    currentDocument.value,
+    incomingDocument,
+    isDirty.value,
+  )
   if (incomingDocument?.content) {
-    const incomingId = incomingDocument.id || incomingDocument.documentId
-    const currentId = currentDocument.value?.id || currentDocument.value?.documentId
-    if (!isDirty.value || incomingId !== currentId) {
+    if (shouldApplyIncoming) {
       applyDocument(incomingDocument)
     }
   }
@@ -618,18 +640,21 @@ const handleEditorChange = () => {
   if (!workspaceHydrated.value && !hasMeaningfulEditorContent(valueHtml.value)) {
     return
   }
-  if (!isApplyingExternalDocument.value) {
-    isDirty.value = true
-    saveConflict.value = false
-    scheduleAutoSave()
+  if (isApplyingExternalDocument.value) {
+    persistedEditorHtml.value = valueHtml.value
+    persistedReportTitle.value = reportTitle.value
+    isDirty.value = false
+    return
   }
+  markDirty()
 }
 
 const markDirty = () => {
   if (!isApplyingExternalDocument.value) {
-    isDirty.value = true
+    isDirty.value = valueHtml.value !== persistedEditorHtml.value
+      || reportTitle.value !== persistedReportTitle.value
     saveConflict.value = false
-    scheduleAutoSave()
+    if (isDirty.value) scheduleAutoSave()
   }
 }
 
@@ -943,7 +968,10 @@ const saveDocument = async (options: { silent?: boolean } = {}) => {
       currentDocument.value = workspace.currentDocument
       documents.value = [workspace.currentDocument]
     }
-    isDirty.value = valueHtml.value !== editorSnapshot || reportTitle.value !== titleSnapshot
+    persistedEditorHtml.value = editorSnapshot
+    persistedReportTitle.value = titleSnapshot
+    isDirty.value = valueHtml.value !== persistedEditorHtml.value
+      || reportTitle.value !== persistedReportTitle.value
     saveConflict.value = false
     if (!options.silent) ElMessage.success('报表已保存')
     if (isDirty.value) scheduleAutoSave()
@@ -983,7 +1011,7 @@ const archiveDocument = async () => {
     const workspace = await DihService.archiveReportDocument(sessionRecordId.value, {
       document_id: currentDocument.value.documentId,
       base_revision: currentDocument.value.revision,
-      name: `${reportTitle.value} ${currentDocument.value.version || ''}`.trim(),
+      name: reportTitle.value.trim() || '未命名报表',
     })
     applyWorkspace(workspace, false)
     activeTab.value = 'artifacts'

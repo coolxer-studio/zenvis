@@ -17,19 +17,33 @@ html, body {
 #app {
   width: 100%;
   height: 100%;
-  min-width: 976px;
-  overflow-x: auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 body, pre {
   color: $text-color;
   font-size: $font-size-base;
-  font-family: alibabaRegular, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-  'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-  'Segoe UI Symbol', 'Noto Color Emoji';
+  font-family: var(--zv-font-family);
   font-variant: tabular-nums;
   line-height: 1.75;
   font-feature-settings: 'tnum';
+}
+
+body {
+  background: var(--zv-bg-page);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--zv-primary);
+  outline-offset: 2px;
 }
 
 /* 内外边距通常让各个浏览器样式的表现位置不同 */

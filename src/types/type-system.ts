@@ -1,5 +1,6 @@
 export type SystemInfo = {
   systemTitle: string;
+  systemSubtitle: string;
   systemIcon?: string;
   systemLogo?: string;
   systemBanner?: string;
@@ -24,4 +25,4 @@ export type Dashboard = {
   htmlPath: string;
   isDefault: boolean;
   updateTime: string;
-}
+};

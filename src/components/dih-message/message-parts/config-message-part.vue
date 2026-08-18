@@ -15,7 +15,7 @@
             size="small"
             :icon="CopyDocument"
             circle
-            @click="emit('copyCode', part.content || '')"
+            @click="emit('copyCode', reportDocumentContent)"
           />
         </el-tooltip>
         <el-tooltip :content="isExpanded ? '折叠' : '展开'" placement="top">
@@ -36,13 +36,13 @@
       <iframe
         v-if="isReportDocumentHtml"
         class="config-html-preview"
-        :srcdoc="part.content || ''"
+        :srcdoc="reportDocumentContent"
         sandbox="allow-same-origin"
       ></iframe>
       <div
         v-else
         class="message-content markdown-body report-document-preview"
-        v-html="parseMarkdown(part.content || '')"
+        v-html="parseMarkdown(reportDocumentContent)"
       ></div>
     </template>
   </div>
@@ -111,6 +111,7 @@ import { computed, ref, toRef } from 'vue';
 import DOMPurify from 'dompurify';
 import { CaretBottom, CaretTop, CopyDocument, Document, View } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
+import { resolveReportDocumentPartContent } from '@/views/dih/components/report-document-sync';
 import { metadataText, useDefaultExpanded, useMarkdownRenderer } from './message-part-context';
 
 const props = defineProps<{
@@ -146,6 +147,8 @@ const reportDocumentFormat = computed(() => {
 const reportDocumentFormatText = computed(() => {
   return reportDocumentFormat.value === 'html' ? 'HTML 文档' : 'Markdown 文档';
 });
+
+const reportDocumentContent = computed(() => resolveReportDocumentPartContent(props.part));
 
 const isReportDocumentHtml = computed(() => reportDocumentFormat.value === 'html');
 

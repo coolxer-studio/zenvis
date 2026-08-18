@@ -216,7 +216,13 @@
               <template #default="{ row }">
                 <div class="row-actions">
                   <el-tooltip content="查看详情" placement="top">
-                    <el-button link type="primary" :icon="View" @click="openDetail(row)" />
+                    <el-button
+                      class="view-action-btn"
+                      link
+                      type="primary"
+                      :icon="View"
+                      @click="openDetail(row)"
+                    />
                   </el-tooltip>
                   <el-tooltip
                     v-if="row.pendingApprovalCount > 0"
@@ -348,26 +354,17 @@ defineOptions({ name: 'ViewDrawer' });
 
 type Props = {
   visible?: boolean;
+  queueStatus: TAnalysisTaskQueue;
 };
 
 const props = withDefaults(defineProps<Props>(), { visible: true });
-const emit = defineEmits<{ (event: 'close'): void }>();
-
-const emptyQueue = (): TAnalysisTaskQueue => ({
-  runningTask: null,
-  nextTask: null,
-  pendingCount: 0,
-  readyCount: 0,
-  runningCount: 0,
-  waitingApprovalCount: 0,
-  availableSlots: 0,
-  maxSuspended: 0,
-  checkedAt: '',
-});
+const emit = defineEmits<{
+  (event: 'close'): void;
+  (event: 'refreshQueueStatus'): void;
+}>();
 
 const tasks = ref<TAnalysisTask[]>([]);
 const total = ref(0);
-const queueStatus = ref<TAnalysisTaskQueue>(emptyQueue());
 const tableLoading = ref(false);
 const refreshing = ref(false);
 const runningOnce = ref(false);
@@ -422,12 +419,12 @@ const statusMeta: Record<
 };
 
 const queueCards = computed(() => [
-  { label: '等待任务', value: queueStatus.value.pendingCount, tone: 'primary' },
-  { label: '到期可执行', value: queueStatus.value.readyCount, tone: 'primary' },
-  { label: '执行中', value: queueStatus.value.runningCount, tone: 'warning' },
-  { label: '等待审批', value: queueStatus.value.waitingApprovalCount, tone: 'danger' },
-  { label: '可用执行槽', value: queueStatus.value.availableSlots, tone: 'success' },
-  { label: '最大挂起数', value: queueStatus.value.maxSuspended, tone: 'info' },
+  { label: '等待任务', value: props.queueStatus.pendingCount, tone: 'primary' },
+  { label: '到期可执行', value: props.queueStatus.readyCount, tone: 'primary' },
+  { label: '执行中', value: props.queueStatus.runningCount, tone: 'warning' },
+  { label: '等待审批', value: props.queueStatus.waitingApprovalCount, tone: 'danger' },
+  { label: '可用执行槽', value: props.queueStatus.availableSlots, tone: 'success' },
+  { label: '最大挂起数', value: props.queueStatus.maxSuspended, tone: 'info' },
 ]);
 
 const statusLabel = (status: TAnalysisTaskStatus) => statusMeta[status]?.label || status;
@@ -462,24 +459,13 @@ const loadTasks = async (silent = false) => {
   }
 };
 
-const loadQueueStatus = async (silent = false) => {
-  try {
-    queueStatus.value = await AnalysisTaskService.getQueueStatus(silent);
-  } catch (error) {
-    if (!silent) console.error('获取AI分析任务队列状态失败:', error);
-  }
-};
-
-const refreshAll = async (silent = false) => {
+const refreshAll = async (silent = false, refreshQueueStatus = true) => {
   if (refreshInFlight) return;
   refreshInFlight = true;
   if (!silent) refreshing.value = true;
+  if (refreshQueueStatus) emit('refreshQueueStatus');
   try {
-    await Promise.all([
-      loadTasks(silent),
-      loadQueueStatus(silent),
-      scheduleListRef.value?.refresh(),
-    ]);
+    await Promise.all([loadTasks(silent), scheduleListRef.value?.refresh()]);
   } finally {
     refreshInFlight = false;
     if (!silent) refreshing.value = false;
@@ -681,7 +667,7 @@ const stopPolling = () => {
 
 const startPolling = () => {
   stopPolling();
-  pollingTimer = setInterval(() => refreshAll(true), 5000);
+  pollingTimer = setInterval(() => refreshAll(true, false), 5000);
 };
 
 const closeDrawer = () => emit('close');
@@ -1016,6 +1002,16 @@ onBeforeUnmount(() => {
   :deep(.el-button + .el-button) {
     margin-left: 8px;
   }
+}
+
+.view-action-btn,
+.view-action-btn:hover,
+.view-action-btn:focus,
+.view-action-btn:active {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .pagination-row {

@@ -1,513 +1,500 @@
 <template>
-  <div class="panel left-panel">
-    <!-- 新建会话按钮 -->
+  <div class="conversation-sidebar">
+    <button class="sidebar-brand" type="button" aria-label="返回仪表盘" @click="goDashboard">
+      <span class="brand-mark">
+        <img v-if="logoUrl" :src="logoUrl" alt="" />
+        <el-icon v-else><DataAnalysis /></el-icon>
+      </span>
+      <span class="brand-copy">
+        <strong :title="systemInfo?.systemTitle || 'ZenVis'">{{
+          systemInfo?.systemTitle || 'ZenVis'
+        }}</strong>
+        <small :title="systemInfo?.systemSubtitle || 'Intelligent Analytics'">
+          {{ systemInfo?.systemSubtitle || 'Intelligent Analytics' }}
+        </small>
+      </span>
+    </button>
+
     <div class="chat-action">
-      <el-button class="new-chat-btn" block @click="createNewChat">
-        <div class="btn-content">
-          <div class="btn-icon">
-            <el-icon><Plus /></el-icon>
-          </div>
-          <div class="btn-text">新建会话</div>
-        </div>
+      <el-button class="new-chat-btn" type="primary" :icon="Plus" @click="createNewChat">
+        新建会话
       </el-button>
     </div>
 
-    <div class="chat-container">
-      <div class="chat-list">
-        <div 
-          class="chat-item" 
-          v-for="(item, index) in chatPinList" 
-          :key="item.id" 
-          :class="{ active: index === activePinChat }"
-          @click="selectPinChat(index)"
-        >
-          <div class="chat-title">{{ item.title }}</div>
-          <div class="chat-actions">
-            <el-dropdown trigger="click" @command="(command) => handlePinListCommand(command, index)">
-              <el-button class="more-btn" type="text">
-                <el-icon><MoreFilled /></el-icon>
-              </el-button>
+    <div class="chat-scroll no-scrollbar">
+      <section v-if="chatPinList.length" class="chat-section">
+        <div class="section-label">
+          <span>置顶会话</span>
+          <span>{{ chatPinList.length }}</span>
+        </div>
+        <div class="chat-list">
+          <div
+            v-for="(item, index) in chatPinList"
+            :key="item.id"
+            class="chat-item"
+            :class="{ active: isActiveSession(item.sessionId) }"
+            role="button"
+            tabindex="0"
+            @click="selectSession(item)"
+            @keydown.enter="selectSession(item)"
+          >
+            <el-icon class="chat-kind-icon"><Paperclip /></el-icon>
+            <span class="chat-title" :title="item.title">{{ item.title }}</span>
+            <el-dropdown trigger="click" @command="command => handlePinListCommand(command, index)">
+              <el-button
+                class="more-btn"
+                text
+                circle
+                :icon="MoreFilled"
+                aria-label="置顶会话操作"
+                @click.stop
+              />
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item  command="pinDown" :icon="Bottom">取消置顶</el-dropdown-item>
+                  <el-dropdown-item command="pinDown" :icon="Bottom">取消置顶</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
           </div>
         </div>
-      </div>
-    
-      <!-- 历史会话列表 -->
-      <div class="chat-history">
-        <div class="history-header">
+      </section>
+
+      <section class="chat-section history-section">
+        <div class="section-label">
+          <span>最近会话</span>
           <el-icon><Clock /></el-icon>
-          历史会话
         </div>
-        
         <div class="chat-list">
-          <div 
-            class="chat-item" 
-            v-for="(item, index) in chatHistory" 
-            :key="item.id" 
-            :class="{ active: index === activeChat }"
-            @click="selectChat(index)"
+          <div
+            v-for="(item, index) in chatHistory"
+            :key="item.id"
+            class="chat-item"
+            :class="{ active: isActiveSession(item.sessionId) }"
+            role="button"
+            tabindex="0"
+            @click="selectSession(item)"
+            @keydown.enter="selectSession(item)"
           >
-            <div class="chat-title">{{ item.title }}</div>
-            <div class="chat-actions">
-              <el-dropdown trigger="click" @command="(command) => handleChatListCommand(command, index)">
-                <el-button class="more-btn" type="text">
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="edit" :icon="EditPen">编辑标题</el-dropdown-item>
-                    <el-dropdown-item  v-if="item.pin" command="pinDown" :icon="Bottom">取消置顶</el-dropdown-item>
-                    <el-dropdown-item  v-else command="pinTop" :icon="Top">置顶</el-dropdown-item>
-                    <el-dropdown-item command="delete" :icon="Delete" class="delete-item">删除</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
+            <el-icon class="chat-kind-icon"><ChatDotRound /></el-icon>
+            <span class="chat-title" :title="item.title">{{ item.title }}</span>
+            <el-dropdown
+              trigger="click"
+              @command="command => handleChatListCommand(command, index)"
+            >
+              <el-button
+                class="more-btn"
+                text
+                circle
+                :icon="MoreFilled"
+                aria-label="会话操作"
+                @click.stop
+              />
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit" :icon="EditPen">编辑标题</el-dropdown-item>
+                  <el-dropdown-item v-if="item.pin" command="pinDown" :icon="Bottom"
+                    >取消置顶</el-dropdown-item
+                  >
+                  <el-dropdown-item v-else command="pinTop" :icon="Top">置顶</el-dropdown-item>
+                  <el-dropdown-item command="delete" :icon="Delete" class="delete-item"
+                    >删除</el-dropdown-item
+                  >
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
-          
-          <div class="view-more" @click="viewMoreChats" v-if="hasMore">
+
+          <el-button v-if="hasMore" class="view-more" text type="primary" @click="viewMoreChats">
             加载更多
-          </div>
+          </el-button>
+          <el-empty v-if="!chatHistory.length" description="暂无会话" :image-size="54" />
         </div>
-      </div>
+      </section>
     </div>
+
+    <footer class="user-footer">
+      <span class="user-avatar">{{ userInitial }}</span>
+      <span class="user-copy">
+        <strong>{{ userInfo?.name || '当前用户' }}</strong>
+        <small>{{ userInfo?.email || '智能分析用户' }}</small>
+      </span>
+    </footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { 
-  Plus, Clock, MoreFilled, EditPen, Top,Bottom, Delete
-} from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
-import { DihService } from '@/service/api'
-import { generateUUID } from '@/utils/util-common'
-import { NEW_CHAT_CREATED_EVENT, useDihEventListener } from '../events'
-import type { DihChatListItem, NewChatCreatedEventDetail } from '../events'
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import {
+  Bottom,
+  ChatDotRound,
+  Clock,
+  DataAnalysis,
+  Delete,
+  EditPen,
+  MoreFilled,
+  Paperclip,
+  Plus,
+  Top,
+} from '@element-plus/icons-vue';
+import { ElMessageBox } from 'element-plus';
+
+import { DihService } from '@/service/api';
+import type { SystemInfo } from '@/types/type-system';
+import { generateUUID } from '@/utils/util-common';
+import { getAssetUrl } from '@u/url';
+import { NEW_CHAT_CREATED_EVENT, useDihEventListener } from '../events';
+import type { DihChatListItem, NewChatCreatedEventDetail } from '../events';
+
+const props = defineProps<{
+  systemInfo?: SystemInfo;
+  userInfo?: { name?: string; email?: string };
+}>();
+const emit = defineEmits<{ (event: 'navigate'): void }>();
 
 const router = useRouter();
+const route = useRoute();
+const chatPinList = ref<DihChatListItem[]>([]);
+const chatHistory = ref<DihChatListItem[]>([]);
+const pageParams = ref({ page: 1, per_page: 10 });
+const hasMore = ref(true);
 
-// 当前激活的聊天，默认不选中（置顶列表）
-const activePinChat = ref(-1)
+const logoUrl = computed(() =>
+  props.systemInfo?.systemLogo ? getAssetUrl(props.systemInfo.systemLogo) : '',
+);
+const userInitial = computed(() =>
+  (props.userInfo?.name || props.userInfo?.email || 'U').trim().slice(0, 1).toUpperCase(),
+);
+const currentSessionId = computed(() => String(route.query.chatSessionId || ''));
+const isActiveSession = (sessionId?: string) =>
+  Boolean(sessionId && sessionId === currentSessionId.value);
 
-// 当前激活的聊天，默认选中第一个(历史列表)
-const activeChat = ref(0)
-
-// 置顶的聊天记录
-const chatPinList = ref<DihChatListItem[]>([])
-
-// 聊天历史数据
-const chatHistory = ref<DihChatListItem[]>([])
-
-// 分页参数
-const pageParams = ref({
-  page: 1,
-  per_page: 10
-})
-
-// 是否还有更多数据
-const hasMore = ref(true)
-
-// 获取置顶聊天记录
 const loadPinnedChats = async () => {
-  try {
-    chatPinList.value = await DihService.getChatSessionForPin()
-  } catch (error) {
-    console.error('获取置顶聊天记录失败:', error)
-  }
-}
+  chatPinList.value = await DihService.getChatSessionForPin();
+};
 
-// 获取聊天历史数据
 const loadChatHistory = async () => {
-  try {
-    const historyChatList = await DihService.getChatSessionPageList({
-      page: pageParams.value.page,
-      per_page: pageParams.value.per_page
-    })
-    // 如果是第一页，直接赋值；否则追加到现有数据
-    if (pageParams.value.page === 1) {
-      chatHistory.value = historyChatList
-    } else {
-      chatHistory.value = [...chatHistory.value, ...historyChatList]
-    }
-    // 判断是否还有更多数据
-    hasMore.value = historyChatList.length === pageParams.value.per_page
-  } catch (error) {
-    console.error('获取聊天历史数据失败:', error)
-  }
-}
+  const items = await DihService.getChatSessionPageList(pageParams.value);
+  chatHistory.value = pageParams.value.page === 1 ? items : [...chatHistory.value, ...items];
+  hasMore.value = items.length === pageParams.value.per_page;
+};
 
-// 创建新聊天
+const goDashboard = () => {
+  emit('navigate');
+  void router.push({ name: 'dashboard' });
+};
+
 const createNewChat = () => {
-  console.log('创建新聊天')
-  //取消激活的样式
-  activePinChat.value = -1;
-  activeChat.value = -1;
-  // 这里可以添加实际的创建逻辑
-  const chatSessionId = generateUUID();
-  router.push({
+  emit('navigate');
+  void router.push({
     name: 'service-dih',
-    query: {
-      type: 'ask',
-      chatSessionId: chatSessionId,
-      createSession: 1
-    }
+    query: { type: 'ask', chatSessionId: generateUUID(), createSession: 1 },
   });
-}
+};
 
-// 选择聊天(置顶)
-const selectPinChat = (index: number) => {
-  activeChat.value = -1
-  activePinChat.value = index;
-  const sessionId = chatPinList.value[index].sessionId;
-  const sessionType = chatPinList.value[index].type;
-  console.log(`选择聊天项: ${sessionId}`)
-  // 跳转到当前路由并传递sessionId作为查询参数
-  router.push({
+const selectSession = (item: DihChatListItem) => {
+  emit('navigate');
+  void router.push({
     name: 'service-dih',
-    query: {
-      type: sessionType,
-      chatSessionId: sessionId
-    }
+    query: { type: item.type, chatSessionId: item.sessionId },
   });
-}
-// 选择聊天（历史列表）
-const selectChat = (index: number) => {
-  activeChat.value = index
-  activePinChat.value = -1;
-  const sessionId = chatHistory.value[index].sessionId;
-  const sessionType = chatHistory.value[index].type;
-  console.log(`选择聊天项: ${sessionId}`)
-  // 跳转到当前路由并传递sessionId作为查询参数
-  router.push({
-    name: 'service-dih',
-    query: {
-      type: sessionType,
-      chatSessionId: sessionId
-    }
-  });
-}
+};
 
-// 处理下拉菜单命令
-const handlePinListCommand = (command: string, index: number) => {
-  const item = chatPinList.value[index]
-  switch (command) {
-      case 'pinDown':
-      // 取消置顶
-      DihService.updateChatSession(item.id, { pin: false })
-        .then(() => {
-          // 从历史列表中的获取当前项，修改置顶状态
-          chatHistory.value.forEach(item => { 
-            if(item.id === chatPinList.value[index].id){
-              item.pin = false
-            }
-          })
-          // 从列表中移除取消置顶的项
-          chatPinList.value.splice(index, 1)
-        })
-        .catch((error) => {
-          console.error('取消置顶操作失败:', error);
-        });
-      break
-  }
-}
-// 处理下拉菜单命令
-const handleChatListCommand = (command: string, index: number) => {
-  const item = chatHistory.value[index]
-  switch (command) {
-    case 'edit':
-      // 编辑标题逻辑
-      ElMessageBox.prompt('请输入新的标题', '编辑标题', {
+const handlePinListCommand = async (command: string, index: number) => {
+  if (command !== 'pinDown') return;
+  const item = chatPinList.value[index];
+  await DihService.updateChatSession(item.id, { pin: false });
+  chatPinList.value.splice(index, 1);
+  const historyItem = chatHistory.value.find(history => history.id === item.id);
+  if (historyItem) historyItem.pin = false;
+};
+
+const handleChatListCommand = async (command: string, index: number) => {
+  const item = chatHistory.value[index];
+  if (command === 'edit') {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入新的标题', '编辑标题', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         inputValue: item.title,
         inputPattern: /\S/,
         inputErrorMessage: '标题不能为空',
-      })
-        .then(async ({ value }) => {
-          try {
-            await DihService.updateChatSession(item.id, { title: value })
-            // 更新本地数据
-            item.title = value
-            // 置顶的也需要更新 
-            if(item.pin){
-              chatPinList.value.forEach(itemPin => {
-                if(itemPin.id === item.id){
-                  itemPin.title = value
-                }
-              })
-            }
-            console.log(`标题已更新为: ${value}`)
-          } catch (error) {
-            console.error('更新失败:', error)
-          }
-        })
-        .catch(() => {
-          console.log('取消编辑')
-        })
-      break
-    case 'pinTop':
-      // 置顶
-      DihService.updateChatSession(item.id, { pin: true })
-        .then(() => {
-          // 更新本地数据
-          loadChatHistory()
-          loadPinnedChats()
-          // 从列表中修改
-          item.pin = true;
-          // 添加到置顶列表
-          chatPinList.value.push(item);
-        })
-        .catch((error) => {
-          console.error('置顶操作失败:', error);
-        });
-      break
-
-    case 'pinDown':
-      // 取消置顶
-      DihService.updateChatSession(item.id, { pin: false })
-        .then(() => {
-          //修改置顶状态
-          item.pin = false
-          // 从置顶列表中查询出，并且移除取消置顶的项
-          for (let i = 0; i < chatPinList.value.length; i++) {
-            if(chatPinList.value[i].id === item.id){
-              chatPinList.value.splice(i, 1);
-              break;
-            }
-          }
-        })
-        .catch((error) => {
-          console.error('取消置顶操作失败:', error);
-        });
-      break
-    
-    case 'delete':
-      // 删除逻辑
-      ElMessageBox.confirm(
-        `确定要删除会话"${item.title}"吗？`,
-        '删除确认',
-        {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning',
-        }
-      )
-      .then(async () => {
-        try {
-          await DihService.deleteChatSession(item.id)
-          // 从列表中移除已删除的项
-          chatHistory.value.splice(index, 1)
-          // 置顶的也需要从列表中移除已删除的项
-            if(item.pin){
-              chatPinList.value = chatPinList.value.filter(pinItem => pinItem.id !== item.id);
-            }
-          // 如果删除的是当前激活的聊天，重置激活项
-          if (index === activeChat.value) {
-            activeChat.value = 0
-          }
-          console.log(`删除: ${item.title}`)
-        } catch (error) {
-          console.error('删除失败:', error)
-        }
-      })
-      .catch(() => {
-        // 用户取消删除
-        console.log('取消删除')
-      })
-      break
-  }
-}
-
-// 查看更多聊天记录（分页加载）
-const viewMoreChats = () => {
-  if (hasMore.value) {
-    pageParams.value.page++
-    loadChatHistory()
-  }
-}
-
-// 组件挂载时加载数据
-onMounted(() => {
-  loadPinnedChats()
-  loadChatHistory()
-})
-
-// 处理新聊天创建事件
-const handleNewChatCreated = ({ chatItem }: NewChatCreatedEventDetail) => {
-  // 将新的聊天项添加到聊天历史列表的开头
-  console.log(chatItem);
-  // 判断是否已经存在
-  if (chatHistory.value.some(item => item.id === chatItem.id || item.sessionId === chatItem.sessionId)) {
+      });
+      await DihService.updateChatSession(item.id, { title: value });
+      item.title = value;
+      const pinned = chatPinList.value.find(pin => pin.id === item.id);
+      if (pinned) pinned.title = value;
+    } catch {
+      return;
+    }
     return;
   }
-  // 不存在添加进去
-  chatHistory.value.unshift(chatItem);
-}
+  if (command === 'pinTop') {
+    await DihService.updateChatSession(item.id, { pin: true });
+    item.pin = true;
+    if (!chatPinList.value.some(pin => pin.id === item.id)) chatPinList.value.unshift(item);
+    return;
+  }
+  if (command === 'pinDown') {
+    await DihService.updateChatSession(item.id, { pin: false });
+    item.pin = false;
+    chatPinList.value = chatPinList.value.filter(pin => pin.id !== item.id);
+    return;
+  }
+  if (command === 'delete') {
+    try {
+      await ElMessageBox.confirm(`确定要删除会话“${item.title}”吗？`, '删除确认', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      });
+      await DihService.deleteChatSession(item.id);
+      chatHistory.value.splice(index, 1);
+      chatPinList.value = chatPinList.value.filter(pin => pin.id !== item.id);
+      if (isActiveSession(item.sessionId)) createNewChat();
+    } catch {
+      return;
+    }
+  }
+};
 
-useDihEventListener(NEW_CHAT_CREATED_EVENT, handleNewChatCreated)
+const viewMoreChats = () => {
+  pageParams.value.page += 1;
+  void loadChatHistory();
+};
 
+const handleNewChatCreated = ({ chatItem }: NewChatCreatedEventDetail) => {
+  if (
+    !chatHistory.value.some(
+      item => item.id === chatItem.id || item.sessionId === chatItem.sessionId,
+    )
+  ) {
+    chatHistory.value.unshift(chatItem);
+  }
+};
+
+useDihEventListener(NEW_CHAT_CREATED_EVENT, handleNewChatCreated);
+
+onMounted(() => {
+  void loadPinnedChats();
+  void loadChatHistory();
+});
 </script>
 
-<style scoped>
-/* 面板容器 */
-.panel {
+<style lang="scss" scoped>
+.conversation-sidebar {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 10px;
   box-sizing: border-box;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.left-panel {
-  background-color: #f5f7fa;
-  margin-left: 0;
-  padding: 10px;
-  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: var(--zv-space-4) var(--zv-space-3) var(--zv-space-3);
+  overflow: hidden;
   flex-direction: column;
+  background: var(--zv-bg-surface);
 }
 
-/* 左侧面板聊天列表样式 */
-.chat-action {
-  margin-bottom: 15px;
-  width: 100%;
-  flex-shrink: 0;
-}
-
-.new-chat-btn {
-  border-radius: 20px;
-  padding: 8px 15px;
-  font-size: 14px;
-  border: 1px solid #dcdfe6;
-  background-color: white;
-  width: 100%;
-}
-
-.btn-content {
+.sidebar-brand {
   display: flex;
+  min-width: 0;
+  min-height: 54px;
+  padding: 4px 8px;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.btn-icon {
-  display: flex;
-  align-items: left;
-}
-
-.btn-text {
-  flex-grow: 1;
-  text-align: center;
-  margin: 0 10px;
-}
-
-.chat-container {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.chat-history {
-  display: flex;
-  flex-direction: column;
-}
-
-.history-header {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 14px;
-  color: #606266;
-  margin-bottom: 10px;
-  padding-left: 5px;
-}
-
-.chat-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.chat-item {
-  padding: 10px;
-  border-radius: 8px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
   cursor: pointer;
-  font-size: 14px;
-  color: #303133;
-  transition: background-color 0.2s;
+}
+
+.brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  overflow: hidden;
+  color: var(--zv-text-inverse);
+  font-size: 21px;
+  place-items: center;
+  background: linear-gradient(145deg, var(--zv-primary), var(--zv-accent));
+  border-radius: var(--zv-radius-md);
+  box-shadow: 0 8px 18px rgb(47 94 229 / 20%);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-copy,
+.user-copy {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  min-width: 0;
+  margin-left: 11px;
+  flex-direction: column;
 }
 
-.chat-item:hover {
-  background-color: #e9ecef;
-}
-
-.chat-item.active {
-  background-color: #e6f1fc;
-}
-
-.chat-title {
-  flex: 1;
+.brand-copy strong,
+.brand-copy small,
+.user-copy strong,
+.user-copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-actions {
-  display: none;
+.brand-copy strong {
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-xl);
+  font-weight: var(--zv-font-weight-bold);
 }
 
-.chat-item:hover .chat-actions,
-.chat-item.active .chat-actions {
-  display: block;
+.brand-copy small {
+  margin-top: 4px;
+  color: var(--zv-text-muted);
+  font-size: 9px;
+  font-weight: var(--zv-font-weight-semibold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.chat-action {
+  margin: var(--zv-space-4) 0 var(--zv-space-5);
+}
+
+.new-chat-btn {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--zv-radius-md);
+  box-shadow: 0 7px 16px rgb(47 94 229 / 18%);
+}
+
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-section + .chat-section {
+  margin-top: var(--zv-space-5);
+  padding-top: var(--zv-space-4);
+  border-top: 1px solid var(--zv-divider);
+}
+
+.section-label {
+  display: flex;
+  margin-bottom: var(--zv-space-2);
+  padding: 0 var(--zv-space-2);
+  align-items: center;
+  justify-content: space-between;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+  font-weight: var(--zv-font-weight-semibold);
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-item {
+  display: flex;
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 5px 6px 9px;
+  align-items: center;
+  gap: var(--zv-space-2);
+  color: var(--zv-text-secondary);
+  font-size: var(--zv-font-size-sm);
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-md);
+  cursor: pointer;
+  transition: all var(--zv-motion-fast) var(--zv-ease-standard);
+}
+
+.chat-item:hover {
+  color: var(--zv-text-primary);
+  background: var(--zv-bg-subtle);
+}
+
+.chat-item.active {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: var(--zv-primary-border);
+}
+
+.chat-kind-icon {
+  flex: 0 0 auto;
+}
+
+.chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .more-btn {
-  padding: 2px;
-  font-size: 16px;
-  color: #909399;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
 }
 
-.more-btn:hover {
-  color: #606266;
-}
-
-:deep(.el-dropdown-menu__item.delete-item) {
-  color: #f56c6c;
-}
-
-:deep(.el-dropdown-menu__item i) {
-  margin-right: 5px;
+.chat-item:hover .more-btn,
+.chat-item.active .more-btn,
+.more-btn:focus-visible {
+  opacity: 1;
 }
 
 .view-more {
-  text-align: center;
-  color: #409eff;
-  font-size: 14px;
-  margin-top: 10px;
-  cursor: pointer;
-  padding: 5px;
+  align-self: center;
+  margin-top: var(--zv-space-2);
+  padding-inline: var(--zv-space-2);
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
-.view-more:hover {
-  text-decoration: underline;
+.view-more:hover,
+.view-more:focus-visible {
+  color: var(--zv-primary-hover);
+  background: transparent !important;
+}
+
+.user-footer {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  margin-top: var(--zv-space-3);
+  padding: var(--zv-space-3) var(--zv-space-2) 0;
+  align-items: center;
+  border-top: 1px solid var(--zv-divider);
+}
+
+.user-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  color: var(--zv-text-inverse);
+  font-size: var(--zv-font-size-sm);
+  font-weight: var(--zv-font-weight-bold);
+  place-items: center;
+  background: linear-gradient(145deg, var(--zv-primary), var(--zv-accent));
+  border-radius: 50%;
+}
+
+.user-copy strong {
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-sm);
+}
+
+.user-copy small {
+  margin-top: 3px;
+  color: var(--zv-text-muted);
+  font-size: 11px;
 }
 </style>
-
-
-
-
-
-
-
-
-

@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "module": "esnext",
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "strict": true,
     "jsx": "preserve",

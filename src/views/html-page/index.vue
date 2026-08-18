@@ -1,9 +1,11 @@
 <template>
   <iframe
+    ref="iframeRef"
     :src="iframeUrl"
     class="iframe-container"
     sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
     referrerpolicy="no-referrer"
+    @load="handleIframeLoad"
   />
 </template>
 
@@ -11,9 +13,12 @@
 import { watch, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { sanitizeIframeUrl } from '@u/url';
+import { usePluginUiBridge } from '@/composables/use-plugin-ui-bridge';
 
 const route = useRoute();
 const iframeUrl = ref<string>(sanitizeIframeUrl('')); // 默认值为 404 页面
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+const { handleIframeLoad } = usePluginUiBridge(iframeRef, iframeUrl);
 
 // 提取路径参数并解码 Base64
 function getDecodedUrl(): string {

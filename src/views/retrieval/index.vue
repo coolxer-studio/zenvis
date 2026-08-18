@@ -1,31 +1,144 @@
 <template>
   <div id="data-list" class="main-content data-retrieval">
-    <el-icon class="double-right-outlined" @click="visible = true"><ArrowRight /></el-icon>
+    <el-tooltip content="管理过滤器" placement="right">
+      <el-badge :value="ruleList.length" :hidden="ruleList.length === 0" class="rule-trigger-badge">
+        <el-button class="rule-trigger" aria-label="打开过滤器管理" @click="visible = true">
+          <el-icon><Filter /></el-icon>
+        </el-button>
+      </el-badge>
+    </el-tooltip>
     <el-drawer
       v-model="visible"
       direction="ltr"
+      size="360px"
       :closable="false"
       :with-header="false"
       :modal-append-to-body="false"
       modal-class="rule-drawer-modal"
       class="rule-drawer"
     >
-      <el-icon class="double-left-outlined" @click="visible = false"><ArrowLeft /></el-icon>
-      <div class="rule-div create-rule-option" @click="enterNewRule">新建过滤器</div>
-      <div class="rule-title">规则列表</div>
-      <div
-        v-for="item in ruleList"
-        :key="item.id"
-        class="rule-div"
-        :class="{ 'active-rule': item.id === activeRule }"
-      >
-        <div class="rule-name" @click="loadRule(item)">
-          <span>{{ item.name }}</span>
-          <el-tag v-if="item.status === 'invalid'" type="warning" size="small">
-            失效 {{ item.issue_count }}
-          </el-tag>
-        </div>
-        <el-icon class="delete-icon" @click.stop="deleteRule(item)"><Close /></el-icon>
+      <div class="rule-drawer-shell">
+        <header class="rule-drawer-header">
+          <div class="rule-drawer-heading">
+            <span class="rule-drawer-icon">
+              <el-icon><Filter /></el-icon>
+            </span>
+            <div>
+              <h2>过滤器管理</h2>
+              <p>保存并快速复用检索条件</p>
+            </div>
+          </div>
+          <el-button
+            text
+            circle
+            class="rule-close"
+            aria-label="关闭过滤器管理"
+            @click="visible = false"
+          >
+            <el-icon><Close /></el-icon>
+          </el-button>
+        </header>
+
+        <section class="rule-drawer-tools">
+          <el-button type="primary" class="create-rule-button" @click="enterNewRule">
+            <el-icon><Plus /></el-icon>
+            新建过滤器
+          </el-button>
+
+          <div class="rule-summary" aria-label="过滤器统计">
+            <span class="summary-item">
+              <b>{{ ruleList.length }}</b>
+              全部
+            </span>
+            <span class="summary-divider"></span>
+            <span class="summary-item" :class="{ warning: invalidRuleCount > 0 }">
+              <b>{{ invalidRuleCount }}</b>
+              失效
+            </span>
+            <span v-if="ruleKeyword" class="summary-match"
+              >匹配 {{ filteredRuleList.length }} 项</span
+            >
+          </div>
+
+          <el-input
+            v-model="ruleKeyword"
+            class="rule-search"
+            clearable
+            placeholder="搜索过滤器名称"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </section>
+
+        <section class="rule-list-section">
+          <div class="rule-list-heading">
+            <span>规则列表</span>
+            <span>{{ filteredRuleList.length }}</span>
+          </div>
+
+          <div v-if="filteredRuleList.length" class="rule-list" role="list">
+            <div
+              v-for="item in filteredRuleList"
+              :key="item.id"
+              class="rule-item"
+              :class="{
+                'active-rule': item.id === activeRule,
+                'invalid-rule': item.status === 'invalid',
+              }"
+              role="listitem"
+            >
+              <button type="button" class="rule-item-main" @click="loadRule(item)">
+                <span class="rule-item-icon">
+                  <el-icon><Document /></el-icon>
+                </span>
+                <span class="rule-item-copy">
+                  <span class="rule-item-title-row">
+                    <el-tooltip :content="item.name" placement="top" :show-after="500">
+                      <span class="rule-name">{{ item.name }}</span>
+                    </el-tooltip>
+                    <el-tag
+                      :type="item.status === 'invalid' ? 'warning' : 'success'"
+                      size="small"
+                      effect="light"
+                    >
+                      {{ item.status === 'invalid' ? `失效 ${item.issue_count}` : '可用' }}
+                    </el-tag>
+                  </span>
+                  <span class="rule-time">{{
+                    formatRuleTime(item.update_time || item.create_time)
+                  }}</span>
+                </span>
+              </button>
+
+              <el-tooltip content="删除过滤器" placement="top">
+                <el-button
+                  text
+                  circle
+                  type="danger"
+                  class="delete-rule-button"
+                  :aria-label="`删除过滤器 ${item.name}`"
+                  @click.stop="deleteRule(item)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+
+          <div v-else-if="ruleList.length === 0" class="rule-empty-state">
+            <el-empty :image-size="72" description="还没有保存的过滤器">
+              <el-button type="primary" plain @click="enterNewRule">新建过滤器</el-button>
+            </el-empty>
+          </div>
+
+          <div v-else class="rule-empty-state">
+            <el-empty :image-size="72" description="未找到匹配的过滤器">
+              <el-button @click="ruleKeyword = ''">清除搜索</el-button>
+            </el-empty>
+          </div>
+        </section>
       </div>
     </el-drawer>
 
@@ -50,7 +163,14 @@
     />
 
     <el-dialog v-model="visibleJson" class="json-data-model" width="800px" title="数据查看">
-      <json-viewer :value="deviceData" :expand-depth="1" copyable boxed sort theme="my-json-theme" />
+      <json-viewer
+        :value="deviceData"
+        :expand-depth="1"
+        copyable
+        boxed
+        sort
+        theme="my-json-theme"
+      />
     </el-dialog>
 
     <el-dialog v-model="visibleSave" title="保存过滤器" @closed="formRef?.resetFields()">
@@ -71,7 +191,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import axios from 'axios';
-import { ArrowLeft, ArrowRight, Close } from '@element-plus/icons-vue';
+import { Close, Delete, Document, Filter, Plus, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { JsonViewer } from 'vue3-json-viewer';
@@ -102,6 +222,7 @@ const formRules: FormRules = { name: [{ required: true, message: '请输入名�
 const RETRIEVAL_ENTITY_CACHE_KEY = '__retrieval_entity__';
 
 const ruleList = ref<RetrievalRuleListItem[]>([]);
+const ruleKeyword = ref('');
 const activeRule = ref(0);
 const activeRuleName = ref('');
 const entityList = ref<TEntityListResponse[]>([]);
@@ -153,10 +274,12 @@ const remainingIssues = computed(() =>
       return false;
     }
     if (issue.code === 'DISPLAY_EMPTY') {
-      return !(config.display_list?.[0]?.attribute_list?.length);
+      return !config.display_list?.[0]?.attribute_list?.length;
     }
     if (issue.code === 'DISPLAY_FIELD_MISSING') {
-      return config.display_list?.some(display => display.attribute_list.includes(issue.attribute || ''));
+      return config.display_list?.some(display =>
+        display.attribute_list.includes(issue.attribute || ''),
+      );
     }
     if (issue.code === 'CRITERIA_FIELD_MISSING') {
       if (config.type === 'advanced') {
@@ -166,8 +289,12 @@ const remainingIssues = computed(() =>
     }
     if (issue.code === 'OPERATOR_MISSING') {
       if (config.type === 'advanced') return config.sql === loadedConfig.value?.sql;
-      const currentCriterion = config.criteria_list?.find(criteria => criteria.attribute === issue.attribute);
-      const loadedCriterion = loadedConfig.value?.criteria_list?.find(criteria => criteria.attribute === issue.attribute);
+      const currentCriterion = config.criteria_list?.find(
+        criteria => criteria.attribute === issue.attribute,
+      );
+      const loadedCriterion = loadedConfig.value?.criteria_list?.find(
+        criteria => criteria.attribute === issue.attribute,
+      );
       return Boolean(currentCriterion && currentCriterion.operator === loadedCriterion?.operator);
     }
     if (issue.code === 'INVALID_EXPRESSION') {
@@ -179,10 +306,26 @@ const remainingIssues = computed(() =>
     if (issue.code === 'DISPLAY_ENTITY_MISMATCH') {
       return config.display_list?.some(display => display.entity !== config.entity);
     }
-    if (issue.code === 'RULE_INVALID') return JSON.stringify(config) === JSON.stringify(loadedConfig.value);
+    if (issue.code === 'RULE_INVALID')
+      return JSON.stringify(config) === JSON.stringify(loadedConfig.value);
     return true;
   }),
 );
+
+const invalidRuleCount = computed(
+  () => ruleList.value.filter(rule => rule.status === 'invalid').length,
+);
+
+const filteredRuleList = computed(() => {
+  const keyword = ruleKeyword.value.trim().toLocaleLowerCase();
+  if (!keyword) return ruleList.value;
+  return ruleList.value.filter(rule => rule.name.toLocaleLowerCase().includes(keyword));
+});
+
+function formatRuleTime(value?: string) {
+  if (!value) return '未记录更新时间';
+  return `更新于 ${value.replace('T', ' ').slice(0, 16)}`;
+}
 
 function clearDataState() {
   dataAbortController?.abort();
@@ -217,18 +360,26 @@ async function enterNewRule() {
   ls.remove('__rule__');
   visible.value = false;
   try {
-    const response = await RetrievalService.getEntity({}, { signal: loadController.signal, silent: true });
+    const response = await RetrievalService.getEntity(
+      {},
+      { signal: loadController.signal, silent: true },
+    );
     if (generation !== loadGeneration) return;
     entityList.value = response.entity_list || [];
     const cachedEntity = ls.get(RETRIEVAL_ENTITY_CACHE_KEY);
-    const selectedEntity = typeof cachedEntity === 'string'
-      && entityList.value.some(item => item.name === cachedEntity)
-      ? cachedEntity
-      : response.selected_entity?.find(name => entityList.value.some(item => item.name === name));
+    const selectedEntity =
+      typeof cachedEntity === 'string' && entityList.value.some(item => item.name === cachedEntity)
+        ? cachedEntity
+        : response.selected_entity?.find(name => entityList.value.some(item => item.name === name));
     const entity = selectedEntity || entityList.value[0]?.name;
     if (!entity) {
       ls.remove(RETRIEVAL_ENTITY_CACHE_KEY);
-      currentFilter.value = { type: 'normal', criteria_logic: 'and', criteria_list: [], display_list: [] };
+      currentFilter.value = {
+        type: 'normal',
+        criteria_logic: 'and',
+        criteria_list: [],
+        display_list: [],
+      };
       return;
     }
     await loadEntity(entity, generation, true, loadController.signal);
@@ -238,7 +389,12 @@ async function enterNewRule() {
   }
 }
 
-async function loadEntity(entity: string, generation: number, executeAfterLoad: boolean, signal: AbortSignal) {
+async function loadEntity(
+  entity: string,
+  generation: number,
+  executeAfterLoad: boolean,
+  signal: AbortSignal,
+) {
   clearDataState();
   ls.set(RETRIEVAL_ENTITY_CACHE_KEY, entity);
   currentFilter.value = {
@@ -252,7 +408,9 @@ async function loadEntity(entity: string, generation: number, executeAfterLoad: 
   if (generation !== loadGeneration) return;
   attributeList.value = response.attribute_list || [];
   const selected = response.select_attribute_list?.map(item => item.name) || [];
-  const selectedNames = selected.length ? selected : attributeList.value.slice(0, 1).map(item => item.name);
+  const selectedNames = selected.length
+    ? selected
+    : attributeList.value.slice(0, 1).map(item => item.name);
   currentFilter.value = {
     ...currentFilter.value,
     display_list: [{ entity, attribute_list: selectedNames }],
@@ -286,7 +444,12 @@ async function loadRule(item: RetrievalRuleListItem, fromStartup = false) {
   activeRuleName.value = '';
   loadedIssues.value = [];
   loadedConfig.value = undefined;
-  currentFilter.value = { type: 'normal', criteria_logic: 'and', criteria_list: [], display_list: [] };
+  currentFilter.value = {
+    type: 'normal',
+    criteria_logic: 'and',
+    criteria_list: [],
+    display_list: [],
+  };
   ls.remove('__rule__');
   visible.value = false;
   try {
@@ -344,11 +507,20 @@ function toEditableConfig(config: RetrievalRuleConfig): RetrievalSearchRequest {
   return cloneConfig({
     ...config,
     type: config.type === 'advanced' || config.type === 'legacy_sql' ? 'advanced' : 'normal',
-    criteria_logic: config.criteria_logic === 'or' ? 'or' : config.criteria_logic === 'expression' ? 'expression' : 'and',
+    criteria_logic:
+      config.criteria_logic === 'or'
+        ? 'or'
+        : config.criteria_logic === 'expression'
+        ? 'expression'
+        : 'and',
   });
 }
 
-function applyColumns(entity: string, attributes: TAttributeListResponse[], selectedNames: string[]) {
+function applyColumns(
+  entity: string,
+  attributes: TAttributeListResponse[],
+  selectedNames: string[],
+) {
   const containerWidth = document.getElementById('data-list')?.offsetWidth || 1200;
   const width = Math.max(120, Math.floor(containerWidth / Math.max(selectedNames.length, 1)));
   const selectedSet = new Set(selectedNames);
@@ -418,9 +590,10 @@ async function getData() {
     tableState.pagination.total = response.total || 0;
   } catch (error) {
     if (requestId !== dataRequestId || axios.isCancel(error)) return;
-    const message = (error as { msg?: string; message?: string })?.msg
-      || (error as { message?: string })?.message
-      || '检索失败';
+    const message =
+      (error as { msg?: string; message?: string })?.msg ||
+      (error as { message?: string })?.message ||
+      '检索失败';
     ElMessage.error(message);
     tableState.data = [];
     tableState.pagination.total = 0;
@@ -435,9 +608,13 @@ function onTableChange({ pagination, sorter }: RetrievalTableChange) {
   }
   if (sorter) {
     const field = sorter.prop || sorter.field;
-    currentSorter.value = sorter.order && field
-      ? { sort_by: field, order: sorter.order === 'ascending' || sorter.order === 'ascend' ? 'asc' : 'desc' }
-      : undefined;
+    currentSorter.value =
+      sorter.order && field
+        ? {
+            sort_by: field,
+            order: sorter.order === 'ascending' || sorter.order === 'ascend' ? 'asc' : 'desc',
+          }
+        : undefined;
   }
   void getData();
 }
@@ -448,14 +625,21 @@ function removeInvalidItem(issue: RetrievalRuleIssue) {
     if (display) {
       currentFilter.value = {
         ...currentFilter.value,
-        display_list: [{ ...display, attribute_list: display.attribute_list.filter(name => name !== issue.attribute) }],
+        display_list: [
+          {
+            ...display,
+            attribute_list: display.attribute_list.filter(name => name !== issue.attribute),
+          },
+        ],
       };
     }
   }
   if (issue.scope === 'criteria' && issue.attribute && currentFilter.value.type === 'normal') {
     currentFilter.value = {
       ...currentFilter.value,
-      criteria_list: currentFilter.value.criteria_list?.filter(criteria => criteria.attribute !== issue.attribute),
+      criteria_list: currentFilter.value.criteria_list?.filter(
+        criteria => criteria.attribute !== issue.attribute,
+      ),
     };
   }
 }
@@ -517,7 +701,9 @@ function showJsonData(data: unknown) {
 onMounted(async () => {
   await refreshRules();
   const cached = ls.get('__rule__') as { ruleId?: number } | undefined;
-  const cachedRule = cached?.ruleId ? ruleList.value.find(item => item.id === cached.ruleId) : undefined;
+  const cachedRule = cached?.ruleId
+    ? ruleList.value.find(item => item.id === cached.ruleId)
+    : undefined;
   if (cachedRule) await loadRule(cachedRule, true);
   else await enterNewRule();
 });
@@ -533,83 +719,440 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 .data-retrieval {
   position: relative;
-  padding-left: 30px;
+  padding-top: var(--zv-space-4);
+  padding-left: var(--zv-space-4);
 }
 
-.double-left-outlined,
-.double-right-outlined {
-  position: absolute;
-  color: #bfc1c5;
-  cursor: pointer;
-  z-index: 99;
-}
-
-.double-left-outlined {
-  top: 45%;
-  right: 10px;
-}
-
-.double-right-outlined {
-  top: 15px;
-  left: 5px;
-}
-
-.rule-title,
-.rule-div {
-  line-height: 35px;
-}
-
-.rule-title {
-  padding-left: 20px;
-  font-size: 16px;
-}
-
-.rule-div {
-  position: relative;
-  width: 85%;
-  padding-left: 40px;
-  cursor: pointer;
-}
-
-.rule-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.delete-icon {
+.rule-trigger-badge {
   position: absolute;
   top: 50%;
-  right: 0;
-  color: #f5222d;
+  left: 0;
+  z-index: 20;
   transform: translateY(-50%);
 }
 
-.create-rule-option {
-  width: 90%;
-  margin: 0 0 10px 20px;
-  padding: 0 0 10px;
-  border-bottom: 1px solid #e6e7e8;
-  font-size: 18px;
+.rule-trigger-badge :deep(.el-badge__content) {
+  top: 1px;
+  right: 5px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+  background: var(--zv-primary);
+  border: 2px solid var(--zv-bg-page);
+  box-shadow: none;
 }
 
-.active-rule {
-  font-weight: 700;
+.rule-trigger {
+  width: 36px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: var(--zv-text-secondary);
+  background: var(--zv-bg-surface);
+  border-color: var(--zv-border);
+  border-left: 0;
+  border-radius: 0 var(--zv-radius-md) var(--zv-radius-md) 0;
+  box-shadow: var(--zv-shadow-2);
+}
+
+.rule-trigger:hover,
+.rule-trigger:focus-visible {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: var(--zv-primary-border);
+}
+
+.rule-drawer-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--zv-bg-surface);
+}
+
+.rule-drawer-header {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 76px;
+  padding: var(--zv-space-4) var(--zv-space-4) var(--zv-space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-divider);
+}
+
+.rule-drawer-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--zv-space-3);
+}
+
+.rule-drawer-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  color: var(--zv-primary);
+  font-size: var(--zv-font-size-lg);
+  background: var(--zv-primary-soft);
+  border-radius: var(--zv-radius-md);
+}
+
+.rule-drawer-heading h2 {
+  margin: 0;
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-lg);
+  font-weight: var(--zv-font-weight-semibold);
+  line-height: var(--zv-line-height-tight);
+}
+
+.rule-drawer-heading p {
+  margin-top: 3px;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+  line-height: var(--zv-line-height-normal);
+}
+
+.rule-close {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--zv-text-muted);
+  border-radius: var(--zv-radius-round);
+}
+
+.rule-close:hover,
+.rule-close:focus-visible {
+  color: var(--zv-text-primary);
+  background: var(--zv-bg-subtle);
+}
+
+.rule-drawer-tools {
+  display: grid;
+  flex: 0 0 auto;
+  padding: var(--zv-space-4);
+  gap: var(--zv-space-3);
+  background: var(--zv-bg-subtle);
+  border-bottom: 1px solid var(--zv-divider);
+}
+
+.create-rule-button {
+  width: 100%;
+  min-height: 36px;
+  border-radius: var(--zv-radius-md);
+}
+
+.rule-summary {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: var(--zv-space-2);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+}
+
+.summary-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--zv-space-1);
+}
+
+.summary-item b {
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-sm);
+  font-weight: var(--zv-font-weight-semibold);
+}
+
+.summary-item.warning,
+.summary-item.warning b {
+  color: var(--zv-warning);
+}
+
+.summary-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--zv-border);
+}
+
+.summary-match {
+  margin-left: auto;
+  color: var(--zv-primary);
+}
+
+.rule-search :deep(.el-input__wrapper) {
+  min-height: 36px;
+  background: var(--zv-bg-surface);
+  border-radius: var(--zv-radius-md);
+  box-shadow: 0 0 0 1px var(--zv-border) inset;
+}
+
+.rule-list-section {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: var(--zv-space-4) var(--zv-space-3) var(--zv-space-3);
+}
+
+.rule-list-heading {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 0 var(--zv-space-1) var(--zv-space-2);
+  align-items: center;
+  justify-content: space-between;
+  color: var(--zv-text-secondary);
+  font-size: var(--zv-font-size-sm);
+  font-weight: var(--zv-font-weight-semibold);
+}
+
+.rule-list-heading span:last-child {
+  display: inline-flex;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  align-items: center;
+  justify-content: center;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+  font-weight: var(--zv-font-weight-medium);
+  background: var(--zv-bg-subtle);
+  border-radius: var(--zv-radius-round);
+}
+
+.rule-list {
+  min-height: 0;
+  padding: var(--zv-space-1);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.rule-item {
+  position: relative;
+  display: flex;
+  min-height: 64px;
+  margin-bottom: var(--zv-space-2);
+  overflow: hidden;
+  align-items: stretch;
+  background: var(--zv-bg-surface);
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-md);
+  transition: background-color var(--zv-motion-fast) var(--zv-ease-standard),
+    border-color var(--zv-motion-fast) var(--zv-ease-standard),
+    box-shadow var(--zv-motion-fast) var(--zv-ease-standard);
+}
+
+.rule-item:hover,
+.rule-item:focus-within {
+  background: var(--zv-bg-subtle);
+  border-color: var(--zv-border);
+}
+
+.rule-item.active-rule {
+  background: var(--zv-primary-soft);
+  border-color: var(--zv-primary-border);
+  box-shadow: 0 3px 10px rgb(47 94 229 / 8%);
+}
+
+.rule-item.active-rule::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  content: '';
+  background: var(--zv-primary);
+  border-radius: 0 var(--zv-radius-round) var(--zv-radius-round) 0;
+}
+
+.rule-item-main {
+  display: flex;
+  min-width: 0;
+  padding: 10px 6px 10px 10px;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.rule-item-main:focus-visible {
+  box-shadow: inset 0 0 0 2px rgb(47 94 229 / 18%);
+}
+
+.rule-item-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  color: var(--zv-text-muted);
+  background: var(--zv-bg-subtle);
+  border-radius: var(--zv-radius-md);
+}
+
+.active-rule .rule-item-icon {
+  color: var(--zv-primary);
+  background: var(--zv-bg-surface);
+}
+
+.invalid-rule .rule-item-icon {
+  color: var(--zv-warning);
+  background: var(--zv-warning-soft);
+}
+
+.rule-item-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rule-item-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.rule-name {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-sm);
+  font-weight: var(--zv-font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-rule .rule-name {
+  color: var(--zv-primary);
+  font-weight: var(--zv-font-weight-semibold);
+}
+
+.rule-item :deep(.el-tag) {
+  height: 20px;
+  padding-inline: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--zv-radius-round);
+  font-size: 11px;
+}
+
+.rule-time {
+  overflow: hidden;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delete-rule-button {
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  margin-right: 6px;
+  flex: 0 0 30px;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity var(--zv-motion-fast) var(--zv-ease-standard),
+    transform var(--zv-motion-fast) var(--zv-ease-standard),
+    background-color var(--zv-motion-fast) var(--zv-ease-standard);
+}
+
+.rule-item:hover .delete-rule-button,
+.delete-rule-button:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.rule-empty-state {
+  display: flex;
+  min-height: 260px;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.rule-empty-state :deep(.el-empty) {
+  padding-top: var(--zv-space-8);
 }
 
 .rule-hint {
-  color: #7c8087;
-  font-size: 12px;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
 }
 
 :deep(.rule-drawer) {
-  top: 60px !important;
-  bottom: 20px;
-  left: 0 !important;
-  margin: 25px 0 0 20px;
+  top: calc(var(--zv-header-height) + var(--zv-space-3)) !important;
+  bottom: var(--zv-space-3);
+  left: var(--zv-space-3) !important;
+  height: auto !important;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-lg);
+  box-shadow: var(--zv-shadow-3);
+}
+
+:deep(.rule-drawer .el-drawer__body) {
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
 }
 
 :global(.rule-drawer-modal) {
-  background-color: transparent !important;
+  background: rgb(15 28 48 / 12%) !important;
+  backdrop-filter: blur(1px);
+}
+
+@media (max-width: 640px) {
+  .data-retrieval {
+    padding-top: var(--zv-space-3);
+    padding-left: var(--zv-space-3);
+  }
+
+  .rule-trigger-badge {
+    top: 50%;
+    left: 0;
+  }
+
+  :deep(.rule-drawer) {
+    top: var(--zv-header-height) !important;
+    bottom: 0;
+    left: 0 !important;
+    width: 100% !important;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .rule-drawer-header,
+  .rule-drawer-tools {
+    padding-inline: var(--zv-space-3);
+  }
+
+  .rule-list-section {
+    padding-inline: var(--zv-space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rule-item,
+  .delete-rule-button {
+    transition: none;
+  }
 }
 </style>

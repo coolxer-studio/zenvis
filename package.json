@@ -12,8 +12,8 @@
     "build:pro-tsc": "vue-tsc --noEmit && vite build --mode production",
     "lint": "eslint src --ext .ts,.vue",
     "preview": "vite preview",
-    "test": "vue-tsc --noEmit && node --test src/utils/report-document-format.test.mts src/views/dih/components/data-visualization-menu-route.test.mts src/views/retrieval/components/filter-criterion-values.test.mts src/views/retrieval/components/filter-query.test.mts",
-    "test:unit": "node --test src/utils/report-document-format.test.mts src/views/dih/components/data-visualization-menu-route.test.mts src/views/retrieval/components/filter-criterion-values.test.mts src/views/retrieval/components/filter-query.test.mts",
+    "test": "vue-tsc --noEmit && node --test src/theme/ui-theme-contract.test.mts src/utils/report-document-format.test.mts src/views/dih/components/data-visualization-menu-route.test.mts src/views/dih/components/report-document-sync.test.mts src/views/retrieval/components/filter-criterion-values.test.mts src/views/retrieval/components/filter-query.test.mts",
+    "test:unit": "node --test src/theme/ui-theme-contract.test.mts src/utils/report-document-format.test.mts src/views/dih/components/data-visualization-menu-route.test.mts src/views/dih/components/report-document-sync.test.mts src/views/retrieval/components/filter-criterion-values.test.mts src/views/retrieval/components/filter-query.test.mts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

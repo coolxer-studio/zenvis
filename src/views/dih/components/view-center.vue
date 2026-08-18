@@ -1,8 +1,84 @@
 <template>
-  <div class="panel center-panel">
-    <!-- 中间面板标题 -->
-    <div class="center-header">
-      <h1 class="center-title">{{ chatSessionTitle }}</h1>
+  <div class="panel center-panel" :class="`is-${variant}`">
+    <header v-if="variant === 'workspace'" class="center-header">
+      <div class="workspace-title-wrap">
+        <div class="mobile-header-actions">
+          <el-button
+            v-if="showSessionToggle"
+            text
+            circle
+            :icon="Menu"
+            aria-label="打开会话列表"
+            @click="emit('openSessions')"
+          />
+        </div>
+        <div class="workspace-title-copy">
+          <div class="workspace-title-line">
+            <h1 class="center-title">智能分析工作台</h1>
+            <el-tag class="current-skill-tag" size="small" effect="light" round>
+              {{ activeSkillLabel }}
+            </el-tag>
+          </div>
+          <p class="current-session-title" :title="chatSessionTitle">{{ chatSessionTitle }}</p>
+        </div>
+      </div>
+      <div class="center-header-actions">
+        <el-button v-if="showResultToggle" :icon="DataAnalysis" @click="emit('openResults')">
+          分析结果
+        </el-button>
+
+        <el-skeleton-item
+          v-if="taskQueueLoading && !taskQueueAvailable"
+          class="task-status-skeleton"
+          variant="text"
+        />
+        <el-tooltip v-else :content="taskQueueTooltip" placement="bottom" :show-after="300">
+          <button
+            type="button"
+            class="task-status-summary"
+            :class="{
+              'is-idle': taskQueueIdle,
+              'is-unavailable': !taskQueueAvailable,
+            }"
+            :aria-label="taskQueueAriaLabel"
+            @click="emit('openAnalysisTasks')"
+          >
+            <template v-if="!taskQueueAvailable">
+              <el-icon class="task-status-unavailable-icon"><WarningFilled /></el-icon>
+              <span>状态暂不可用</span>
+            </template>
+            <template v-else-if="taskQueueIdle">
+              <el-icon class="task-status-idle-icon"><CircleCheckFilled /></el-icon>
+              <span>队列空闲</span>
+            </template>
+            <template v-else>
+              <span
+                v-for="item in taskQueueItems"
+                :key="item.key"
+                class="task-status-item"
+                :class="`is-${item.tone}`"
+              >
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span class="task-status-label">{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </span>
+            </template>
+          </button>
+        </el-tooltip>
+
+        <el-badge
+          class="analysis-task-badge"
+          :value="taskQueueTotal"
+          :hidden="!taskQueueAvailable || taskQueueTotal === 0"
+        >
+          <el-button class="analysis-task-button" :icon="Clock" @click="emit('openAnalysisTasks')">
+            <span class="analysis-task-label">分析任务</span>
+          </el-button>
+        </el-badge>
+      </div>
+    </header>
+    <div v-else class="compact-header">
+      <strong>{{ chatSessionTitle }}</strong>
     </div>
 
     <!-- 聊天内容区域 -->
@@ -10,12 +86,21 @@
       <!-- Enter提示信息 -->
       <!-- 已移除原来的 enter-tip 元素，改为使用 ElMessage 实现 toast 提示 -->
       <div class="message-list">
-        <div v-for="(message, index) in messages" :key="messageRenderKey(message)" class="message-item">
-          <div v-if="message.sender === 'ai'" class="ai-message-container"
-            @mouseenter="handleMouseEnter('ai', index)" 
-            @mouseleave="handleMouseLeave('ai')">
+        <div
+          v-for="(message, index) in messages"
+          :key="messageRenderKey(message)"
+          class="message-item"
+          :class="message.sender === 'ai' ? 'is-ai-message-item' : 'is-user-message-item'"
+        >
+          <div
+            v-if="message.sender === 'ai'"
+            class="ai-message-container"
+            @mouseenter="handleMouseEnter('ai', index)"
+            @mouseleave="handleMouseLeave('ai')"
+          >
             <div class="avatar ai-avatar">
-              <el-icon :size="20"><Monitor /></el-icon>
+              <img v-if="systemLogo" :src="systemLogo" alt="" />
+              <el-icon v-else :size="20"><Monitor /></el-icon>
             </div>
             <div class="message-bubble ai-message">
               <!-- 加载动画 -->
@@ -39,16 +124,25 @@
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：AI消息的交互按钮 -->
               <div class="message-actions" v-show="isHoveredAiMessage === index">
-                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument">复制</el-button>
-                <el-button @click="shareMessage(message.content)" size="small" :icon="Share">分享</el-button>
+                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument"
+                  >复制</el-button
+                >
+                <el-button @click="shareMessage(message.content)" size="small" :icon="Share"
+                  >分享</el-button
+                >
                 <el-button @click="likeMessage(index)" size="small" :icon="Sunny">准确</el-button>
-                <el-button @click="dislikeMessage(index)" size="small" :icon="Lightning">不准确</el-button>
+                <el-button @click="dislikeMessage(index)" size="small" :icon="Lightning"
+                  >不准确</el-button
+                >
               </div>
             </div>
           </div>
-          <div v-else class="user-message-container"
-            @mouseenter="handleMouseEnter('user', index)" 
-            @mouseleave="handleMouseLeave('user')">
+          <div
+            v-else
+            class="user-message-container"
+            @mouseenter="handleMouseEnter('user', index)"
+            @mouseleave="handleMouseLeave('user')"
+          >
             <div class="message-bubble user-message">
               <div class="message-content user-content">{{ message.content }}</div>
               <div v-if="message.attachments?.length" class="message-attachments">
@@ -68,14 +162,18 @@
                   <template v-else>
                     <el-icon><Paperclip /></el-icon>
                     <span class="attachment-name">{{ attachmentFileName(attachment) }}</span>
-                    <span class="attachment-size">{{ formatFileSize(attachment.file_size ?? attachment.fileSize) }}</span>
+                    <span class="attachment-size">{{
+                      formatFileSize(attachment.file_size ?? attachment.fileSize)
+                    }}</span>
                   </template>
                 </div>
               </div>
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：用户消息的交互按钮 -->
               <div class="message-actions" v-show="isHoveredUserMessage === index">
-                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument">复制</el-button>
+                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument"
+                  >复制</el-button
+                >
               </div>
             </div>
           </div>
@@ -94,9 +192,15 @@
         show-icon
       />
       <div class="input-container">
-        <el-input v-model="inputMessage" type="textarea" :rows="1" :autosize="{ minRows: 2, maxRows: 6 }"
-          placeholder="输入你的问题，帮你深度解答" @keydown.enter.exact.prevent="handleEnterPress" 
-          @keydown.enter.shift.exact.prevent="insertLineBreak"></el-input>
+        <el-input
+          v-model="inputMessage"
+          type="textarea"
+          :rows="1"
+          :autosize="{ minRows: 2, maxRows: 6 }"
+          placeholder="输入你的问题，帮你深度解答"
+          @keydown.enter.exact.prevent="handleEnterPress"
+          @keydown.enter.shift.exact.prevent="insertLineBreak"
+        ></el-input>
 
         <div v-if="pendingAttachments.length || isUploadingAttachment" class="pending-attachments">
           <div
@@ -115,10 +219,17 @@
             <template v-else>
               <el-icon><Paperclip /></el-icon>
               <span class="attachment-name">{{ attachmentFileName(attachment) }}</span>
-              <span class="attachment-size">{{ formatFileSize(attachment.file_size ?? attachment.fileSize) }}</span>
+              <span class="attachment-size">{{
+                formatFileSize(attachment.file_size ?? attachment.fileSize)
+              }}</span>
             </template>
             <el-tooltip content="移除附件" placement="top">
-              <el-button class="attachment-remove-btn" :icon="Close" circle @click="removePendingAttachment(index)" />
+              <el-button
+                class="attachment-remove-btn"
+                :icon="Close"
+                circle
+                @click="removePendingAttachment(index)"
+              />
             </el-tooltip>
           </div>
           <div v-if="isUploadingAttachment" class="pending-attachment uploading">
@@ -128,63 +239,93 @@
         </div>
 
         <div class="input-actions">
-          <el-select
-            v-model="modelSelectData.period"
-            class="model-select"
-            popper-class="dih-model-select-popper"
-            size="small"
-            filterable
-            placeholder="选择模型"
-            no-match-text="未找到模型"
-          >
-            <el-option
-              v-for="item in modelSelectData.periodOptions"
-              :key="item"
-              :label="item"
-              :value="item"
-            />
-          </el-select>
-          
-          <!-- 新增深度思考按钮 -->
-          <el-tooltip v-if="chatSessionType === 'ask'" content="深度思考" placement="top">
-            <el-button 
-              class="action-btn" 
-              :class="{ 'deep-thinking-active': isDeepThinking }"
-              @click="toggleDeepThinking">
-              <el-icon><Opportunity /></el-icon>
-            </el-button>
-          </el-tooltip>
-          <!-- 结束新增 -->
+          <div class="input-action-group input-action-primary">
+            <el-select
+              v-model="modelSelectData.period"
+              class="model-select"
+              :style="modelSelectStyle"
+              :popper-class="[
+                'dih-model-select-popper',
+                { 'dih-model-select-popper--compact': props.variant === 'compact' },
+              ]"
+              :teleported="true"
+              size="small"
+              placeholder="选择模型"
+            >
+              <el-option
+                v-for="item in modelSelectData.periodOptions"
+                :key="item"
+                :label="item"
+                :value="item"
+              />
+            </el-select>
 
-          <el-tooltip content="上传文件" placement="top">
-            <el-button class="action-btn" :disabled="isUploadingAttachment" @click="uploadFile">
-              <el-icon>
-                <Paperclip />
-              </el-icon>
-            </el-button>
-          </el-tooltip>
+            <!-- 新增深度思考按钮 -->
+            <el-tooltip v-if="chatSessionType === 'ask'" content="切换深度思考" placement="top">
+              <el-button
+                class="action-btn deep-thinking-btn"
+                :class="{ 'deep-thinking-active': isDeepThinking }"
+                @click="toggleDeepThinking"
+              >
+                <el-icon><Opportunity /></el-icon>
+                <span>深度思考</span>
+              </el-button>
+            </el-tooltip>
+          </div>
 
-          <el-tooltip v-if="isStreamingResponse" content="停止生成" placement="top">
-            <el-button class="action-btn stop-btn" aria-label="停止生成" @click="stopCurrentChat">
-              <span class="stop-icon-square" aria-hidden="true"></span>
-            </el-button>
-          </el-tooltip>
+          <div class="input-action-group">
+            <el-tooltip content="上传文件" placement="top">
+              <el-button
+                class="action-btn attachment-btn"
+                circle
+                aria-label="上传附件"
+                :disabled="isUploadingAttachment"
+                @click="uploadFile"
+              >
+                <el-icon>
+                  <Paperclip />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
 
-          <el-tooltip v-else content="发送" placement="top">
-            <el-button class="action-btn send-btn" :disabled="!canSendMessage" @click="sendMessage">
-              <el-icon>
-                <Position />
-              </el-icon>
-            </el-button>
-          </el-tooltip>
+            <el-tooltip v-if="isStreamingResponse" content="停止生成" placement="top">
+              <el-button
+                class="action-btn stop-btn"
+                circle
+                aria-label="停止生成"
+                @click="stopCurrentChat"
+              >
+                <span class="stop-icon-square" aria-hidden="true"></span>
+              </el-button>
+            </el-tooltip>
+
+            <el-tooltip v-else content="发送" placement="top">
+              <el-button
+                class="action-btn send-btn"
+                circle
+                aria-label="发送消息"
+                :disabled="!canSendMessage"
+                @click="sendMessage"
+              >
+                <el-icon>
+                  <Position />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
         </div>
       </div>
 
       <!-- 快捷操作按钮 -->
       <div class="suggestions" v-if="showSuggestionBtn">
-        <el-button v-for="(suggestion, index) in suggestions" :key="index" class="suggestion-btn" size="small"
-          :class="{ 'active': router.currentRoute.value.query.type ===  suggestion.type}"
-          @click="selectSuggestion(index)">
+        <el-button
+          v-for="(suggestion, index) in suggestions"
+          :key="index"
+          class="suggestion-btn"
+          size="small"
+          :class="{ active: router.currentRoute.value.query.type === suggestion.type }"
+          @click="selectSuggestion(index)"
+        >
           <el-icon class="suggestion-icon">
             <component :is="suggestion.icon" />
           </el-icon>
@@ -196,14 +337,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue';
 import {
-  Close, CopyDocument, Lightning, Loading, Monitor, Opportunity, Paperclip, Position, Share, Sunny
-} from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { DihService } from '@/service/api'
-import { useRouter } from 'vue-router'
-import { generateUUID } from '@/utils/util-common'
+  CircleCheckFilled,
+  Clock,
+  Close,
+  CopyDocument,
+  DataAnalysis,
+  Lightning,
+  Loading,
+  Lock,
+  Menu,
+  Monitor,
+  Opportunity,
+  Paperclip,
+  Position,
+  Share,
+  Sunny,
+  VideoPlay,
+  WarningFilled,
+} from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { DihService } from '@/service/api';
+import { useRouter } from 'vue-router';
+import { generateUUID } from '@/utils/util-common';
 import { copyTextToClipboard } from '@/utils/clipboard';
 import MessageCardRenderer from '@/components/dih-message/message-card-renderer.vue';
 import { useChatAttachments } from '../composables/use-chat-attachments';
@@ -212,11 +369,9 @@ import { useChatSession } from '../composables/use-chat-session';
 import { useChatStream } from '../composables/use-chat-stream';
 import { useMcpApproval } from '../composables/use-mcp-approval';
 import { usePanelRecordSync } from '../composables/use-panel-record-sync';
-import {
-  DATA_VISUALIZATION_CHART_DATA_EVENT,
-  emitDihEvent,
-} from '../events';
+import { DATA_VISUALIZATION_CHART_DATA_EVENT, emitDihEvent } from '../events';
 import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
+import type { TAnalysisTaskQueue } from '@/types/type-analysis-task';
 
 const router = useRouter();
 
@@ -245,21 +400,90 @@ const scrollToBottom = async (): Promise<void> => {
 
 // 定义建议接口
 interface Suggestion {
-  type: string
-  label: string
-  icon: any
+  type: string;
+  label: string;
+  icon: any;
 }
 
 interface Props {
-  suggestions: Suggestion[]
-  chatSessionId?: string
-  chatSessionType?: string
-  skillEntryUnavailable?: boolean
+  suggestions: Suggestion[];
+  chatSessionId?: string;
+  chatSessionType?: string;
+  skillEntryUnavailable?: boolean;
+  variant?: 'workspace' | 'compact';
+  systemLogo?: string;
+  taskQueueStatus?: TAnalysisTaskQueue;
+  taskQueueLoading?: boolean;
+  taskQueueAvailable?: boolean;
+  showSessionToggle?: boolean;
+  showResultToggle?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   skillEntryUnavailable: false,
-})
+  variant: 'workspace',
+  systemLogo: '',
+  taskQueueLoading: false,
+  taskQueueAvailable: false,
+  showSessionToggle: false,
+  showResultToggle: false,
+});
+const emit = defineEmits<{
+  (event: 'openAnalysisTasks'): void;
+  (event: 'openSessions'): void;
+  (event: 'openResults'): void;
+}>();
+
+const activeSkillLabel = computed(() => {
+  const type = String(router.currentRoute.value.query.type || 'ask');
+  if (type === 'ask') return '智能问答';
+  return props.suggestions.find(item => item.type === type)?.label || '专业分析';
+});
+
+const taskQueueItems = computed(() => [
+  {
+    key: 'running',
+    label: '执行中',
+    value: props.taskQueueStatus?.runningCount || 0,
+    tone: 'warning',
+    icon: VideoPlay,
+  },
+  {
+    key: 'approval',
+    label: '待审批',
+    value: props.taskQueueStatus?.waitingApprovalCount || 0,
+    tone: 'danger',
+    icon: Lock,
+  },
+  {
+    key: 'pending',
+    label: '排队中',
+    value: props.taskQueueStatus?.pendingCount || 0,
+    tone: 'primary',
+    icon: Clock,
+  },
+]);
+
+const taskQueueTotal = computed(() =>
+  taskQueueItems.value.reduce((total, item) => total + item.value, 0),
+);
+const taskQueueIdle = computed(
+  () => props.taskQueueAvailable && !props.taskQueueLoading && taskQueueTotal.value === 0,
+);
+const taskQueueAriaLabel = computed(() => {
+  if (!props.taskQueueAvailable) return '分析任务状态暂不可用，打开分析任务面板';
+  if (taskQueueIdle.value) return '分析任务队列空闲，打开分析任务面板';
+  return `${taskQueueItems.value
+    .map(item => `${item.label}${item.value}项`)
+    .join('，')}，打开分析任务面板`;
+});
+const taskQueueTooltip = computed(() => {
+  if (!props.taskQueueAvailable) return '暂时无法获取分析任务状态，点击打开任务面板';
+  const runningTaskName = props.taskQueueStatus?.runningTask?.name;
+  if (runningTaskName) return `当前任务：${runningTaskName}`;
+  if (taskQueueIdle.value) return '当前没有等待或执行中的分析任务';
+  return taskQueueItems.value.map(item => `${item.label} ${item.value}`).join(' · ');
+});
 
 const {
   pendingAttachments,
@@ -292,34 +516,52 @@ const {
 });
 
 // 添加深度思考状态
-const isDeepThinking = ref(false)
+const isDeepThinking = ref(false);
 
 watch(
   chatSessionType,
   sessionType => {
     if (sessionType !== 'ask') {
-      isDeepThinking.value = false
+      isDeepThinking.value = false;
     }
   },
   { immediate: true },
-)
+);
 
 // 定义选择框结构
 interface SelectData {
-  period: string
-  periodOptions: string[]
+  period: string;
+  periodOptions: string[];
 }
 
 // 输入消息
-const inputMessage = ref('')
+const inputMessage = ref('');
 const modelSelectData = ref<SelectData>({
   periodOptions: ['qianwen-max', 'deepseek-R1', 'deepseek-V3'],
   period: 'qianwen-max',
-})
+});
+
+const modelSelectStyle = computed(() => {
+  const label = modelSelectData.value.period || '选择模型';
+  const textWidth = Array.from(label).reduce((width, character) => {
+    if (/^[\u3400-\u9fff]$/.test(character)) return width + 13;
+    if (/^[A-Z0-9]$/.test(character)) return width + 8;
+    if (/^[mwMW]$/.test(character)) return width + 9;
+    if (/^[ilI1|]$/.test(character)) return width + 4;
+    return width + 7;
+  }, 0);
+  const maxWidth = props.variant === 'compact' ? 148 : 200;
+  const width = Math.min(maxWidth, Math.max(88, Math.ceil(textWidth + 40)));
+
+  return {
+    width: `${width}px`,
+    flex: `0 0 ${width}px`,
+  };
+});
 
 // 添加一个变量来跟踪Enter按键次数
-const enterPressCount = ref(0)
-const enterPressTimer = ref<number | null>(null)
+const enterPressCount = ref(0);
+const enterPressTimer = ref<number | null>(null);
 // 移除了 showEnterTip 变量，因为我们不再使用页面内元素显示提示
 
 const queryTextValue = (value: unknown) => {
@@ -359,15 +601,19 @@ const queryPromptValue = (query: Record<string, unknown>) => {
  */
 const parseJsonContent = (content: string) => {
   if (!content) return null;
-  
+
   let cleanContent = content.trim();
   // 0. 处理 BOM 头 (ufeff)
-  if (cleanContent.charCodeAt(0) === 0xFEFF) {
+  if (cleanContent.charCodeAt(0) === 0xfeff) {
     cleanContent = cleanContent.slice(1);
   }
 
   const tryParse = (str: string) => {
-    try { return JSON.parse(str); } catch (e) { return null; }
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      return null;
+    }
   };
 
   // 方法1: 直接尝试解析
@@ -390,13 +636,19 @@ const parseJsonContent = (content: string) => {
   const lastBrace = cleanContent.lastIndexOf('}');
   const firstBracket = cleanContent.indexOf('[');
   const lastBracket = cleanContent.lastIndexOf(']');
-  let start = -1; 
+  let start = -1;
   let end = -1;
   // 优先匹配最外层的对象或数组
   if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-    if (lastBrace > firstBrace) { start = firstBrace; end = lastBrace; }
+    if (lastBrace > firstBrace) {
+      start = firstBrace;
+      end = lastBrace;
+    }
   } else if (firstBracket !== -1) {
-    if (lastBracket > firstBracket) { start = firstBracket; end = lastBracket; }
+    if (lastBracket > firstBracket) {
+      start = firstBracket;
+      end = lastBracket;
+    }
   }
   if (start !== -1 && end !== -1) {
     result = tryParse(cleanContent.substring(start, end + 1));
@@ -412,33 +664,39 @@ const parseJsonContent = (content: string) => {
       // 递归调用以处理 unescaped 字符串中的 markdown 或其他情况
       result = parseJsonContent(unescaped);
       if (result) {
-          return result;
+        return result;
       }
     } else if (typeof unescaped === 'object' && unescaped !== null) {
       return unescaped;
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    /* ignore */
+  }
 
   // 方法5: 尝试补充引号解析 (针对 {\"a\": 1} 这种缺少外层引号的单行内容)
   // 这比直接替换更安全，因为它遵循JSON转义规则
   // 这一步才成功
   try {
-     const wrapped = '"' + cleanContent + '"';
-     const unescaped = JSON.parse(wrapped);
-     if (typeof unescaped === 'string') {
-        result = tryParse(unescaped);
-        if (result) {
-            return result;
-        }
-     }
-  } catch (e) { /* ignore */ }
+    const wrapped = '"' + cleanContent + '"';
+    const unescaped = JSON.parse(wrapped);
+    if (typeof unescaped === 'string') {
+      result = tryParse(unescaped);
+      if (result) {
+        return result;
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
 
   // 方法6: 暴力替换转义引号 (兼容旧逻辑 - 最后的兜底)
   try {
     const cleaned = cleanContent.replace(/\\"/g, '"');
     result = JSON.parse(cleaned);
     return result;
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    /* ignore */
+  }
 
   return null;
 };
@@ -484,12 +742,11 @@ const dispatchChartData = (jsonData: any) => {
 
 const processMessageFormat = (message: ChatMessage) => {
   if (message.sender === 'ai' && message.content) {
-    
     // 如果消息类型已经是 text，直接返回，不进行 JSON 解析
     if (message.type === 'text') {
       return;
     }
-    
+
     // 如果消息类型已经是 chart，发送图表数据到右侧组件
     if (message.type === 'chart') {
       const jsonData = parseJsonContent(getChartContent(message));
@@ -501,7 +758,7 @@ const processMessageFormat = (message: ChatMessage) => {
       }
       return;
     }
-    
+
     const jsonData = parseJsonContent(message.content);
     // 判断是否为图表数据格式
     if (jsonData && (jsonData.option || jsonData.chart_type)) {
@@ -514,12 +771,7 @@ const processMessageFormat = (message: ChatMessage) => {
   }
 };
 
-const {
-  isStreamingResponse,
-  canSendMessage,
-  sendMessage,
-  stopCurrentChat,
-} = useChatStream({
+const { isStreamingResponse, canSendMessage, sendMessage, stopCurrentChat } = useChatStream({
   router,
   messages,
   inputMessage,
@@ -573,93 +825,92 @@ const fetchModelList = async () => {
       modelSelectData.value.periodOptions = modelList.map(modelInfo => modelInfo.model);
       modelSelectData.value.period = modelList[0].model;
     }
-  } catch (error) {
-  }
+  } catch (error) {}
 };
 
 // 监听query参数的变化
 watch(
   () => router.currentRoute.value.query,
   (newQuery, oldQuery) => {
-    inputMessage.value = queryPromptValue(newQuery as Record<string, unknown>)
+    inputMessage.value = queryPromptValue(newQuery as Record<string, unknown>);
   },
   // 首次进入组件时也执行一次
-  { immediate: true }     
-)
+  { immediate: true },
+);
 
 // 切换深度思考模式
 const toggleDeepThinking = () => {
-  isDeepThinking.value = !isDeepThinking.value
-}
+  isDeepThinking.value = !isDeepThinking.value;
+};
 
 // 处理Enter按键
 const handleEnterPress = () => {
-  enterPressCount.value++
-  
+  enterPressCount.value++;
+
   // 如果这是第一次按下Enter，启动计时器
   if (enterPressCount.value === 1) {
     enterPressTimer.value = window.setTimeout(() => {
       // 如果在300ms内没有再次按下Enter，则重置计数器
-      enterPressCount.value = 0
+      enterPressCount.value = 0;
       insertLineBreak();
       // 显示 toast 提示信息
       ElMessage({
         message: '快速按下两次Enter发送消息',
         type: 'info',
-        duration: 2000
+        duration: 2000,
       });
-    }, 300)
-  } 
+    }, 300);
+  }
   // 如果这是第二次按下Enter，在300ms内
   else if (enterPressCount.value === 2) {
     // 清除计时器
     if (enterPressTimer.value) {
-      clearTimeout(enterPressTimer.value)
-      enterPressTimer.value = null
+      clearTimeout(enterPressTimer.value);
+      enterPressTimer.value = null;
     }
-    
+
     // 重置计数器
-    enterPressCount.value = 0
-    
+    enterPressCount.value = 0;
+
     // 发送消息
-    sendMessage()
+    sendMessage();
   }
-}
+};
 
 // 插入换行符
 const insertLineBreak = () => {
-  const textarea = document.querySelector('.input-container textarea') as HTMLTextAreaElement
+  const textarea = document.querySelector('.input-container textarea') as HTMLTextAreaElement;
   if (textarea) {
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = inputMessage.value
-    inputMessage.value = text.substring(0, start) + '\n' + text.substring(end)
-    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = inputMessage.value;
+    inputMessage.value = text.substring(0, start) + '\n' + text.substring(end);
+
     // 在下一次DOM更新后设置光标位置
     nextTick(() => {
-      textarea.selectionStart = start + 1
-      textarea.selectionEnd = start + 1
-    })
+      textarea.selectionStart = start + 1;
+      textarea.selectionEnd = start + 1;
+    });
   }
-}
+};
 
 // 选择建议
 const selectSuggestion = (index: number) => {
-  const suggestion = props.suggestions[index]
-  
+  const suggestion = props.suggestions[index];
+
   // 如果点击的是xx开启新的chatSession
   if (suggestion.type) {
     chatSessionId.value = generateUUID();
     router.push({
-    name: 'service-dih',
-    query: {
-      type: suggestion.type,
-      chatSessionId: chatSessionId.value,
-      createSession: 1
-    }
-  });
-}
-}
+      name: 'service-dih',
+      query: {
+        type: suggestion.type,
+        chatSessionId: chatSessionId.value,
+        createSession: 1,
+      },
+    });
+  }
+};
 
 const isHoveredAiMessage = ref(-1);
 const isHoveredUserMessage = ref(-1);
@@ -698,398 +949,596 @@ const fillPromptSuggestion = (prompt: string) => {
 // 分享消息（示例）
 const shareMessage = (content: string) => {
   // 显示 toast 提示信息
-      ElMessage({
-        message: '当前用户暂不支持分享',
-        type: 'info',
-        duration: 2000
-      });
+  ElMessage({
+    message: '当前用户暂不支持分享',
+    type: 'info',
+    duration: 2000,
+  });
 };
 
 // 点赞消息
-const likeMessage = (index: number) => {
-};
+const likeMessage = (index: number) => {};
 
 // 点踩消息
-const dislikeMessage = (index: number) => {
-};
-
+const dislikeMessage = (index: number) => {};
 </script>
 
-<style scoped>
-.container {
-  height: 100%;
+<style lang="scss" scoped>
+.center-panel {
+  display: flex;
   width: 100%;
-  padding: 10px;
-  box-sizing: border-box;
-  box-shadow: var(--el-border-color-light) 0px 0px 10px;
-  position: relative;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  flex-direction: column;
+  background: var(--zv-bg-surface);
+  border-radius: 0;
+  box-shadow: none;
+  container-type: inline-size;
+}
+
+.center-header {
+  display: flex;
+  height: 72px;
+  min-height: 72px;
+  padding: 10px 18px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  text-align: left;
+  background: var(--zv-bg-surface);
+  border-bottom: 1px solid var(--zv-divider);
+}
+
+.workspace-title-wrap,
+.center-header-actions,
+.mobile-header-actions,
+.input-action-group {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-title-wrap {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
-/* 抽屉触发器样式 */
-.drawer-trigger {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  background-color: var(--el-color-primary);
-  color: white;
-  padding: 5px 15px;
-  border-radius: 0 0 8px 8px;
-  cursor: pointer;
+.mobile-header-actions {
+  margin-right: var(--zv-space-2);
+}
+
+.mobile-header-actions:empty {
+  display: none;
+  margin: 0;
+}
+
+.workspace-title-copy {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-title-line {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  gap: var(--zv-space-2);
 }
 
-.drawer-trigger .el-icon {
-  transition: transform 0.3s;
+.center-title {
+  margin: 0;
+  color: var(--zv-text-primary);
+  font-size: 20px;
+  font-weight: var(--zv-font-weight-bold);
+  line-height: var(--zv-line-height-tight);
+  white-space: nowrap;
 }
 
-/* 自定义抽屉样式 */
-.custom-drawer {
-  position: absolute;
-  top: -100%;
-  /* 初始位置在容器外部上方 */
-  left: 0;
-  width: 100%;
-  height: 100%;
-  /* 填充满整个父容器的高度 */
-  background-color: white;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  z-index: 5;
-  transition: top 0.3s ease;
-  border-bottom: 1px solid #e4e7ed;
-  display: flex;
-  flex-direction: column;
+.current-skill-tag {
+  --el-tag-bg-color: var(--zv-primary-soft);
+  --el-tag-border-color: transparent;
+  --el-tag-text-color: var(--zv-primary);
+
+  max-width: min(220px, 24cqw);
+  flex: 0 1 auto;
+  font-weight: var(--zv-font-weight-medium);
 }
 
-.custom-drawer.drawer-open {
-  top: 0;
-  /* 打开时移动到容器顶部 */
-}
-
-.drawer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  border-bottom: 1px solid #e4e7ed;
-  font-size: 16px;
-  font-weight: bold;
-  flex-shrink: 0;
-  /* 防止头部被压缩 */
-}
-
-.drawer-content {
-  padding: 20px;
-  overflow-y: auto;
-  flex-grow: 1;
-  /* 内容区域自动填充剩余空间 */
-}
-
-/* 面板容器 */
-.panels-container {
-  height: 100%;
-  position: relative;
-  z-index: 1;
-}
-
-/* 面板样式 */
-.panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 10px;
-  box-sizing: border-box;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.left-panel {
-  background-color: #f5f7fa;
-  margin-left: 0;
-  padding: 10px;
-  overflow-y: auto;
-}
-
-.center-panel {
-  background-color: #ffffff;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-}
-
-.right-panel {
-  background-color: #f5f7fa;
-  color: #333;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-/* 左侧面板聊天列表样式 */
-.chat-action {
-  margin-bottom: 15px;
-  width: 100%;
-}
-
-.new-chat-btn {
-  border-radius: 20px;
-  padding: 8px 15px;
-  font-size: 14px;
-  border: 1px solid #dcdfe6;
-  background-color: white;
-  width: 100%;
-}
-
-.btn-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.btn-icon {
-  display: flex;
-  align-items: left;
-}
-
-.btn-text {
-  flex-grow: 1;
-  text-align: center;
-  margin: 0 10px;
-}
-
-.btn-shortcut {
-  display: flex;
-  align-items: center;
-}
-
-.shortcut-key {
-  background-color: #f2f2f2;
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #606266;
-}
-
-.chat-history {
-  display: flex;
-  flex-direction: column;
-}
-
-.history-header {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 14px;
-  color: #606266;
-  margin-bottom: 10px;
-  padding-left: 5px;
-}
-
-.chat-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.chat-item {
-  padding: 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #303133;
-  transition: background-color 0.2s;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chat-item:hover {
-  background-color: #e9ecef;
-}
-
-.chat-item.active {
-  background-color: #e6f1fc;
-}
-
-.chat-title {
-  flex: 1;
+.current-skill-tag :deep(.el-tag__content) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-actions {
+.current-session-title {
+  max-width: min(420px, 44cqw);
+  margin: var(--zv-space-1) 0 0;
+  overflow: hidden;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.center-header-actions {
+  flex: 0 0 auto;
+  gap: var(--zv-space-2);
+}
+
+.task-status-skeleton {
+  width: 230px;
+  height: 32px;
+  border-radius: var(--zv-radius-md);
+}
+
+.task-status-summary {
+  display: inline-flex;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+  overflow: hidden;
+  color: var(--zv-text-secondary);
+  font: inherit;
+  white-space: nowrap;
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-md);
+  cursor: pointer;
+  transition: color var(--zv-motion-fast) var(--zv-ease-standard),
+    background-color var(--zv-motion-fast) var(--zv-ease-standard),
+    border-color var(--zv-motion-fast) var(--zv-ease-standard),
+    box-shadow var(--zv-motion-fast) var(--zv-ease-standard);
+}
+
+.task-status-summary:hover {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: var(--zv-primary-border);
+}
+
+.task-status-summary:focus-visible {
+  outline: none;
+  box-shadow: var(--zv-focus-ring);
+}
+
+.task-status-summary.is-idle,
+.task-status-summary.is-unavailable {
+  padding: 0 var(--zv-space-3);
+  gap: var(--zv-space-2);
+  font-size: var(--zv-font-size-xs);
+  font-weight: var(--zv-font-weight-medium);
+}
+
+.task-status-summary.is-idle {
+  color: var(--zv-success);
+  background: var(--zv-success-soft);
+  border-color: color-mix(in srgb, var(--zv-success) 26%, transparent);
+}
+
+.task-status-summary.is-unavailable {
+  color: var(--zv-text-muted);
+}
+
+.task-status-idle-icon,
+.task-status-unavailable-icon {
+  font-size: var(--zv-font-size-lg);
+}
+
+.task-status-item {
+  display: inline-flex;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  align-items: center;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-font-size-xs);
+}
+
+.task-status-item + .task-status-item {
+  border-left: 1px solid var(--zv-divider);
+}
+
+.task-status-item .el-icon {
+  font-size: var(--zv-font-size-md);
+}
+
+.task-status-item strong {
+  min-width: 1ch;
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-status-item.is-warning .el-icon {
+  color: var(--zv-warning);
+}
+
+.task-status-item.is-danger .el-icon {
+  color: var(--zv-danger);
+}
+
+.task-status-item.is-primary .el-icon {
+  color: var(--zv-primary);
+}
+
+.analysis-task-badge {
+  flex: 0 0 auto;
+}
+
+.analysis-task-badge :deep(.el-badge__content) {
   display: none;
 }
 
-.chat-item:hover .chat-actions,
-.chat-item.active .chat-actions {
-  display: block;
-}
-
-.more-btn {
-  padding: 2px;
-  font-size: 16px;
-  color: #909399;
-}
-
-.more-btn:hover {
-  color: #606266;
-}
-
-:deep(.el-dropdown-menu__item.delete-item) {
-  color: #f56c6c;
-}
-
-:deep(.el-dropdown-menu__item i) {
-  margin-right: 5px;
-}
-
-.view-all {
-  text-align: center;
-  color: #409eff;
-  font-size: 14px;
-  margin-top: 10px;
-  cursor: pointer;
-  padding: 5px;
-}
-
-.view-all:hover {
-  text-decoration: underline;
-}
-
-.center-header {
-  text-align: center;
-  padding: 5px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.center-title {
+.analysis-task-button {
   margin: 0;
-  font-size: 18px;
-  font-weight: bold;
 }
 
-.enter-tip {
-  text-align: center;
-  padding: 5px;
-  background-color: #f0f9eb;
-  color: #67c23a;
-  border: 1px solid #e1f3d8;
-  border-radius: 4px;
-  margin: 10px auto;
-  width: fit-content;
+.compact-header {
+  padding: 9px 14px;
+  color: var(--zv-text-primary);
+  background: var(--zv-bg-surface);
+  border-bottom: 1px solid var(--zv-divider);
 }
 
 .chat-content {
   flex: 1;
+  min-height: 0;
+  padding: var(--zv-space-6) clamp(18px, 4vw, 54px);
   overflow-y: auto;
-  padding: 20px;
+  background: var(--zv-bg-surface);
+}
+
+.message-list {
+  width: min(100%, 840px);
+  margin: 0 auto;
+  gap: 0;
+}
+
+.message-item {
+  width: 100%;
+}
+
+.message-item + .message-item {
+  margin-top: var(--zv-space-10);
+}
+
+.is-ai-message-item + .message-item {
+  margin-top: 72px;
+}
+
+.ai-message-container,
+.user-message-container {
+  gap: var(--zv-space-3);
+}
+
+.ai-message-container {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.user-message-container {
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+.avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  overflow: hidden;
+  color: var(--zv-text-inverse);
+  place-items: center;
+  background: linear-gradient(145deg, var(--zv-primary), var(--zv-accent));
+  border: 1px solid color-mix(in srgb, var(--zv-bg-surface) 75%, transparent);
+  border-radius: var(--zv-radius-md);
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--zv-primary) 18%, transparent);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.message-bubble {
+  min-width: 0;
+  border-radius: var(--zv-radius-lg);
+}
+
+.ai-message {
+  width: calc(100% - 48px);
+  max-width: calc(100% - 48px);
+  padding: 5px 0 var(--zv-space-1);
+  color: var(--zv-text-primary);
+  background: transparent;
+  box-shadow: none;
+}
+
+.user-message {
+  width: auto;
+  max-width: 82%;
+  padding: 13px 16px 9px;
+  color: var(--zv-text-primary);
+  background: linear-gradient(135deg, var(--zv-primary-soft), var(--zv-bg-subtle));
+  border: 1px solid var(--zv-primary-border);
+  border-bottom-right-radius: var(--zv-radius-xs);
+}
+
+.message-time {
+  margin-top: var(--zv-space-2);
+  color: var(--zv-text-placeholder);
+  font-size: 11px;
+}
+
+.message-actions {
+  gap: var(--zv-space-1);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.message-actions :deep(.el-button) {
+  margin: 0;
+  color: var(--zv-text-muted);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.message-actions :deep(.el-button:hover),
+.message-actions :deep(.el-button:focus-visible) {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .input-area {
-  padding: 15px;
-  border-top: 1px solid #f0f0f0;
+  flex: 0 0 auto;
+  padding: var(--zv-space-3) clamp(18px, 4vw, 54px) var(--zv-space-4);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--zv-bg-surface) 72%, transparent),
+    var(--zv-bg-surface) 22%
+  );
+  border-top: 0;
+}
+
+.skill-unavailable-alert,
+.input-container,
+.suggestions {
+  width: min(100%, 840px);
+  margin-inline: auto;
 }
 
 .skill-unavailable-alert {
-  margin-bottom: 10px;
+  margin-bottom: var(--zv-space-2);
+  border-radius: var(--zv-radius-lg);
 }
 
 .input-container {
   position: relative;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  background-color: #fff;
+  overflow: hidden;
+  background: var(--zv-bg-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: 16px;
+  box-shadow: var(--zv-shadow-1);
+  transition: border-color var(--zv-motion-fast) var(--zv-ease-standard),
+    box-shadow var(--zv-motion-fast) var(--zv-ease-standard);
 }
 
 .input-container:focus-within {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  border-color: var(--zv-primary-border);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--zv-primary) 7%, transparent), var(--zv-shadow-2);
 }
 
-:deep(.el-textarea__inner) {
-  border: none;
-  padding: 12px min(220px, 48%) 12px 12px;
+.input-container :deep(.el-textarea__inner) {
+  min-height: 64px !important;
+  padding: 14px 16px 4px;
+  color: var(--zv-text-primary);
+  line-height: 1.6;
+  background: transparent;
+  border: 0;
   resize: none;
   box-shadow: none;
 }
 
-:deep(.el-textarea__inner:focus) {
-  box-shadow: none;
+.input-container :deep(.el-textarea__inner::placeholder) {
+  color: var(--zv-text-placeholder);
 }
 
 .input-actions {
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
+  position: static;
   display: flex;
+  min-height: 44px;
+  padding: 4px 8px 8px 10px;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  border-top: 0;
+}
+
+.input-action-group {
+  min-width: 0;
+  gap: var(--zv-space-2);
+}
+
+.input-action-primary {
+  flex: 1;
 }
 
 .model-select {
-  width: 60px;
+  min-width: 88px;
+  max-width: min(200px, 38vw);
 }
 
-:deep(.model-select .el-select__wrapper) {
-  min-height: 28px;
-  padding: 0 6px;
+.model-select :deep(.el-select__wrapper) {
+  min-height: 32px;
+  padding-inline: 10px;
   background: transparent;
+  border: 0;
+  border-radius: var(--zv-radius-round);
   box-shadow: none;
-  border: none;
-  border-radius: 6px;
+  transition: color var(--zv-motion-fast) var(--zv-ease-standard),
+    background-color var(--zv-motion-fast) var(--zv-ease-standard),
+    box-shadow var(--zv-motion-fast) var(--zv-ease-standard);
 }
 
-:deep(.model-select .el-select__wrapper:hover),
-:deep(.model-select .el-select__wrapper.is-focused) {
+.model-select :deep(.el-select__wrapper:hover) {
+  color: var(--zv-text-primary);
+  background: var(--zv-bg-subtle);
+}
+
+.model-select :deep(.el-select__wrapper.is-focused) {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
   box-shadow: none;
 }
 
-:deep(.model-select .el-select__selected-item) {
-  max-width: 28px;
+.model-select :deep(.el-select__selected-item) {
+  max-width: calc(100% - 22px);
+  color: inherit;
+  font-size: var(--zv-font-size-sm);
+  font-weight: var(--zv-font-weight-medium);
 }
 
-:global(.dih-model-select-popper) {
-  max-width: 320px;
+.model-select :deep(.el-select__caret) {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
 }
 
-:global(.dih-model-select-popper .el-select-dropdown__wrap) {
-  max-height: 260px;
+:global(.dih-model-select-popper.el-popper) {
+  padding: var(--zv-space-1);
+  overflow: hidden;
+  background: var(--zv-bg-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-lg);
+  box-shadow: var(--zv-shadow-2);
+}
+
+:global(.dih-model-select-popper--compact.el-popper) {
+  z-index: 10001 !important;
+  min-width: 176px !important;
+}
+
+:global(.dih-model-select-popper .el-select-dropdown__list) {
+  padding: 0;
 }
 
 :global(.dih-model-select-popper .el-select-dropdown__item) {
-  max-width: 300px;
+  height: 34px;
+  margin: 2px 0;
+  padding: 0 var(--zv-space-3);
+  color: var(--zv-text-secondary);
+  line-height: 34px;
+  border-radius: var(--zv-radius-md);
+}
+
+:global(.dih-model-select-popper .el-select-dropdown__item.is-hovering) {
+  color: var(--zv-text-primary);
+  background: var(--zv-bg-subtle);
+}
+
+:global(.dih-model-select-popper .el-select-dropdown__item.is-selected) {
+  color: var(--zv-primary);
+  font-weight: var(--zv-font-weight-semibold);
+  background: var(--zv-primary-soft);
+}
+
+:global(.dih-model-select-popper .el-popper__arrow) {
+  display: none;
+}
+
+.action-btn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 9px;
+  color: var(--zv-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-round);
+  box-shadow: none;
+}
+
+.deep-thinking-btn {
+  gap: 5px;
+}
+
+.action-btn:hover,
+.deep-thinking-active {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: transparent;
+}
+
+.action-btn:focus-visible {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--zv-primary) 18%, transparent);
+}
+
+.send-btn,
+.stop-btn {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  color: var(--zv-text-inverse);
+  background: var(--zv-primary);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--zv-primary) 22%, transparent);
+}
+
+.send-btn:hover,
+.send-btn:focus {
+  color: var(--zv-text-inverse);
+  background: var(--zv-primary-hover);
+}
+
+.stop-btn,
+.stop-btn:hover,
+.stop-btn:focus {
+  color: var(--zv-text-inverse);
+  background: var(--zv-danger);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--zv-danger) 20%, transparent);
+}
+
+.send-btn.is-disabled,
+.send-btn.is-disabled:hover {
+  color: var(--el-text-color-disabled);
+  background: var(--el-fill-color);
+  box-shadow: none;
 }
 
 .pending-attachments {
   display: flex;
+  padding: 2px 12px 6px;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 min(220px, 48%) 10px 12px;
+  gap: var(--zv-space-2);
 }
 
 .pending-attachment,
 .message-attachment {
   display: inline-flex;
+  min-height: 28px;
+  max-width: 260px;
+  padding: var(--zv-space-1) var(--zv-space-2);
   align-items: center;
   gap: 6px;
-  max-width: 260px;
-  min-height: 28px;
-  padding: 4px 8px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  background-color: #f7f8fa;
-  color: #606266;
-  font-size: 12px;
+  color: var(--zv-text-secondary);
+  font-size: var(--zv-font-size-xs);
   line-height: 1.2;
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-round);
 }
 
 .pending-image-attachment {
@@ -1098,26 +1547,27 @@ const dislikeMessage = (index: number) => {
   height: 66px;
   padding: 0;
   overflow: hidden;
+  border-radius: var(--zv-radius-md);
 }
 
 .pending-image-preview {
+  display: block;
   width: 66px;
   height: 66px;
   object-fit: cover;
   cursor: pointer;
-  display: block;
 }
 
 .pending-image-attachment .attachment-remove-btn {
   position: absolute;
   top: 3px;
   right: 3px;
-  color: #606266;
-  background-color: rgba(255, 255, 255, 0.86);
+  color: var(--zv-text-secondary);
+  background: color-mix(in srgb, var(--zv-bg-surface) 86%, transparent);
 }
 
 .pending-attachment.uploading {
-  color: #409eff;
+  color: var(--zv-primary);
 }
 
 .attachment-name {
@@ -1129,38 +1579,39 @@ const dislikeMessage = (index: number) => {
 
 .attachment-size {
   flex-shrink: 0;
-  color: #909399;
+  color: var(--zv-text-placeholder);
 }
 
 .attachment-remove-btn {
-  flex-shrink: 0;
   width: 20px;
   height: 20px;
   min-height: 20px;
   padding: 0;
-  border: none;
+  flex-shrink: 0;
+  color: var(--zv-text-placeholder);
   background: transparent;
-  color: #909399;
+  border: 0;
+  box-shadow: none;
 }
 
 .message-attachments {
   display: flex;
+  margin-top: var(--zv-space-2);
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
 }
 
 .user-message .message-attachment {
-  background-color: rgba(255, 255, 255, 0.7);
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #2f4156;
+  color: var(--zv-text-secondary);
+  background: color-mix(in srgb, var(--zv-bg-surface) 72%, transparent);
+  border-color: color-mix(in srgb, var(--zv-bg-surface) 60%, transparent);
 }
 
 .message-attachment.image-attachment {
   max-width: none;
   padding: 0;
   overflow: hidden;
-  background-color: transparent;
+  background: transparent;
 }
 
 .attachment-image-preview {
@@ -1171,985 +1622,34 @@ const dislikeMessage = (index: number) => {
   cursor: zoom-in;
 }
 
-.action-btn {
-  border: none;
-  background: transparent;
-  padding: 4px;
-  color: #909399;
-}
-
-.deep-thinking-active {
-  color: #409eff;
-  background-color: rgba(64, 158, 255, 0.1);
-}
-
-.action-btn:hover {
-  color: #606266;
-}
-
-.send-btn {
-  color: #409eff;
-}
-
-.send-btn:hover {
-  color: #66b1ff;
-}
-
-.stop-btn {
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0;
-  border-radius: 50%;
-  color: #fff;
-  background-color: #ff4d4f;
-  box-shadow: 0 4px 10px rgba(255, 77, 79, 0.28);
-  transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
-}
-
-.stop-btn:hover,
-.stop-btn:focus {
-  color: #fff;
-  background-color: #ff6b6d;
-  box-shadow: 0 6px 14px rgba(255, 77, 79, 0.36);
-}
-
-.stop-btn:active {
-  transform: scale(0.94);
-  background-color: #e94749;
-}
-
-.stop-icon-square {
-  display: block;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background-color: currentColor;
-}
-
-.suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.suggestion-btn {
-  border-radius: 20px;
-  background-color: #f5f7fa;
-  border: 1px solid #e4e7ed;
-  color: #606266;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-}
-
-.suggestion-btn:hover {
-  background-color: #e9ecef;
-  color: #409eff;
-}
-
-.suggestion-btn.active {
-  background-color: #409eff;
-  color: white;
-  border-color: #409eff;
-}
-
-.suggestion-icon {
-  margin-right: 5px;
-  width: 1em;
-  height: 1em;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid #333;
-}
-
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.collapse-btn {
-  color: #909399;
-}
-
-.info-card {
-  margin: 12px;
-  background-color: rgb(137, 137, 143);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background-color: #a9a3a3;
-  font-size: 14px;
-}
-
-.card-header .el-icon {
-  margin-right: 8px;
-}
-
-.card-content {
-  padding: 12px 16px;
-}
-
-.info-item {
-  display: flex;
-  margin-bottom: 12px;
-  font-size: 14px;
-}
-
-.info-label {
-  width: 100px;
-  color: rgb(0, 0, 0);
-}
-
-.info-value {
-  flex: 1;
-  word-break: break-all;
-}
-
-.expand-btn {
-  color: #409eff;
-  padding: 0;
-  font-size: 14px;
-  margin-top: 8px;
-}
-
-.task-result {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #333;
-}
-
-.result-title {
-  margin: 0 0 8px;
-  line-height: 1.5;
-}
-
-.result-time {
-  margin: 0;
-  color: rgb(32, 95, 222);
-  font-size: 12px;
-}
-
-.task-item {
-  margin-bottom: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.task-header {
-  display: flex;
-  align-items: flex-start;
-  padding: 12px;
-  background-color: rgb(121, 118, 118);
-  cursor: pointer;
-}
-
-.task-icon {
-  color: #409eff;
-  margin-right: 8px;
-  margin-top: 2px;
-}
-
-.task-title {
-  flex: 1;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.task-arrow {
-  margin-left: 8px;
-}
-
-.task-arrow .is-rotate {
-  transform: rotate(180deg);
-}
-
-.task-detail {
-  padding: 12px;
-  color: rgb(242, 244, 247);
-  background-color: rgb(55, 59, 64);
-  font-size: 14px;
-}
-
-/* 选项卡样式 */
-.tab-container {
-  flex: 1;
-  overflow: hidden;
-}
-
-.right-tabs {
-  height: 100%;
-}
-
-:deep(.el-tabs__content) {
-  padding: 0;
-  height: calc(100% - 40px);
-  overflow-y: auto;
-}
-
-:deep(.el-tabs__nav) {
-  background-color: #fff;
-  padding: 0px 30px;
-  width: 100%;
-}
-
-:deep(.el-tabs__item) {
-  font-size: 14px;
-  height: 40px;
-  line-height: 40px;
-}
-
-:deep(.el-tabs__item.is-active) {
-  font-weight: bold;
-}
-
-/* 可视化面板样式 */
-.visualization-container {
-  margin: 12px;
-  background-color: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.visualization-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
-}
-
-.visualization-header h4 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.visualization-content {
-  padding: 20px;
-  min-height: 200px;
-}
-
-.placeholder-chart {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  color: #909399;
-}
-
-.placeholder-chart .el-icon {
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-/* 产物面板样式 */
-.artifacts-container {
-  padding: 12px;
-}
-
-.artifact-item {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  margin-bottom: 8px;
-  background-color: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.artifact-icon {
-  font-size: 24px;
-  margin-right: 12px;
-  color: #409eff;
-}
-
-.artifact-info {
-  flex: 1;
-}
-
-.artifact-name {
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.artifact-path {
-  font-size: 12px;
-  color: #909399;
-}
-
-.artifact-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* 配置面板样式 */
-.config-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 0;
-}
-
-.config-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background-color: #2d2d30;
-  color: #e0e0e0;
-}
-
-.config-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.config-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.editor-container {
-  flex: 1;
-  min-height: 500px;
-}
-
-.overview-container {
-  padding: 10px 5px;
-}
-
-/* 状态卡片样式 */
-.status-card {
-  display: flex;
-  background-color: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  height: 100%;
-  transition: all 0.3s ease;
-}
-
-.status-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.status-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  margin-right: 12px;
-  font-size: 24px;
-}
-
-.status-icon.success {
-  background-color: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
-}
-
-.status-icon.warning {
-  background-color: rgba(230, 162, 60, 0.1);
-  color: #e6a23c;
-}
-
-.status-icon.info {
-  background-color: rgba(64, 158, 255, 0.1);
-  color: #409eff;
-}
-
-.status-icon.primary {
-  background-color: rgba(103, 119, 239, 0.1);
-  color: #6777ef;
-}
-
-.status-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.status-info h4 {
-  margin: 0 0 5px;
-  font-size: 14px;
-  color: #606266;
-  font-weight: normal;
-}
-
-.status-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-  line-height: 1.2;
-}
-
-.status-desc {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
-}
-
-.text-danger {
-  color: #f56c6c;
-}
-
-/* 标题样式 */
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 25px 0 15px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.section-title h3 {
-  font-size: 18px;
-  margin: 0;
-  font-weight: 600;
-  color: #303133;
-}
-
-/* 图表容器样式 */
-.chart-container {
-  background-color: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  height: 100%;
-  margin-bottom: 20px;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.chart-header h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  color: #303133;
-}
-
-.chart-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 180px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
-  color: #909399;
-  margin-bottom: 12px;
-}
-
-.chart-placeholder .el-icon {
-  font-size: 40px;
-  margin-bottom: 10px;
-  opacity: 0.7;
-}
-
-.chart-legend {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding-top: 10px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  color: #606266;
-}
-
-.legend-color {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  margin-right: 6px;
-}
-
-.legend-color.high {
-  background-color: #f56c6c;
-}
-
-.legend-color.medium {
-  background-color: #e6a23c;
-}
-
-.legend-color.low {
-  background-color: #67c23a;
-}
-
-/* 快速访问区样式 */
-.quick-access {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.access-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100px;
-  height: 100px;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.access-item:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.access-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: #f0f2f5;
-  margin-bottom: 8px;
-}
-
-.access-icon .el-icon {
-  font-size: 24px;
-  color: #409eff;
-}
-
-.access-text {
-  font-size: 14px;
-  color: #606266;
-}
-
-/* 最近活动样式 */
-.recent-activities {
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.activity-item {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.activity-item:last-child {
-  border-bottom: none;
-}
-
-.activity-time {
-  width: 50px;
-  color: #909399;
-  font-size: 13px;
-}
-
-.activity-content {
-  flex: 1;
-  margin: 0 12px;
-}
-
-.activity-title {
-  font-weight: 500;
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 4px;
-}
-
-.activity-desc {
-  font-size: 12px;
-  color: #606266;
-  line-height: 1.5;
-}
-
-.activity-action {
-  margin-left: 12px;
-}
-
-
-.message-list {
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-}
-
-.message-item {
-  display: flex;
-  justify-content: flex-start;
-  min-width: 0;
-}
-
-.message-bubble {
-  max-width: 80%;
-  min-width: 0;
-  padding: 12px 16px;
-  border-radius: 12px;
-  line-height: 1.5;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  position: relative;
-}
-
-.user-message {
-  max-width: 80%;
-  min-width: 0;
-  background-color: #e6f1fc;
-  align-self: flex-end;
-  border-bottom-right-radius: 4px;
-}
-
-.ai-message {
-  max-width: 80%;
-  min-width: 0;
-  background-color: #f5f7fa;
-  align-self: flex-start;
-  border-bottom-left-radius: 4px;
-}
-
-.user-message-container {
-  display: flex;
-  flex-direction: row-reverse;
-  width: 100%;
-  min-width: 0;
-}
-
-.ai-message-container {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-}
-
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 10px;
-  flex-shrink: 0;
-}
-
-.ai-avatar {
-  background-color: #409eff;
-  color: white;
-}
-
 .message-content {
-  margin: 0;
-  font-size: 14px;
-  color: #303133;
-  max-width: 100%;
   min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  color: var(--zv-text-primary);
+  font-size: var(--zv-font-size-md);
   overflow-wrap: anywhere;
 }
 
-/* 添加用户消息内容样式，支持换行 */
 .user-content {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 
-/* 添加Markdown内容样式 */
-.markdown-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial,
-    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-  font-size: 14px;
-  line-height: 1.5;
-  word-wrap: break-word;
-}
-
-.markdown-body::before {
-  display: table;
-  content: "";
-}
-
-.markdown-body::after {
-  display: table;
-  clear: both;
-  content: "";
-}
-
-.markdown-body>*:first-child {
-  margin-top: 0 !important;
-}
-
-.markdown-body>*:last-child {
-  margin-bottom: 0 !important;
-}
-
-.markdown-body a {
-  color: #409eff;
-  text-decoration: none;
-}
-
-.markdown-body a:hover {
-  text-decoration: underline;
-}
-
-.markdown-body a:active,
-.markdown-body a:hover {
-  outline-width: 0;
-}
-
-.markdown-body strong {
-  font-weight: 600;
-}
-
-.markdown-body h1 {
-  font-size: 2em;
-  margin: 0.67em 0;
-}
-
-.markdown-body h2 {
-  font-size: 1.5em;
-  margin: 0.83em 0;
-}
-
-.markdown-body h3 {
-  font-size: 1.25em;
-  margin: 1em 0;
-}
-
-.markdown-body h4 {
-  font-size: 1em;
-  margin: 1.33em 0;
-}
-
-.markdown-body h5 {
-  font-size: 0.875em;
-  margin: 1.67em 0;
-}
-
-.markdown-body h6 {
-  font-size: 0.85em;
-  color: #6a737d;
-  margin: 2em 0;
-}
-
-.markdown-body p {
-  margin-top: 0;
-  margin-bottom: 10px;
-}
-
-.markdown-body blockquote {
-  margin: 0;
-  padding: 0 1em;
-  color: #6a737d;
-  border-left: 0.25em solid #dfe2e5;
-}
-
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 2em;
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.markdown-body ul ul,
-.markdown-body ul ol,
-.markdown-body ol ol,
-.markdown-body ol ul {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.markdown-body li {
-  word-wrap: break-all;
-}
-
-.markdown-body li>p {
-  margin-top: 16px;
-}
-
-.markdown-body li+li {
-  margin-top: 0.25em;
-}
-
-.markdown-body code {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  font-size: 85%;
-  background-color: rgba(27, 31, 35, 0.05);
-  border-radius: 3px;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-}
-
-.markdown-body pre {
-  word-wrap: normal;
-  background-color: #f6f8fa;
-  border-radius: 3px;
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-}
-
-.markdown-body pre code {
-  background: transparent;
-  word-break: normal;
-  overflow-wrap: normal;
-}
-
-.markdown-body pre code,
-.markdown-body pre tt {
-  display: inline;
-  max-width: auto;
-  padding: 0;
-  margin: 0;
-  overflow: visible;
-  line-height: inherit;
-  word-wrap: normal;
-  background-color: transparent;
-  border: 0;
-}
-
-.markdown-body hr {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
-  background-color: #e1e4e8;
-  border: 0;
-}
-
-.markdown-body table {
-  border-spacing: 0;
-  border-collapse: collapse;
-  display: block;
-  width: max-content;
-  max-width: 100%;
-  overflow: auto;
-}
-
-.markdown-body td,
-.markdown-body th {
-  padding: 6px 13px;
-  border: 1px solid #dfe2e5;
-}
-
-.markdown-body th {
-  font-weight: 600;
-}
-
-.markdown-body tr {
-  background-color: #fff;
-  border-top: 1px solid #c6cbd1;
-}
-
-.markdown-body tr:nth-child(2n) {
-  background-color: #f6f8fa;
-}
-
-.markdown-body img {
-  max-width: 100%;
-  box-sizing: content-box;
-  background-color: #fff;
-}
-
-/* 确保AI消息容器中的Markdown内容样式正确应用 */
-.ai-message .message-content {
-  color: #303133;
-  background-color: transparent;
-}
-
-/* 确保AI消息容器中的Markdown内容样式正确应用 */
-.ai-message .markdown-body {
-  color: #303133;
-  background-color: transparent;
-}
-
-.message-time {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
-  text-align: right;
-}
-
-.message-actions {
-  display: flex;
-  gap: 8px;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  transform: translateY(100%);
-  background-color: rgba(255, 255, 255, 0.3);
-  padding: 4px;
-  border-radius: 4px;
-  z-index: 10;
-}
-
-.message-actions .el-button {
-  padding: 4px 8px;
-  font-size: 12px;
-  border: none;
-  background: transparent;
-}
-
-.message-actions .el-button:hover {
-  background-color: #f2f6fc;
-}
-
-/* 图表消息样式 */
-.message-chart {
-  width: 100%;
-  min-height: 200px;
-  background-color: #fff;
-  border-radius: 4px;
-  padding: 8px;
-  margin-bottom: 8px;
-}
-
-/* 打字机动画效果 */
 .typing-indicator {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
   height: 24px;
+  padding: var(--zv-space-1) var(--zv-space-2);
+  align-items: center;
+  gap: var(--zv-space-1);
 }
 
 .typing-dot {
   width: 6px;
   height: 6px;
+  background: var(--zv-text-placeholder);
   border-radius: 50%;
-  background-color: #909399;
   animation: typing 1.4s infinite ease-in-out both;
 }
 
@@ -2162,11 +1662,232 @@ const dislikeMessage = (index: number) => {
 }
 
 @keyframes typing {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     transform: scale(0);
   }
+
   40% {
     transform: scale(1);
+  }
+}
+
+.stop-icon-square {
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.suggestion-icon {
+  width: 1em;
+  height: 1em;
+  margin-right: 5px;
+}
+
+.suggestions {
+  display: flex;
+  margin-top: var(--zv-space-3);
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.suggestion-btn {
+  position: relative;
+  display: inline-flex;
+  height: 30px;
+  margin: 0;
+  padding: 0 var(--zv-space-3);
+  align-items: center;
+  color: var(--zv-text-secondary);
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-round);
+  box-shadow: none;
+  transition: color var(--zv-duration-fast) ease, background-color var(--zv-duration-fast) ease,
+    border-color var(--zv-duration-fast) ease, box-shadow var(--zv-duration-fast) ease,
+    transform var(--zv-duration-fast) ease;
+}
+
+.suggestion-btn:hover {
+  color: var(--zv-primary);
+  background: var(--zv-primary-soft);
+  border-color: var(--zv-primary-border);
+}
+
+.suggestion-btn.active {
+  color: var(--zv-primary);
+  font-weight: 600;
+  background: linear-gradient(180deg, var(--zv-bg-card), var(--zv-primary-soft));
+  border-color: var(--zv-border);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--zv-primary) 12%, transparent);
+}
+
+.suggestion-btn.active::after {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 16px;
+  height: 2px;
+  content: '';
+  background: var(--zv-primary);
+  border-radius: var(--zv-radius-round);
+  transform: translateX(-50%);
+}
+
+.suggestion-btn:active {
+  transform: translateY(1px);
+}
+
+.is-compact .chat-content {
+  padding: var(--zv-space-3);
+}
+
+.is-compact .input-area {
+  padding: var(--zv-space-2);
+}
+
+.is-compact .input-container {
+  border-radius: 14px;
+}
+
+.is-compact .input-container :deep(.el-textarea__inner) {
+  min-height: 52px !important;
+  padding: 10px 12px 2px;
+}
+
+.is-compact .input-actions {
+  min-height: 40px;
+  padding: 3px 6px 6px 8px;
+}
+
+.is-compact .workspace-title-copy,
+.is-compact .suggestions,
+.is-compact .deep-thinking-btn span {
+  display: none;
+}
+
+@container (max-width: 900px) {
+  .task-status-item {
+    padding-inline: var(--zv-space-2);
+  }
+
+  .task-status-label {
+    display: none;
+  }
+}
+
+@container (max-width: 680px) {
+  .task-status-summary,
+  .task-status-skeleton {
+    display: none;
+  }
+
+  .analysis-task-badge :deep(.el-badge__content) {
+    display: inline-flex;
+  }
+
+  .current-skill-tag {
+    max-width: 24cqw;
+  }
+}
+
+@container (max-width: 520px) {
+  .current-skill-tag {
+    display: none;
+  }
+
+  .current-session-title {
+    max-width: 46cqw;
+  }
+}
+
+@media (max-width: 720px) {
+  .center-header {
+    min-height: 68px;
+    padding: 10px 12px;
+  }
+
+  .center-title {
+    font-size: var(--zv-font-size-lg);
+  }
+
+  .center-header-actions :deep(.el-button span) {
+    display: none;
+  }
+
+  .chat-content {
+    padding: var(--zv-space-4) var(--zv-space-3);
+  }
+
+  .message-item + .message-item {
+    margin-top: var(--zv-space-8);
+  }
+
+  .is-ai-message-item + .message-item {
+    margin-top: 64px;
+  }
+
+  .input-area {
+    padding: var(--zv-space-2) var(--zv-space-3) var(--zv-space-3);
+  }
+
+  .ai-message {
+    width: calc(100% - 44px);
+    max-width: calc(100% - 44px);
+  }
+
+  .user-message {
+    max-width: 90%;
+  }
+
+  .input-actions {
+    align-items: center;
+    gap: var(--zv-space-2);
+  }
+
+  .deep-thinking-btn span {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .current-session-title {
+    display: none;
+  }
+
+  .center-header-actions {
+    gap: 0;
+  }
+
+  .center-header-actions :deep(.el-button) {
+    margin-left: 0;
+    padding-inline: 8px;
+  }
+
+  .input-actions {
+    gap: 4px;
+  }
+
+  .input-action-group {
+    gap: 4px;
+  }
+
+  .send-btn,
+  .stop-btn {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input-container,
+  .chat-item,
+  .action-btn {
+    transition: none;
   }
 }
 </style>

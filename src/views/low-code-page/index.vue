@@ -1,9 +1,11 @@
 <template>
   <iframe
+    ref="iframeRef"
     :src="iframeUrl"
     class="iframe-container"
     sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
     referrerpolicy="no-referrer"
+    @load="handleIframeLoad"
   />
 </template>
 
@@ -11,6 +13,7 @@
 import { watch, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { appBaseUrl, sanitizeIframeUrl } from '@u/url';
+import { usePluginUiBridge } from '@/composables/use-plugin-ui-bridge';
 const route = useRoute();
 const baseUrl = ref<string>('/amis/page.html');
 // 提取路径参数并转换为字符串
@@ -38,6 +41,8 @@ const buildIframeUrl = () => {
 
 // 初始化 iframeUrl
 const iframeUrl = ref<string>(buildIframeUrl());
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+const { handleIframeLoad } = usePluginUiBridge(iframeRef, iframeUrl);
 
 // 监听路由变化
 watch(

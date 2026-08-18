@@ -5,6 +5,7 @@ const prefix = '/api/v1/system';
 
 type RawSystemInfo = {
   system_title?: string;
+  system_subtitle?: string;
   system_icon?: string;
   system_logo?: string;
   system_banner?: string;
@@ -35,6 +36,7 @@ let systemInfoPromise: Promise<SystemInfo> | null = null;
 
 const normalizeSystemInfo = (res: RawSystemInfo): SystemInfo => ({
   systemTitle: res.system_title || '',
+  systemSubtitle: res.system_subtitle || '',
   systemIcon: res.system_icon || '',
   systemLogo: res.system_logo || '',
   systemBanner: res.system_banner || '',
@@ -103,17 +105,22 @@ export class SystemService {
   }
 
   static async updateSystemInfo(params: SystemInfo): Promise<void> {
-    await request<void>(`${prefix}/about/info/update`, {
-      system_title: params.systemTitle,
-      product_name: params.productName,
-      product_version: params.productVersion,
-      product_introduction: params.productIntroduction,
-      copyright: params.copyright,
-      service_phone: params.servicePhone,
-      service_email: params.serviceEmail,
-      technical_email: params.technicalEmail,
-      integrate_link: params.integrateLink,
-    }, 'PUT');
+    await request<void>(
+      `${prefix}/about/info/update`,
+      {
+        system_title: params.systemTitle,
+        system_subtitle: params.systemSubtitle,
+        product_name: params.productName,
+        product_version: params.productVersion,
+        product_introduction: params.productIntroduction,
+        copyright: params.copyright,
+        service_phone: params.servicePhone,
+        service_email: params.serviceEmail,
+        technical_email: params.technicalEmail,
+        integrate_link: params.integrateLink,
+      },
+      'PUT',
+    );
     SystemService.invalidateSystemInfoCache();
   }
 

@@ -30,6 +30,10 @@ import type {
   ReportQuickActionEventDetail,
 } from '../events';
 import type { SendMessageOptions } from './use-chat-stream';
+import {
+  extractLatestMessageReportDocument,
+  mergeStoredAndMessageReportDocument,
+} from '../components/report-document-sync';
 
 export type DihPanelRecord = Record<string, unknown> & {
   id?: string;
@@ -178,6 +182,9 @@ export const usePanelRecordSync = ({
 
   const extractReportRecords = () => {
     const report = asObject(parseSessionExtraData().report);
+    const storedDocument = asObject(report.currentDocument);
+    const messageDocument = extractLatestMessageReportDocument(messages.value);
+    const currentDocument = mergeStoredAndMessageReportDocument(storedDocument, messageDocument);
     const dataVisualization = asObject(parseSessionExtraData().dataVisualization);
     const dataAnalysis = asObject(parseSessionExtraData().dataAnalysis);
     const materials: DihPanelRecord[] = [];
@@ -214,8 +221,10 @@ export const usePanelRecordSync = ({
       });
     });
     return {
-      currentDocument: asObject(report.currentDocument),
-      documents: asRecordList(report.documents),
+      currentDocument,
+      documents: Object.keys(currentDocument).length
+        ? upsertById(asRecordList(report.documents), currentDocument)
+        : asRecordList(report.documents),
       artifacts: asRecordList(report.artifacts),
       revisions: asRecordList(report.revisions).map(record => ({
         ...record,
@@ -255,6 +264,16 @@ export const usePanelRecordSync = ({
     publishConfigurationRecords();
     publishReportRecords();
   });
+
+  watch(
+    () => {
+      const document = extractLatestMessageReportDocument(messages.value);
+      return document
+        ? `${textValue(document.documentId || document.id)}:${Number(document.revision || 0)}:${textValue(document.contentHash)}:${textValue(document.content).length}`
+        : '';
+    },
+    () => publishReportRecords(),
+  );
 
   const configRecordLabel = (record?: ConfigRecord) => {
     return textValue(record?.fileName || record?.id || record?.recordId, '当前配置记录');

@@ -660,10 +660,42 @@
 
   .card-toggle-btn {
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     margin-left: auto;
     background: transparent;
+  }
+
+  .code-copy-btn,
+  .config-copy-btn,
+  .card-toggle-btn {
+    flex: 0 0 28px;
+    width: 28px;
+    min-width: 28px;
+    max-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0;
+    line-height: 1;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+
+  .code-copy-btn .el-icon,
+  .config-copy-btn .el-icon,
+  .card-toggle-btn .el-icon {
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+  }
+
+  .code-copy-btn .el-icon svg,
+  .config-copy-btn .el-icon svg,
+  .card-toggle-btn .el-icon svg {
+    width: 14px;
+    height: 14px;
   }
 
   .notice-content,
@@ -898,5 +930,53 @@
 
   .chart-part {
     color: #409eff;
+  }
+}
+
+.rich-message {
+  color: var(--zv-text-primary);
+
+  .message-content {
+    color: var(--zv-text-primary);
+    font-size: var(--zv-font-size-sm);
+    line-height: 1.72;
+  }
+
+  .thinking-part,
+  .config-part,
+  .notice-part,
+  .confirm-part,
+  .mcp-approval-part,
+  .info-steps-part,
+  .data-access-decision-part,
+  .visualization-chart-preview-part,
+  .chart-part {
+    border-color: var(--zv-border);
+    border-radius: var(--zv-radius-md);
+    background: var(--zv-bg-subtle);
+    box-shadow: var(--zv-shadow-1);
+  }
+
+  .thinking-header,
+  .config-card-header,
+  .visualization-chart-preview-header {
+    color: var(--zv-text-secondary);
+    background: var(--zv-bg-surface);
+    border-bottom-color: var(--zv-divider);
+  }
+
+  .config-preview,
+  .report-document-preview,
+  .info-step-item {
+    background: var(--zv-bg-surface);
+    border-color: var(--zv-border);
+    border-radius: var(--zv-radius-md);
+  }
+
+  .prompt-suggestion-bubble {
+    color: var(--zv-primary);
+    background: var(--zv-primary-soft);
+    border-color: var(--zv-primary-border);
+    border-radius: var(--zv-radius-round);
   }
 }

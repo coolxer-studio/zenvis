@@ -1,6 +1,6 @@
 <template>
   <div class="ai-float-ball-wrapper" :style="wrapperStyle">
-    <transition name="fade">
+    <transition name="float-ball">
       <div
         v-show="isVisible"
         class="ai-float-ball"
@@ -21,22 +21,43 @@
       </div>
     </transition>
 
-    <transition name="slide-up">
+    <transition name="chat-pop">
       <div v-if="isExpanded" class="ai-chat-window-container">
         <div class="chat-header">
-          <button
-            class="action-btn"
-            aria-label="在新页面打开对话"
-            title="在新页面打开对话"
-            @click="openChatPage"
-          >
-            <el-icon><TopRight /></el-icon>
-          </button>
-          <button class="action-btn" aria-label="关闭" title="关闭" @click="closeWindow">
-            <el-icon><Close /></el-icon>
-          </button>
+          <div class="chat-header-brand">
+            <span class="chat-header-logo">
+              <img :src="copilotImg" alt="" />
+            </span>
+            <span class="chat-header-copy">
+              <strong>智能助手</strong>
+              <small>AI Copilot</small>
+            </span>
+          </div>
+          <div class="chat-header-actions">
+            <button
+              class="action-btn"
+              aria-label="在新页面打开对话"
+              title="在新页面打开对话"
+              @click="openChatPage"
+            >
+              <el-icon><FullScreen /></el-icon>
+            </button>
+            <button
+              class="action-btn is-close"
+              aria-label="关闭对话"
+              title="关闭对话"
+              @click="closeWindow"
+            >
+              <el-icon><CloseBold /></el-icon>
+            </button>
+          </div>
         </div>
-        <view-center :suggestions="[]" :chat-session-id="chatSessionId" chat-session-type="ask" />
+        <view-center
+          :suggestions="[]"
+          :chat-session-id="chatSessionId"
+          chat-session-type="ask"
+          variant="compact"
+        />
       </div>
     </transition>
   </div>
@@ -45,7 +66,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { Close, TopRight } from '@element-plus/icons-vue';
+import { CloseBold, FullScreen } from '@element-plus/icons-vue';
 import { generateUUID } from '@/utils/util-common';
 import copilotImg from '@/assets/images/copilot.png';
 
@@ -219,11 +240,12 @@ onUnmounted(() => {
   cursor: pointer;
   touch-action: none;
   user-select: none;
-  transition: opacity 0.3s ease, box-shadow 0.2s ease, background 0.2s ease;
+  transition: opacity 0.3s ease, transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.2s ease, background 0.2s ease;
   opacity: 0.8;
 
   &:hover {
-    transform: translateY(-2px);
+    transform: translateY(-2px) scale(1.1);
     background: #2d7df0;
     box-shadow: 0 12px 35px rgba(57, 136, 255, 0.45);
   }
@@ -256,6 +278,8 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   margin-bottom: 15px;
+  transform-origin: calc(100% - 28px) 100%;
+  will-change: transform, opacity, filter;
 
   :deep(.center-panel) {
     flex: 1;
@@ -271,6 +295,7 @@ onUnmounted(() => {
   :deep(.chat-content) {
     padding: 12px;
     flex: 1;
+    overflow-x: hidden;
     overflow-y: auto;
     min-height: 0;
   }
@@ -286,8 +311,26 @@ onUnmounted(() => {
   }
 
   :deep(.message-list) {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     gap: 20px;
     padding: 10px;
+  }
+
+  :deep(.message-item),
+  :deep(.ai-message-container),
+  :deep(.user-message-container),
+  :deep(.message-content),
+  :deep(.markdown-body) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :deep(.message-content),
+  :deep(.markdown-body) {
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
   :deep(.message-bubble) {
@@ -298,53 +341,160 @@ onUnmounted(() => {
 .chat-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  min-height: 40px;
-  padding: 5px 10px;
-  background: #3988ff;
-  color: #fff;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 7px 10px 7px 12px;
+  color: var(--zv-text-primary, #15233a);
+  background: radial-gradient(circle at 12% 0%, rgb(47 94 229 / 10%), transparent 42%),
+    linear-gradient(135deg, #fff 0%, var(--zv-bg-secondary, #f7f9fc) 100%);
+  border-bottom: 1px solid var(--zv-border-light, #e5eaf2);
+}
+
+.chat-header-brand,
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.chat-header-brand {
+  min-width: 0;
+  gap: 9px;
+}
+
+.chat-header-logo {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  overflow: hidden;
+  background: linear-gradient(145deg, var(--zv-primary, #2f5ee5), var(--zv-accent, #0f9fa3));
+  border: 1px solid rgb(255 255 255 / 80%);
+  border-radius: 10px;
+  box-shadow: 0 5px 14px rgb(47 94 229 / 20%);
+  place-items: center;
+}
+
+.chat-header-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.chat-header-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.chat-header-copy strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-copy small {
+  margin-top: 3px;
+  color: var(--zv-text-tertiary, #66758a);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.chat-header-actions {
+  flex: 0 0 auto;
+  gap: 4px;
 }
 
 .action-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: #fff;
+  border-radius: 9px;
+  color: var(--zv-text-secondary, #47556b);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--zv-primary, #2f5ee5);
+    background: rgb(47 94 229 / 9%);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgb(47 94 229 / 25%);
+    outline-offset: 1px;
+  }
+
+  &.is-close:hover {
+    color: var(--zv-danger, #d1435b);
+    background: rgb(209 67 91 / 9%);
   }
 
   .el-icon {
-    font-size: 15px;
+    font-size: 16px;
   }
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
+.float-ball-enter-active {
+  transition: opacity 180ms ease-out, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.float-ball-leave-active {
+  transition: opacity 120ms ease-in, transform 150ms ease-in;
+}
+
+.float-ball-enter-from {
   opacity: 0;
+  transform: scale(0.72) rotate(7deg);
 }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-up-enter-from,
-.slide-up-leave-to {
+.float-ball-leave-to {
   opacity: 0;
-  transform: translateY(20px);
+  transform: scale(0.82);
+}
+
+.chat-pop-enter-active {
+  transition: opacity 220ms ease-out, transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 220ms ease-out;
+}
+
+.chat-pop-leave-active {
+  transition: opacity 150ms ease-in, transform 180ms cubic-bezier(0.4, 0, 1, 1),
+    filter 150ms ease-in;
+}
+
+.chat-pop-enter-from {
+  opacity: 0;
+  filter: blur(5px);
+  transform: translate3d(18px, 18px, 0) scale(0.86);
+}
+
+.chat-pop-leave-to {
+  opacity: 0;
+  filter: blur(3px);
+  transform: translate3d(14px, 16px, 0) scale(0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-ball-enter-active,
+  .float-ball-leave-active,
+  .chat-pop-enter-active,
+  .chat-pop-leave-active {
+    transition-duration: 1ms;
+  }
+
+  .float-ball-enter-from,
+  .float-ball-leave-to,
+  .chat-pop-enter-from,
+  .chat-pop-leave-to {
+    filter: none;
+    transform: none;
+  }
 }
 </style>

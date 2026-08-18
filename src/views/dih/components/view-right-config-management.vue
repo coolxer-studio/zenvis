@@ -2,7 +2,7 @@
   <div class="panel right-panel">
     <el-tabs v-model="activeTab" class="right-tabs">
       <el-tab-pane label="配置记录" name="records">
-        <div class="config-section">
+        <template #default>
           <div class="section-toolbar">
             <div>
               <div class="section-title">配置变更记录</div>
@@ -32,14 +32,22 @@
             </el-table-column>
             <el-table-column label="验证状态" width="104">
               <template #default="scope">
-                <el-tag size="small" :type="validationTagType(scope.row.validationStatus)" effect="plain">
+                <el-tag
+                  size="small"
+                  :type="validationTagType(scope.row.validationStatus)"
+                  effect="plain"
+                >
                   {{ validationStatusText(scope.row.validationStatus) }}
                 </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="生效状态" width="92">
               <template #default="scope">
-                <el-tag size="small" :type="effectiveTagType(scope.row.effectiveStatus)" effect="plain">
+                <el-tag
+                  size="small"
+                  :type="effectiveTagType(scope.row.effectiveStatus)"
+                  effect="plain"
+                >
                   {{ effectiveStatusText(scope.row.effectiveStatus) }}
                 </el-tag>
               </template>
@@ -48,17 +56,31 @@
               <template #default="scope">
                 <div class="record-actions">
                   <el-button size="small" @click="showDiff(scope.row)">对比</el-button>
-                  <el-button size="small" type="primary" plain :disabled="isEffective(scope.row)" @click="requestTrial(scope.row)">试验</el-button>
-                  <el-button size="small" type="success" plain :disabled="!canApply(scope.row)" @click="requestApply(scope.row)">下发</el-button>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    :disabled="isEffective(scope.row)"
+                    @click="requestTrial(scope.row)"
+                    >试验</el-button
+                  >
+                  <el-button
+                    size="small"
+                    type="success"
+                    plain
+                    :disabled="!canApply(scope.row)"
+                    @click="requestApply(scope.row)"
+                    >下发</el-button
+                  >
                 </div>
               </template>
             </el-table-column>
           </el-table>
-        </div>
+        </template>
       </el-tab-pane>
 
       <el-tab-pane label="试验场验证" name="trial">
-        <div class="config-section">
+        <template #default>
           <el-empty v-if="!trialRecords.length" description="暂无试验结果" :image-size="72" />
           <div v-else class="trial-list">
             <div v-for="record in trialRecords" :key="recordKey(record)" class="trial-item">
@@ -74,11 +96,11 @@
               <pre class="json-result">{{ prettyJson(record.validationResult || {}) }}</pre>
             </div>
           </div>
-        </div>
+        </template>
       </el-tab-pane>
 
       <el-tab-pane label="正式生效" name="effective">
-        <div class="config-section">
+        <template #default>
           <el-empty v-if="!applicationRecords.length" description="暂无下发结果" :image-size="72" />
           <div v-else class="trial-list">
             <div v-for="record in applicationRecords" :key="recordKey(record)" class="trial-item">
@@ -94,7 +116,7 @@
               <pre class="json-result">{{ prettyJson(record.applyResult || {}) }}</pre>
             </div>
           </div>
-        </div>
+        </template>
       </el-tab-pane>
     </el-tabs>
 
@@ -116,156 +138,166 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import * as monaco from 'monaco-editor'
-import type { ConfigRecord } from '@/types/type-dih'
-import { setupMonacoWorkers } from '@u/monaco-workers'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import * as monaco from 'monaco-editor';
+import type { ConfigRecord } from '@/types/type-dih';
+import { setupMonacoWorkers } from '@u/monaco-workers';
 import {
   CONFIG_RECORD_ACTION_EVENT,
   CONFIG_RECORD_EVENT,
   CONFIG_RECORD_REQUEST_EVENT,
   emitDihEvent,
   useDihEventListener,
-} from '../events'
-import type { ConfigRecordEventDetail } from '../events'
+} from '../events';
+import type { ConfigRecordEventDetail } from '../events';
 
-const activeTab = ref('records')
-const records = ref<ConfigRecord[]>([])
-const diffVisible = ref(false)
-const diffFileName = ref('config.json')
-const diffLanguage = ref('plaintext')
-const oldConfigText = ref('')
-const newConfigText = ref('')
-const diffEditorContainer = ref<HTMLElement | null>(null)
+const activeTab = ref('records');
+const records = ref<ConfigRecord[]>([]);
+const diffVisible = ref(false);
+const diffFileName = ref('config.json');
+const diffLanguage = ref('plaintext');
+const oldConfigText = ref('');
+const newConfigText = ref('');
+const diffEditorContainer = ref<HTMLElement | null>(null);
 
-let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null
-let originalModel: monaco.editor.ITextModel | null = null
-let modifiedModel: monaco.editor.ITextModel | null = null
+let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
+let originalModel: monaco.editor.ITextModel | null = null;
+let modifiedModel: monaco.editor.ITextModel | null = null;
 
-const trialRecords = computed(() => records.value.filter(record => record.validationStatus && record.validationStatus !== 'unverified'))
-const applicationRecords = computed(() => records.value.filter(record => {
-  if (record.effectiveStatus === 'yes') return true
-  const result = record.applyResult
-  return typeof result === 'string' ? !!result.trim() : !!result && typeof result === 'object' && Object.keys(result).length > 0
-}))
+const trialRecords = computed(() =>
+  records.value.filter(
+    record => record.validationStatus && record.validationStatus !== 'unverified',
+  ),
+);
+const applicationRecords = computed(() =>
+  records.value.filter(record => {
+    if (record.effectiveStatus === 'yes') return true;
+    const result = record.applyResult;
+    return typeof result === 'string'
+      ? !!result.trim()
+      : !!result && typeof result === 'object' && Object.keys(result).length > 0;
+  }),
+);
 
 const cellText = (value: unknown, fallback = '') => {
-  if (value === undefined || value === null || value === '') return fallback
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {
-    return JSON.stringify(value)
+    return JSON.stringify(value);
   } catch {
-    return fallback
+    return fallback;
   }
-}
+};
 
 const prettyJson = (value: unknown) => {
   if (typeof value === 'string') {
     try {
-      return JSON.stringify(JSON.parse(value), null, 2)
+      return JSON.stringify(JSON.parse(value), null, 2);
     } catch {
-      return value
+      return value;
     }
   }
   try {
-    return JSON.stringify(value, null, 2)
+    return JSON.stringify(value, null, 2);
   } catch {
-    return cellText(value)
+    return cellText(value);
   }
-}
+};
 
 const compactConfig = (value: unknown) => {
-  const text = prettyJson(value)
-  if (!text || text === '""') return '-'
-  return text.replace(/\s+/g, ' ').slice(0, 80)
-}
+  const text = prettyJson(value);
+  if (!text || text === '""') return '-';
+  return text.replace(/\s+/g, ' ').slice(0, 80);
+};
 
 const diffSummary = (record: ConfigRecord) => {
-  const oldValue = compactConfig(record.oldConfig)
-  const newValue = compactConfig(record.newConfig)
-  if (record.changeMode === 'add') return `新增：${newValue}`
-  if (oldValue === newValue) return '内容无变化'
-  return `${oldValue} → ${newValue}`
-}
+  const oldValue = compactConfig(record.oldConfig);
+  const newValue = compactConfig(record.newConfig);
+  if (record.changeMode === 'add') return `新增：${newValue}`;
+  if (oldValue === newValue) return '内容无变化';
+  return `${oldValue} → ${newValue}`;
+};
 
-const recordKey = (record: ConfigRecord) => cellText(record.id || record.recordId || record.fileName || record.updatedAt)
+const recordKey = (record: ConfigRecord) =>
+  cellText(record.id || record.recordId || record.fileName || record.updatedAt);
 
 const changeModeText = (mode?: string) => {
-  if (mode === 'add') return '新增'
-  if (mode === 'modify') return '修改'
-  return mode || '-'
-}
+  if (mode === 'add') return '新增';
+  if (mode === 'modify') return '修改';
+  return mode || '-';
+};
 
 const validationStatusText = (status?: string) => {
-  if (status === 'success') return '验证成功'
-  if (status === 'failed') return '验证失败'
-  if (status === 'blocked') return '验证阻塞'
-  return '未验证'
-}
+  if (status === 'success') return '验证成功';
+  if (status === 'failed') return '验证失败';
+  if (status === 'blocked') return '验证阻塞';
+  return '未验证';
+};
 
 const validationTagType = (status?: string) => {
-  if (status === 'success') return 'success'
-  if (status === 'failed') return 'danger'
-  if (status === 'blocked') return 'warning'
-  return 'info'
-}
+  if (status === 'success') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'blocked') return 'warning';
+  return 'info';
+};
 
-const effectiveStatusText = (status?: string) => status === 'yes' ? '是' : '否'
+const effectiveStatusText = (status?: string) => (status === 'yes' ? '是' : '否');
 
-const effectiveTagType = (status?: string) => status === 'yes' ? 'success' : 'info'
+const effectiveTagType = (status?: string) => (status === 'yes' ? 'success' : 'info');
 
-const isEffective = (record: ConfigRecord) => record.effectiveStatus === 'yes'
+const isEffective = (record: ConfigRecord) => record.effectiveStatus === 'yes';
 
-const canApply = (record: ConfigRecord) => record.validationStatus === 'success' && record.effectiveStatus !== 'yes'
+const canApply = (record: ConfigRecord) =>
+  record.validationStatus === 'success' && record.effectiveStatus !== 'yes';
 
 const editorLanguage = (record: ConfigRecord) => {
-  const format = cellText(record.format).toLowerCase()
-  if (format === 'json') return 'json'
-  if (format === 'xml') return 'xml'
-  if (format === 'properties' || format === 'conf') return 'ini'
-  if (format === 'csv') return 'plaintext'
-  return 'plaintext'
-}
+  const format = cellText(record.format).toLowerCase();
+  if (format === 'json') return 'json';
+  if (format === 'xml') return 'xml';
+  if (format === 'properties' || format === 'conf') return 'ini';
+  if (format === 'csv') return 'plaintext';
+  return 'plaintext';
+};
 
 const configText = (value: unknown) => {
-  if (value === undefined || value === null || value === '') return ''
+  if (value === undefined || value === null || value === '') return '';
   if (typeof value === 'string') {
     try {
-      return JSON.stringify(JSON.parse(value), null, 2)
+      return JSON.stringify(JSON.parse(value), null, 2);
     } catch {
-      return value
+      return value;
     }
   }
   try {
-    return JSON.stringify(value, null, 2)
+    return JSON.stringify(value, null, 2);
   } catch {
-    return String(value)
+    return String(value);
   }
-}
+};
 
 const disposeDiffModels = () => {
-  originalModel?.dispose()
-  modifiedModel?.dispose()
-  originalModel = null
-  modifiedModel = null
-}
+  originalModel?.dispose();
+  modifiedModel?.dispose();
+  originalModel = null;
+  modifiedModel = null;
+};
 
 const disposeDiffEditor = () => {
-  diffEditor?.dispose()
-  diffEditor = null
-  disposeDiffModels()
-}
+  diffEditor?.dispose();
+  diffEditor = null;
+  disposeDiffModels();
+};
 
 const renderDiffEditor = async () => {
-  await nextTick()
-  if (!diffEditorContainer.value) return
+  await nextTick();
+  if (!diffEditorContainer.value) return;
 
-  setupMonacoWorkers()
-  disposeDiffEditor()
+  setupMonacoWorkers();
+  disposeDiffEditor();
 
-  originalModel = monaco.editor.createModel(oldConfigText.value, diffLanguage.value)
-  modifiedModel = monaco.editor.createModel(newConfigText.value, diffLanguage.value)
+  originalModel = monaco.editor.createModel(oldConfigText.value, diffLanguage.value);
+  modifiedModel = monaco.editor.createModel(newConfigText.value, diffLanguage.value);
   diffEditor = monaco.editor.createDiffEditor(diffEditorContainer.value, {
     automaticLayout: true,
     readOnly: true,
@@ -279,45 +311,45 @@ const renderDiffEditor = async () => {
     fontSize: 13,
     lineNumbersMinChars: 3,
     diffAlgorithm: 'advanced',
-  })
+  });
   diffEditor.setModel({
     original: originalModel,
     modified: modifiedModel,
-  })
-}
+  });
+};
 
 const showDiff = (record: ConfigRecord) => {
-  diffFileName.value = record.fileName || 'config.json'
-  diffLanguage.value = editorLanguage(record)
-  oldConfigText.value = configText(record.oldConfig)
-  newConfigText.value = configText(record.newConfig)
-  diffVisible.value = true
-  if (diffEditor) renderDiffEditor()
-}
+  diffFileName.value = record.fileName || 'config.json';
+  diffLanguage.value = editorLanguage(record);
+  oldConfigText.value = configText(record.oldConfig);
+  newConfigText.value = configText(record.newConfig);
+  diffVisible.value = true;
+  if (diffEditor) renderDiffEditor();
+};
 
 const requestTrial = (record: ConfigRecord) => {
-  activeTab.value = 'trial'
-  emitDihEvent(CONFIG_RECORD_ACTION_EVENT, { action: 'trial', record })
-}
+  activeTab.value = 'trial';
+  emitDihEvent(CONFIG_RECORD_ACTION_EVENT, { action: 'trial', record });
+};
 
 const requestApply = (record: ConfigRecord) => {
-  emitDihEvent(CONFIG_RECORD_ACTION_EVENT, { action: 'apply', record })
-}
+  emitDihEvent(CONFIG_RECORD_ACTION_EVENT, { action: 'apply', record });
+};
 
 const handleRecordsUpdated = (detail: ConfigRecordEventDetail) => {
-  detail ||= {}
-  records.value = Array.isArray(detail.records) ? detail.records : []
-}
+  detail ||= {};
+  records.value = Array.isArray(detail.records) ? detail.records : [];
+};
 
-useDihEventListener(CONFIG_RECORD_EVENT, handleRecordsUpdated)
+useDihEventListener(CONFIG_RECORD_EVENT, handleRecordsUpdated);
 
 onMounted(() => {
-  emitDihEvent(CONFIG_RECORD_REQUEST_EVENT)
-})
+  emitDihEvent(CONFIG_RECORD_REQUEST_EVENT);
+});
 
 onBeforeUnmount(() => {
-  disposeDiffEditor()
-})
+  disposeDiffEditor();
+});
 </script>
 
 <style scoped>
@@ -354,10 +386,6 @@ onBeforeUnmount(() => {
 :deep(.el-tabs__item) {
   height: 40px;
   line-height: 40px;
-}
-
-.config-section {
-  padding: 12px;
 }
 
 .section-toolbar,

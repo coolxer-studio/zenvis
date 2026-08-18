@@ -1,5 +1,13 @@
 <template>
-  <el-dialog v-model="visible" title="修改密码" @close="handleCancel" :before-close="handleCancel">
+  <el-dialog
+    :model-value="props.show"
+    title="修改密码"
+    width="520px"
+    append-to-body
+    destroy-on-close
+    :before-close="handleBeforeClose"
+    @closed="resetForm"
+  >
     <el-form
       ref="formRef"
       :model="formPassword"
@@ -44,7 +52,7 @@
   </el-dialog>
 </template>
 <script setup lang="ts">
-  import { reactive, ref, watch } from "vue";
+  import { reactive, ref } from 'vue';
   import type { FormInstance } from 'element-plus';
   import { rules } from '@u/tool';
   interface IUserFrom {
@@ -62,7 +70,6 @@
     'on-ok': null,
     'on-cancel': null,
   });
-  let visible = ref<boolean>(false)
   const formRef = ref<FormInstance>();
   let formPassword = reactive<IUserFrom>({
     old_password: '',
@@ -100,20 +107,17 @@
     password: [{ required: true, validator: newPass, trigger: 'blur' }],
     password_copy: [{ required: true, validator: reNewPass, trigger: 'blur' }],
   });
-  watch(
-    () => props.show,
-    (newVal) => {
-      visible.value = newVal;
-      if (formRef.value) {
-        formRef.value.resetFields();
-      }
-    }
-  );
-  const handleCancel = () => {
+  const resetForm = () => {
     if (formRef.value) {
       formRef.value.resetFields();
     }
+  };
+  const handleCancel = () => {
     emit('on-cancel');
+  };
+  const handleBeforeClose = (done: () => void) => {
+    emit('on-cancel');
+    done();
   };
   const handleOk = () => {
     formRef.value?.validate((valid: boolean) => {

@@ -352,7 +352,7 @@
 }
 
 .el-header {
-  background: #3988ff;
+  background: var(--zv-bg-surface);
 }
 
 .aqfuzt-icon {
@@ -361,13 +361,16 @@
 }
 
 .main-content {
-  width: calc(100% - 40px);
-  background: #fff;
-  height: 95%;
-  margin: 20px auto;
-  padding: 10px;
-  border-top: 2px solid #3988ff;
-  border-radius: 0 0 10px 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   overflow-y: auto;
   overflow-x: hidden;
 }

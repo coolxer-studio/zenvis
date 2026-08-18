@@ -1,5 +1,3 @@
-name: zenvis
-
 x-common: &common
   restart: unless-stopped
   networks:
@@ -35,7 +33,7 @@ services:
       KAFKA_LOG_DIRS: /tmp/kafka-logs
       CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
     ports:
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9094:9094"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:9094:9094"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/kafka/kafka-logs:/tmp/kafka-logs
@@ -55,7 +53,7 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:6379:6379"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:6379:6379"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config/redis/redis.conf:/usr/local/redis/redis.conf:ro
@@ -80,7 +78,7 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:16379:6379"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:16379:6379"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config/redis-stack/redis-stack.conf:/etc/redis-stack.conf:ro
@@ -108,7 +106,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-zenvis}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
     ports:
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:3306:3306"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:3306:3306"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/mysql/data:/var/lib/mysql:rw
@@ -133,9 +131,9 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:8123:8123"
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9000:9000"
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9009:9009"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:8123:8123"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:9000:9000"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:9009:9009"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/clickhouse/logs:/var/log/clickhouse-server
@@ -177,7 +175,7 @@ services:
       OPENAI_COMPLETION_URL: ${OPENAI_COMPLETION_URL:-}
       OPENAI_COMPLETION_MODEL: ${OPENAI_COMPLETION_MODEL:-}
     ports:
-      - "${ZENVIS_API_BIND_ADDRESS:-127.0.0.1}:${ZENVIS_API_PORT:-11001}:11001"
+      - "${ZENVIS_API_BIND_ADDRESS}:${ZENVIS_API_PORT}:11001"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config/zenvis-backend/config/application.properties:/app/application.properties:ro
@@ -220,7 +218,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       KAFKA_BOOTSTRAP_SERVERS: kafka-service:9092
     ports:
-      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:${VECTUM_PORT:-11002}:11002"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:${VECTUM_PORT}:11002"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/vectum/workspace:/workspace
@@ -249,7 +247,7 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
     ports:
-      - "${ZENVIS_WEB_BIND_ADDRESS:-0.0.0.0}:${ZENVIS_WEB_PORT:-11000}:11000"
+      - "${ZENVIS_WEB_BIND_ADDRESS}:${ZENVIS_WEB_PORT}:11000"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config/zenvis-frontend/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro

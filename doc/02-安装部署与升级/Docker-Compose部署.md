@@ -2,6 +2,8 @@
 
 Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHouse、Redis、Redis Stack 和单节点 Kafka。该模式将数据保存在 `deploy/data/`，适合单机部署和测试环境。
 
+运行环境支持 Docker Compose v2（推荐）或 legacy `docker-compose` 1.29.2；不支持更低版本的 `docker-compose` v1。
+
 ## 初始化
 
 在仓库根目录执行：
@@ -15,6 +17,7 @@ Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHous
 - 根据主机生成 `ARCH=amd64` 或 `ARCH=arm64`；
 - 为数据库、Redis、API、MCP、Vectum 和内置账号生成独立随机凭据；
 - 将凭据写入 Git 忽略的 `deploy/.env` 并设置权限 `600`；
+- 对已有 `deploy/.env` 保留原值，并自动补齐缺失的监听地址和主机端口；
 - 如发现历史数据而 `.env` 丢失，则终止初始化，不猜测旧密码。
 
 需要定制时，在首次启动前编辑 `deploy/.env`。不要把生成文件复制回 `.env.example`。

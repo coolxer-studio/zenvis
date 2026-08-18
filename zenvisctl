@@ -9,6 +9,8 @@ readonly ENV_FILE="${DEPLOY_DIR}/.env"
 readonly ENV_EXAMPLE="${DEPLOY_DIR}/.env.example"
 readonly BACKUP_ROOT="${DEPLOY_DIR}/backups"
 readonly HELM_CHART="${DEPLOY_DIR}/helm/zenvis"
+readonly COMPOSE_PROJECT="zenvis"
+readonly MIN_LEGACY_COMPOSE_VERSION="1.29.2"
 readonly DEFAULT_NAMESPACE="${ZENVIS_K8S_NAMESPACE:-zenvis}"
 readonly DEFAULT_RELEASE="${ZENVIS_K8S_RELEASE:-zenvis}"
 readonly STARTUP_TIMEOUT="${ZENVIS_STARTUP_TIMEOUT:-900}"
@@ -96,22 +98,69 @@ env_value() {
     awk -F= -v key="$key" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
 }
 
+ensure_env_default() {
+    local key="$1"
+    local value="$2"
+    [[ -n "$(env_value "$key")" ]] || set_env_value "$ENV_FILE" "$key" "$value"
+}
+
+ensure_compose_endpoint_defaults() {
+    ensure_env_default ZENVIS_WEB_BIND_ADDRESS 0.0.0.0
+    ensure_env_default ZENVIS_API_BIND_ADDRESS 127.0.0.1
+    ensure_env_default ZENVIS_INFRA_BIND_ADDRESS 127.0.0.1
+    ensure_env_default ZENVIS_WEB_PORT 11000
+    ensure_env_default ZENVIS_API_PORT 11001
+    ensure_env_default VECTUM_PORT 11002
+}
+
+version_at_least_1_29_2() {
+    local version="${1#v}"
+    local remainder major minor patch
+    version="${version%%[-+]*}"
+    major="${version%%.*}"
+    remainder="${version#*.}"
+    [[ "$remainder" != "$version" ]] || return 1
+    minor="${remainder%%.*}"
+    patch="${remainder#*.}"
+    patch="${patch%%.*}"
+    [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ && "$patch" =~ ^[0-9]+$ ]] || return 1
+    (( major > 1 || (major == 1 && (minor > 29 || (minor == 29 && patch >= 2))) ))
+}
+
 select_compose_command() {
+    local legacy_version
     require_command docker
     if docker compose version >/dev/null 2>&1; then
         COMPOSE_CMD=(docker compose)
     elif command -v docker-compose >/dev/null 2>&1; then
+        legacy_version="$(docker-compose version --short 2>/dev/null || true)"
+        version_at_least_1_29_2 "$legacy_version" \
+            || die "docker-compose 版本过低或无法识别：${legacy_version:-unknown}；最低要求 ${MIN_LEGACY_COMPOSE_VERSION}"
         COMPOSE_CMD=(docker-compose)
     else
-        die "未检测到 Docker Compose v2 或 docker-compose"
+        die "未检测到 Docker Compose v2 或 docker-compose ${MIN_LEGACY_COMPOSE_VERSION}"
     fi
 }
 
 compose() {
+    local web_bind api_bind infra_bind web_port api_port vectum_port
     if [[ "${#COMPOSE_CMD[@]}" -eq 0 ]]; then
         select_compose_command
     fi
-    "${COMPOSE_CMD[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+    web_bind="${ZENVIS_WEB_BIND_ADDRESS:-$(env_value ZENVIS_WEB_BIND_ADDRESS)}"
+    api_bind="${ZENVIS_API_BIND_ADDRESS:-$(env_value ZENVIS_API_BIND_ADDRESS)}"
+    infra_bind="${ZENVIS_INFRA_BIND_ADDRESS:-$(env_value ZENVIS_INFRA_BIND_ADDRESS)}"
+    web_port="${ZENVIS_WEB_PORT:-$(env_value ZENVIS_WEB_PORT)}"
+    api_port="${ZENVIS_API_PORT:-$(env_value ZENVIS_API_PORT)}"
+    vectum_port="${VECTUM_PORT:-$(env_value VECTUM_PORT)}"
+    env \
+        ZENVIS_WEB_BIND_ADDRESS="$web_bind" \
+        ZENVIS_API_BIND_ADDRESS="$api_bind" \
+        ZENVIS_INFRA_BIND_ADDRESS="$infra_bind" \
+        ZENVIS_WEB_PORT="$web_port" \
+        ZENVIS_API_PORT="$api_port" \
+        VECTUM_PORT="$vectum_port" \
+        "${COMPOSE_CMD[@]}" --project-name "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
 has_existing_compose_data() {
@@ -123,7 +172,9 @@ has_existing_compose_data() {
 compose_init() {
     [[ -f "$ENV_EXAMPLE" ]] || die "缺少模板：$ENV_EXAMPLE"
     if [[ -f "$ENV_FILE" ]]; then
-        info "保留已有 deploy/.env；不会覆盖现有凭据。"
+        ensure_compose_endpoint_defaults
+        chmod 600 "$ENV_FILE"
+        info "保留已有 deploy/.env；不会覆盖现有凭据，并已补齐缺失的监听地址和端口默认值。"
         return
     fi
     if has_existing_compose_data; then
@@ -132,6 +183,7 @@ compose_init() {
 
     umask 077
     cp "$ENV_EXAMPLE" "$ENV_FILE"
+    ensure_compose_endpoint_defaults
     set_env_value "$ENV_FILE" ARCH "$(detect_architecture)"
     set_env_value "$ENV_FILE" MYSQL_ROOT_PASSWORD "$(random_password)"
     set_env_value "$ENV_FILE" MYSQL_PASSWORD "$(random_password)"
@@ -154,7 +206,9 @@ compose_init() {
 validate_required_env() {
     local key
     local missing=""
-    for key in ARCH ZENVIS_IMAGE_REGISTRY MYSQL_ROOT_PASSWORD MYSQL_PASSWORD \
+    for key in ARCH ZENVIS_IMAGE_REGISTRY ZENVIS_WEB_BIND_ADDRESS \
+        ZENVIS_API_BIND_ADDRESS ZENVIS_INFRA_BIND_ADDRESS ZENVIS_WEB_PORT \
+        ZENVIS_API_PORT VECTUM_PORT MYSQL_ROOT_PASSWORD MYSQL_PASSWORD \
         CLICKHOUSE_PASSWORD REDIS_PASSWORD KAFKA_CLUSTER_ID API_BEARER_TOKEN \
         MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD \
         ZENVIS_BOOTSTRAP_ADMIN_PASSWORD; do
@@ -167,9 +221,9 @@ validate_required_env() {
 
 compose_doctor() {
     [[ -f "$ENV_FILE" ]] || die "deploy/.env 不存在，请先运行 ./zenvisctl compose init"
+    validate_required_env
     select_compose_command
     docker info >/dev/null 2>&1 || die "Docker 服务不可用"
-    validate_required_env
     compose config --quiet
     case "$(env_value ARCH)" in amd64|arm64) ;; *) die "ARCH 只支持 amd64 或 arm64" ;; esac
     info "Compose 配置解析成功，共 $(compose config --services | wc -l | tr -d ' ') 个服务。"
@@ -223,7 +277,11 @@ compose_backup_internal() {
 
     running_services="$(compose ps --services --filter status=running 2>/dev/null || true)"
     printf '%s\n' "$running_services" > "${backup_dir}/running-services.txt"
-    compose config --no-interpolate > "${backup_dir}/compose-config.yml"
+    # Compose v2.11 validates compact port syntax even with interpolation disabled.
+    # Render the effective configuration instead; the backup already contains .env
+    # and is protected as sensitive data.
+    compose config > "${backup_dir}/compose-config.yml"
+    chmod 600 "${backup_dir}/compose-config.yml"
     compose images > "${backup_dir}/images.txt" 2>&1 || true
     cp "$ENV_FILE" "${backup_dir}/env.before"
     chmod 600 "${backup_dir}/env.before"

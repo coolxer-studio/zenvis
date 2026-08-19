@@ -5,8 +5,8 @@
       <nav-menu></nav-menu>
     </el-header>
     <el-container class="drawer-body" id="drawer-body">
-      <TopRight v-show="isShow" class="toggle-icon" @click="hideHeader"/>
-      <BottomLeft v-show="!isShow" class="toggle-icon" @click="showHeader"/>
+      <FullScreen v-show="isShow" class="toggle-icon" @click="hideHeader"/>
+      <ScaleToOriginal v-show="!isShow" class="toggle-icon" @click="showHeader"/>
       <el-main class="app-body">
         <div class="layout-content-body no-scrollbar">
           <router-view></router-view>
@@ -18,7 +18,7 @@
 
 <script setup lang="ts">
   import {ref, onMounted, onUnmounted} from "vue";
-  import { TopRight, BottomLeft } from '@element-plus/icons-vue';
+  import { FullScreen, ScaleToOriginal } from '@element-plus/icons-vue';
 
 
   import navMenu from './components/nav-menu.vue';

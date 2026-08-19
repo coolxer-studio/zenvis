@@ -3,15 +3,58 @@
   color: #fff;
   padding-bottom: 30px;
   box-sizing: border-box;
-  background: url('@a/images/bg002.jpg') 50% 50% no-repeat;
+  // 仅弱化上半部分星空，在页面中线附近自然过渡，下半部分保留原图亮度。
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgba(0, 7, 20, 0.68) 0%,
+      rgba(0, 7, 20, 0.68) 44%,
+      rgba(0, 7, 20, 0) 54%
+    ),
+    url('@a/images/dashboard-background-dark.jpg');
+  background-position: 50% 50%;
+  background-repeat: no-repeat;
   background-size: 100% 100%;
   background-color: #000;
+
+  .theme-switch {
+    position: absolute;
+    z-index: 10;
+    top: 12px;
+    left: 24px;
+    display: flex;
+    padding: 3px;
+    border: 1px solid rgba(125, 204, 255, 0.42);
+    border-radius: 16px;
+    background: rgba(1, 13, 32, 0.52);
+    box-shadow: 0 4px 18px rgba(0, 18, 48, 0.18);
+    backdrop-filter: blur(8px);
+
+    button {
+      min-width: 48px;
+      padding: 4px 10px;
+      border: 0;
+      border-radius: 12px;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 12px;
+      line-height: 18px;
+      cursor: pointer;
+      background: transparent;
+      transition: color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+
+      &.active {
+        color: #fff;
+        background: #168be8;
+        box-shadow: 0 2px 8px rgba(0, 124, 224, 0.32);
+      }
+    }
+  }
 
   .title-bar {
     font-size: 18px;
     text-align: center;
     padding: 12px 0 16px 0;
-    background: url('@a/images/bg01top.png') center bottom no-repeat;
+    background: url('@a/images/dashboard-title-divider.png') center bottom no-repeat;
     font-weight: 500;
   }
 
@@ -30,7 +73,7 @@
       min-width: 145px;
       height: 56px;
       padding: 10px 0 0 30px;
-      background: url('@a/images/bg01bigindex.png') 0 0 no-repeat;
+      background: url('@a/images/summary-card-frame.png') 0 0 no-repeat;
       margin-right: 40px;
 
       &:last-of-type{
@@ -61,7 +104,7 @@
         bottom: 1px;
         height: 5px;
         width: 345px;
-        background: url('@a/images/bg04bigindex.png') 0 0 repeat-x;
+        background: url('@a/images/summary-card-bottom-line.png') 0 0 repeat-x;
       }
 
       .animation-2 {
@@ -70,7 +113,7 @@
         top: 1px;
         height: 16px;
         width: 15px;
-        background: url('@a/images/bg02bigindex.png') 0 0 no-repeat;
+        background: url('@a/images/summary-card-top-corner.png') 0 0 no-repeat;
       }
 
       .animation-3 {
@@ -79,7 +122,7 @@
         bottom: 1px;
         height: 4px;
         width: 4px;
-        background: url('@a/images/bg03bigindex.png') 50% 50% no-repeat;
+        background: url('@a/images/summary-card-bottom-corner.png') 50% 50% no-repeat;
       }
     }
 
@@ -118,7 +161,7 @@
           top: 32px;
           width: 200px;
           height: 2px;
-          background: url('@a/images/logoline.png') 50% 50% no-repeat;
+          background: url('@a/images/status-divider-line.png') 50% 50% no-repeat;
           display: block;
         }
   
@@ -129,7 +172,7 @@
           top: -34px;
           width: 41px;
           height: 29px;
-          background: url('@a/images/logoline1.png') 50% 50% no-repeat;
+          background: url('@a/images/status-corner-accent.png') 50% 50% no-repeat;
           display: block;
         }
   
@@ -140,7 +183,7 @@
           top: 58px;
           width: 152px;
           height: 26px;
-          background: url('@a/images/logoline2.png') 50% 50% no-repeat;
+          background: url('@a/images/status-underline-accent.png') 50% 50% no-repeat;
           display: block;
         }
   
@@ -156,7 +199,7 @@
           top: -41px;
           width: 121px;
           height: 121px;
-          background: url('@a/images/logoline3.png') 50% 50% no-repeat;
+          background: url('@a/images/status-orbit.png') 50% 50% no-repeat;
           display: block;
         }
       }
@@ -194,7 +237,7 @@
 
     .left-area {
       -webkit-animation: bounceInLeft 0.1s 1s ease both;
-      background: url('@a/images/bg01submenu.png') 0 50% no-repeat;
+      background: url('@a/images/sidebar-rail.png') 0 50% no-repeat;
       height: 564px;
       position: absolute;
       left: 0;
@@ -221,7 +264,7 @@
     
             &:hover b,
             &.active b {
-              background: url('@a/images/bg03submenu.png') 1px 50% no-repeat #0067e6;
+              background: url('@a/images/sidebar-item-stripe.png') 1px 50% no-repeat #0067e6;
             }
     
             &:hover span,
@@ -239,14 +282,14 @@
               top: 0;
               height: 26px;
               width: 10px;
-              background: url('@a/images/bg02submenu.png') 0 0 no-repeat;
+              background: url('@a/images/sidebar-item-hover-tail.png') 0 0 no-repeat;
             }
     
             b {
               display: inline-block;
               height: 26px;
               line-height: 26px;
-              background: url('@a/images/bg03submenu.png') 1px 50% no-repeat #0050b3;
+              background: url('@a/images/sidebar-item-stripe.png') 1px 50% no-repeat #0050b3;
               min-width: 14px;
               padding: 0 8px;
             }
@@ -278,7 +321,7 @@
                 top: 0;
                 height: 26px;
                 width: 10px;
-                background: url('@a/images/bg04submenu.png') right center no-repeat;
+                background: url('@a/images/sidebar-item-tail.png') right center no-repeat;
               }
             }
           }
@@ -297,7 +340,7 @@
       h3 {
         position: relative;
         top: 20px;
-        background: url('@a/images/bg04rightarea.png') 6px bottom no-repeat;
+        background: url('@a/images/section-title-underline.png') 6px bottom no-repeat;
         padding-bottom: 6px;
         padding-left: 6px;
         font-size: 14px;
@@ -315,14 +358,14 @@
           display: block;
           width: 7px;
           height: 7px;
-          background: url('@a/images/bg03rightarea.png') right 0 no-repeat;
+          background: url('@a/images/section-title-dot.png') right 0 no-repeat;
         }
       }
 
       .area-inbox-1 {
         width: 300px;
         height: 270px;
-        background: url('@a/images/bg01rightarea.png') right bottom no-repeat;
+        background: url('@a/images/health-panel-frame.png') right bottom no-repeat;
 
         dl {
           padding: 78px 0 0 130px;
@@ -358,7 +401,7 @@
               display: block;
               width: 74px;
               height: 17px;
-              background: url('@a/images/bg07rightarea.png') left bottom no-repeat;
+              background: url('@a/images/health-value-highlight.png') left bottom no-repeat;
             }
 
             &:nth-child(2) b {
@@ -428,7 +471,7 @@
         font-family: 'electronicFont';
         font-size: 14px;
         border-radius: 100%;
-        background: url('@a/images/bg05rightarea.png') right bottom no-repeat;
+        background: url('@a/images/health-ratio-glow.png') right bottom no-repeat;
         -webkit-animation-iteration-count: infinite;
         -webkit-animation-name: whitePulse;
         -webkit-animation-duration: 2s;
@@ -441,7 +484,7 @@
         width: 23px;
         height: 23px;
         border-radius: 100%;
-        background: url('@a/images/bg06rightarea.png') right bottom no-repeat;
+        background: url('@a/images/health-orbit-dot.png') right bottom no-repeat;
         box-shadow: 0 0 12px #fff;
         -webkit-animation-iteration-count: infinite;
         -webkit-animation-name: forotate;
@@ -455,31 +498,18 @@
       position: relative;
 
       .pandect-area {
-        background: url('@a/images/bg02pandect.png') center top no-repeat;
         height: 292px;
-        margin: 0 68px;
+        margin: 0;
         position: relative;
-        padding-top: 1px;
-
-        .pandect-area-left {
-          position: absolute;
-          left: -68px;
-          top: 0;
-          display: block;
-          width: 68px;
-          height: 292px;
-          background: url('@a/images/bg01pandect.png') center top no-repeat;
-        }
-
-        .pandect-area-right {
-          position: absolute;
-          right: -68px;
-          top: 0;
-          display: block;
-          width: 68px;
-          height: 292px;
-          background: url('@a/images/bg03pandect.png') center top no-repeat;
-        }
+        padding: 10px 14px;
+        box-sizing: border-box;
+        overflow: hidden;
+        border: 1px solid rgba(27, 157, 255, 0.72);
+        border-radius: 6px;
+        background: rgba(2, 13, 30, 0.72);
+        box-shadow:
+          inset 0 0 24px rgba(0, 119, 255, 0.08),
+          0 0 14px rgba(0, 140, 255, 0.2);
       }
     }
   }
@@ -496,45 +526,33 @@
       margin-top: 30px;
       height: 240px;
       text-align: center;
+      box-sizing: border-box;
+      overflow: hidden;
+      border: 1px solid rgba(27, 157, 255, 0.72);
+      border-radius: 6px;
+      background: rgba(2, 13, 30, 0.72);
+      box-shadow:
+        inset 0 0 24px rgba(0, 119, 255, 0.08),
+        0 0 14px rgba(0, 140, 255, 0.2);
     }
 
     .details1-area{
       margin-right: 40px;
     }
 
-    .detailsl-area-left {
-      display: block;
-      width: 122px;
-      background: url('@a/images/bg01details03.png') center bottom no-repeat;
-    }
-    .detailsl-area-right {
-      display: block;
-      width: 121px;
-      background: url('@a/images/bg01details05.png') center bottom no-repeat;
-    }
     .details1-area-center {
       flex: 1;
-      background: url('@a/images/bg01details04.png') center bottom repeat-x;
+      min-width: 0;
     }
 
     .details2-area h3,
     .details2-area dl {
       margin-left: 40px !important;
     }
-    .details2-area-left {
-      display: block;
-      width: 122px;
-      background: url('@a/images/bg01details01.png') center bottom no-repeat;
-    }
-    .details2-area-right {
-      display: block;
-      width: 121px;
-      background: url('@a/images/bg01details02.png') center bottom no-repeat;
-    }
     .details2-area-center {
       flex: 1;
+      min-width: 0;
       float: left;
-      background: url('@a/images/bg01details06.png') center bottom repeat-x;
     }
   }
 
@@ -545,19 +563,22 @@
     .area-text {
       display: flex;
       margin: auto;
-      width: 600px;
+      width: min(760px, calc(100% - 100px));
       height: 270px;
       padding: 14px;
+      box-sizing: border-box;
+      overflow: hidden;
+      border: 1px solid rgba(27, 157, 255, 0.72);
+      border-radius: 6px;
+      background: rgba(2, 13, 30, 0.72);
+      box-shadow:
+        inset 0 0 24px rgba(0, 119, 255, 0.08),
+        0 0 14px rgba(0, 140, 255, 0.2);
 
       h4{
         color: #fff;
       }
     
-      .img-border {
-        display: block;
-        width: auto;
-      }
-
       .msg-content{
         display: flex;
         flex-direction: column;
@@ -689,6 +710,113 @@
   }
 }
 
+.dashboard-wrap.theme-light {
+  color: #163b61;
+  background-color: #dff3ff;
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.14) 44%,
+      rgba(255, 255, 255, 0) 54%
+    ),
+    url('@a/images/dashboard-background-light.png');
+
+  .theme-switch {
+    border-color: rgba(39, 126, 188, 0.28);
+    background: rgba(244, 251, 255, 0.72);
+
+    button {
+      color: #416886;
+
+      &.active {
+        color: #fff;
+      }
+    }
+  }
+
+  .message-bar-item {
+    background-image: url('@a/images/summary-card-frame-light.png');
+
+    strong {
+      color: #153f68;
+    }
+
+    p {
+      color: #52738f;
+    }
+
+    .animation-1 {
+      background-image: url('@a/images/summary-card-bottom-line-light.png');
+    }
+  }
+
+  .title-bar {
+    background-image: url('@a/images/dashboard-title-divider-light.png');
+  }
+
+  .message-bar .time-bar h2,
+  .right-area,
+  .right-area h3,
+  .bottom-area .area-text h4 {
+    color: #163b61;
+  }
+
+  .right-area .area-inbox-1 dl dt {
+    color: rgba(22, 59, 97, 0.58);
+  }
+
+  .right-area {
+    .round-1 {
+      border-color: rgba(21, 85, 136, 0.72);
+    }
+
+    .round-2,
+    .round-3 {
+      border-color: rgba(21, 85, 136, 0.42);
+    }
+
+    .round-3 {
+      background-image: url('@a/images/health-ratio-glow-light.png');
+    }
+
+    .round-4 {
+      background-image: url('@a/images/health-orbit-dot-light.png');
+      box-shadow: 0 0 12px rgba(47, 127, 193, 0.72);
+    }
+  }
+
+  .center-area .pandect-area,
+  .chart-bar-item,
+  .bottom-area .area-text {
+    border-color: rgba(35, 139, 205, 0.46);
+    background: rgba(241, 250, 255, 0.72);
+    box-shadow:
+      inset 0 0 20px rgba(26, 123, 186, 0.06),
+      0 0 12px rgba(31, 130, 194, 0.12);
+  }
+
+  .bottom-area .area-text .msg-content .text-outer .text-inner .text-item,
+  .center-area .board-state,
+  .chart-bar-item .board-state,
+  :deep(.chart-empty) {
+    color: rgba(22, 59, 97, 0.7);
+  }
+
+  .bottom-area .area-button .transparent-border-button {
+    color: #315d80;
+    border-color: rgba(38, 104, 155, 0.45);
+    background: rgba(255, 255, 255, 0.46);
+  }
+
+  .bottom-area .area-button .transparent-border-button:hover,
+  .bottom-area .area-button .button-active {
+    color: #fff;
+    border-color: #168be8;
+    background: #168be8;
+  }
+}
+
 .dashboard-wrap {
   .message-bar-item {
     small {
@@ -765,4 +893,3 @@
     pointer-events: none;
   }
 }
-

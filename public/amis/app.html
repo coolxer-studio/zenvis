@@ -32,6 +32,29 @@
       animation: scrollMessage 5s linear infinite;
     }
 
+    .page-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #5c6b77;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      background: #f7f8fa;
+    }
+
+    .page-loading__spinner {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 14px;
+      border: 3px solid #d9e2f2;
+      border-top-color: #2468f2;
+      border-radius: 50%;
+      animation: pageLoadingSpin 0.8s linear infinite;
+    }
+
     /* 去除顶部面包屑导航栏 */
     .amis-scope .cxd-AppBcn {
       display: none;
@@ -46,11 +69,28 @@
         transform: translateX(-100%);
       }
     }
+
+    @keyframes pageLoadingSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .page-loading__spinner {
+        animation: none;
+      }
+    }
   </style>
 </head>
 
 <body>
-  <div id="root" class="app-wrapper"></div>
+  <div id="root" class="app-wrapper">
+    <div class="page-loading" role="status" aria-live="polite">
+      <div class="page-loading__spinner" aria-hidden="true"></div>
+      <div>页面加载中…</div>
+    </div>
+  </div>
   <script src="./sdk-v6.7.0/sdk.js"></script>
   <script src="./js/history.js?v=24b6ced9"></script>
   <script src="./js/vue.js?v=57110669"></script>

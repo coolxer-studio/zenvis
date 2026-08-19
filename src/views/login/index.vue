@@ -130,7 +130,7 @@ import { SystemService, UserService } from '@/service/api';
 import type { SystemInfo } from '@/types/type-system';
 import { setLoginSession } from '@u/auth-session';
 import { getAssetUrl, withBaseUrl, withCacheBuster } from '@u/url';
-import loginBanner from '@a/images/login_banner.png';
+import loginBanner from '@a/images/login-banner.png';
 
 defineOptions({ name: 'AmpLogin' });
 

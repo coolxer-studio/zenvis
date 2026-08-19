@@ -14,7 +14,13 @@ import type { TAnalysisTaskStatus } from '@/types/type-dashboard';
 
 defineOptions({ name: 'AnalysisTaskStatusChart' });
 
-const props = withDefaults(defineProps<{ data?: TAnalysisTaskStatus[] }>(), { data: () => [] });
+const props = withDefaults(defineProps<{
+  data?: TAnalysisTaskStatus[];
+  theme?: 'dark' | 'light';
+}>(), {
+  data: () => [],
+  theme: 'dark',
+});
 
 const chartRef = ref<HTMLElement | null>(null);
 const hasData = computed(() => props.data.some(item => item.count > 0));
@@ -23,23 +29,24 @@ let resizeObserver: ResizeObserver | null = null;
 
 const renderChart = () => {
   if (!chart) return;
+  const textColor = props.theme === 'light' ? '#24496f' : '#fff';
   const option: EChartsOption = {
     title: {
       text: 'AI分析任务状态分布',
       top: 10,
-      textStyle: { color: '#fff', fontSize: 14, fontWeight: 'normal' },
+      textStyle: { color: textColor, fontSize: 14, fontWeight: 'normal' },
     },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { top: 70, left: 0, right: 30, bottom: 10, containLabel: true },
     xAxis: {
       type: 'value',
       minInterval: 1,
-      axisLabel: { color: '#fff' },
+      axisLabel: { color: textColor },
     },
     yAxis: {
       type: 'category',
       data: props.data.map(item => item.description),
-      axisLabel: { color: '#fff' },
+      axisLabel: { color: textColor },
     },
     series: [
       {
@@ -61,7 +68,7 @@ onMounted(() => {
   renderChart();
 });
 
-watch(() => props.data, renderChart, { deep: true });
+watch(() => [props.data, props.theme], renderChart, { deep: true });
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();

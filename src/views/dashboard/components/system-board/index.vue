@@ -1,6 +1,19 @@
 <template>
-  <div class="dashboard-wrap">
+  <div class="dashboard-wrap" :class="`theme-${boardTheme}`">
     <div class="title-bar">系统总览大屏</div>
+
+    <div class="theme-switch" role="group" aria-label="大屏主题色">
+      <button
+        v-for="item in themeOptions"
+        :key="item.value"
+        type="button"
+        :class="{ active: boardTheme === item.value }"
+        :aria-pressed="boardTheme === item.value"
+        @click="boardTheme = item.value"
+      >
+        {{ item.label }}
+      </button>
+    </div>
 
     <div class="message-bar">
       <span v-for="item in summaryCards" :key="item.key" class="message-bar-item">
@@ -50,14 +63,13 @@
 
       <div class="center-area">
         <div class="pandect-area">
-          <span class="pandect-area-left"><b></b></span>
           <div class="pandect-area-center">
             <entity-trend-chart
               :x-axis="statistics?.x_axis || []"
               :series="statistics?.series || []"
+              :theme="boardTheme"
             />
           </div>
-          <span class="pandect-area-right"><b></b></span>
         </div>
         <span v-if="statisticsHint" class="statistics-hint">{{ statisticsHint }}</span>
         <div v-if="statisticsLoading" class="board-state">统计数据加载中...</div>
@@ -97,20 +109,22 @@
 
     <div class="chart-bar">
       <div class="chart-bar-item details1-area">
-        <span class="detailsl-area-left"></span>
         <div class="details1-area-center">
-          <business-service-status-chart :data="overview?.business_service_status || []" />
+          <business-service-status-chart
+            :data="overview?.business_service_status || []"
+            :theme="boardTheme"
+          />
         </div>
-        <span class="detailsl-area-right"></span>
         <div v-if="overviewLoading" class="board-state">系统概览加载中...</div>
         <div v-else-if="overviewError" class="board-state error">系统概览加载失败</div>
       </div>
       <div class="chart-bar-item details2-area">
-        <span class="details2-area-left"></span>
         <div class="details2-area-center">
-          <analysis-task-status-chart :data="overview?.analysis_task_status || []" />
+          <analysis-task-status-chart
+            :data="overview?.analysis_task_status || []"
+            :theme="boardTheme"
+          />
         </div>
-        <span class="details2-area-right"></span>
         <div v-if="overviewLoading" class="board-state">系统概览加载中...</div>
         <div v-else-if="overviewError" class="board-state error">系统概览加载失败</div>
       </div>
@@ -130,7 +144,6 @@
         </button>
       </div>
       <div class="area-text">
-        <img class="img-border" :src="leftBorder" alt="" />
         <div class="msg-content">
           <h4>当前信息：</h4>
           <div
@@ -151,7 +164,6 @@
             </div>
           </div>
         </div>
-        <img class="img-border" :src="rightBorder" alt="" />
       </div>
     </div>
   </div>
@@ -170,8 +182,6 @@ import type {
   TSystemNotice,
   TSystemOverviewResponse,
 } from '@/types/type-dashboard';
-import leftBorder from '@a/images/bg01righttext.png';
-import rightBorder from '@a/images/bg02righttext.png';
 import AnalysisTaskStatusChart from './analysis-task-status-chart.vue';
 import BusinessServiceStatusChart from './business-service-status-chart.vue';
 import EntityTrendChart from './entity-trend-chart.vue';
@@ -183,6 +193,15 @@ const rangeOptions: Array<{ label: string; value: TEntityStatisticsRange }> = [
   { label: '昨天', value: 'YESTERDAY' },
   { label: '最近7天', value: 'LAST_7_DAYS' },
 ];
+
+type TBoardTheme = 'dark' | 'light';
+
+const themeOptions: Array<{ label: string; value: TBoardTheme }> = [
+  { label: '暗黑', value: 'dark' },
+  { label: '浅蓝', value: 'light' },
+];
+
+const boardTheme = ref<TBoardTheme>('dark');
 
 const EMPTY_HEALTH: TServiceHealth = {
   ratio: null,
@@ -379,8 +398,11 @@ const restartScroll = async () => {
 };
 
 watch(tickerItems, restartScroll, { deep: true });
+watch(boardTheme, value => window.localStorage.setItem('system-board-theme', value));
 
 onMounted(() => {
+  const savedTheme = window.localStorage.getItem('system-board-theme');
+  if (savedTheme === 'dark' || savedTheme === 'light') boardTheme.value = savedTheme;
   updateClock();
   loadOverview();
   loadEntityStatistics();

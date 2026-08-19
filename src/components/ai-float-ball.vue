@@ -68,7 +68,7 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue
 import { useRoute } from 'vue-router';
 import { CloseBold, FullScreen } from '@element-plus/icons-vue';
 import { generateUUID } from '@/utils/util-common';
-import copilotImg from '@/assets/images/copilot.png';
+import copilotImg from '@/assets/images/ai-assistant-avatar.png';
 
 const ViewCenter = defineAsyncComponent(() => import('@/views/dih/components/view-center.vue'));
 const route = useRoute();

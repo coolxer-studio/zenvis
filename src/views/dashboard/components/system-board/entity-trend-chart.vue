@@ -33,7 +33,7 @@ let resizeObserver: ResizeObserver | null = null;
 
 const renderChart = () => {
   if (!chart) return;
-  const textColor = props.theme === 'light' ? '#24496f' : '#fff';
+  const textColor = props.theme === 'light' ? '#47556b' : '#b8c4dc';
   const option: EChartsOption = {
     title: {
       top: 10,
@@ -41,7 +41,7 @@ const renderChart = () => {
     },
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } },
+      axisPointer: { type: 'cross', label: { backgroundColor: '#2f5ee5' } },
     },
     legend: {
       type: 'scroll',
@@ -63,12 +63,13 @@ const renderChart = () => {
       minInterval: 1,
       axisLabel: { color: textColor },
     },
-    series: props.series.map(item => ({
+    series: props.series.map((item, index) => ({
       name: item.label,
       type: 'line',
       stack: 'Total',
       data: item.data,
-      areaStyle: {},
+      color: ['#2f5ee5', '#0f9fa3', '#7c5ce5', '#0f9f74', '#d89a20', '#d1435b'][index % 6],
+      areaStyle: { opacity: 0.12 },
       emphasis: { focus: 'series' },
     })),
   };

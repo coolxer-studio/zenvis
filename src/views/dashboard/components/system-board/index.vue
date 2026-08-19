@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard-wrap" :class="`theme-${boardTheme}`">
-    <div class="title-bar">系统总览大屏</div>
+    <div class="title-bar">系统运行总览</div>
 
     <div class="theme-switch" role="group" aria-label="大屏主题色">
       <button
@@ -28,7 +28,7 @@
       <div class="time-bar">
         <h2>
           <strong>{{ overview?.status_description || '状态未知' }}</strong>
-          <span>系统状态综合评估</span>
+          <span>系统综合运行状态</span>
           <b class="logoline"></b>
           <b class="logoline1"></b>
           <b class="logoline2"></b>
@@ -62,6 +62,18 @@
       </div>
 
       <div class="center-area">
+        <div class="area-button">
+          <button
+            v-for="item in rangeOptions"
+            :key="item.value"
+            class="transparent-border-button"
+            :class="{ 'button-active': activeRange === item.value }"
+            type="button"
+            @click="changeRange(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
         <div class="pandect-area">
           <div class="pandect-area-center">
             <entity-trend-chart
@@ -92,7 +104,7 @@
               ><b></b>
             </dd>
 
-            <dt>近24小时事件数</dt>
+            <dt>近 24 小时事件</dt>
             <dd>
               <span>{{ serviceHealth.event_count_24h }}</span
               ><b></b>
@@ -131,21 +143,9 @@
     </div>
 
     <div class="bottom-area">
-      <div class="area-button">
-        <button
-          v-for="item in rangeOptions"
-          :key="item.value"
-          class="transparent-border-button"
-          :class="{ 'button-active': activeRange === item.value }"
-          type="button"
-          @click="changeRange(item.value)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
       <div class="area-text">
         <div class="msg-content">
-          <h4>当前信息：</h4>
+          <h4>运行动态</h4>
           <div
             ref="textOuterRef"
             class="text-outer"
@@ -160,7 +160,7 @@
                   </span>
                 </template>
               </template>
-              <span v-else class="text-item">* 暂无AI分析任务状态</span>
+              <span v-else class="text-item">暂无最新运行动态</span>
             </div>
           </div>
         </div>
@@ -189,7 +189,7 @@ import EntityTrendChart from './entity-trend-chart.vue';
 defineOptions({ name: 'SystemBoard' });
 
 const rangeOptions: Array<{ label: string; value: TEntityStatisticsRange }> = [
-  { label: '近一天', value: 'TODAY' },
+  { label: '今日', value: 'TODAY' },
   { label: '昨天', value: 'YESTERDAY' },
   { label: '最近7天', value: 'LAST_7_DAYS' },
 ];
@@ -197,11 +197,11 @@ const rangeOptions: Array<{ label: string; value: TEntityStatisticsRange }> = [
 type TBoardTheme = 'dark' | 'light';
 
 const themeOptions: Array<{ label: string; value: TBoardTheme }> = [
-  { label: '暗黑', value: 'dark' },
-  { label: '浅蓝', value: 'light' },
+  { label: '深色', value: 'dark' },
+  { label: '浅色', value: 'light' },
 ];
 
-const boardTheme = ref<TBoardTheme>('dark');
+const boardTheme = ref<TBoardTheme>('light');
 
 const EMPTY_HEALTH: TServiceHealth = {
   ratio: null,
@@ -242,10 +242,10 @@ const formatCount = (value: number | null | undefined) =>
 const summaryCards = computed(() => {
   const summary = overview.value?.summary;
   return [
-    { key: 'entity', label: '实体类型数', value: formatCount(summary?.entity_count), hint: '' },
+    { key: 'entity', label: '实体类型', value: formatCount(summary?.entity_count), hint: '' },
     {
       key: 'push-task',
-      label: '数据推送任务数',
+      label: '数据推送任务',
       value: overview.value?.push_task_source_available
         ? formatCount(summary?.push_task_count)
         : '--',
@@ -253,13 +253,13 @@ const summaryCards = computed(() => {
     },
     {
       key: 'analysis-task',
-      label: 'AI分析任务数',
+      label: 'AI 分析任务',
       value: formatCount(summary?.analysis_task_count),
       hint: '',
     },
     {
       key: 'business-service',
-      label: '业务应用服务数',
+      label: '业务应用服务',
       value: formatCount(summary?.business_service_count),
       hint: '',
     },

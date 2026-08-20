@@ -144,8 +144,17 @@
 
     <div class="bottom-area">
       <div class="area-text">
+        <div class="ambient-layer" aria-hidden="true">
+          <i></i>
+          <i></i>
+          <i></i>
+        </div>
         <div class="msg-content">
-          <h4>运行动态</h4>
+          <div class="feed-heading">
+            <span class="live-dot"></span>
+            <h4>运行动态</h4>
+            <small>实时更新</small>
+          </div>
           <div
             ref="textOuterRef"
             class="text-outer"
@@ -156,7 +165,7 @@
               <template v-if="tickerItems.length">
                 <template v-for="copy in tickerItems.length > 1 ? 2 : 1" :key="'ticker-' + copy">
                   <span v-for="item in tickerItems" :key="copy + '-' + item.id" class="text-item">
-                    * {{ item.text }}
+                    {{ item.text }}
                   </span>
                 </template>
               </template>

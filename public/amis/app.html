@@ -55,6 +55,54 @@
       animation: pageLoadingSpin 0.8s linear infinite;
     }
 
+    /* 与 ZenVis 顶部导航保持一致的蓝白浅色主题 */
+    .amis-scope {
+      --Layout-aside-bg: #ffffff;
+      --Layout-aside-color: #58657a;
+      --Layout-aside-subList-bg: #f7f9fc;
+      --Layout-aside-onHover-bg: #f2f6ff;
+      --Layout-aside-onAcitve-bg: #edf3ff;
+      --Layout-aside-onAcitve-onHover-bg: #e6efff;
+      --Layout-asideDivider-bg: #e8edf5;
+      --Layout-asideLabel-color: #8792a6;
+      --Layout-asideLink-color: #4e5b70;
+      --Layout-asideLink-arrowColor: #8792a6;
+      --Layout-asideLink-iconColor: #6f7c90;
+      --Layout-asideLink-onActive-color: #2468f2;
+      --Layout-asideLink-onActive-arrowColor: #2468f2;
+      --Layout-asideLink-onHover-color: #2468f2;
+      --Layout-asideLink-onHover-iconColor: #2468f2;
+      --Layout-asideLink-onHover-arrowColor: #2468f2;
+      --Layout-body-bg: #f6f8fc;
+      --primary: #2468f2;
+      --primary-onHover: #1f5edb;
+      --primary-onActive: #1a54c7;
+    }
+
+    .amis-scope .cxd-Layout-aside {
+      border-right: 1px solid #e8edf5;
+      box-shadow: 2px 0 8px rgba(26, 55, 96, 0.04);
+    }
+
+    .amis-scope .cxd-AsideNav-item > a {
+      margin: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .amis-scope .cxd-AsideNav-item.is-active > a {
+      box-shadow: inset 3px 0 0 #2468f2;
+      font-weight: 500;
+    }
+
+    .amis-scope .cxd-AsideNav-itemArrow:empty::before {
+      filter: brightness(0) saturate(100%) invert(52%) sepia(11%) saturate(793%) hue-rotate(178deg) brightness(91%);
+    }
+
+    .amis-scope .cxd-AsideNav-item:hover .cxd-AsideNav-itemArrow:empty::before,
+    .amis-scope .cxd-AsideNav-item.is-active .cxd-AsideNav-itemArrow:empty::before {
+      filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(3003%) hue-rotate(215deg) brightness(98%);
+    }
+
     /* 去除顶部面包屑导航栏 */
     .amis-scope .cxd-AppBcn {
       display: none;

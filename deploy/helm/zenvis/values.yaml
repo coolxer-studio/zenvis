@@ -65,6 +65,7 @@ vectum:
   replicas: 1
   image:
     repository: vectum
+    version: latest
   resources:
     requests:
       cpu: 500m

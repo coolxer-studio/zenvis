@@ -19,7 +19,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "zenvis.image" -}}
-{{- printf "%s/%s:%s-%s" .root.Values.global.imageRegistry .repository .root.Values.global.version .root.Values.global.arch -}}
+{{- $version := default .root.Values.global.version .version -}}
+{{- printf "%s/%s:%s-%s" .root.Values.global.imageRegistry .repository $version .root.Values.global.arch -}}
 {{- end -}}
 
 {{- define "zenvis.storageClass" -}}

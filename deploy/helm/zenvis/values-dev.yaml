@@ -1,6 +1,10 @@
 global:
   version: latest
 
+vectum:
+  image:
+    version: "1.0.1"
+
 embedded:
   mysql:
     enabled: true

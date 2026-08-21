@@ -25,7 +25,7 @@ spec:
       {{- end }}
       containers:
         - name: vectum
-          image: {{ include "zenvis.image" (dict "root" . "repository" .Values.vectum.image.repository) }}
+          image: {{ include "zenvis.image" (dict "root" . "repository" .Values.vectum.image.repository "version" .Values.vectum.image.version) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
             - name: http

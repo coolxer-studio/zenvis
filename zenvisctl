@@ -104,7 +104,8 @@ ensure_env_default() {
     [[ -n "$(env_value "$key")" ]] || set_env_value "$ENV_FILE" "$key" "$value"
 }
 
-ensure_compose_endpoint_defaults() {
+ensure_compose_defaults() {
+    ensure_env_default VECTUM_VERSION latest
     ensure_env_default ZENVIS_WEB_BIND_ADDRESS 0.0.0.0
     ensure_env_default ZENVIS_API_BIND_ADDRESS 127.0.0.1
     ensure_env_default ZENVIS_INFRA_BIND_ADDRESS 127.0.0.1
@@ -172,9 +173,9 @@ has_existing_compose_data() {
 compose_init() {
     [[ -f "$ENV_EXAMPLE" ]] || die "缺少模板：$ENV_EXAMPLE"
     if [[ -f "$ENV_FILE" ]]; then
-        ensure_compose_endpoint_defaults
+        ensure_compose_defaults
         chmod 600 "$ENV_FILE"
-        info "保留已有 deploy/.env；不会覆盖现有凭据，并已补齐缺失的监听地址和端口默认值。"
+        info "保留已有 deploy/.env；不会覆盖现有凭据，并已补齐缺失的 Vectum 版本、监听地址和端口默认值。"
         return
     fi
     if has_existing_compose_data; then
@@ -183,7 +184,7 @@ compose_init() {
 
     umask 077
     cp "$ENV_EXAMPLE" "$ENV_FILE"
-    ensure_compose_endpoint_defaults
+    ensure_compose_defaults
     set_env_value "$ENV_FILE" ARCH "$(detect_architecture)"
     set_env_value "$ENV_FILE" MYSQL_ROOT_PASSWORD "$(random_password)"
     set_env_value "$ENV_FILE" MYSQL_PASSWORD "$(random_password)"
@@ -227,7 +228,7 @@ compose_doctor() {
     compose config --quiet
     case "$(env_value ARCH)" in amd64|arm64) ;; *) die "ARCH 只支持 amd64 或 arm64" ;; esac
     info "Compose 配置解析成功，共 $(compose config --services | wc -l | tr -d ' ') 个服务。"
-    info "镜像版本：$(env_value ZENVIS_VERSION)，架构：$(env_value ARCH)"
+    info "镜像版本：ZenVis $(env_value ZENVIS_VERSION)，Vectum $(env_value VECTUM_VERSION)，架构：$(env_value ARCH)"
 }
 
 wait_for_compose() {
@@ -297,6 +298,7 @@ compose_backup_internal() {
         printf 'backup_id=%s\n' "$backup_id"
         printf 'created_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         printf 'version=%s\n' "$(env_value ZENVIS_VERSION)"
+        printf 'vectum_version=%s\n' "$(env_value VECTUM_VERSION)"
         printf 'arch=%s\n' "$(env_value ARCH)"
     } > "${backup_dir}/manifest.env"
     chmod -R go-rwx "$backup_dir"

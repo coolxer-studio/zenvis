@@ -106,7 +106,7 @@
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { ArrowRight, Check, Close, DataBoard, Search } from '@element-plus/icons-vue';
 
@@ -124,6 +124,7 @@ const builtInDashboardMap = {
 
 const visible = ref(false);
 const route = useRoute();
+const router = useRouter();
 const currentDashboard = ref({
   id: '',
   type: '',
@@ -194,6 +195,14 @@ const selectDashboardFromRoute = () => {
 const setDashboard = item => {
   currentDashboard.value = item;
   visible.value = false;
+  void router.replace({
+    query: {
+      ...route.query,
+      id: String(item.id ?? ''),
+      code: String(item.code ?? ''),
+      name: String(item.name ?? ''),
+    },
+  });
 };
 
 const isCurrentDashboard = item => {

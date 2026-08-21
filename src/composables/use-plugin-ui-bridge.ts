@@ -1,7 +1,9 @@
 import { onMounted, onUnmounted, toValue, type MaybeRefOrGetter, type Ref } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   buildUiThemeContractV1,
   isUiThemeReadyEvent,
+  resolveUiNavigationEvent,
   resolveUiTargetOrigin,
 } from '@/theme/plugin-ui-contract';
 
@@ -9,6 +11,8 @@ export function usePluginUiBridge(
   iframeRef: Ref<HTMLIFrameElement | null>,
   iframeUrl: MaybeRefOrGetter<string>,
 ) {
+  const router = useRouter();
+
   const sendUiTheme = (): boolean => {
     if (typeof window === 'undefined') {
       return false;
@@ -26,14 +30,20 @@ export function usePluginUiBridge(
 
   const handleMessage = (event: MessageEvent) => {
     const targetOrigin = resolveUiTargetOrigin(toValue(iframeUrl), window.location.origin);
-    if (
-      !targetOrigin ||
-      !isUiThemeReadyEvent(event, iframeRef.value?.contentWindow, targetOrigin)
-    ) {
+    if (!targetOrigin) {
       return;
     }
 
-    sendUiTheme();
+    const iframeWindow = iframeRef.value?.contentWindow;
+    if (isUiThemeReadyEvent(event, iframeWindow, targetOrigin)) {
+      sendUiTheme();
+      return;
+    }
+
+    const navigationTarget = resolveUiNavigationEvent(event, iframeWindow, targetOrigin);
+    if (navigationTarget) {
+      void router.push(navigationTarget);
+    }
   };
 
   onMounted(() => window.addEventListener('message', handleMessage));

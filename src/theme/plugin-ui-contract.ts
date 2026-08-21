@@ -7,6 +7,7 @@ import {
 
 export const UI_THEME_MESSAGE_TYPE = 'zenvis:ui' as const;
 export const UI_THEME_READY_TYPE = 'zenvis:ui:ready' as const;
+export const UI_NAVIGATE_MESSAGE_TYPE = 'zenvis:navigate' as const;
 export const UI_THEME_CONTRACT_VERSION = '1.0.0' as const;
 
 export interface UiThemeContractV1 {
@@ -119,4 +120,42 @@ export function isUiThemeReadyEvent(
     event.origin === targetOrigin &&
     isUiThemeReadyPayload(event.data)
   );
+}
+
+export function resolveUiNavigationPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const candidate = payload as { type?: unknown; to?: unknown };
+  if (
+    candidate.type !== UI_NAVIGATE_MESSAGE_TYPE ||
+    typeof candidate.to !== 'string' ||
+    !candidate.to.startsWith('/') ||
+    /[\u0000-\u001f\u007f\\]/.test(candidate.to)
+  ) {
+    return null;
+  }
+
+  try {
+    const application = new URL('https://zenvis.invalid');
+    const target = new URL(candidate.to, application);
+    if (target.origin !== application.origin || target.hash) {
+      return null;
+    }
+    return `${target.pathname}${target.search}`;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveUiNavigationEvent(
+  event: UiThemeReadyEventLike,
+  targetWindow: unknown,
+  targetOrigin: string,
+): string | null {
+  if (!targetWindow || event.source !== targetWindow || event.origin !== targetOrigin) {
+    return null;
+  }
+  return resolveUiNavigationPayload(event.data);
 }

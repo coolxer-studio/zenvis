@@ -7,6 +7,8 @@ import {
   buildUiThemeContractV1,
   isUiThemeReadyEvent,
   isUiThemeReadyPayload,
+  resolveUiNavigationEvent,
+  resolveUiNavigationPayload,
   resolveUiTargetOrigin,
   UI_THEME_CONTRACT_VERSION,
 } from './plugin-ui-contract.ts';
@@ -70,6 +72,39 @@ describe('ZenVis UI theme contract', () => {
     assert.equal(isUiThemeReadyEvent(event, frameWindow, 'https://plugin.example.com'), true);
     assert.equal(isUiThemeReadyEvent(event, {}, 'https://plugin.example.com'), false);
     assert.equal(isUiThemeReadyEvent(event, frameWindow, 'https://evil.example.com'), false);
+  });
+
+  test('accepts only same-frame internal navigation messages', () => {
+    assert.equal(
+      resolveUiNavigationPayload({
+        type: 'zenvis:navigate',
+        to: '/service/low-code-app/com.coolxer.plugin.onesoc.app?page=%2Fasset%2Foverview',
+      }),
+      '/service/low-code-app/com.coolxer.plugin.onesoc.app?page=%2Fasset%2Foverview',
+    );
+    assert.equal(
+      resolveUiNavigationPayload({ type: 'zenvis:navigate', to: '//evil.example.com' }),
+      null,
+    );
+    assert.equal(
+      resolveUiNavigationPayload({ type: 'zenvis:navigate', to: '/service\\evil' }),
+      null,
+    );
+    assert.equal(resolveUiNavigationPayload({ type: 'zenvis:navigate', to: 'javascript:alert(1)' }), null);
+    assert.equal(resolveUiNavigationPayload({ type: 'different', to: '/dashboard/index' }), null);
+
+    const frameWindow = {};
+    const event = {
+      source: frameWindow,
+      origin: 'https://zenvis.example.com',
+      data: { type: 'zenvis:navigate', to: '/service/low-code-page/plugin.detail?id=1' },
+    };
+    assert.equal(
+      resolveUiNavigationEvent(event, frameWindow, 'https://zenvis.example.com'),
+      '/service/low-code-page/plugin.detail?id=1',
+    );
+    assert.equal(resolveUiNavigationEvent(event, {}, 'https://zenvis.example.com'), null);
+    assert.equal(resolveUiNavigationEvent(event, frameWindow, 'https://evil.example.com'), null);
   });
 
   test('keeps the CSS custom properties aligned with public token values', async () => {

@@ -13,6 +13,7 @@ import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -22,8 +23,13 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,17 +44,32 @@ import static org.mockito.Mockito.when;
 class McpApprovalServiceTest {
 
     private final Map<String, McpToolInvocation> invocations = new ConcurrentHashMap<>();
+    private McpToolInvocationRepository repository;
     private McpToolPolicyService policyService;
     private McpChatToolGrantService chatToolGrantService;
     private McpTaskToolGrantService taskToolGrantService;
     private McpApprovalService service;
+    private final AtomicInteger failingReads = new AtomicInteger();
+    private final AtomicInteger optimisticAuditFailures = new AtomicInteger();
+    private final AtomicBoolean failFailedAuditSave = new AtomicBoolean();
+    private final IllegalStateException auditSaveFailure =
+            new IllegalStateException("approval audit save failed");
 
     @BeforeEach
     void setUp() {
-        McpToolInvocationRepository repository = mock(McpToolInvocationRepository.class);
+        repository = mock(McpToolInvocationRepository.class);
         policyService = mock(McpToolPolicyService.class);
         when(repository.save(any(McpToolInvocation.class))).thenAnswer(call -> {
             McpToolInvocation invocation = call.getArgument(0);
+            if (invocation.getStatus() == McpInvocationStatus.FAILED
+                    && failFailedAuditSave.get()) {
+                throw auditSaveFailure;
+            }
+            if (invocation.getStatus() == McpInvocationStatus.FAILED
+                    && optimisticAuditFailures.getAndUpdate(value -> Math.max(value - 1, 0)) > 0) {
+                invocation.setStatus(McpInvocationStatus.PENDING);
+                throw new OptimisticLockingFailureException("approval audit conflict");
+            }
             if (invocation.getCreateTime() == null) invocation.setCreateTime(new Date());
             invocations.put(invocation.getRequestId(), invocation);
             return invocation;
@@ -60,8 +81,26 @@ class McpApprovalServiceTest {
             return invocation;
         });
         when(repository.saveAllAndFlush(any())).thenAnswer(call -> call.getArgument(0));
-        when(repository.findByRequestId(any())).thenAnswer(call ->
-                Optional.ofNullable(invocations.get(call.getArgument(0))));
+        when(repository.findByRequestId(any())).thenAnswer(call -> {
+            if (failingReads.getAndUpdate(value -> Math.max(value - 1, 0)) > 0) {
+                throw new IllegalStateException("approval read failed");
+            }
+            return Optional.ofNullable(invocations.get(call.getArgument(0)));
+        });
+        when(repository.findByStatusIn(any())).thenAnswer(call -> {
+            List<McpInvocationStatus> statuses = call.getArgument(0);
+            return invocations.values().stream()
+                    .filter(item -> statuses.contains(item.getStatus()))
+                    .toList();
+        });
+        when(repository.findByTurnIdAndStatusIn(anyString(), any())).thenAnswer(call -> {
+            String turnId = call.getArgument(0);
+            List<McpInvocationStatus> statuses = call.getArgument(1);
+            return invocations.values().stream()
+                    .filter(item -> turnId.equals(item.getTurnId()))
+                    .filter(item -> statuses.contains(item.getStatus()))
+                    .toList();
+        });
         when(repository.findByChatIdAndRequesterUserIdAndToolKeyAndStatus(anyString(), any(), anyString(), any()))
                 .thenAnswer(call -> invocations.values().stream()
                         .filter(item -> call.getArgument(0).equals(item.getChatId()))
@@ -243,11 +282,182 @@ class McpApprovalServiceTest {
 
         assertThat(result.get(2, TimeUnit.SECONDS)).contains("rejected");
         assertThat(called).isFalse();
+        assertThat(service.pendingApprovalCount()).isZero();
         assertThat(events).extracting(McpApprovalEvent::event)
                 .contains("approval_required", "approval_updated");
         assertThatThrownBy(() -> service.decide(pending.getRequestId(), "approved", null, requester))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("已处理");
+    }
+
+    @Test
+    void requiredEventFailureMarksAuditFailedAndAlwaysRemovesPendingEntry() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        IllegalStateException failure = new IllegalStateException("approval required event failed");
+        AtomicBoolean called = new AtomicBoolean();
+        McpInvocationContext failingContext = contextWithConsumer(event -> { throw failure; });
+
+        assertThatThrownBy(() -> service.execute(descriptor(), "{}", failingContext, () -> {
+            called.set(true);
+            return "should-not-run";
+        })).isSameAs(failure);
+
+        assertThat(called).isFalse();
+        assertThat(service.pendingApprovalCount()).isZero();
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.FAILED);
+            assertThat(invocation.getErrorSummary()).contains("approval required event failed");
+            assertThat(invocation.getFinishTime()).isNotNull();
+        });
+    }
+
+    @Test
+    void approvalReadFailureMarksAuditFailedAndRemovesPendingEntry() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        McpInvocationContext context = contextWithConsumer(event -> {
+            if ("approval_required".equals(event.event())) {
+                failingReads.set(1);
+            }
+        });
+
+        assertThatThrownBy(() -> service.execute(descriptor(), "{}", context, () -> "no"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("approval read failed");
+
+        assertThat(service.pendingApprovalCount()).isZero();
+        assertThat(invocations.values()).singleElement()
+                .satisfies(invocation -> {
+                    assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.FAILED);
+                    assertThat(invocation.getFinishTime()).isNotNull();
+                });
+    }
+
+    @Test
+    void approvedStatusEventFailureMarksAuditFailedBeforeDelegateRuns() throws Exception {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        AtomicInteger emitted = new AtomicInteger();
+        IllegalStateException failure = new IllegalStateException("running approval event failed");
+        AtomicBoolean called = new AtomicBoolean();
+        User requester = user(42, false);
+        McpInvocationContext context = contextWithConsumer(event -> {
+            if (emitted.incrementAndGet() == 3) {
+                throw failure;
+            }
+        });
+        CompletableFuture<String> result = CompletableFuture.supplyAsync(() -> service.execute(
+                descriptor(), "{}", context, () -> {
+                    called.set(true);
+                    return "should-not-run";
+                }));
+        McpToolInvocation pending = awaitPendingInvocation();
+
+        service.decide(pending.getRequestId(), "approved", null, requester);
+
+        assertThatThrownBy(() -> result.get(2, TimeUnit.SECONDS))
+                .hasCause(failure);
+        assertThat(called).isFalse();
+        assertThat(service.pendingApprovalCount()).isZero();
+        assertThat(pending.getStatus()).isEqualTo(McpInvocationStatus.FAILED);
+        assertThat(pending.getFinishTime()).isNotNull();
+    }
+
+    @Test
+    void eventFailureAfterRejectionDoesNotOverwriteTerminalDecision() throws Exception {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        AtomicInteger emitted = new AtomicInteger();
+        IllegalStateException failure = new IllegalStateException("rejected event failed");
+        User requester = user(42, false);
+        McpInvocationContext context = contextWithConsumer(event -> {
+            if (emitted.incrementAndGet() == 3) {
+                throw failure;
+            }
+        });
+        CompletableFuture<String> result = CompletableFuture.supplyAsync(() -> service.execute(
+                descriptor(), "{}", context, () -> "should-not-run"));
+        McpToolInvocation pending = awaitPendingInvocation();
+
+        service.decide(pending.getRequestId(), "rejected", null, requester);
+
+        assertThatThrownBy(() -> result.get(2, TimeUnit.SECONDS))
+                .hasCause(failure);
+        assertThat(service.pendingApprovalCount()).isZero();
+        assertThat(pending.getStatus()).isEqualTo(McpInvocationStatus.REJECTED);
+    }
+
+    @Test
+    void auditSaveFailureIsSuppressedWithoutMaskingOriginalAndMapIsCleaned() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        IllegalStateException original = new IllegalStateException("approval emit failed");
+        McpInvocationContext context = contextWithConsumer(event -> {
+            failFailedAuditSave.set(true);
+            throw original;
+        });
+
+        assertThatThrownBy(() -> service.execute(descriptor(), "{}", context, () -> "no"))
+                .isSameAs(original)
+                .satisfies(error -> assertThat(error.getSuppressed())
+                        .containsExactly(auditSaveFailure));
+        assertThat(service.pendingApprovalCount()).isZero();
+    }
+
+    @Test
+    void optimisticAuditConflictIsRereadOnceAndLongErrorRemainsBounded() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        optimisticAuditFailures.set(1);
+        IllegalStateException original = new IllegalStateException("x".repeat(2500));
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor(),
+                "{}",
+                contextWithConsumer(event -> { throw original; }),
+                () -> "no"
+        ))
+                .isSameAs(original)
+                .satisfies(error -> assertThat(error.getSuppressed()).isEmpty());
+
+        assertThat(service.pendingApprovalCount()).isZero();
+        assertThat(invocations.values()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.FAILED);
+            assertThat(invocation.getErrorSummary()).hasSizeLessThanOrEqualTo(2000);
+            assertThat(invocation.getFinishTime()).isNotNull();
+        });
+    }
+
+    @Test
+    void cancellationExpiryAndThreadInterruptionAllCleanPendingMap() throws Exception {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+
+        CompletableFuture<String> cancelled = CompletableFuture.supplyAsync(() -> service.execute(
+                descriptor(), "{\"case\":\"cancel\"}", context(null), () -> "no"));
+        McpToolInvocation cancelPending = awaitPendingInvocation();
+        service.cancelTurn(cancelPending.getTurnId(), cancelPending.getRequesterUserId());
+        assertThat(cancelled.get(2, TimeUnit.SECONDS)).contains("cancelled");
+        assertThat(service.pendingApprovalCount()).isZero();
+
+        CompletableFuture<String> expired = CompletableFuture.supplyAsync(() -> service.execute(
+                descriptor(), "{\"case\":\"expire\"}", context(null), () -> "no"));
+        McpToolInvocation expirePending = awaitPendingInvocation();
+        expirePending.setExpireTime(new Date(0));
+        service.expireOverdue();
+        assertThat(expired.get(2, TimeUnit.SECONDS)).contains("expired");
+        assertThat(service.pendingApprovalCount()).isZero();
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        AtomicReference<Thread> waitingThread = new AtomicReference<>();
+        try {
+            CompletableFuture<String> interrupted = CompletableFuture.supplyAsync(() -> {
+                waitingThread.set(Thread.currentThread());
+                return service.execute(
+                        descriptor(), "{\"case\":\"interrupt\"}", context(null), () -> "no");
+            }, executor);
+            McpToolInvocation interruptPending = awaitPendingInvocation();
+            waitingThread.get().interrupt();
+            assertThat(interrupted.get(2, TimeUnit.SECONDS)).contains("cancelled");
+            assertThat(interruptPending.getStatus()).isEqualTo(McpInvocationStatus.CANCELLED);
+            assertThat(service.pendingApprovalCount()).isZero();
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -509,6 +719,11 @@ class McpApprovalServiceTest {
     }
 
     private McpInvocationContext context(List<McpApprovalEvent> events) {
+        return contextWithConsumer(events == null ? null : events::add);
+    }
+
+    private McpInvocationContext contextWithConsumer(
+            Consumer<McpApprovalEvent> eventConsumer) {
         return new McpInvocationContext(
                 McpInvocationChannel.CHAT_AGENT,
                 42,
@@ -517,7 +732,7 @@ class McpApprovalServiceTest {
                 "ask",
                 null,
                 null,
-                events == null ? null : events::add
+                eventConsumer
         );
     }
 

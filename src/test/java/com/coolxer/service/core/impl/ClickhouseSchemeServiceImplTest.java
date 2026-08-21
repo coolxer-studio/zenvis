@@ -66,23 +66,62 @@ class ClickhouseSchemeServiceImplTest {
         service.loadSchemeFromMetaData(metaData);
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(entityManager, org.mockito.Mockito.times(6)).createNativeQuery(sql.capture());
+        verify(entityManager, org.mockito.Mockito.times(7)).createNativeQuery(sql.capture());
         assertThat(sql.getAllValues().get(0)).contains(
                 "CREATE TABLE IF NOT EXISTS zenvis.asset",
                 "zenvis_id Nullable(UUID) DEFAULT generateUUIDv4()",
                 "zenvis_insert_time DateTime64(3) DEFAULT now64(3)");
-        assertThat(sql.getAllValues().get(1)).isEqualTo(
-                "ALTER TABLE zenvis.asset ADD COLUMN IF NOT EXISTS "
-                        + "zenvis_insert_time DateTime64(3) DEFAULT now64(3)");
+        assertThat(sql.getAllValues().get(1)).startsWith("SELECT name FROM system.columns");
         assertThat(sql.getAllValues().get(2)).isEqualTo(
                 "ALTER TABLE zenvis.asset ADD COLUMN IF NOT EXISTS "
-                        + "zenvis_id Nullable(UUID) DEFAULT NULL");
+                        + "zenvis_insert_time DateTime64(3) DEFAULT now64(3)");
         assertThat(sql.getAllValues().get(3)).isEqualTo(
-                "ALTER TABLE zenvis.asset MATERIALIZE COLUMN zenvis_id SETTINGS mutations_sync = 1");
+                "ALTER TABLE zenvis.asset ADD COLUMN IF NOT EXISTS "
+                        + "zenvis_id Nullable(UUID) DEFAULT NULL");
         assertThat(sql.getAllValues().get(4)).isEqualTo(
+                "ALTER TABLE zenvis.asset MATERIALIZE COLUMN zenvis_id SETTINGS mutations_sync = 1");
+        assertThat(sql.getAllValues().get(5)).isEqualTo(
                 "ALTER TABLE zenvis.asset MODIFY COLUMN "
                         + "zenvis_id Nullable(UUID) DEFAULT generateUUIDv4()");
-        assertThat(sql.getAllValues().get(5)).startsWith("SELECT engine_full FROM system.tables");
+        assertThat(sql.getAllValues().get(6)).startsWith("SELECT engine_full FROM system.tables");
+    }
+
+    @Test
+    void startupSchemaLoadSkipsBuiltInColumnsThatAlreadyExist() {
+        EntityManager entityManager = mock(EntityManager.class);
+        when(entityManager.createNativeQuery(anyString())).thenAnswer(invocation -> {
+            String statement = invocation.getArgument(0);
+            Query query = mock(Query.class);
+            when(query.getResultList()).thenReturn(statement.startsWith("SELECT name FROM system.columns")
+                    ? List.of(MetaDataConstants.INSERT_TIME_COLUMN, MetaDataConstants.RECORD_ID_COLUMN)
+                    : List.of());
+            return query;
+        });
+        MetaDataService metaDataService = mock(MetaDataService.class);
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+        ReflectionTestUtils.setField(service, "metaDataService", metaDataService);
+
+        DataEntity entity = new DataEntity();
+        entity.setName("asset");
+        entity.setTableName("onesoc_asset_inventory");
+        entity.setDataSource("clickhouse");
+        DataEntity.DbCreate autoCreate = entity.new DbCreate();
+        autoCreate.setEngine("ReplacingMergeTree(updated_at)");
+        autoCreate.setOrderBy(List.of("asset_id"));
+        entity.setAutoCreate(autoCreate);
+        when(metaDataService.getAllDataAttributeByEntity(entity)).thenReturn(List.of(
+                attribute("asset", "asset_id", "String"),
+                attribute("asset", MetaDataConstants.RECORD_ID_COLUMN, MetaDataConstants.RECORD_ID_COLUMN_TYPE),
+                attribute("asset", MetaDataConstants.INSERT_TIME_COLUMN,
+                        MetaDataConstants.INSERT_TIME_COLUMN_TYPE)));
+
+        MetaData metaData = new MetaData();
+        metaData.setEntity(List.of(entity));
+
+        service.loadSchemeFromMetaData(metaData);
+
+        verify(entityManager, never()).createNativeQuery(
+                org.mockito.ArgumentMatchers.startsWith("ALTER TABLE"));
     }
 
     @Test
@@ -157,6 +196,41 @@ class ClickhouseSchemeServiceImplTest {
         assertThat(sql.getAllValues()).anyMatch(statement -> statement.startsWith("CREATE TABLE IF NOT EXISTS"));
         assertThat(sql.getAllValues()).anyMatch(statement -> statement.contains("ADD COLUMN IF NOT EXISTS severity UInt8"));
         assertThat(sql.getAllValues()).noneMatch(statement -> statement.toUpperCase().contains("DROP TABLE"));
+    }
+
+    @Test
+    void additiveUpgradeSkipsAlterForColumnsThatAlreadyExist() {
+        EntityManager entityManager = mock(EntityManager.class);
+        when(entityManager.createNativeQuery(anyString())).thenAnswer(invocation -> {
+            String statement = invocation.getArgument(0);
+            Query query = mock(Query.class);
+            when(query.getResultList()).thenReturn(statement.startsWith("SELECT name FROM system.columns")
+                    ? List.of("event_id", "severity", MetaDataConstants.INSERT_TIME_COLUMN,
+                            MetaDataConstants.RECORD_ID_COLUMN)
+                    : List.of());
+            return query;
+        });
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+
+        DataEntity entity = new DataEntity();
+        entity.setName("event");
+        entity.setTableName("zenvis.event");
+        entity.setDataSource("clickhouse");
+        DataEntity.DbCreate autoCreate = entity.new DbCreate();
+        autoCreate.setEngine("MergeTree()");
+        autoCreate.setOrderBy(List.of("event_id"));
+        entity.setAutoCreate(autoCreate);
+
+        MetaData metaData = new MetaData();
+        metaData.setEntity(List.of(entity));
+        metaData.setAttribute(List.of(
+                attribute("event", "event_id", "String"),
+                attribute("event", "severity", "UInt8")));
+
+        service.applyAdditiveScheme(metaData);
+
+        verify(entityManager, never()).createNativeQuery(
+                org.mockito.ArgumentMatchers.startsWith("ALTER TABLE"));
     }
 
     @Test

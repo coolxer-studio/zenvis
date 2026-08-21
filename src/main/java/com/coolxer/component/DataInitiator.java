@@ -426,7 +426,7 @@ public class DataInitiator {
             systemInfo.setSystemTitle("ZenVis");
             systemInfo.setSystemSubtitle("Unified Situation Awareness");
             systemInfo.setProductName("数据分析应用框架");
-            systemInfo.setProductVersion("1.0.1.alpha");
+            systemInfo.setProductVersion("1.1.0.alpha");
             systemInfo.setProductIntroduction("一个基于配置实现的数据存储、可视化及业务扩展的框架平台，实现在通用的数据分析框架之上构建业务应用。提供智能分析能力，全方位满足数据处理、展示、扩展与深度分析需求。");
             systemInfo.setServicePhone("待补充");
             systemInfo.setServiceEmail("coolxer@163.com");

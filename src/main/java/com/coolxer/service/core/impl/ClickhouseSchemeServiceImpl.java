@@ -19,8 +19,10 @@ import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -121,11 +123,16 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
         metaData.getEntity().stream()
                 .filter(this::isClickHouseEntity)
                 .forEach(dataEntity -> {
-                    executeSql("ALTER TABLE " + dataEntity.getTableName()
-                            + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.INSERT_TIME_COLUMN
-                            + " " + MetaDataConstants.INSERT_TIME_COLUMN_TYPE
-                            + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
-                    migrateRecordIdColumn(dataEntity);
+                    Set<String> currentColumns = readCurrentColumnNames(dataEntity.getTableName());
+                    if (!currentColumns.contains(MetaDataConstants.INSERT_TIME_COLUMN)) {
+                        executeSql("ALTER TABLE " + dataEntity.getTableName()
+                                + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.INSERT_TIME_COLUMN
+                                + " " + MetaDataConstants.INSERT_TIME_COLUMN_TYPE
+                                + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
+                    }
+                    if (!currentColumns.contains(MetaDataConstants.RECORD_ID_COLUMN)) {
+                        migrateRecordIdColumn(dataEntity);
+                    }
                 });
         synchronizeTableTtl(metaData);
         log.info("clickhouse scheme init successfully.");
@@ -180,21 +187,49 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
                     + " ORDER BY (" + String.join(",", entity.getAutoCreate().getOrderBy()) + ")"
                     + partition + ttlClause(entity.getAutoCreate().getTtl()));
 
+            Set<String> currentColumns = readCurrentColumnNames(entity.getTableName());
             for (DataAttribute attribute : attributes) {
-                executeRequiredSql("ALTER TABLE " + entity.getTableName()
-                        + " ADD COLUMN IF NOT EXISTS " + columnDefinition(attribute));
+                if (!currentColumns.contains(attribute.getColumnName())) {
+                    executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                            + " ADD COLUMN IF NOT EXISTS " + columnDefinition(attribute));
+                }
             }
-            executeRequiredSql("ALTER TABLE " + entity.getTableName()
-                    + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.INSERT_TIME_COLUMN
-                    + " " + MetaDataConstants.INSERT_TIME_COLUMN_TYPE
-                    + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
-            executeRequiredSql("ALTER TABLE " + entity.getTableName()
-                    + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.RECORD_ID_COLUMN
-                    + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
-                    + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION);
+            if (!currentColumns.contains(MetaDataConstants.INSERT_TIME_COLUMN)) {
+                executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                        + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.INSERT_TIME_COLUMN
+                        + " " + MetaDataConstants.INSERT_TIME_COLUMN_TYPE
+                        + " DEFAULT " + MetaDataConstants.INSERT_TIME_DEFAULT_EXPRESSION);
+            }
+            if (!currentColumns.contains(MetaDataConstants.RECORD_ID_COLUMN)) {
+                executeRequiredSql("ALTER TABLE " + entity.getTableName()
+                        + " ADD COLUMN IF NOT EXISTS " + MetaDataConstants.RECORD_ID_COLUMN
+                        + " " + MetaDataConstants.RECORD_ID_COLUMN_TYPE
+                        + " DEFAULT " + MetaDataConstants.RECORD_ID_DEFAULT_EXPRESSION);
+            }
         }
         synchronizeTableTtl(metaData);
         log.info("ClickHouse additive schema upgrade completed");
+    }
+
+    private Set<String> readCurrentColumnNames(String qualifiedTableName) {
+        TableReference table = TableReference.parse(qualifiedTableName);
+        String sql = table.database() == null
+                ? "SELECT name FROM system.columns WHERE database = currentDatabase() AND table = :tableName"
+                : "SELECT name FROM system.columns WHERE database = :databaseName AND table = :tableName";
+        try {
+            Query query = entityManager.createNativeQuery(sql);
+            query.setParameter("tableName", table.table());
+            if (table.database() != null) {
+                query.setParameter("databaseName", table.database());
+            }
+            Set<String> columns = new LinkedHashSet<>();
+            for (Object row : query.getResultList()) {
+                columns.add(String.valueOf(row));
+            }
+            return columns;
+        } catch (Exception e) {
+            throw new IllegalStateException("读取ClickHouse表字段失败: " + qualifiedTableName, e);
+        }
     }
 
     @Override

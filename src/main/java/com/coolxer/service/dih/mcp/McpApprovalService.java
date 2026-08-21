@@ -63,6 +63,11 @@ public class McpApprovalService {
     private static final List<McpInvocationStatus> ACTIVE_STATUSES = List.of(
             McpInvocationStatus.PENDING, McpInvocationStatus.APPROVED, McpInvocationStatus.RUNNING
     );
+    private static final Set<McpInvocationStatus> APPROVAL_ORCHESTRATION_STATUSES = Set.of(
+            McpInvocationStatus.PENDING,
+            McpInvocationStatus.APPROVED,
+            McpInvocationStatus.RUNNING
+    );
 
     private final McpToolInvocationRepository invocationRepository;
     private final McpToolPolicyService policyService;
@@ -154,21 +159,28 @@ public class McpApprovalService {
 
         if (approvalRequired) {
             PendingApproval pending = new PendingApproval(new CompletableFuture<>(), executionContext);
-            pendingApprovals.put(invocation.getRequestId(), pending);
-            executionContext.emit(McpApprovalEvent.required(new McpApprovalVo(invocation)));
-            McpInvocationStatus decision = awaitDecision(invocation, pending);
-            pendingApprovals.remove(invocation.getRequestId());
-            if (decision != McpInvocationStatus.APPROVED) {
-                McpToolInvocation resolved = getInvocation(invocation.getRequestId());
-                String reason = decision == McpInvocationStatus.EXPIRED ? "MCP工具审批已超时"
-                        : decision == McpInvocationStatus.CANCELLED ? "MCP工具调用已取消" : "用户拒绝了MCP工具调用";
-                executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(resolved)));
-                return deniedResult(resolved, executionContext, reason);
+            String requestId = invocation.getRequestId();
+            try {
+                pendingApprovals.put(requestId, pending);
+                executionContext.emit(McpApprovalEvent.required(new McpApprovalVo(invocation)));
+                McpInvocationStatus decision = awaitDecision(invocation, pending);
+                if (decision != McpInvocationStatus.APPROVED) {
+                    McpToolInvocation resolved = getInvocation(requestId);
+                    String reason = decision == McpInvocationStatus.EXPIRED ? "MCP工具审批已超时"
+                            : decision == McpInvocationStatus.CANCELLED ? "MCP工具调用已取消" : "用户拒绝了MCP工具调用";
+                    executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(resolved)));
+                    return deniedResult(resolved, executionContext, reason);
+                }
+                invocation = getInvocation(requestId);
+                invocation.setStatus(McpInvocationStatus.RUNNING);
+                invocationRepository.save(invocation);
+                executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(invocation)));
+            } catch (RuntimeException e) {
+                markApprovalOrchestrationFailed(requestId, e);
+                throw e;
+            } finally {
+                pendingApprovals.remove(requestId, pending);
             }
-            invocation = getInvocation(invocation.getRequestId());
-            invocation.setStatus(McpInvocationStatus.RUNNING);
-            invocationRepository.save(invocation);
-            executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(invocation)));
         }
 
         if (executionContext.isTaskCancelled()) {
@@ -675,6 +687,47 @@ public class McpApprovalService {
         }
         invocation.setStatus(status).setErrorSummary(error).setFinishTime(new Date());
         invocationRepository.save(invocation);
+    }
+
+    private void markApprovalOrchestrationFailed(String requestId, RuntimeException original) {
+        RuntimeException auditFailure = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                McpToolInvocation failed = getInvocation(requestId);
+                if (!APPROVAL_ORCHESTRATION_STATUSES.contains(failed.getStatus())) {
+                    return;
+                }
+                String detail = "MCP审批编排失败: " + original.getClass().getSimpleName()
+                        + (StringUtils.isBlank(original.getMessage()) ? "" : " - " + original.getMessage());
+                failed.setStatus(McpInvocationStatus.FAILED)
+                        .setErrorSummary(boundedApprovalError(detail))
+                        .setFinishTime(new Date());
+                invocationRepository.save(failed);
+                return;
+            } catch (OptimisticLockingFailureException e) {
+                auditFailure = e;
+                if (attempt == 0) {
+                    continue;
+                }
+            } catch (RuntimeException e) {
+                auditFailure = e;
+            }
+            break;
+        }
+        if (auditFailure != null && auditFailure != original) {
+            original.addSuppressed(auditFailure);
+        }
+        log.error("MCP审批编排失败且审计状态更新失败: requestId={}", requestId, auditFailure);
+    }
+
+    int pendingApprovalCount() {
+        return pendingApprovals.size();
+    }
+
+    private String boundedApprovalError(String detail) {
+        String summary = summarizeJson(detail, MAX_ERROR_CHARS);
+        return summary.length() <= MAX_ERROR_CHARS
+                ? summary : summary.substring(0, MAX_ERROR_CHARS);
     }
 
     private McpToolInvocation createInvocation(McpToolDescriptor descriptor,

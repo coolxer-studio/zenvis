@@ -5,6 +5,10 @@ global:
   imagePullSecrets:
     - name: registry-credentials
 
+vectum:
+  image:
+    version: "1.0.1"
+
 secrets:
   existingSecret: zenvis-production-secrets
 

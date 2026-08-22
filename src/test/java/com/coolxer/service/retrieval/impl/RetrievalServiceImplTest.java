@@ -47,6 +47,7 @@ class RetrievalServiceImplTest {
         insertTime.setLabel("创建时间");
         insertTime.setColumnName(MetaDataConstants.INSERT_TIME_COLUMN);
         insertTime.setColumnType(MetaDataConstants.INSERT_TIME_COLUMN_TYPE);
+        insertTime.setSearchType("datetime");
         insertTime.setOperators(List.of("equal"));
         insertTime.setDisplaySelected(false);
         DataOperator operator = new DataOperator();
@@ -64,6 +65,10 @@ class RetrievalServiceImplTest {
         DataAttributeResultVo displayResult = service.listAttributeForDisplay("msg", null, 7);
 
         assertThat(attributeResult.getAttributeList()).hasSize(3);
+        assertThat(attributeResult.getAttributeList())
+                .filteredOn(result -> MetaDataConstants.INSERT_TIME_ATTRIBUTE.equals(result.getName()))
+                .singleElement()
+                .satisfies(result -> assertThat(result.getSearchType()).isEqualTo("datetime"));
         assertThat(attributeResult.getAttributeList())
                 .filteredOn(result -> "guid".equals(result.getName()))
                 .singleElement()

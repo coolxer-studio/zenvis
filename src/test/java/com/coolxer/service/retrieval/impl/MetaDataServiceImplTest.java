@@ -263,6 +263,7 @@ class MetaDataServiceImplTest {
         assertThat(insertTime.getColumnName()).isEqualTo(MetaDataConstants.INSERT_TIME_COLUMN);
         assertThat(insertTime.getColumnType()).isEqualTo("DateTime64(3)");
         assertThat(insertTime.getRetrievalType()).isEqualTo("date");
+        assertThat(insertTime.getSearchType()).isEqualTo("datetime");
         assertThat(insertTime.isDisplaySelected()).isFalse();
         assertThat(insertTime.isMustCandidate()).isFalse();
         assertThat(insertTime.getOperators()).contains(

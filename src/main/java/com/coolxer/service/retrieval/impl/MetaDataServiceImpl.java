@@ -446,6 +446,7 @@ public class MetaDataServiceImpl implements MetaDataService {
         attribute.setColumnName(MetaDataConstants.INSERT_TIME_COLUMN);
         attribute.setColumnType(MetaDataConstants.INSERT_TIME_COLUMN_TYPE);
         attribute.setRetrievalType("date");
+        attribute.setSearchType("datetime");
         attribute.setOperators(List.of("greatthan", "lessthan", "greatequalthan", "lessequalthan"));
         attribute.setDisplaySelected(false);
         attribute.setMustCandidate(false);

@@ -1,0 +1,35 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/index"
+      },
+      {
+        "children": [
+          {
+            "label": "数据概览",
+            "url": "index",
+            "icon": "fa-solid fa-gauge-high",
+            "schemaApi": "get:/zenvis/api/v1/config/user-event-app/get?file_name=index.json"
+          },
+          {
+            "label": "事件管理",
+            "url": "manage",
+            "icon": "fa-solid fa-table-list",
+            "schemaApi": "get:/zenvis/api/v1/config/user-event-app/get?file_name=manage.json"
+          },
+          {
+            "label": "趋势分析",
+            "url": "trend",
+            "icon": "fa-solid fa-chart-line",
+            "schemaApi": "get:/zenvis/api/v1/config/user-event-app/get?file_name=trend.json"
+          }
+        ]
+      }
+    ]
+  }
+}

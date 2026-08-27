@@ -1,0 +1,42 @@
+{
+  "type": "page",
+  "title": "用户事件数据趋势",
+  "body": [
+    {
+      "type": "chart",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/aggregate/query",
+        "data": "__QUERY_REQUEST__",
+        "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+      },
+      "config": {
+        "title": {
+          "text": "用户事件数据趋势",
+          "left": "center"
+        },
+        "tooltip": {
+          "trigger": "axis"
+        },
+        "legend": {
+          "top": 30
+        },
+        "grid": {
+          "left": 48,
+          "right": 24,
+          "top": 72,
+          "bottom": 42
+        },
+        "dataset": "${chart_dataset}",
+        "xAxis": {
+          "type": "category"
+        },
+        "yAxis": {
+          "type": "value",
+          "minInterval": 1
+        },
+        "series": "${chart_series}"
+      }
+    }
+  ]
+}

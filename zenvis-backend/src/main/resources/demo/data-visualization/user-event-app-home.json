@@ -1,0 +1,145 @@
+{
+  "type": "page",
+  "title": "用户事件数据概览",
+  "remark": "实时读取 user_event 实体，最近更新时间由接口请求触发",
+  "body": [
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "user_event"
+          ],
+          "time_range": {
+            "preset": "TODAY"
+          },
+          "time_field": "server_time",
+          "comparison": "PREVIOUS_PERIOD",
+          "criteria_list": [],
+          "criteria_logic": "and"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{};var r=d.result&&d.result.rows&&d.result.rows[0]?d.result.rows[0]:{};return {status:0,msg:'',data:{all_time_count:r.all_time_count||0,today_count:r.current_value||0,previous_count:r.previous_value||0,delta_rate:r.delta_rate}};"
+      },
+      "body": {
+        "type": "grid",
+        "columns": [
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "累计事件",
+              "body": "<div style='font-size:34px;font-weight:700;color:#2563eb'>${all_time_count}</div><div class='text-muted'>来自真实 user_event 数据</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "今日事件",
+              "body": "<div style='font-size:34px;font-weight:700;color:#059669'>${today_count}</div><div class='text-muted'>按 server_time 统计</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "上一周期",
+              "body": "<div style='font-size:34px;font-weight:700;color:#7c3aed'>${previous_count}</div><div class='text-muted'>用于今日环比</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "grid",
+      "columns": [
+        {
+          "md": 7,
+          "body": {
+            "type": "chart",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/trend/query",
+              "data": {
+                "series": [
+                  {
+                    "entity": "user_event",
+                    "label": "用户事件",
+                    "metric": {
+                      "name": "count",
+                      "operation": "COUNT",
+                      "label": "事件数"
+                    },
+                    "time_field": "server_time",
+                    "criteria_list": [],
+                    "criteria_logic": "and"
+                  }
+                ],
+                "time_range": {
+                  "preset": "LAST_24_HOURS"
+                },
+                "granularity": "HOUR",
+                "comparison": "NONE",
+                "criteria_list": [],
+                "criteria_logic": "and"
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "近 24 小时事件趋势"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "dataset": "${dataset}",
+              "xAxis": {
+                "type": "category"
+              },
+              "yAxis": {
+                "type": "value",
+                "minInterval": 1
+              },
+              "series": "${series}"
+            }
+          }
+        },
+        {
+          "md": 5,
+          "body": {
+            "type": "chart",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "entity": "user_event",
+                "dimension": "event_type",
+                "time_range": {
+                  "preset": "LAST_24_HOURS"
+                },
+                "time_field": "server_time",
+                "criteria_list": [],
+                "criteria_logic": "and",
+                "limit": 10,
+                "include_null": false
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "事件类型分布"
+              },
+              "tooltip": {
+                "trigger": "item"
+              },
+              "dataset": "${dataset}",
+              "series": "${series}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

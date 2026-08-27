@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户事件数据态势看板</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050a16;
+      --panel: rgba(12, 25, 48, .88);
+      --panel-strong: rgba(15, 32, 59, .96);
+      --line: rgba(95, 165, 255, .2);
+      --text: #f3f8ff;
+      --muted: #8fa8c7;
+      --blue: #4da3ff;
+      --cyan: #42e8e0;
+      --green: #63e6a7;
+      --amber: #ffc66d;
+      --rose: #ff7393;
+      --violet: #a68cff;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      margin: 0;
+      min-width: 1180px;
+      min-height: 680px;
+      overflow: hidden;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 50% -15%, rgba(61, 139, 255, .24), transparent 42%),
+        radial-gradient(circle at 100% 85%, rgba(66, 232, 224, .08), transparent 34%),
+        linear-gradient(rgba(76, 139, 222, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(76, 139, 222, .035) 1px, transparent 1px),
+        var(--bg);
+      background-size: auto, auto, 40px 40px, 40px 40px, auto;
+    }
+    button { font: inherit; }
+    .screen {
+      width: 100vw;
+      height: 100vh;
+      padding: 18px 22px 22px;
+      display: grid;
+      grid-template-rows: 68px 116px minmax(0, 1fr);
+      gap: 14px;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(270px, 1fr) minmax(460px, 1.5fr) minmax(270px, 1fr);
+      align-items: center;
+      gap: 18px;
+    }
+    .brand, .top-actions {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(90deg, rgba(20, 43, 78, .82), rgba(10, 24, 45, .68));
+    }
+    .brand-mark {
+      width: 27px;
+      height: 27px;
+      border: 2px solid var(--cyan);
+      border-radius: 8px 3px 8px 3px;
+      box-shadow: 0 0 18px rgba(66, 232, 224, .36), inset 0 0 10px rgba(66, 232, 224, .18);
+      transform: rotate(45deg);
+    }
+    .brand-copy strong { display: block; font-size: 14px; }
+    .brand-copy span, .updated { color: var(--muted); font-size: 11px; }
+    .title { text-align: center; }
+    .title h1 { margin: 0; font-size: 29px; letter-spacing: 4px; text-shadow: 0 0 24px rgba(77, 163, 255, .45); }
+    .title p { margin: 5px 0 0; color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+    .top-actions { justify-content: flex-end; }
+    .clock { min-width: 82px; font-variant-numeric: tabular-nums; font-size: 18px; color: var(--cyan); }
+    .refresh {
+      border: 1px solid rgba(77, 163, 255, .44);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: rgba(39, 100, 185, .22);
+      color: #cde4ff;
+      cursor: pointer;
+    }
+    .refresh:disabled { opacity: .55; cursor: wait; }
+    .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+    .kpi, .panel {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: linear-gradient(160deg, var(--panel-strong), var(--panel));
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .22), inset 0 1px rgba(255, 255, 255, .04);
+    }
+    .kpi::before, .panel::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 76px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--blue), transparent);
+    }
+    .kpi { padding: 14px 15px; display: flex; flex-direction: column; justify-content: space-between; }
+    .kpi-label { color: var(--muted); font-size: 12px; }
+    .kpi-value { margin-top: 4px; font-size: clamp(23px, 2vw, 32px); font-weight: 760; line-height: 1; font-variant-numeric: tabular-nums; }
+    .kpi-note { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi-note.positive { color: var(--green); }
+    .kpi-note.negative { color: var(--rose); }
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(270px, .85fr) minmax(500px, 1.6fr) minmax(310px, 1fr);
+      grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+    .panel { padding: 14px; min-height: 0; display: flex; flex-direction: column; }
+    .panel.trend { grid-row: span 2; }
+    .panel.records { grid-row: span 2; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; height: 28px; margin-bottom: 8px; flex: 0 0 auto; }
+    .panel-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+    .panel-title::before { content: ""; width: 3px; height: 14px; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+    .panel-meta { color: var(--muted); font-size: 10px; }
+    .chart-area { position: relative; flex: 1 1 auto; min-height: 0; }
+    .empty { height: 100%; min-height: 100px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+    .bars { display: grid; gap: 9px; align-content: center; height: 100%; }
+    .bar { display: grid; grid-template-columns: 66px 1fr 46px; align-items: center; gap: 8px; font-size: 11px; }
+    .bar-name { color: #cad9ed; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(114, 145, 185, .14); }
+    .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--cyan)); box-shadow: 0 0 10px rgba(66, 232, 224, .22); }
+    .bar-value { text-align: right; font-variant-numeric: tabular-nums; color: #c9dcf3; }
+    .trend-svg { width: 100%; height: 100%; display: block; }
+    .grid-line { stroke: rgba(131, 165, 207, .13); stroke-width: 1; }
+    .axis-label { fill: var(--muted); font-size: 10px; }
+    .trend-line { fill: none; stroke: var(--cyan); stroke-width: 2.5; filter: drop-shadow(0 0 5px rgba(66, 232, 224, .45)); }
+    .trend-area { fill: url(#trendGradient); }
+    .trend-dot { fill: #dffffc; stroke: var(--cyan); stroke-width: 2; }
+    .histogram { height: 100%; display: flex; gap: 7px; align-items: flex-end; padding: 15px 4px 3px; }
+    .hist-item { min-width: 0; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; }
+    .hist-value { color: #c9dcf3; font-size: 9px; }
+    .hist-bar { width: 66%; min-height: 2px; border-radius: 4px 4px 1px 1px; background: linear-gradient(180deg, var(--violet), var(--blue)); box-shadow: 0 0 10px rgba(166, 140, 255, .25); }
+    .hist-label { width: 100%; color: var(--muted); font-size: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .records-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { padding: 9px 7px; border-bottom: 1px solid rgba(120, 153, 196, .1); text-align: left; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    th { position: sticky; top: 0; color: var(--muted); background: #0d1d36; font-weight: 600; }
+    tbody tr:hover { background: rgba(77, 163, 255, .06); }
+    .event-type { display: inline-flex; border-radius: 5px; padding: 3px 6px; color: var(--cyan); background: rgba(66, 232, 224, .09); }
+    .error {
+      position: fixed;
+      z-index: 5;
+      top: 92px;
+      left: 50%;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      max-width: 760px;
+      padding: 11px 14px;
+      border: 1px solid rgba(255, 115, 147, .5);
+      border-radius: 9px;
+      background: rgba(74, 20, 38, .96);
+      color: #ffdce5;
+      transform: translateX(-50%);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, .38);
+      font-size: 12px;
+    }
+    .error.visible { display: flex; }
+    .error button { border: 1px solid rgba(255,255,255,.25); border-radius: 6px; padding: 5px 9px; background: transparent; color: #fff; cursor: pointer; }
+    .loading {
+      position: fixed;
+      z-index: 4;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5, 10, 22, .48);
+      backdrop-filter: blur(2px);
+    }
+    .loading.visible { display: flex; }
+    .loader {
+      width: 42px;
+      height: 42px;
+      border: 3px solid rgba(77, 163, 255, .2);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-height: 760px) {
+      .screen { padding: 12px 16px 16px; grid-template-rows: 58px 98px minmax(0, 1fr); gap: 10px; }
+      .kpi { padding: 10px 12px; }
+      .panel { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-copy"><strong>ZenVis · User Event</strong><span>数据接入智能体实时数据源</span></div>
+      </div>
+      <div class="title"><h1>用户事件数据态势看板</h1><p>real-time user event observability</p></div>
+      <div class="top-actions">
+        <div><div class="clock" id="clock">--:--:--</div><div class="updated" id="updatedAt">尚未更新</div></div>
+        <button class="refresh" id="refresh">刷新数据</button>
+      </div>
+    </header>
+
+    <section class="kpis">
+      <article class="kpi"><div class="kpi-label">累计事件</div><div class="kpi-value" id="totalCount">—</div><div class="kpi-note">user_event 全量记录</div></article>
+      <article class="kpi"><div class="kpi-label">今日事件</div><div class="kpi-value" id="todayCount">—</div><div class="kpi-note" id="todayDelta">等待真实数据</div></article>
+      <article class="kpi"><div class="kpi-label">近 24H 活跃用户</div><div class="kpi-value" id="activeUsers">—</div><div class="kpi-note">按 user 去重</div></article>
+      <article class="kpi"><div class="kpi-label">平均可信度</div><div class="kpi-value" id="avgReliability">—</div><div class="kpi-note">近 24 小时均值</div></article>
+      <article class="kpi"><div class="kpi-label">事件类型</div><div class="kpi-value" id="eventTypes">—</div><div class="kpi-note">近 24 小时去重</div></article>
+      <article class="kpi"><div class="kpi-label">最新事件</div><div class="kpi-value" id="latestAge">—</div><div class="kpi-note" id="latestTime">暂无记录</div></article>
+    </section>
+
+    <section class="main">
+      <article class="panel">
+        <header class="panel-head"><div class="panel-title">事件类型分布</div><div class="panel-meta">LAST 24 HOURS</div></header>
+        <div class="chart-area bars" id="typeBars"><div class="empty">正在读取真实数据…</div></div>
+      </article>
+      <article class="panel trend">
+        <header class="panel-head"><div class="panel-title">用户事件上报趋势</div><div class="panel-meta">按小时 · SERVER_TIME</div></header>
+        <div class="chart-area" id="trendChart"><div class="empty">正在读取真实数据…</div></div>
+      </article>
+      <article class="panel records">
+        <header class="panel-head"><div class="panel-title">最新用户事件</div><div class="panel-meta" id="recordTotal">0 条</div></header>
+        <div class="records-wrap">
+          <table>
+            <thead><tr><th style="width:30%">时间</th><th style="width:18%">类型</th><th style="width:28%">用户</th><th style="width:24%">可信度</th></tr></thead>
+            <tbody id="recordRows"><tr><td colspan="4"><div class="empty">正在读取真实数据…</div></td></tr></tbody>
+          </table>
+        </div>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><div class="panel-title">可信度区间</div><div class="panel-meta">近 24 小时</div></header>
+        <div class="chart-area histogram" id="reliabilityHistogram"><div class="empty">正在读取真实数据…</div></div>
+      </article>
+    </section>
+  </main>
+
+  <div class="error" id="error"><span id="errorMessage">数据刷新失败</span><button id="retry">重试</button></div>
+  <div class="loading" id="loading"><div class="loader"></div></div>
+
+  <script>
+    (() => {
+      const ENTITY = 'user_event';
+      const API_BASES = ['/zenvis/api/v1', '/api/v1'];
+      const REFRESH_INTERVAL_MS = 60000;
+      let apiBase = API_BASES[0];
+      let refreshTimer;
+      let loading = false;
+
+      const elements = {
+        refresh: document.getElementById('refresh'),
+        retry: document.getElementById('retry'),
+        error: document.getElementById('error'),
+        errorMessage: document.getElementById('errorMessage'),
+        loading: document.getElementById('loading'),
+        updatedAt: document.getElementById('updatedAt'),
+        clock: document.getElementById('clock')
+      };
+      const setText = (id, value) => { document.getElementById(id).textContent = value; };
+      const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+      const formatNumber = value => number(value).toLocaleString('zh-CN', {maximumFractionDigits: 2});
+      const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
+      const unwrap = value => value && Object.prototype.hasOwnProperty.call(value, 'data') ? value.data : value;
+      const safeRows = value => value && value.result && Array.isArray(value.result.rows) ? value.result.rows : [];
+      const analyticsRange = preset => ({preset, start_time: null, end_time: null});
+      const post = body => ({method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+
+      async function request(path, options = {}) {
+        let lastError;
+        for (const base of [apiBase, ...API_BASES.filter(item => item !== apiBase)]) {
+          try {
+            const response = await fetch(`${base}${path}`, {credentials: 'same-origin', ...options});
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const json = await response.json();
+            if (json && json.code !== undefined && ![0, 200].includes(Number(json.code))) {
+              throw new Error(json.message || json.msg || `接口返回 ${json.code}`);
+            }
+            apiBase = base;
+            return unwrap(json);
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError || new Error('接口请求失败');
+      }
+
+      function metricMap(rows) {
+        return rows.reduce((result, row) => {
+          result[row.metric] = number(row.value);
+          return result;
+        }, {});
+      }
+
+      function relativeAge(value) {
+        if (!value) return {short: '—', full: '暂无记录'};
+        const normalized = String(value).replace(' ', 'T').replace(/(\.\d{3})\d+$/, '$1');
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) return {short: '—', full: String(value)};
+        const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+        let short;
+        if (seconds < 60) short = `${seconds}s`;
+        else if (seconds < 3600) short = `${Math.floor(seconds / 60)}m`;
+        else if (seconds < 86400) short = `${Math.floor(seconds / 3600)}h`;
+        else short = `${Math.floor(seconds / 86400)}d`;
+        return {short, full: date.toLocaleString('zh-CN', {hour12: false})};
+      }
+
+      function renderBars(containerId, rows, emptyText) {
+        const container = document.getElementById(containerId);
+        if (!rows.length) {
+          container.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+          return;
+        }
+        const max = Math.max(...rows.map(row => number(row.value)), 1);
+        container.innerHTML = rows.slice(0, 8).map(row => `
+          <div class="bar">
+            <span class="bar-name" title="${escapeHtml(row.bucket)}">${escapeHtml(row.bucket || '未分类')}</span>
+            <span class="bar-track"><span class="bar-fill" style="width:${Math.max(2, number(row.value) / max * 100).toFixed(1)}%"></span></span>
+            <span class="bar-value">${formatNumber(row.value)}</span>
+          </div>
+        `).join('');
+      }
+
+      function renderTrend(rows) {
+        window.__userEventTrendRows = rows;
+        const container = document.getElementById('trendChart');
+        if (!rows.length) {
+          container.innerHTML = '<div class="empty">近 24 小时暂无趋势数据</div>';
+          return;
+        }
+        const width = Math.max(container.clientWidth, 520);
+        const height = Math.max(container.clientHeight, 260);
+        const padding = {left: 46, right: 18, top: 18, bottom: 32};
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+        const max = Math.max(...rows.map(row => number(row.value)), 1);
+        const points = rows.map((row, index) => ({
+          x: padding.left + (rows.length === 1 ? chartWidth / 2 : index / (rows.length - 1) * chartWidth),
+          y: padding.top + chartHeight - number(row.value) / max * chartHeight,
+          value: number(row.value),
+          bucket: row.bucket
+        }));
+        const line = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+        const area = `${line} L${points[points.length - 1].x.toFixed(1)},${padding.top + chartHeight} L${points[0].x.toFixed(1)},${padding.top + chartHeight} Z`;
+        const grid = Array.from({length: 5}, (_, index) => {
+          const y = padding.top + chartHeight * index / 4;
+          const label = Math.round(max * (1 - index / 4));
+          return `<line class="grid-line" x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}"/><text class="axis-label" x="4" y="${y + 4}">${label}</text>`;
+        }).join('');
+        const labels = points.filter((_, index) => index % Math.max(1, Math.ceil(points.length / 6)) === 0 || index === points.length - 1).map(point => `<text class="axis-label" text-anchor="middle" x="${point.x}" y="${height - 7}">${escapeHtml(String(point.bucket || '').slice(5, 16))}</text>`).join('');
+        const dots = points.map(point => `<circle class="trend-dot" cx="${point.x}" cy="${point.y}" r="3"><title>${escapeHtml(point.bucket)}：${point.value}</title></circle>`).join('');
+        container.innerHTML = `<svg class="trend-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><defs><linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#42e8e0" stop-opacity=".30"/><stop offset="100%" stop-color="#42e8e0" stop-opacity="0"/></linearGradient></defs>${grid}<path class="trend-area" d="${area}"/><path class="trend-line" d="${line}"/>${dots}${labels}</svg>`;
+      }
+
+      function renderHistogram(rows) {
+        const container = document.getElementById('reliabilityHistogram');
+        if (!rows.length) {
+          container.innerHTML = '<div class="empty">近 24 小时暂无可信度数据</div>';
+          return;
+        }
+        const max = Math.max(...rows.map(row => number(row.value)), 1);
+        container.innerHTML = rows.map(row => `
+          <div class="hist-item">
+            <span class="hist-value">${formatNumber(row.value)}</span>
+            <span class="hist-bar" style="height:${Math.max(2, number(row.value) / max * 82).toFixed(1)}%"></span>
+            <span class="hist-label" title="${escapeHtml(row.bucket)}">${escapeHtml(row.bucket || '')}</span>
+          </div>
+        `).join('');
+      }
+
+      function renderRecords(page) {
+        const rows = page && Array.isArray(page.rows) ? page.rows : [];
+        setText('recordTotal', `共 ${formatNumber(page && page.total)} 条`);
+        const body = document.getElementById('recordRows');
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="4"><div class="empty">当前 user_event 实体暂无数据</div></td></tr>';
+          return;
+        }
+        body.innerHTML = rows.map(row => `
+          <tr>
+            <td title="${escapeHtml(row.server_time)}">${escapeHtml(row.server_time || '—')}</td>
+            <td><span class="event-type">${escapeHtml(row.event_type || '—')}</span></td>
+            <td title="${escapeHtml(row.user)}">${escapeHtml(row.user || '—')}</td>
+            <td>${row.reliability === null || row.reliability === undefined ? '—' : number(row.reliability).toFixed(2)}</td>
+          </tr>
+        `).join('');
+      }
+
+      function setLoading(value) {
+        loading = value;
+        elements.refresh.disabled = value;
+        elements.retry.disabled = value;
+        elements.loading.classList.toggle('visible', value);
+      }
+      function showError(error) {
+        elements.errorMessage.textContent = `数据刷新失败：${error && error.message ? error.message : String(error)}`;
+        elements.error.classList.add('visible');
+      }
+      function clearError() { elements.error.classList.remove('visible'); }
+
+      async function loadDashboard() {
+        if (loading) return;
+        setLoading(true);
+        clearError();
+        try {
+          const time24h = analyticsRange('LAST_24_HOURS');
+          const [overview, summary, trend, eventTypes, histogram, records] = await Promise.all([
+            request('/entity/overview/query', post({
+              entities: [ENTITY],
+              time_range: analyticsRange('TODAY'),
+              time_field: 'server_time',
+              comparison: 'PREVIOUS_PERIOD',
+              criteria_list: [],
+              criteria_logic: 'and'
+            })),
+            request('/entity/summary/query', post({
+              entity: ENTITY,
+              metrics: [
+                {name: 'active_users', operation: 'DISTINCT_COUNT', field: 'user', label: '活跃用户'},
+                {name: 'average_reliability', operation: 'AVG', field: 'reliability', label: '平均可信度'},
+                {name: 'event_types', operation: 'DISTINCT_COUNT', field: 'event_type', label: '事件类型'}
+              ],
+              time_range: time24h,
+              time_field: 'server_time',
+              comparison: 'NONE',
+              criteria_list: [],
+              criteria_logic: 'and'
+            })),
+            request('/entity/trend/query', post({
+              series: [{
+                entity: ENTITY,
+                label: '用户事件',
+                metric: {name: 'count', operation: 'COUNT', label: '事件数'},
+                time_field: 'server_time',
+                criteria_list: [],
+                criteria_logic: 'and'
+              }],
+              time_range: time24h,
+              granularity: 'HOUR',
+              comparison: 'NONE',
+              criteria_list: [],
+              criteria_logic: 'and'
+            })),
+            request('/entity/distribution/query', post({
+              entity: ENTITY,
+              dimension: 'event_type',
+              time_range: time24h,
+              time_field: 'server_time',
+              criteria_list: [],
+              criteria_logic: 'and',
+              limit: 8,
+              include_null: false
+            })),
+            request('/entity/histogram/query', post({
+              entity: ENTITY,
+              field: 'reliability',
+              bins: 10,
+              time_range: time24h,
+              time_field: 'server_time',
+              criteria_list: [],
+              criteria_logic: 'and'
+            })),
+            request(`/entity/${ENTITY}/list?page=1&perPage=12&orderBy=server_time&orderDir=desc`)
+          ]);
+
+          const overviewRow = safeRows(overview)[0] || {};
+          const metrics = metricMap(safeRows(summary));
+          const recordRows = records && Array.isArray(records.rows) ? records.rows : [];
+          const age = relativeAge(recordRows[0] && recordRows[0].server_time);
+
+          setText('totalCount', formatNumber(overviewRow.all_time_count));
+          setText('todayCount', formatNumber(overviewRow.current_value));
+          setText('activeUsers', formatNumber(metrics.active_users));
+          setText('avgReliability', number(metrics.average_reliability).toFixed(2));
+          setText('eventTypes', formatNumber(metrics.event_types));
+          setText('latestAge', age.short);
+          setText('latestTime', age.full);
+
+          const deltaRate = overviewRow.delta_rate;
+          const delta = document.getElementById('todayDelta');
+          if (deltaRate === null || deltaRate === undefined) {
+            delta.textContent = '上一周期暂无可比数据';
+            delta.className = 'kpi-note';
+          } else {
+            const percentage = number(deltaRate) * 100;
+            delta.textContent = `较上一周期 ${percentage >= 0 ? '+' : ''}${percentage.toFixed(1)}%`;
+            delta.className = `kpi-note ${percentage >= 0 ? 'positive' : 'negative'}`;
+          }
+
+          renderBars('typeBars', safeRows(eventTypes), '近 24 小时暂无事件类型数据');
+          renderTrend(safeRows(trend));
+          renderHistogram(safeRows(histogram));
+          renderRecords(records);
+          elements.updatedAt.textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN', {hour12: false})}`;
+        } catch (error) {
+          showError(error);
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function updateClock() {
+        elements.clock.textContent = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+      }
+      function scheduleRefresh() {
+        if (refreshTimer) window.clearInterval(refreshTimer);
+        refreshTimer = window.setInterval(loadDashboard, REFRESH_INTERVAL_MS);
+      }
+
+      elements.refresh.addEventListener('click', loadDashboard);
+      elements.retry.addEventListener('click', loadDashboard);
+      window.addEventListener('resize', () => {
+        window.clearTimeout(window.__userEventResizeTimer);
+        window.__userEventResizeTimer = window.setTimeout(() => renderTrend(window.__userEventTrendRows || []), 180);
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadDashboard();
+      });
+      updateClock();
+      window.setInterval(updateClock, 1000);
+      scheduleRefresh();
+      loadDashboard();
+    })();
+  </script>
+</body>
+</html>

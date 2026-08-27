@@ -1,0 +1,266 @@
+{
+  "type": "page",
+  "title": "用户事件数据管理",
+  "remark": "数据来自数据接入智能体持续写入的 user_event 实体",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "新建用户事件",
+      "level": "primary",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "新建用户事件",
+        "size": "lg",
+        "body": {
+          "type": "form",
+          "api": "post:/zenvis/api/v1/entity/user_event/add",
+          "reload": "user-event-crud",
+          "body": [
+            {
+              "type": "input-text",
+              "name": "event_id",
+              "label": "事件ID",
+              "required": true
+            },
+            {
+              "type": "input-number",
+              "name": "procid",
+              "label": "进程id",
+              "required": true
+            },
+            {
+              "type": "input-text",
+              "name": "user",
+              "label": "用户",
+              "required": true
+            },
+            {
+              "type": "select",
+              "name": "event_type",
+              "label": "事件类型",
+              "source": "/zenvis/api/v1/entity/user_event/event_type/mapping",
+              "required": true
+            },
+            {
+              "type": "input-number",
+              "name": "reliability",
+              "label": "可信度",
+              "min": 0,
+              "max": 10,
+              "precision": 3,
+              "required": true
+            },
+            {
+              "type": "json-editor",
+              "name": "detail",
+              "label": "数据详情",
+              "required": true
+            },
+            {
+              "type": "input-tag",
+              "name": "tags",
+              "label": "标记",
+              "source": "/zenvis/api/v1/entity/user_event/tags/list",
+              "clearable": true
+            },
+            {
+              "type": "input-datetime",
+              "name": "server_time",
+              "label": "入库时间",
+              "format": "YYYY-MM-DD HH:mm:ss",
+              "value": "now",
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "刷新",
+      "icon": "fa fa-refresh",
+      "target": "user-event-crud",
+      "actionType": "reload"
+    }
+  ],
+  "body": [
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "user_event"
+          ],
+          "time_range": {
+            "preset": "TODAY"
+          },
+          "time_field": "server_time",
+          "comparison": "PREVIOUS_PERIOD",
+          "criteria_list": [],
+          "criteria_logic": "and"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{};var r=d.result&&d.result.rows&&d.result.rows[0]?d.result.rows[0]:{};return {status:0,msg:'',data:{all_time_count:r.all_time_count||0,today_count:r.current_value||0,previous_count:r.previous_value||0}};"
+      },
+      "body": {
+        "type": "grid",
+        "columns": [
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "累计事件",
+              "body": "<div style='font-size:30px;font-weight:700;color:#2563eb'>${all_time_count}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "今日事件",
+              "body": "<div style='font-size:30px;font-weight:700;color:#0f9f6e'>${today_count}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "上一周期",
+              "body": "<div style='font-size:30px;font-weight:700;color:#7c3aed'>${previous_count}</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "crud",
+      "name": "user-event-crud",
+      "api": "/zenvis/api/v1/entity/user_event/list",
+      "perPage": 20,
+      "autoGenerateFilter": true,
+      "keepItemSelectionOnPageChange": true,
+      "placeholder": "当前 user_event 实体暂无数据",
+      "columns": [
+        {
+          "type": "tpl",
+          "name": "event_id",
+          "label": "事件ID",
+          "tpl": "${event_id|truncate:18}",
+          "copyable": true
+        },
+        {
+          "name": "procid",
+          "label": "进程id",
+          "searchable": true
+        },
+        {
+          "name": "user",
+          "label": "用户",
+          "searchable": {
+            "type": "input-text",
+            "autoComplete": "/zenvis/api/v1/entity/user_event/user/auto-complete?term=$term"
+          }
+        },
+        {
+          "name": "event_type",
+          "label": "事件类型",
+          "type": "mapping",
+          "map": {
+            "login": "<span class='label label-info'>登录</span>",
+            "click": "<span class='label label-success'>点击</span>",
+            "view": "<span class='label label-primary'>浏览</span>",
+            "delete": "<span class='label label-danger'>删除</span>",
+            "modify": "<span class='label label-warning'>修改</span>",
+            "*": "其他"
+          },
+          "searchable": {
+            "type": "select",
+            "source": "/zenvis/api/v1/entity/user_event/event_type/mapping",
+            "clearable": true
+          }
+        },
+        {
+          "name": "reliability",
+          "label": "可信度",
+          "searchable": {
+            "type": "input-number"
+          }
+        },
+        {
+          "name": "tags",
+          "label": "标记",
+          "type": "tpl",
+          "tpl": "<span class='label label-info'>${tags}</span>"
+        },
+        {
+          "name": "server_time",
+          "label": "入库时间",
+          "type": "datetime",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "server_time"
+          }
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": 150,
+          "buttons": [
+            {
+              "type": "button",
+              "label": "详情",
+              "level": "link",
+              "actionType": "dialog",
+              "dialog": {
+                "title": "事件详情",
+                "size": "lg",
+                "body": [
+                  {
+                    "type": "property",
+                    "column": 2,
+                    "items": [
+                      {
+                        "label": "事件ID",
+                        "content": "${event_id}"
+                      },
+                      {
+                        "label": "用户",
+                        "content": "${user}"
+                      },
+                      {
+                        "label": "事件类型",
+                        "content": "${event_type}"
+                      },
+                      {
+                        "label": "入库时间",
+                        "content": "${server_time}"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "divider"
+                  },
+                  {
+                    "type": "json",
+                    "value": "${detail}"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "button",
+              "label": "删除",
+              "level": "link",
+              "className": "text-danger",
+              "actionType": "ajax",
+              "confirmText": "确认删除该事件？",
+              "api": "delete:/zenvis/api/v1/entity/user_event/$zenvis_id",
+              "reload": "user-event-crud"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

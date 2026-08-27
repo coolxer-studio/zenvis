@@ -1,0 +1,197 @@
+{
+  "entity": [
+    {
+      "id": 1,
+      "name": "user_event",
+      "label": "用户事件数据",
+      "description": "用户行为事件数据，用于记录用户登录、点击、浏览、删除、修改等行为事件。",
+      "table_name": "zenvis.msg_user_event",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree",
+        "order_by": [
+          "event_id",
+          "server_time"
+        ],
+        "partition_by": "toYYYYMM(server_time)"
+      }
+    }
+  ],
+  "attribute": [
+    {
+      "id": 1,
+      "entity": "user_event",
+      "name": "event_id",
+      "label": "事件ID",
+      "description": "业务侧事件唯一标识符",
+      "column_name": "event_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "copyable": true,
+      "display_selected": true
+    },
+    {
+      "id": 2,
+      "entity": "user_event",
+      "name": "procid",
+      "label": "进程id",
+      "description": "产生事件时关联的进程编号",
+      "column_name": "procid",
+      "column_type": "UInt16",
+      "search_type": "number",
+      "operators": [
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true
+    },
+    {
+      "id": 3,
+      "entity": "user_event",
+      "name": "user",
+      "label": "用户",
+      "description": "用户名称或脱敏后的用户标识",
+      "column_name": "user",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "copyable": true,
+      "display_selected": true
+    },
+    {
+      "id": 4,
+      "entity": "user_event",
+      "name": "event_type",
+      "label": "事件类型",
+      "description": "用户行为事件类型",
+      "column_name": "event_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": true,
+      "enums": [
+        "login",
+        "click",
+        "view",
+        "delete",
+        "modify",
+        "other"
+      ]
+    },
+    {
+      "id": 5,
+      "entity": "user_event",
+      "name": "reliability",
+      "label": "可信度",
+      "description": "行为的可信评估结果",
+      "column_name": "reliability",
+      "column_type": "Float64",
+      "search_type": "number",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true
+    },
+    {
+      "id": 6,
+      "entity": "user_event",
+      "name": "detail",
+      "label": "数据详情",
+      "description": "事件明细 JSON 数据",
+      "column_name": "detail",
+      "column_type": "JSON",
+      "operators": [],
+      "display_selected": true,
+      "display_type": "json"
+    },
+    {
+      "id": 7,
+      "entity": "user_event",
+      "name": "tags",
+      "label": "标记",
+      "description": "事件标签数组",
+      "column_name": "tags",
+      "column_type": "Array(String)",
+      "operators": [
+        "in"
+      ],
+      "display_selected": true,
+      "display_type": "array"
+    },
+    {
+      "id": 8,
+      "entity": "user_event",
+      "name": "server_time",
+      "label": "入库时间",
+      "description": "数据写入或服务端处理时间",
+      "column_name": "server_time",
+      "column_type": "DateTime64(3)",
+      "search_type": "datetime",
+      "operators": [
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true
+    }
+  ],
+  "operator": [
+    {
+      "name": "equal",
+      "description": "等于"
+    },
+    {
+      "name": "notequal",
+      "description": "不等于"
+    },
+    {
+      "name": "match",
+      "description": "模糊匹配"
+    },
+    {
+      "name": "greatthan",
+      "description": "大于"
+    },
+    {
+      "name": "greatequalthan",
+      "description": "大于等于"
+    },
+    {
+      "name": "lessthan",
+      "description": "小于"
+    },
+    {
+      "name": "lessequalthan",
+      "description": "小于等于"
+    },
+    {
+      "name": "between",
+      "description": "介于"
+    },
+    {
+      "name": "in",
+      "description": "包含"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "id": "report-agent",
+  "name": "报表制作",
+  "description": "汇总各类智能体分析结果生成专业报表文档，并支持通过自然语言持续修改、润色、补充和重组文档内容。",
+  "version": "1.2.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_report"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "report",
+    "document",
+    "summary",
+    "editing"
+  ],
+  "chat": {
+    "enabled": true,
+    "label": "报表制作",
+    "icon": "document",
+    "order": 50
+  },
+  "runtime": {
+    "tools": {
+      "local": {
+        "retrieval": [
+          "retrieval_search",
+          "retrieval_list_rule",
+          "retrieval_list_entity",
+          "retrieval_list_attribute",
+          "retrieval_list_candidate",
+          "retrieval_list_display_entity",
+          "retrieval_list_display_attribute",
+          "entity_overview",
+          "entity_summary",
+          "entity_trend",
+          "entity_distribution",
+          "entity_value_statistics",
+          "entity_relations",
+          "entity_relation_timeline",
+          "entity_list",
+          "entity_view"
+        ],
+        "analysis-task": [
+          "analysis_task_list",
+          "analysis_task_view",
+          "analysis_task_queue_status"
+        ]
+      },
+      "mcp": {}
+    },
+    "limits": {
+      "maxToolCalls": 8,
+      "maxRepeatedFailures": 2,
+      "maxToolResultChars": 8000,
+      "maxAccumulatedToolResultChars": 24000
+    }
+  },
+  "enabled": true,
+  "entry": "SKILL.md"
+}

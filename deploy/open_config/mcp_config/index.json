@@ -1,0 +1,1012 @@
+{
+  "type": "page",
+  "title": "MCP 服务管理",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "dialog",
+      "label": "新增 MCP 服务",
+      "primary": true,
+      "icon": "fa fa-plus",
+      "dialog": {
+        "title": "新增 MCP 服务",
+        "mode": "horizontal",
+        "size": "lg",
+        "body": {
+          "type": "form",
+          "api": "/zenvis/api/v1/dih/mcp/servers/add",
+          "reload": "mcp_server_list",
+          "body": [
+            {
+              "label": "服务标识",
+              "name": "code",
+              "type": "input-text",
+              "required": true,
+              "clearable": true,
+              "placeholder": "例如 risk-system"
+            },
+            {
+              "label": "服务名称",
+              "name": "name",
+              "type": "input-text",
+              "required": true,
+              "clearable": true
+            },
+            {
+              "label": "基础地址",
+              "name": "base_url",
+              "type": "input-url",
+              "required": true,
+              "clearable": true,
+              "placeholder": "http://127.0.0.1:11002"
+            },
+            {
+              "label": "SSE Endpoint",
+              "name": "sse_endpoint",
+              "type": "input-text",
+              "value": "/sse",
+              "required": true
+            },
+            {
+              "label": "启用",
+              "name": "enabled",
+              "type": "switch",
+              "value": true
+            },
+            {
+              "label": "请求超时(秒)",
+              "name": "request_timeout_seconds",
+              "type": "input-number",
+              "value": 30,
+              "min": 1
+            },
+            {
+              "label": "连接超时(秒)",
+              "name": "connect_timeout_seconds",
+              "type": "input-number",
+              "value": 10,
+              "min": 1
+            },
+            {
+              "label": "固定请求头",
+              "name": "headers",
+              "type": "editor",
+              "language": "json",
+              "size": "md",
+              "placeholder": "{\"Authorization\":\"Bearer token\"}"
+            },
+            {
+              "label": "描述",
+              "name": "description",
+              "type": "textarea",
+              "minRows": 2,
+              "maxRows": 4,
+              "clearable": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "刷新全部连接",
+      "level": "info",
+      "icon": "fa fa-refresh",
+      "actionType": "ajax",
+      "confirmText": "确认刷新全部已启用 MCP 服务连接？",
+      "api": "post:/zenvis/api/v1/dih/mcp/servers/refresh",
+      "reload": "mcp_server_list"
+    },
+    {
+      "type": "button",
+      "label": "业务 Agent MCP 工具提示词",
+      "icon": "fa fa-file-text-o",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "业务 Agent MCP 工具提示词",
+        "size": "lg",
+        "body": {
+          "type": "service",
+          "api": "/zenvis/api/v1/dih/mcp/agent/prompt",
+          "body": {
+            "type": "code",
+            "language": "markdown",
+            "value": "${value|default:'暂无已连接 MCP 工具'}"
+          }
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "工具审批策略",
+      "icon": "fa fa-shield",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "MCP 工具审批策略",
+        "size": "xl",
+        "body": {
+          "name": "mcp_tool_policy_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/mcp/tools/policies/list",
+          "defaultParams": {
+            "page": 1,
+            "perPage": 20
+          },
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 20,
+          "perPageAvailable": [10, 20, 50, 100],
+          "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+          "primaryField": "tool_key",
+          "multiple": true,
+          "keepItemSelectionOnPageChange": true,
+          "bulkActions": [
+            {
+              "type": "button",
+              "label": "批量允许",
+              "level": "success",
+              "actionType": "ajax",
+              "confirmText": "确认将选中的 MCP 工具批量设置为允许直接执行？",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": "ALLOW"
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            },
+            {
+              "type": "button",
+              "label": "批量询问",
+              "level": "warning",
+              "actionType": "ajax",
+              "confirmText": "确认将选中的 MCP 工具批量设置为调用前询问？",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": "ASK"
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            },
+            {
+              "type": "button",
+              "label": "批量禁止",
+              "level": "danger",
+              "actionType": "ajax",
+              "confirmText": "确认批量禁止选中的 MCP 工具？禁止后 Agent 将不再获得这些工具。",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": "DENY"
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            },
+            {
+              "type": "button",
+              "label": "批量恢复默认",
+              "actionType": "ajax",
+              "confirmText": "确认将选中的 MCP 工具批量恢复为默认审批策略？",
+              "api": {
+                "method": "post",
+                "url": "/zenvis/api/v1/dih/mcp/tools/policies/bulk-update",
+                "data": {
+                  "tool_keys": "${items|pick:tool_key}",
+                  "policy": null
+                }
+              },
+              "reload": "mcp_tool_policy_list"
+            }
+          ],
+          "filter": {
+            "body": [
+              {
+                "label": "关键词",
+                "type": "input-text",
+                "name": "keyword",
+                "clearable": true
+              },
+              {
+                "label": "来源",
+                "type": "select",
+                "name": "sourceType",
+                "clearable": true,
+                "options": [
+                  { "label": "本地", "value": "LOCAL" },
+                  { "label": "外部 MCP", "value": "EXTERNAL" }
+                ]
+              },
+              {
+                "label": "有效策略",
+                "type": "select",
+                "name": "policy",
+                "clearable": true,
+                "options": [
+                  { "label": "ALLOW", "value": "ALLOW" },
+                  { "label": "ASK", "value": "ASK" },
+                  { "label": "DENY", "value": "DENY" }
+                ]
+              }
+            ],
+            "actions": [
+              { "type": "reset", "label": "重置" },
+              { "type": "submit", "label": "查询", "level": "primary" }
+            ]
+          },
+          "columns": [
+            { "name": "tool_key", "label": "工具唯一键", "type": "text" },
+            { "name": "description", "label": "描述", "type": "text" },
+            { "name": "server_name", "label": "MCP 服务", "type": "text", "placeholder": "本地" },
+            {
+              "name": "effective_approval_policy",
+              "label": "有效策略",
+              "type": "mapping",
+              "map": {
+                "ALLOW": "<span class='label label-success'>ALLOW</span>",
+                "ASK": "<span class='label label-warning'>ASK</span>",
+                "DENY": "<span class='label label-danger'>DENY</span>"
+              }
+            },
+            { "name": "default_approval_policy", "label": "默认策略", "type": "text" },
+            { "name": "risk_level", "label": "风险", "type": "text" },
+            {
+              "name": "available",
+              "label": "可用",
+              "type": "mapping",
+              "map": {
+                "true": "<span class='label label-success'>可用</span>",
+                "false": "<span class='label label-default'>不可用</span>",
+                "*": "<span class='label label-default'>未知</span>"
+              }
+            },
+            {
+              "type": "operation",
+              "label": "设置策略",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "允许",
+                  "level": "success",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": "ALLOW" } },
+                  "reload": "mcp_tool_policy_list"
+                },
+                {
+                  "type": "button",
+                  "label": "询问",
+                  "level": "warning",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": "ASK" } },
+                  "reload": "mcp_tool_policy_list"
+                },
+                {
+                  "type": "button",
+                  "label": "禁止",
+                  "level": "danger",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": "DENY" } },
+                  "reload": "mcp_tool_policy_list"
+                },
+                {
+                  "type": "button",
+                  "label": "恢复默认",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/tools/policies/update", "data": { "tool_key": "${tool_key}", "policy": null } },
+                  "reload": "mcp_tool_policy_list"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "待审批队列",
+      "icon": "fa fa-clock-o",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "MCP 审批队列",
+        "size": "xl",
+        "body": {
+          "name": "mcp_approval_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/mcp/approvals/list",
+          "interval": 3000,
+          "silentPolling": true,
+          "defaultParams": { "page": 1, "perPage": 20 },
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 20,
+          "perPageAvailable": [10, 20, 50, 100],
+          "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+          "placeholder": "暂无待审批的 MCP 工具调用",
+          "columns": [
+            { "name": "request_id", "label": "请求 ID", "type": "text" },
+            { "name": "tool_name", "label": "工具", "type": "text" },
+            { "name": "server_name", "label": "服务", "type": "text", "placeholder": "本地" },
+            { "name": "requester_user_id", "label": "发起用户", "type": "text" },
+            { "name": "status", "label": "状态", "type": "text" },
+            { "name": "create_time", "label": "创建时间", "type": "datetime" },
+            { "name": "expire_time", "label": "过期时间", "type": "datetime" },
+            {
+              "type": "operation",
+              "label": "操作",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "允许本次",
+                  "level": "primary",
+                  "visibleOn": "${status === 'PENDING'}",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/approvals/${request_id}/decision", "data": { "decision": "approved" } },
+                  "reload": "mcp_approval_list"
+                },
+                {
+                  "type": "button",
+                  "label": "拒绝",
+                  "visibleOn": "${status === 'PENDING'}",
+                  "actionType": "ajax",
+                  "api": { "method": "post", "url": "/zenvis/api/v1/dih/mcp/approvals/${request_id}/decision", "data": { "decision": "rejected" } },
+                  "reload": "mcp_approval_list"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "调用审计",
+      "icon": "fa fa-history",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "MCP 工具调用审计",
+        "size": "xl",
+        "body": {
+          "name": "mcp_invocation_audit_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/mcp/invocations/list",
+          "defaultParams": { "page": 1, "perPage": 20 },
+          "syncLocation": false,
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 20,
+          "perPageAvailable": [10, 20, 50, 100],
+          "autoJumpToTopOnPagerChange": true,
+          "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+          "filter": {
+            "title": "审计检索",
+            "body": [
+              {
+                "label": "关键词",
+                "type": "input-text",
+                "name": "keyword",
+                "clearable": true,
+                "placeholder": "工具、服务、会话或 Agent"
+              },
+              {
+                "label": "请求 ID",
+                "type": "input-text",
+                "name": "requestId",
+                "clearable": true,
+                "placeholder": "请输入完整请求 ID"
+              },
+              {
+                "label": "渠道",
+                "type": "select",
+                "name": "channel",
+                "clearable": true,
+                "options": [
+                  { "label": "DIH Chat", "value": "CHAT_AGENT" },
+                  { "label": "后台 Agent", "value": "BACKGROUND_AGENT" },
+                  { "label": "MCP Server", "value": "MCP_SERVER" },
+                  { "label": "手工测试", "value": "MANUAL" }
+                ]
+              },
+              {
+                "label": "状态",
+                "type": "select",
+                "name": "status",
+                "clearable": true,
+                "options": [
+                  { "label": "等待审批", "value": "PENDING" },
+                  { "label": "已批准", "value": "APPROVED" },
+                  { "label": "执行中", "value": "RUNNING" },
+                  { "label": "成功", "value": "SUCCEEDED" },
+                  { "label": "失败", "value": "FAILED" },
+                  { "label": "已拒绝", "value": "REJECTED" },
+                  { "label": "策略禁止", "value": "DENIED" },
+                  { "label": "已超时", "value": "EXPIRED" },
+                  { "label": "已取消", "value": "CANCELLED" }
+                ]
+              },
+              {
+                "label": "策略快照",
+                "type": "select",
+                "name": "policy",
+                "clearable": true,
+                "options": [
+                  { "label": "ALLOW", "value": "ALLOW" },
+                  { "label": "ASK", "value": "ASK" },
+                  { "label": "DENY", "value": "DENY" }
+                ]
+              },
+              {
+                "label": "审批范围",
+                "type": "select",
+                "name": "approvalScope",
+                "clearable": true,
+                "options": [
+                  { "label": "允许本次", "value": "ONCE" },
+                  { "label": "本会话允许", "value": "SESSION" },
+                  { "label": "AI分析任务自动批准", "value": "TASK_AUTO" },
+                  { "label": "本次任务允许", "value": "TASK_RUN" }
+                ]
+              },
+              {
+                "label": "发起用户 ID",
+                "type": "input-text",
+                "name": "requesterUserId",
+                "clearable": true
+              },
+              {
+                "label": "审批人 ID",
+                "type": "input-text",
+                "name": "decisionBy",
+                "clearable": true
+              },
+              {
+                "label": "AI分析任务 ID",
+                "type": "input-text",
+                "name": "analysisTaskId",
+                "clearable": true
+              },
+              {
+                "label": "Execution ID",
+                "type": "input-text",
+                "name": "executionId",
+                "clearable": true
+              }
+            ],
+            "actions": [
+              { "type": "reset", "label": "重置" },
+              { "type": "submit", "label": "查询", "level": "primary" }
+            ]
+          },
+          "columns": [
+            { "name": "request_id", "label": "请求 ID", "type": "text" },
+            { "name": "requester_user_id", "label": "发起用户 ID", "type": "text", "placeholder": "-" },
+            { "name": "tool_key", "label": "工具", "type": "text" },
+            { "name": "server_code", "label": "服务代码", "type": "text", "placeholder": "-" },
+            { "name": "analysis_task_id", "label": "AI分析任务", "type": "text", "placeholder": "-" },
+            { "name": "task_execution_id", "label": "Execution ID", "type": "text", "placeholder": "-", "toggled": false },
+            { "name": "channel", "label": "渠道", "type": "text" },
+            { "name": "policy", "label": "策略快照", "type": "text" },
+            { "name": "approval_scope", "label": "审批范围", "type": "text", "placeholder": "无需审批" },
+            { "name": "status", "label": "状态", "type": "text" },
+            { "name": "decision_by", "label": "审批人", "type": "text" },
+            { "name": "duration_millis", "label": "耗时(ms)", "type": "text" },
+            { "name": "arguments", "label": "参数", "type": "json" },
+            { "name": "result_length", "label": "结果长度(byte)", "type": "text", "placeholder": "-" },
+            { "name": "result", "label": "结果", "type": "json" },
+            { "name": "error_summary", "label": "错误摘要", "type": "text" },
+            { "name": "create_time", "label": "创建时间", "type": "datetime" }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "刷新",
+      "icon": "fa fa-repeat",
+      "actionType": "reload",
+      "target": "mcp_server_list"
+    }
+  ],
+  "body": [
+    {
+      "type": "panel",
+      "title": "内置 MCP 服务",
+      "className": "m-b-md",
+      "body": {
+        "name": "mcp_builtin_service_list",
+        "type": "crud",
+        "api": "/zenvis/api/v1/dih/mcp/local-services",
+        "syncLocation": false,
+        "loadDataOnce": true,
+        "filterTogglable": false,
+        "headerToolbar": [],
+        "footerToolbar": [],
+        "columns": [
+          {
+            "name": "code",
+            "label": "服务标识",
+            "type": "text"
+          },
+          {
+            "name": "name",
+            "label": "服务名称",
+            "type": "text"
+          },
+          {
+            "name": "description",
+            "label": "说明",
+            "type": "tpl",
+            "tpl": "${description|truncate:60|default:'-'}"
+          },
+          {
+            "name": "sse_endpoint",
+            "label": "SSE Endpoint",
+            "type": "text"
+          },
+          {
+            "name": "message_endpoint",
+            "label": "Message Endpoint",
+            "type": "text"
+          },
+          {
+            "name": "tool_count",
+            "label": "工具数",
+            "type": "text",
+            "width": 80
+          },
+          {
+            "type": "operation",
+            "label": "操作",
+            "width": 100,
+            "buttons": [
+              {
+                "type": "button",
+                "label": "工具",
+                "icon": "fa fa-wrench text-info",
+                "actionType": "dialog",
+                "dialog": {
+                  "title": "内置 MCP 工具 - ${name}",
+                  "size": "xl",
+                  "body": {
+                    "type": "crud",
+                    "api": "/zenvis/api/v1/dih/mcp/local-services/${code}/tools",
+                    "syncLocation": false,
+                    "headerToolbar": [],
+                    "footerToolbar": [],
+                    "columns": [
+                      {
+                        "name": "name",
+                        "label": "工具名",
+                        "type": "text"
+                      },
+                      {
+                        "name": "description",
+                        "label": "描述",
+                        "type": "tpl",
+                        "tpl": "${description|truncate:80|default:'-'}"
+                      },
+                      {
+                        "name": "effective_approval_policy",
+                        "label": "有效策略",
+                        "type": "mapping",
+                        "map": {
+                          "ALLOW": "<span class='label label-success'>允许</span>",
+                          "ASK": "<span class='label label-warning'>询问</span>",
+                          "DENY": "<span class='label label-danger'>禁止</span>",
+                          "*": "-"
+                        }
+                      },
+                  {
+                    "name": "risk_level",
+                    "label": "风险",
+                    "type": "text"
+                  },
+                  {
+                    "type": "operation",
+                    "label": "Schema",
+                    "width": 90,
+                    "buttons": [
+                      {
+                        "type": "button",
+                        "label": "查看",
+                        "actionType": "dialog",
+                        "dialog": {
+                          "title": "工具 Schema - ${name}",
+                          "size": "lg",
+                          "body": {
+                            "type": "json",
+                            "value": "${input_schema | json}"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "mcp_server_list",
+      "type": "crud",
+      "api": "/zenvis/api/v1/dih/mcp/servers/list",
+      "defaultParams": {
+        "page": 1,
+        "perPage": 10
+      },
+      "pageField": "page",
+      "perPageField": "perPage",
+      "perPage": 10,
+      "perPageAvailable": [10, 20, 50, 100],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+      "filter": {
+        "title": "搜索",
+        "body": [
+          {
+            "label": "关键词",
+            "type": "input-text",
+            "name": "keyword",
+            "clearable": true,
+            "placeholder": "匹配标识、名称、描述和地址"
+          },
+          {
+            "label": "启用状态",
+            "type": "select",
+            "name": "enabled",
+            "clearable": true,
+            "options": [
+              {
+                "label": "已启用",
+                "value": true
+              },
+              {
+                "label": "已停用",
+                "value": false
+              }
+            ]
+          },
+          {
+            "label": "连接状态",
+            "type": "select",
+            "name": "connected",
+            "clearable": true,
+            "options": [
+              {
+                "label": "已连接",
+                "value": true
+              },
+              {
+                "label": "未连接",
+                "value": false
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "type": "reset",
+            "label": "重置"
+          },
+          {
+            "type": "submit",
+            "level": "primary",
+            "label": "查询"
+          }
+        ]
+      },
+      "columns": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "text",
+          "width": 70,
+          "toggled": true
+        },
+        {
+          "name": "code",
+          "label": "服务标识",
+          "type": "text",
+          "searchable": true,
+          "toggled": true
+        },
+        {
+          "name": "name",
+          "label": "服务名称",
+          "type": "text",
+          "searchable": true,
+          "toggled": true
+        },
+        {
+          "name": "enabled",
+          "label": "启用",
+          "type": "mapping",
+          "map": {
+            "true": "<span class='label label-success'>已启用</span>",
+            "false": "<span class='label label-default'>已停用</span>",
+            "*": "<span class='label label-default'>未知</span>"
+          },
+          "toggled": true
+        },
+        {
+          "name": "connected",
+          "label": "连接",
+          "type": "mapping",
+          "map": {
+            "true": "<span class='label label-success'>已连接</span>",
+            "false": "<span class='label label-danger'>未连接</span>",
+            "*": "<span class='label label-default'>未知</span>"
+          },
+          "toggled": true
+        },
+        {
+          "name": "tool_count",
+          "label": "工具数",
+          "type": "text",
+          "width": 80,
+          "placeholder": "0",
+          "toggled": true
+        },
+        {
+          "name": "base_url",
+          "label": "基础地址",
+          "type": "tpl",
+          "tpl": "${base_url|truncate:42}",
+          "popOver": {
+            "trigger": "hover",
+            "position": "left-top",
+            "showIcon": false,
+            "body": {
+              "type": "tpl",
+              "tpl": "${base_url}${sse_endpoint}"
+            }
+          },
+          "toggled": true
+        },
+        {
+          "name": "last_error",
+          "label": "最近错误",
+          "type": "tpl",
+          "tpl": "${last_error|truncate:36|default:'-'}",
+          "popOver": {
+            "trigger": "hover",
+            "position": "left-top",
+            "showIcon": false,
+            "body": {
+              "type": "tpl",
+              "tpl": "${last_error|default:'无'}"
+            }
+          },
+          "toggled": true
+        },
+        {
+          "name": "last_connected_time",
+          "label": "最近连接",
+          "type": "text",
+          "placeholder": "-",
+          "toggled": true
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": 260,
+          "buttons": [
+            {
+              "type": "button",
+              "label": "工具",
+              "icon": "fa fa-wrench text-info",
+              "actionType": "dialog",
+              "dialog": {
+                "title": "MCP 工具 - ${name}",
+                "size": "xl",
+                "body": {
+                  "type": "crud",
+                  "api": "/zenvis/api/v1/dih/mcp/tools?serverId=${id}",
+                  "syncLocation": false,
+                  "columns": [
+                    {
+                      "name": "ai_tool_name",
+                      "label": "AI工具名",
+                      "type": "text"
+                    },
+                    {
+                      "name": "name",
+                      "label": "原始工具名",
+                      "type": "text"
+                    },
+                    {
+                      "name": "description",
+                      "label": "描述",
+                      "type": "tpl",
+                      "tpl": "${description|truncate:80|default:'-'}"
+                    },
+                    {
+                      "name": "read_only_hint",
+                      "label": "只读",
+                      "type": "mapping",
+                      "map": {
+                        "true": "<span class='label label-success'>是</span>",
+                        "false": "<span class='label label-warning'>否</span>",
+                        "*": "-"
+                      }
+                    },
+                    {
+                      "type": "operation",
+                      "label": "操作",
+                      "width": 100,
+                      "buttons": [
+                        {
+                          "type": "button",
+                          "label": "测试",
+                          "icon": "fa fa-play text-success",
+                          "actionType": "dialog",
+                          "dialog": {
+                            "title": "测试调用 ${name}",
+                            "size": "lg",
+                            "body": {
+                              "type": "form",
+                              "api": "post:/zenvis/api/v1/dih/mcp/tools/call",
+                              "body": [
+                                {
+                                  "type": "hidden",
+                                  "name": "server_id",
+                                  "value": "${server_id}"
+                                },
+                                {
+                                  "type": "hidden",
+                                  "name": "name",
+                                  "value": "${name}"
+                                },
+                                {
+                                  "label": "参数",
+                                  "name": "arguments",
+                                  "type": "input-kv",
+                                  "description": "按工具 inputSchema 填写参数键值"
+                                },
+                                {
+                                  "label": "输入结构",
+                                  "type": "code",
+                                  "language": "json",
+                                  "value": "${input_schema|json}"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "label": "刷新",
+              "icon": "fa fa-refresh text-info",
+              "actionType": "ajax",
+              "api": "post:/zenvis/api/v1/dih/mcp/servers/${id}/refresh",
+              "reload": "mcp_server_list"
+            },
+            {
+              "type": "button",
+              "label": "启用",
+              "icon": "fa fa-play text-success",
+              "hiddenOn": "data.enabled",
+              "actionType": "ajax",
+              "confirmText": "确认启用该 MCP 服务？",
+              "api": "post:/zenvis/api/v1/dih/mcp/servers/${id}/enable",
+              "reload": "mcp_server_list"
+            },
+            {
+              "type": "button",
+              "label": "停用",
+              "icon": "fa fa-pause text-warning",
+              "hiddenOn": "!data.enabled",
+              "actionType": "ajax",
+              "confirmText": "确认停用该 MCP 服务？",
+              "api": "post:/zenvis/api/v1/dih/mcp/servers/${id}/disable",
+              "reload": "mcp_server_list"
+            },
+            {
+              "type": "button",
+              "label": "编辑",
+              "icon": "fa fa-pencil",
+              "actionType": "dialog",
+              "dialog": {
+                "title": "编辑 MCP 服务",
+                "mode": "horizontal",
+                "size": "lg",
+                "body": {
+                  "type": "form",
+                  "initApi": "/zenvis/api/v1/dih/mcp/servers/${id}/view",
+                  "api": "/zenvis/api/v1/dih/mcp/servers/$id/update",
+                  "reload": "mcp_server_list",
+                  "body": [
+                    {
+                      "label": "服务标识",
+                      "name": "code",
+                      "type": "input-text",
+                      "required": true,
+                      "clearable": true
+                    },
+                    {
+                      "label": "服务名称",
+                      "name": "name",
+                      "type": "input-text",
+                      "required": true,
+                      "clearable": true
+                    },
+                    {
+                      "label": "基础地址",
+                      "name": "base_url",
+                      "type": "input-url",
+                      "required": true,
+                      "clearable": true
+                    },
+                    {
+                      "label": "SSE Endpoint",
+                      "name": "sse_endpoint",
+                      "type": "input-text",
+                      "required": true
+                    },
+                    {
+                      "label": "启用",
+                      "name": "enabled",
+                      "type": "switch"
+                    },
+                    {
+                      "label": "请求超时(秒)",
+                      "name": "request_timeout_seconds",
+                      "type": "input-number",
+                      "min": 1
+                    },
+                    {
+                      "label": "连接超时(秒)",
+                      "name": "connect_timeout_seconds",
+                      "type": "input-number",
+                      "min": 1
+                    },
+                    {
+                      "label": "固定请求头",
+                      "name": "headers",
+                      "type": "editor",
+                      "language": "json",
+                      "size": "md"
+                    },
+                    {
+                      "label": "描述",
+                      "name": "description",
+                      "type": "textarea",
+                      "minRows": 2,
+                      "maxRows": 4,
+                      "clearable": true
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "label": "删除",
+              "icon": "fa fa-times text-danger",
+              "actionType": "ajax",
+              "confirmText": "确认删除该 MCP 服务？",
+              "api": "delete:/zenvis/api/v1/dih/mcp/servers/${id}",
+              "reload": "mcp_server_list"
+            }
+          ],
+          "toggled": true
+        }
+      ]
+    }
+  ]
+}

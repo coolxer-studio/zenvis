@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "android": {
+      "type": "object",
+      "properties": {
+        "key_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rate": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key_list",
+        "rate"
+      ]
+    },
+    "ios": {
+      "type": "object",
+      "properties": {
+        "key_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rate": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key_list",
+        "rate"
+      ]
+    },
+    "h5": {
+      "type": "object",
+      "properties": {
+        "key_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rate": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key_list",
+        "rate"
+      ]
+    },
+    "host": {
+      "type": "object",
+      "properties": {
+        "key_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rate": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key_list",
+        "rate"
+      ]
+    },
+    "wechat": {
+      "type": "object",
+      "properties": {
+        "key_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rate": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key_list",
+        "rate"
+      ]
+    }
+  },
+  "required": [
+    "android",
+    "ios",
+    "h5",
+    "host",
+    "wechat"
+  ]
+}

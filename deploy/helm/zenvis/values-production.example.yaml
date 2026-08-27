@@ -1,0 +1,39 @@
+# Copy this file outside the repository and replace every example value.
+global:
+  version: "1.0.0"
+  arch: amd64
+  imagePullSecrets:
+    - name: registry-credentials
+
+vectum:
+  image:
+    version: "1.0.1"
+
+secrets:
+  existingSecret: zenvis-production-secrets
+
+external:
+  mysql:
+    host: mysql.internal.example
+  clickhouse:
+    host: clickhouse.internal.example
+  redis:
+    host: redis.internal.example
+  redisStack:
+    host: redis-stack.internal.example
+  kafka:
+    bootstrapServers: kafka.internal.example:9092
+
+persistence:
+  storageClass: managed-csi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: zenvis.example.com
+  tls:
+    enabled: true
+    secretName: zenvis-tls
+
+networkPolicy:
+  enabled: true

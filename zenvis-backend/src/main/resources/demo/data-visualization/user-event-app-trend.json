@@ -1,0 +1,79 @@
+{
+  "type": "page",
+  "title": "用户事件趋势分析",
+  "body": [
+    {
+      "type": "chart",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/aggregate/query",
+        "data": {
+          "entity": "user_event",
+          "dimensions": [
+            {
+              "name": "event_time",
+              "field": "server_time",
+              "label": "时间",
+              "kind": "TIME",
+              "granularity": "HOUR",
+              "include_null": false
+            },
+            {
+              "name": "event_type",
+              "field": "event_type",
+              "label": "事件类型",
+              "kind": "FIELD",
+              "include_null": false
+            }
+          ],
+          "metrics": [
+            {
+              "name": "event_count",
+              "operation": "COUNT",
+              "label": "事件数"
+            }
+          ],
+          "time_range": {
+            "preset": "LAST_24_HOURS"
+          },
+          "time_field": "server_time",
+          "criteria_list": [],
+          "criteria_logic": "and",
+          "order_by": {
+            "field": "event_time",
+            "direction": "asc"
+          },
+          "limit": 100,
+          "chart_hint": "LINE"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:o.series||[]}};"
+      },
+      "config": {
+        "title": {
+          "text": "近 24 小时分类型上报趋势"
+        },
+        "tooltip": {
+          "trigger": "axis"
+        },
+        "legend": {
+          "top": 28
+        },
+        "grid": {
+          "top": 70,
+          "left": 48,
+          "right": 24,
+          "bottom": 42
+        },
+        "dataset": "${dataset}",
+        "xAxis": {
+          "type": "category"
+        },
+        "yAxis": {
+          "type": "value",
+          "minInterval": 1
+        },
+        "series": "${series}"
+      }
+    }
+  ]
+}

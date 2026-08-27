@@ -1,0 +1,50 @@
+{
+  "id": "data-access-agent",
+  "name": "数据接入",
+  "description": "系统内置数据接入智能体 Skill，支持元数据配置生成与可选 Vectum 数据推送。",
+  "version": "1.3.1",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_data_access"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "data-access"
+  ],
+  "chat": {
+    "enabled": true,
+    "label": "数据接入",
+    "icon": "connection",
+    "order": 10
+  },
+  "runtime": {
+    "tools": {
+      "local": {
+        "config": [
+          "config_tree",
+          "config_add",
+          "config_apply",
+          "config_read"
+        ],
+        "push-task": [
+          "push_task_detect_format",
+          "push_task_list_by_source_mark",
+          "push_task_create_and_start",
+          "push_task_get_log",
+          "push_task_repair_and_restart",
+          "push_task_delete_by_source_mark"
+        ]
+      }
+    },
+    "limits": {
+      "maxToolCalls": 32,
+      "maxRepeatedFailures": 2,
+      "maxToolResultChars": 8000,
+      "maxAccumulatedToolResultChars": 64000,
+      "maxAccumulatedToolResultTokens": 48000
+    }
+  },
+  "enabled": true,
+  "entry": "SKILL.md"
+}

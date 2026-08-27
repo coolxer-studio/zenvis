@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "策略名称"
+      },
+      "app_id": {
+        "type": "integer",
+        "description": "应用ID"
+      },
+      "code": {
+        "type": "string",
+        "description": "策略代码"
+      },
+      "computation_period": {
+        "type": "integer",
+        "description": "计算周期"
+      },
+      "grade_rules": {
+        "type": "object",
+        "properties": {
+          "低风险": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "integer",
+                "description": "起始值"
+              },
+              "to": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "结束值"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          },
+          "中风险": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "integer",
+                "description": "起始值"
+              },
+              "to": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "结束值"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          },
+          "高风险": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "integer",
+                "description": "起始值"
+              },
+              "to": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "结束值"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        },
+        "required": [
+          "低风险",
+          "中风险",
+          "高风险"
+        ]
+      },
+      "status": {
+        "type": "integer",
+        "description": "状态"
+      },
+      "score_rules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "description": "标签"
+            },
+            "basic_score": {
+              "type": "integer",
+              "description": "基础分数"
+            },
+            "superposition_score": {
+              "type": "integer",
+              "description": "叠加分数"
+            },
+            "top_score": {
+              "type": "integer",
+              "description": "最高分数"
+            }
+          },
+          "required": [
+            "tag",
+            "basic_score",
+            "superposition_score",
+            "top_score"
+          ]
+        }
+      }
+    },
+    "required": [
+      "name",
+      "app_id",
+      "code",
+      "computation_period",
+      "grade_rules",
+      "status",
+      "score_rules"
+    ]
+  }
+}

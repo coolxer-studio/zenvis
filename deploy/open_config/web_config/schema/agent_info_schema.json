@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "agent_list": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "探针ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "探针名称"
+          },
+          "package_name": {
+            "type": "string",
+            "description": "探针包名"
+          },
+          "version": {
+            "type": "string",
+            "description": "探针版本"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "package_name",
+          "version"
+        ]
+      }
+    },
+    "agent_check": {
+      "type": "boolean",
+      "description": "探针检查状态"
+    }
+  },
+  "required": [
+    "agent_list",
+    "agent_check"
+  ]
+}

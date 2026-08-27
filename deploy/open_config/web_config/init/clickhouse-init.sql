@@ -1,0 +1,2 @@
+-- ClickHouse 固定初始化脚本当前无需创建平台专用业务表。
+-- 实体表由 meta_config 中的 auto_create 配置按需创建。

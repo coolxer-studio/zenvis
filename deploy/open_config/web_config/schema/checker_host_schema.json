@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "startConfig": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      }
+    },
+    "deviceConfig": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "screen": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cpu": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "battery": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uuid": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "storage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fileConfig": {
+      "type": "object",
+      "properties": {
+        "exist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fileList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "md5": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "access": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "yara": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "properties": {
+        "process": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cmd": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "netConfig": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "socket": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "netInterface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "httpProxy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "certificate": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "eventConfig": {
+      "type": "object",
+      "properties": {
+        "sshd": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

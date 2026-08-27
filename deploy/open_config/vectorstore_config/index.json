@@ -1,0 +1,290 @@
+{
+  "type": "page",
+  "title": "RAG 文档管理",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "刷新",
+      "icon": "fa fa-repeat",
+      "actionType": "reload",
+      "target": "rag_document_list,rag_search_list"
+    }
+  ],
+  "body": [
+    {
+      "type": "tabs",
+      "tabsMode": "line",
+      "tabs": [
+        {
+          "title": "文档列表",
+          "body": {
+            "name": "rag_document_list",
+            "type": "crud",
+            "api": "/zenvis/api/v1/dih/vectorstore/documents/list",
+            "defaultParams": {
+              "page": 1,
+              "perPage": 10
+            },
+            "pageField": "page",
+            "perPageField": "perPage",
+            "perPage": 10,
+            "perPageAvailable": [10, 20, 50, 100],
+            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+            "filter": {
+              "title": "搜索",
+              "body": [
+                {
+                  "label": "关键词",
+                  "type": "input-text",
+                  "name": "keyword",
+                  "clearable": true,
+                  "placeholder": "匹配文档 ID、内容、来源或元数据"
+                },
+                {
+                  "label": "来源",
+                  "type": "input-text",
+                  "name": "source",
+                  "clearable": true,
+                  "placeholder": "插件包名中的 . 会替换为 _"
+                }
+              ],
+              "actions": [
+                {
+                  "type": "reset",
+                  "label": "重置"
+                },
+                {
+                  "type": "submit",
+                  "level": "primary",
+                  "label": "查询"
+                }
+              ]
+            },
+            "columns": [
+              {
+                "name": "id",
+                "label": "文档 ID",
+                "type": "tpl",
+                "tpl": "${id|truncate:32}",
+                "popOver": {
+                  "trigger": "hover",
+                  "position": "left-top",
+                  "showIcon": false,
+                  "body": {
+                    "type": "tpl",
+                    "tpl": "${id}"
+                  }
+                },
+                "toggled": true
+              },
+              {
+                "name": "source",
+                "label": "来源",
+                "type": "text",
+                "placeholder": "-",
+                "width": 180,
+                "toggled": true
+              },
+              {
+                "name": "text",
+                "label": "内容",
+                "type": "tpl",
+                "tpl": "${text|truncate:80|default:'-'}",
+                "popOver": {
+                  "trigger": "hover",
+                  "position": "left-top",
+                  "showIcon": false,
+                  "body": {
+                    "type": "code",
+                    "language": "markdown",
+                    "value": "${text|default:''}"
+                  }
+                },
+                "toggled": true
+              },
+              {
+                "type": "operation",
+                "label": "操作",
+                "width": 200,
+                "buttons": [
+                  {
+                    "type": "button",
+                    "label": "查看",
+                    "icon": "fa fa-eye text-info",
+                    "actionType": "dialog",
+                    "dialog": {
+                      "title": "RAG 文档",
+                      "size": "xl",
+                      "body": {
+                        "type": "service",
+                        "api": "/zenvis/api/v1/dih/vectorstore/document/${id}",
+                        "body": [
+                          {
+                            "type": "property",
+                            "title": "基础信息",
+                            "column": 2,
+                            "items": [
+                              {
+                                "label": "文档 ID",
+                                "content": "${id}"
+                              },
+                              {
+                                "label": "来源",
+                                "content": "${source|default:'-'}"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "tabs",
+                            "tabsMode": "simple",
+                            "tabs": [
+                              {
+                                "title": "内容",
+                                "body": {
+                                  "type": "code",
+                                  "language": "markdown",
+                                  "value": "${text|default:''}"
+                                }
+                              },
+                              {
+                                "title": "元数据",
+                                "body": {
+                                  "type": "json",
+                                  "source": "${metadata}"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "label": "删除",
+                    "icon": "fa fa-times text-danger",
+                    "actionType": "ajax",
+                    "confirmText": "确认删除该 RAG 文档？",
+                    "api": "delete:/zenvis/api/v1/dih/vectorstore/document/${id}",
+                    "reload": "rag_document_list,rag_search_list"
+                  }
+                ],
+                "toggled": true
+              }
+            ]
+          }
+        },
+        {
+          "title": "相似度搜索",
+          "body": {
+            "name": "rag_search_list",
+            "type": "crud",
+            "api": "/zenvis/api/v1/dih/vectorstore/search",
+            "initFetch": false,
+            "syncLocation": false,
+            "defaultParams": {
+              "page": 1,
+              "perPage": 10,
+              "topK": 5
+            },
+            "pageField": "page",
+            "perPageField": "perPage",
+            "perPage": 10,
+            "perPageAvailable": [10, 20, 50, 100],
+            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+            "filter": {
+              "title": "搜索",
+              "body": [
+                {
+                  "label": "查询文本",
+                  "type": "input-text",
+                  "name": "query",
+                  "required": true,
+                  "clearable": true
+                },
+                {
+                  "label": "来源",
+                  "type": "input-text",
+                  "name": "source",
+                  "clearable": true,
+                  "placeholder": "留空则搜索全部插件文档"
+                },
+                {
+                  "label": "TopK",
+                  "type": "input-number",
+                  "name": "topK",
+                  "value": 5,
+                  "min": 1,
+                  "max": 100
+                }
+              ],
+              "actions": [
+                {
+                  "type": "reset",
+                  "label": "重置"
+                },
+                {
+                  "type": "submit",
+                  "level": "primary",
+                  "label": "搜索"
+                }
+              ]
+            },
+            "columns": [
+              {
+                "name": "id",
+                "label": "文档 ID",
+                "type": "tpl",
+                "tpl": "${id|truncate:32}",
+                "toggled": true
+              },
+              {
+                "name": "source",
+                "label": "来源",
+                "type": "text",
+                "placeholder": "-",
+                "width": 180,
+                "toggled": true
+              },
+              {
+                "name": "text",
+                "label": "内容",
+                "type": "tpl",
+                "tpl": "${text|truncate:100|default:'-'}",
+                "popOver": {
+                  "trigger": "hover",
+                  "position": "left-top",
+                  "showIcon": false,
+                  "body": {
+                    "type": "code",
+                    "language": "markdown",
+                    "value": "${text|default:''}"
+                  }
+                },
+                "toggled": true
+              },
+              {
+                "type": "operation",
+                "label": "操作",
+                "width": 100,
+                "buttons": [
+                  {
+                    "type": "button",
+                    "label": "删除",
+                    "icon": "fa fa-times text-danger",
+                    "actionType": "ajax",
+                    "confirmText": "确认删除该 RAG 文档？",
+                    "api": "delete:/zenvis/api/v1/dih/vectorstore/document/${id}",
+                    "reload": "rag_document_list,rag_search_list"
+                  }
+                ],
+                "toggled": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,635 @@
+{
+	"type": "page",
+	"title": "插件管理",
+	"remark": null,
+	"toolbar": [
+		{
+			"type": "button",
+			"actionType": "dialog",
+			"label": "创建插件",
+			"primary": true,
+			"dialog": {
+				"title": "创建插件",
+				"mode": "horizontal",
+				"size": "lg",
+				"body": {
+					"type": "form",
+					"api": "/zenvis/api/v1/system/plugin/add",
+					"body": [
+						{
+							"type": "input-file",
+							"name": "file",
+							"label": "上传插件包",
+							"accept": ".tar.gz",
+							"drag": true,
+							"receiver": "/zenvis/api/v1/system/plugin/upload",
+							"autoFill": {
+								"name": "${name}",
+								"package_name": "${package_name}",
+								"version": "${version}",
+								"description": "${description}",
+								"author": "${author}",
+								"plugin_path": "${plugin_path}",
+								"icon": "${icon}"
+							}
+						},
+						{
+							"type": "input-image",
+							"name": "icon",
+							"label": "插件图标(可选)",
+							"receiver": "/zenvis/api/v1/system/plugin/icon/base64"
+						},
+						{
+							"label": "插件名称",
+							"name": "name",
+							"type": "input-text",
+							"required": true
+						},
+						{
+							"label": "包名",
+							"name": "package_name",
+							"type": "input-text",
+							"required": true
+						},
+						{
+							"label": "版本",
+							"name": "version",
+							"type": "input-text",
+							"required": true
+						},
+						{
+							"label": "描述",
+							"name": "description",
+							"type": "input-text",
+							"required": true
+						},
+						{
+							"label": "作者",
+							"name": "author",
+							"type": "input-text",
+							"required": true
+						},
+						{
+							"label": "插件路径",
+							"name": "plugin_path",
+							"type": "input-text",
+							"placeholder": "系统分配插件路径",
+							"disabled": true
+						}
+					]
+				}
+			}
+		}
+	],
+	"body": [
+		{
+			"name": "plugin_list",
+			"type": "crud",
+			"api": "/zenvis/api/v1/system/plugin/list",
+			"mode": "cards",
+			"columnsCount": 4,
+			"defaultParams": {
+				"page": 1,
+				"perPage": 12
+			},
+			"pageField": "page",
+			"perPageField": "perPage",
+			"perPage": 12,
+			"perPageAvailable": [12, 24, 48, 96],
+			"footerToolbar": ["statistics", "switch-per-page", "pagination"],
+			"filter": {
+				"title": "搜索",
+				"body": [
+					{
+						"label": "插件名称",
+						"type": "input-text",
+						"name": "name",
+						"clearable": true,
+						"placeholder": "通过插件名称搜索",
+						"size": "lg"
+					},
+					{
+						"label": "插件包名",
+						"type": "input-text",
+						"name": "package_name",
+						"clearable": true,
+						"placeholder": "通过插件包名搜索",
+						"size": "lg"
+					}
+				],
+				"actions": [
+					{
+						"type": "reset",
+						"label": "重置"
+					},
+					{
+						"type": "submit",
+						"level": "primary",
+						"label": "查询"
+					}
+				]
+			},
+			"card": {
+				"header": {
+					"title": "$name",
+					"subTitle": "${description | truncate:24}",
+					"subTitlePlaceholder": "暂无说明",
+					"avatar": "${icon}",
+					"avatarClassName": "pull-left b-3x m-r w-12 h-12"
+				},
+				"body": [
+					{
+						"name": "status",
+						"label": "状态",
+						"type": "mapping",
+							"map": {
+								"UN_INSTALL": "<span class='label label-info'>未安装</span>",
+								"INSTALLING": "<span class='label label-warning'>安装中</span>",
+								"INSTALLED": "<span class='label label-danger'>已安装</span>",
+								"INSTALL_FAILED": "<span class='label label-danger'>安装失败</span>",
+								"UNINSTALLING": "<span class='label label-warning'>卸载中</span>",
+								"UNINSTALL_FAILED": "<span class='label label-danger'>卸载失败</span>",
+								"UPGRADING": "<span class='label label-warning'>升级中</span>",
+								"UPGRADE_FAILED": "<span class='label label-danger'>升级失败</span>",
+								"*": "<span class='label label-default'>未知</span>"
+							}
+						},
+					{
+						"name": "package_name",
+						"label": "包名",
+						"type": "tpl",
+						"tpl": "${package_name|truncate:24}",
+						"popOver": {
+							"trigger": "hover",
+							"position": "left-top",
+							"showIcon": false,
+							"body": {
+								"type": "tpl",
+								"tpl": "${package_name}"
+							}
+						}
+					},
+					{
+						"name": "version",
+						"label": "版本",
+						"type": "text"
+					},
+					{
+						"name": "author",
+						"label": "作者",
+						"type": "text"
+					},
+					{
+						"name": "plugin_path",
+						"label": "安装路径",
+						"type": "tpl",
+						"tpl": "${plugin_path|truncate:24}",
+						"popOver": {
+							"trigger": "hover",
+							"position": "left-top",
+							"showIcon": false,
+							"body": {
+								"type": "tpl",
+								"tpl": "${plugin_path}"
+							}
+						}
+					},
+					{
+						"name": "update_time",
+						"label": "更新时间"
+					}
+				],
+				"actionsCount": 4,
+				"actions": [
+					{
+						"type": "button",
+						"label": "查看",
+						"actionType": "dialog",
+						"icon": "fa fa-eye text-info",
+						"dialog": {
+							"title": "插件说明文档",
+							"size": "full",
+							"body": {
+								"type": "service",
+								"api": "/zenvis/api/v1/system/plugin/${id}/readme",
+								"body": [
+									{
+										"type": "markdown",
+										"hiddenOn": "data.status == 'INSTALLED'",
+										"value": "${value | url_decode}"
+									},
+									{
+										"type": "grid",
+										"hiddenOn": "data.status != 'INSTALLED'",
+										"columns": [
+											{
+												"md": 0,
+												"body": [
+													{
+														"type": "input-tree",
+														"name": "doc_name",
+														"heightAuto": true,
+														"onlyLeaf": true,
+														"source": "/zenvis/api/v1/system/plugin/${id}/doc/tree"
+													}
+												]
+											},
+											{
+												"md": 9,
+												"body": [
+													{
+														"type": "wrapper",
+														"body": {
+															"type": "service",
+															"api": "/zenvis/api/v1/system/plugin/${id}/doc/view?file=${doc_name}",
+															"body": {
+																"type": "markdown",
+																"value": "${value | url_decode}"
+															}
+														},
+														"size": "md",
+														"className": "b"
+													}
+												]
+											}
+										]
+									}
+								]
+							}
+						}
+					},
+					{
+							"type": "button",
+							"label": "安装",
+							"icon": "fa fa-play text-success",
+							"hiddenOn": "data.status == 'INSTALLED' || data.status == 'INSTALLING' || data.status == 'UNINSTALLING' || data.status == 'UNINSTALL_FAILED' || data.status == 'UPGRADING' || data.status == 'UPGRADE_FAILED'",
+							"actionType": "dialog",
+						"dialog": {
+							"id": "dialog_install",
+							"data": {
+								"plugin_id": "${id}",
+								"hide_log": true,
+								"hide_confirm": false
+							},
+							"title": "请确认是否安装？",
+							"actions": [
+								{
+									"label": "取消",
+									"actionType": "cancel",
+									"type": "button",
+									"hiddenOn": "data.hide_confirm"
+								},
+								{
+									"type": "button",
+									"actionType": "reload",
+									"target": "plugin_list",
+									"label": "完成",
+									"hiddenOn": "!data.hide_confirm",
+									"primary": true,
+									"close": true
+								},
+								{
+									"label": "安装",
+									"primary": true,
+									"type": "button",
+									"hiddenOn": "data.hide_confirm",
+									"onEvent": {
+										"click": {
+											"actions": [
+												{
+													"actionType": "ajax",
+													"api": "post:/zenvis/api/v1/system/plugin/${plugin_id}/install"
+												},
+												{
+													"actionType": "setValue",
+													"componentId": "dialog_install",
+													"args": {
+														"value": {
+															"hide_log": false,
+															"hide_confirm": true
+														}
+													}
+												}
+											]
+										}
+									}
+								}
+							],
+							"body": [
+								{
+									"type": "log",
+									"height": 300,
+									"hiddenOn": "data.hide_log",
+									"source": "/zenvis/api/v1/system/plugin/${plugin_id}/logs"
+								}
+							]
+						}
+					},
+					{
+							"type": "button",
+							"label": "卸载",
+							"icon": "fa fa-stop text-warning",
+							"hiddenOn": "data.status != 'INSTALLED' && data.status != 'INSTALL_FAILED' && data.status != 'UNINSTALL_FAILED' && data.status != 'UPGRADE_FAILED'",
+							"actionType": "dialog",
+						"dialog": {
+							"id": "dialog_uninstall",
+							"size": "lg",
+							"data": {
+								"plugin_id": "${id}",
+								"plugin_name": "${name}",
+								"package_name": "${package_name}",
+								"plugin_version": "${version}",
+								"hide_log": true,
+								"hide_confirm": false
+							},
+							"title": "高风险操作：卸载插件",
+							"actions": [
+								{
+									"label": "取消",
+									"actionType": "cancel",
+									"type": "button",
+									"hiddenOn": "data.hide_confirm"
+								},
+								{
+									"type": "button",
+									"actionType": "reload",
+									"target": "plugin_list",
+									"label": "完成",
+									"hiddenOn": "!data.hide_confirm",
+									"primary": true,
+									"close": true
+								},
+								{
+									"label": "确认卸载",
+									"level": "danger",
+									"type": "button",
+									"hiddenOn": "data.hide_confirm",
+									"onEvent": {
+										"click": {
+											"actions": [
+												{
+													"actionType": "ajax",
+													"api": "post:/zenvis/api/v1/system/plugin/${plugin_id}/uninstall"
+												},
+												{
+													"actionType": "setValue",
+													"componentId": "dialog_uninstall",
+													"args": {
+														"value": {
+															"hide_log": false,
+															"hide_confirm": true
+														}
+													}
+												}
+											]
+										}
+									}
+								}
+							],
+							"body": [
+								{
+									"type": "alert",
+									"level": "danger",
+									"title": "卸载将对系统造成不可逆影响",
+									"showIcon": true,
+									"showCloseButton": false,
+									"hiddenOn": "data.hide_confirm",
+									"body": {
+										"type": "tpl",
+										"tpl": "<p>卸载插件后将产生以下影响：</p><ul><li>停止并删除插件的数据推送任务，相关数据将不再接入；</li><li>移除插件菜单、页面、看板、MCP、Skill、RAG 文档及动态 API，正在使用的功能可能立即中断；</li><li>删除插件 Meta 定义及其关联的 ClickHouse 数据表，已有业务数据将永久丢失；</li><li>依赖上述接口、菜单或数据表的其他系统功能可能出现异常。</li></ul><p><strong>此操作不可撤销。请确认已完成必要的数据备份，且当前没有更新、分析或外部调用依赖该插件。</strong></p>"
+									}
+								},
+								{
+									"type": "tpl",
+									"hiddenOn": "data.hide_confirm",
+									"tpl": "<p><strong>插件：</strong>${plugin_name}</p><p><strong>包名：</strong><code>${package_name}</code></p><p><strong>版本：</strong>${plugin_version}</p>"
+								},
+								{
+									"type": "log",
+									"height": 300,
+									"hiddenOn": "data.hide_log",
+									"source": "/zenvis/api/v1/system/plugin/${plugin_id}/logs"
+								}
+							]
+						}
+					},
+					{
+						"type": "button",
+						"label": "升级",
+						"icon": "fa fa-arrow-up text-primary",
+						"hiddenOn": "data.status != 'INSTALLED'",
+						"actionType": "dialog",
+						"dialog": {
+							"id": "dialog_upgrade",
+							"title": "升级插件",
+							"size": "lg",
+							"data": {
+								"plugin_id": "${id}",
+								"current_package_name": "${package_name}",
+								"current_version": "${version}",
+								"plugin_path": null,
+								"candidate_name": null,
+								"candidate_package_name": null,
+								"candidate_version": null,
+								"hide_log": true,
+								"hide_confirm": false
+							},
+							"actions": [
+								{
+									"label": "取消",
+									"actionType": "cancel",
+									"type": "button",
+									"hiddenOn": "data.hide_confirm"
+								},
+								{
+									"type": "button",
+									"actionType": "reload",
+									"target": "plugin_list",
+									"label": "完成",
+									"hiddenOn": "!data.hide_confirm",
+									"primary": true,
+									"close": true
+								},
+								{
+									"label": "开始升级",
+									"primary": true,
+									"type": "button",
+									"disabledOn": "!plugin_path",
+									"hiddenOn": "data.hide_confirm",
+									"onEvent": {
+										"click": {
+											"actions": [
+												{
+													"actionType": "ajax",
+													"api": {
+														"method": "post",
+														"url": "/zenvis/api/v1/system/plugin/${plugin_id}/upgrade",
+														"data": { "plugin_path": "${plugin_path}" }
+													}
+												},
+												{
+													"actionType": "setValue",
+													"componentId": "dialog_upgrade",
+													"args": { "value": { "hide_log": false, "hide_confirm": true } }
+												}
+											]
+										}
+									}
+								}
+							],
+							"body": [
+								{
+									"type": "alert",
+									"level": "info",
+									"showIcon": true,
+									"hiddenOn": "data.hide_confirm",
+									"body": "升级仅接受包名相同且版本更高的 SemVer 插件包。历史业务数据会保留，破坏性 ClickHouse 结构变化会在维护窗口前被拒绝。"
+								},
+								{
+									"type": "input-file",
+									"name": "file",
+									"label": "上传更高版本插件包",
+									"accept": ".tar.gz",
+									"drag": true,
+									"hiddenOn": "data.hide_confirm",
+									"receiver": "/zenvis/api/v1/system/plugin/upload",
+									"onEvent": {
+										"success": {
+											"actions": [
+												{
+													"actionType": "setValue",
+													"componentId": "dialog_upgrade",
+													"args": {
+														"value": {
+															"candidate_name": "${result.name}",
+															"candidate_package_name": "${result.package_name}",
+															"candidate_version": "${result.version}",
+															"plugin_path": "${result.plugin_path}"
+														}
+													}
+												}
+											]
+										}
+									}
+								},
+								{
+									"type": "tpl",
+									"hiddenOn": "data.hide_confirm || !plugin_path",
+									"tpl": "<p><strong>当前：</strong>${current_package_name} / ${current_version}</p><p><strong>候选：</strong>${candidate_package_name} / ${candidate_version}</p>"
+								},
+								{
+									"type": "log",
+									"height": 300,
+									"hiddenOn": "data.hide_log",
+									"source": "/zenvis/api/v1/system/plugin/${plugin_id}/logs"
+								}
+							]
+						}
+					},
+					{
+						"type": "button",
+						"label": "升级日志",
+						"icon": "fa fa-list text-warning",
+						"hiddenOn": "data.status != 'UPGRADING'",
+						"actionType": "dialog",
+						"dialog": {
+							"title": "插件升级日志",
+							"size": "lg",
+							"body": {
+								"type": "log",
+								"height": 400,
+								"source": "/zenvis/api/v1/system/plugin/${id}/logs"
+							}
+						}
+					},
+					{
+						"type": "button",
+						"label": "恢复旧版本",
+						"icon": "fa fa-undo text-danger",
+						"hiddenOn": "data.status != 'UPGRADE_FAILED'",
+						"actionType": "dialog",
+						"dialog": {
+							"id": "dialog_upgrade_recover",
+							"title": "恢复升级前旧版本",
+							"size": "lg",
+							"data": {
+								"plugin_id": "${id}",
+								"hide_log": true,
+								"hide_confirm": false
+							},
+							"actions": [
+								{
+									"label": "取消",
+									"actionType": "cancel",
+									"type": "button",
+									"hiddenOn": "data.hide_confirm"
+								},
+								{
+									"type": "button",
+									"actionType": "reload",
+									"target": "plugin_list",
+									"label": "完成",
+									"hiddenOn": "!data.hide_confirm",
+									"primary": true,
+									"close": true
+								},
+								{
+									"label": "确认恢复",
+									"level": "danger",
+									"type": "button",
+									"hiddenOn": "data.hide_confirm",
+									"onEvent": {
+										"click": {
+											"actions": [
+												{
+													"actionType": "ajax",
+													"api": "post:/zenvis/api/v1/system/plugin/${plugin_id}/upgrade/recover"
+												},
+												{
+													"actionType": "setValue",
+													"componentId": "dialog_upgrade_recover",
+													"args": { "value": { "hide_log": false, "hide_confirm": true } }
+												}
+											]
+										}
+									}
+								}
+							],
+							"body": [
+								{
+									"type": "alert",
+									"level": "warning",
+									"showIcon": true,
+									"hiddenOn": "data.hide_confirm",
+									"body": "将使用升级前持久化快照恢复旧目录和运行配置；已执行的 MySQL 迁移及新增的 ClickHouse 表、字段不会回滚。"
+								},
+								{
+									"type": "log",
+									"height": 300,
+									"hiddenOn": "data.hide_log",
+									"source": "/zenvis/api/v1/system/plugin/${plugin_id}/logs"
+								}
+							]
+						}
+					},
+					{
+						"type": "button",
+						"label": "删除",
+							"icon": "fa fa-trash text-danger",
+							"actionType": "ajax",
+							"confirmText": "您确认要删除?",
+							"disabledOn": "data.status == 'INSTALLED' || data.status == 'INSTALLING' || data.status == 'UNINSTALLING' || data.status == 'UPGRADING' || data.status == 'UPGRADE_FAILED'",
+							"api": "delete:/zenvis/api/v1/system/plugin/$id"
+					},
+					{
+						"type": "button",
+						"label": "下载",
+						"icon": "fa fa-download text-primary",
+						"actionType": "download",
+						"api": "/zenvis/api/v1/system/plugin/$id/export"
+					}
+				]
+			}
+		}
+	]
+}

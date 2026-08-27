@@ -1,0 +1,123 @@
+global:
+  imageRegistry: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio
+  version: latest
+  arch: amd64
+  timezone: Asia/Shanghai
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  utilityImage: busybox:1.36.1
+
+secrets:
+  existingSecret: zenvis-secrets
+
+openConfig:
+  seedChecksum: uninitialized
+  seedConfigMaps:
+    assets: zenvis-open-config-seed-assets
+    schema: zenvis-open-config-seed-schema
+    defaults: zenvis-open-config-seed-defaults
+
+persistence:
+  storageClass: ""
+  openConfig:
+    size: 10Gi
+  vectum:
+    size: 20Gi
+  mysql:
+    size: 20Gi
+  clickhouse:
+    size: 50Gi
+  redis:
+    size: 5Gi
+  redisStack:
+    size: 10Gi
+  kafka:
+    size: 20Gi
+
+backend:
+  replicas: 1
+  image:
+    repository: zenvis-backend
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+frontend:
+  replicas: 1
+  image:
+    repository: zenvis-frontend
+  service:
+    type: ClusterIP
+    port: 11000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+vectum:
+  replicas: 1
+  image:
+    repository: vectum
+    version: latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+embedded:
+  mysql:
+    enabled: false
+  clickhouse:
+    enabled: false
+  redis:
+    enabled: false
+  redisStack:
+    enabled: false
+  kafka:
+    enabled: false
+
+external:
+  mysql:
+    host: ""
+    port: 3306
+    database: zenvis
+    user: zenvis
+  clickhouse:
+    host: ""
+    httpPort: 8123
+    database: zenvis
+    user: default
+  redis:
+    host: ""
+    port: 6379
+  redisStack:
+    host: ""
+    port: 6379
+  kafka:
+    bootstrapServers: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: zenvis.example.com
+  tls:
+    enabled: false
+    secretName: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  enabled: false

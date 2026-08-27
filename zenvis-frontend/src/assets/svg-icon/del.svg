@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>查看 2</title>
+    <g id="查看" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" stroke-linecap="round">
+        <line x1="12.3561486" y1="8.68265117" x2="12.3561486" y2="14.2323532" id="Stroke-9" stroke="#196CFE"></line>
+        <path d="M13.9172293,3.53373776 L13.9172293,2.90035486 C13.9172293,1.82350085 13.0684764,1 11.9585483,1 L8.04139862,1 C6.93141739,1 6.08277069,1.82350085 6.08277069,2.90035486 L6.08277069,3.53373776" id="Stroke-1" stroke="#196CFE"></path>
+        <line x1="7.69696821" y1="8.68265117" x2="7.69696821" y2="14.2323532" id="Stroke-7" stroke="#196CFE"></line>
+        <line x1="1" y1="3.79614006" x2="19" y2="3.79614006" id="Stroke-5" stroke="#196CFE"></line>
+        <path d="M2.81841559,3.77190829 L2.81841559,16.923442 C2.81841559,18.1001221 3.66711541,19 4.77704352,19 L15.2229352,19 C16.3328102,19 17.1815632,18.1001221 17.1815632,16.923442 L17.1815632,3.77190829" id="Stroke-3" stroke="#196CFE"></path>
+    </g>
+</svg>

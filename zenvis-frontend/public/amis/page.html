@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>page</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <link rel="stylesheet" href="sdk-v6.7.0/sdk.css" />
+  <link rel="stylesheet" href="sdk-v6.7.0/helper.css" />
+  <link rel="stylesheet" href="sdk-v6.7.0/iconfont.css" />
+  <style>
+    html,
+    body,
+    .app-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .page-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #5c6b77;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      background: #f7f8fa;
+    }
+
+    .page-loading__spinner {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 14px;
+      border: 3px solid #d9e2f2;
+      border-top-color: #2468f2;
+      border-radius: 50%;
+      animation: pageLoadingSpin 0.8s linear infinite;
+    }
+
+    @keyframes pageLoadingSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .page-loading__spinner {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root" class="app-wrapper">
+    <div class="page-loading" role="status" aria-live="polite">
+      <div class="page-loading__spinner" aria-hidden="true"></div>
+      <div>页面加载中…</div>
+    </div>
+  </div>
+  <!-- 引入 axios 和 amis sdk -->
+  <script src="js/axios.min.js?v=040f352c"></script>
+  <script src="sdk-v6.7.0/sdk.js"></script>
+  <script type="text/javascript">
+    // 等待 DOM 和 SDK 加载完成
+    window.onload = function () {
+      // 获取地址栏的查询字符串部分
+      const queryString = window.location.search;
+      // 使用 URLSearchParams 解析查询字符串
+      const urlParams = new URLSearchParams(queryString);
+      // 获取site配置参数的值
+      const pageConfig = urlParams.get('config');
+      const apiBaseUrl = (urlParams.get('baseUrl') || '').replace(/\/+$/, '');
+      const pageParams = {};
+      urlParams.forEach(function (value, key) {
+        if (key !== 'config' && key !== 'baseUrl') {
+          pageParams[key] = value;
+        }
+      });
+      const withApiBaseUrl = function (path) {
+        return apiBaseUrl + (path.charAt(0) === '/' ? path : '/' + path);
+      };
+      // 请求 JSON 配置
+      axios.get(withApiBaseUrl('/api/v1/config/' + encodeURIComponent(pageConfig || '') + '/get?file_name=index.json')).then(function (response) {
+        var amisJSON = response.data; // 获取到的 JSON 配置
+        if (!amisJSON || typeof amisJSON !== 'object' || !amisJSON.type) {
+          throw new Error((amisJSON && amisJSON.msg) || '低代码页面配置无效');
+        }
+        // 渲染 amis 页面
+        var amis = amisRequire('amis/embed');
+        amis.embed('#root', amisJSON, {
+          data: Object.assign({}, pageParams, {
+            params: Object.assign({}, pageParams)
+          })
+        });
+      }).catch(function (error) {
+        var message = error && error.message ? error.message : '低代码页面加载失败';
+        document.getElementById('root').innerHTML =
+          '<div style="padding:24px;color:#a8071a;background:#fff1f0;border:1px solid #ffa39e">' +
+          '<strong>页面加载失败：</strong>' + message.replace(/[&<>"']/g, function (char) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+          }) + '</div>';
+      });
+    };
+  </script>
+</body>
+
+</html>

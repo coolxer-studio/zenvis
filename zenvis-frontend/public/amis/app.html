@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>app</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <link rel="stylesheet" href="./sdk-v6.7.0/sdk.css" />
+  <link rel="stylesheet" href="./sdk-v6.7.0/helper.css" />
+  <link rel="stylesheet" href="./sdk-v6.7.0/iconfont.css" />
+
+  <style>
+    html,
+    body,
+    .app-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .message-container {
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .message {
+      display: inline-block;
+      animation: scrollMessage 5s linear infinite;
+    }
+
+    .page-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #5c6b77;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      background: #f7f8fa;
+    }
+
+    .page-loading__spinner {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 14px;
+      border: 3px solid #d9e2f2;
+      border-top-color: #2468f2;
+      border-radius: 50%;
+      animation: pageLoadingSpin 0.8s linear infinite;
+    }
+
+    /* 与 ZenVis 顶部导航保持一致的蓝白浅色主题 */
+    .amis-scope {
+      --Layout-aside-bg: #ffffff;
+      --Layout-aside-color: #58657a;
+      --Layout-aside-subList-bg: #f7f9fc;
+      --Layout-aside-onHover-bg: #f2f6ff;
+      --Layout-aside-onAcitve-bg: #edf3ff;
+      --Layout-aside-onAcitve-onHover-bg: #e6efff;
+      --Layout-asideDivider-bg: #e8edf5;
+      --Layout-asideLabel-color: #8792a6;
+      --Layout-asideLink-color: #4e5b70;
+      --Layout-asideLink-arrowColor: #8792a6;
+      --Layout-asideLink-iconColor: #6f7c90;
+      --Layout-asideLink-onActive-color: #2468f2;
+      --Layout-asideLink-onActive-arrowColor: #2468f2;
+      --Layout-asideLink-onHover-color: #2468f2;
+      --Layout-asideLink-onHover-iconColor: #2468f2;
+      --Layout-asideLink-onHover-arrowColor: #2468f2;
+      --Layout-body-bg: #f6f8fc;
+      --primary: #2468f2;
+      --primary-onHover: #1f5edb;
+      --primary-onActive: #1a54c7;
+    }
+
+    .amis-scope .cxd-Layout-aside {
+      border-right: 1px solid #e8edf5;
+      box-shadow: 2px 0 8px rgba(26, 55, 96, 0.04);
+    }
+
+    .amis-scope .cxd-AsideNav-item > a {
+      margin: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .amis-scope .cxd-AsideNav-item.is-active > a {
+      box-shadow: inset 3px 0 0 #2468f2;
+      font-weight: 500;
+    }
+
+    .amis-scope .cxd-AsideNav-itemArrow:empty::before {
+      filter: brightness(0) saturate(100%) invert(52%) sepia(11%) saturate(793%) hue-rotate(178deg) brightness(91%);
+    }
+
+    .amis-scope .cxd-AsideNav-item:hover .cxd-AsideNav-itemArrow:empty::before,
+    .amis-scope .cxd-AsideNav-item.is-active .cxd-AsideNav-itemArrow:empty::before {
+      filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(3003%) hue-rotate(215deg) brightness(98%);
+    }
+
+    /* 去除顶部面包屑导航栏 */
+    .amis-scope .cxd-AppBcn {
+      display: none;
+    }
+
+    @keyframes scrollMessage {
+      0% {
+        transform: translateX(100%);
+      }
+
+      100% {
+        transform: translateX(-100%);
+      }
+    }
+
+    @keyframes pageLoadingSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .page-loading__spinner {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root" class="app-wrapper">
+    <div class="page-loading" role="status" aria-live="polite">
+      <div class="page-loading__spinner" aria-hidden="true"></div>
+      <div>页面加载中…</div>
+    </div>
+  </div>
+  <script src="./sdk-v6.7.0/sdk.js"></script>
+  <script src="./js/history.js?v=24b6ced9"></script>
+  <script src="./js/vue.js?v=57110669"></script>
+
+  <script type="text/javascript">
+    (function () {
+      let amis = amisRequire('amis/embed');
+      const match = amisRequire('path-to-regexp').match;
+
+      // 如果想用 browserHistory 请切换下这处代码, 其他不用变
+      // const history = History.createBrowserHistory();
+      const history = History.createHashHistory();
+
+      // 获取地址栏的查询字符串部分
+      const queryString = window.location.search;
+      // 使用 URLSearchParams 解析查询字符串
+      const urlParams = new URLSearchParams(queryString);
+      // 获取site配置参数的值
+      const siteConfig = urlParams.get('config');
+      const apiBaseUrl = (urlParams.get('baseUrl') || '').replace(/\/+$/, '');
+      const withApiBaseUrl = function (path) {
+        return apiBaseUrl + (path.charAt(0) === '/' ? path : '/' + path);
+      };
+
+      const app = {
+        type: 'app',
+        //          brandName: 'XXX管理系统',
+        //          header: {
+        //           type: 'tpl',
+        //            inline: false,
+        //            className: 'w-full',
+        //            tpl: '<div class="flex justify-between"><div>顶部区域左侧</div><div>顶部区域右侧</div></div>'
+        //         },
+        footer: '<div class="p-2 text-center bg-light">Copyright © 2024 coolXer团队. All rights reserved.</div>',
+        api: withApiBaseUrl('/api/v1/config/' + encodeURIComponent(siteConfig || '') + '/get?file_name=site.json')
+      };
+
+      function normalizeLink(to, location = history.location) {
+        to = to || '';
+
+        if (to && to[0] === '#') {
+          to = location.pathname + location.search + to;
+        } else if (to && to[0] === '?') {
+          to = location.pathname + to;
+        }
+
+        const queryIndex = to.indexOf('?');
+        const hashIndex = to.indexOf('#');
+        const pathnameEnd = [queryIndex, hashIndex]
+          .filter(index => index >= 0)
+          .reduce((minimum, index) => Math.min(minimum, index), to.length);
+        let pathname = to.substring(0, pathnameEnd);
+        let search = queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex)
+          ? to.substring(queryIndex, hashIndex >= 0 ? hashIndex : undefined)
+          : '';
+        let hash = hashIndex >= 0 ? to.substring(hashIndex) : location.hash;
+
+        if (!pathname) {
+          pathname = location.pathname;
+        } else if (pathname[0] != '/' && !/^https?\:\/\//.test(pathname)) {
+          let relativeBase = location.pathname;
+          const paths = relativeBase.split('/');
+          paths.pop();
+          let m;
+          while ((m = /^\.\.?\//.exec(pathname))) {
+            if (m[0] === '../') {
+              paths.pop();
+            }
+            pathname = pathname.substring(m[0].length);
+          }
+          pathname = paths.concat(pathname).join('/');
+        }
+
+        return pathname + search + hash;
+      }
+
+      function isCurrentUrl(to, ctx) {
+        if (!to) {
+          return false;
+        }
+        const pathname = history.location.pathname;
+        const link = normalizeLink(to, {
+          ...location,
+          pathname,
+          hash: ''
+        });
+
+        if (!~link.indexOf('http') && ~link.indexOf(':')) {
+          let strict = ctx && ctx.strict;
+          return match(link, {
+            decode: decodeURIComponent,
+            strict: typeof strict !== 'undefined' ? strict : true
+          })(pathname);
+        }
+
+        return decodeURI(pathname) === link;
+      }
+
+      let amisInstance = amis.embed(
+        '#root',
+        app,
+        {
+          location: history.location,
+          data: {
+            // 全局数据，是受控的数据
+          },
+          context: {
+            // 全局上下文数据, 非受控的数据，无论哪一层都能获取到，包括弹窗自定义数据映射后都能获取到。
+            // 可以用来放一下全局配置等。比如 API_HOST, 这样页面配置里面可以通过 ${API_HOST} 来获取到。
+            API_HOST: 'https://3xsw4ap8wah59.cfc-execute.bj.baidubce.com'
+          }
+        },
+        {
+          // watchRouteChange: fn => {
+          //   return history.listen(fn);
+          // },
+          updateLocation: (location, replace) => {
+            location = normalizeLink(location);
+            if (location === 'goBack') {
+              return history.goBack();
+            } else if (
+              (!/^https?\:\/\//.test(location) &&
+                location ===
+                history.location.pathname + history.location.search) ||
+              location === history.location.href
+            ) {
+              // 目标地址和当前地址一样，不处理，免得重复刷新
+              return;
+            } else if (/^https?\:\/\//.test(location) || !history) {
+              return (window.location.href = location);
+            }
+
+            history[replace ? 'replace' : 'push'](location);
+          },
+          jumpTo: (to, action) => {
+            if (to === 'goBack') {
+              return history.goBack();
+            }
+
+            to = normalizeLink(to);
+
+            if (isCurrentUrl(to)) {
+              return;
+            }
+
+            if (action && action.actionType === 'url') {
+              action.blank === false
+                ? (window.location.href = to)
+                : window.open(to, '_blank', 'noopener,noreferrer');
+              return;
+            } else if (action && action.blank) {
+              window.open(to, '_blank', 'noopener,noreferrer');
+              return;
+            }
+
+            if (/^https?:\/\//.test(to)) {
+              window.location.href = to;
+            } else if (
+              (!/^https?\:\/\//.test(to) &&
+                to === history.pathname + history.location.search) ||
+              to === history.location.href
+            ) {
+              // do nothing
+            } else {
+              history.push(to);
+            }
+          },
+          isCurrentUrl: isCurrentUrl,
+          theme: 'cxd'
+        }
+      );
+
+      history.listen(state => {
+        amisInstance.updateProps({
+          location: state.location || state
+        });
+      });
+    })();
+
+  </script>
+</body>
+
+</html>

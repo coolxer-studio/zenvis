@@ -1,0 +1,85 @@
+.detail-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  .title-wrap {
+    width: 100%;
+    min-height: 63px;
+    box-sizing: border-box;
+    border-bottom: 1px solid $border-color;
+    padding: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+
+    > .title {
+      flex: 1;
+      color: $text-color;
+      font-weight: 600;
+      font-size: 16px;
+      line-height: 26px;
+      box-sizing: border-box;
+      padding-right: 16px;
+      white-space: nowrap; /*强制span不换行*/
+      overflow: hidden; /*超出宽度部分隐藏*/
+      text-overflow: ellipsis; /*超出部分以点号代替*/
+    }
+
+    > .risk {
+      color: $desc-color;
+      font-size: 14px;
+      line-height: 16px;
+
+      .label {
+        margin-left: 16px;
+      }
+
+      .ant-tag {
+        margin-right: 0;
+        padding: 2px 16px;
+      }
+    }
+
+    > .desc {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 6px;
+      color: $block-color;
+    }
+  }
+
+  .container {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 16px;
+
+    > .title {
+      color: $text-color;
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 16px;
+    }
+
+    > .block {
+      margin: 16px 0;
+      padding: 16px;
+      font-size: 14px;
+      line-height: 22px;
+      color: $block-color;
+      background-color: $code-block-bg-color;
+    }
+
+    img {
+      max-width: 100%;
+    }
+  }
+
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+}

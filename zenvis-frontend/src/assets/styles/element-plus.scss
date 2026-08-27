@@ -1,0 +1,102 @@
+/* Shared Element Plus density and interaction baseline. Page composition stays local. */
+.el-button,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-date-editor.el-input__wrapper,
+.el-cascader .el-input__wrapper {
+  min-height: var(--zv-control-height);
+  border-radius: var(--zv-radius-sm);
+  transition: border-color var(--zv-motion-fast) var(--zv-ease-standard),
+    box-shadow var(--zv-motion-fast) var(--zv-ease-standard),
+    background-color var(--zv-motion-fast) var(--zv-ease-standard);
+}
+
+.el-button {
+  font-weight: var(--zv-font-weight-medium);
+}
+
+.el-button--primary:not(.is-plain) {
+  box-shadow: 0 2px 6px rgb(47 94 229 / 18%);
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+.el-button:focus-visible,
+.el-link:focus-visible,
+.el-dropdown:focus-visible {
+  box-shadow: var(--zv-focus-ring);
+}
+
+/*
+ * Element Plus composite controls focus their internal native input. The global
+ * accessibility outline belongs on the visible wrapper, otherwise searchable
+ * selects render a second blue rectangle inside the control.
+ */
+.el-input__inner:focus-visible,
+.el-textarea__inner:focus-visible,
+.el-select__input:focus,
+.el-select__input:focus-visible,
+.el-cascader__search-input:focus,
+.el-cascader__search-input:focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
+
+.el-select__wrapper.is-focused,
+.el-cascader .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--zv-border-strong) inset, var(--zv-shadow-1);
+}
+
+.el-table {
+  --el-table-header-bg-color: var(--zv-bg-subtle);
+  --el-table-header-text-color: var(--zv-text-secondary);
+  --el-table-row-hover-bg-color: var(--zv-primary-soft);
+  --el-table-border-color: var(--zv-divider);
+  color: var(--zv-text-secondary);
+}
+
+.el-table th.el-table__cell {
+  height: 40px;
+  padding: 6px 0;
+  font-size: var(--zv-font-size-sm);
+  font-weight: var(--zv-font-weight-semibold);
+}
+
+.el-table td.el-table__cell {
+  padding: 7px 0;
+}
+
+.el-dialog,
+.el-drawer,
+.el-message-box,
+.el-popover.el-popper,
+.el-dropdown__popper .el-popper__content {
+  border-radius: var(--zv-radius-lg);
+  box-shadow: var(--zv-shadow-3);
+}
+
+.el-dialog__header,
+.el-message-box__header {
+  color: var(--zv-text-primary);
+}
+
+.el-form-item__label {
+  color: var(--zv-text-secondary);
+  font-weight: var(--zv-font-weight-medium);
+}
+
+.el-pagination {
+  --el-pagination-button-bg-color: var(--zv-bg-surface);
+  --el-pagination-hover-color: var(--zv-primary);
+}
+
+.el-message,
+.el-notification {
+  border-radius: var(--zv-radius-md);
+  box-shadow: var(--zv-shadow-2);
+}
+
+::selection {
+  color: var(--zv-text-primary);
+  background: #cdd9ff;
+}

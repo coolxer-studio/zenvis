@@ -1,0 +1,24 @@
+.list-page {
+  background-color: $page-background-color;
+}
+
+.list-card {
+  ::v-deep(.ant-card-head) {
+    padding: 0 16px;
+    box-sizing: border-box;
+  }
+
+  ::v-deep(.ant-card-body) {
+    padding: 0 16px;
+    box-sizing: border-box;
+  }
+}
+
+.list-title {
+  font-weight: 600;
+}
+
+.aqtag-form-item {
+  width: 100%;
+  overflow: auto;
+}

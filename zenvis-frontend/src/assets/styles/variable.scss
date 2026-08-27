@@ -1,0 +1,29 @@
+//variable定义系统中复用的变量样式值
+
+$vir-pre: vir-;
+$ant-pre: ant-;
+
+//定义系统主体颜色默认数据
+$white-color: var(--zv-bg-surface);
+$border-color: var(--zv-divider);
+$dash-border-color: var(--zv-border);
+$primary-color: var(--zv-primary);
+$finish-color: var(--zv-success);
+$wait-color: var(--zv-bg-subtle);
+$error-color: var(--zv-danger);
+$assist-color: var(--zv-info-soft);
+$disable-color: var(--el-text-color-disabled);
+$text-color: var(--zv-text-primary);
+$block-color: var(--zv-text-secondary);
+$desc-color: var(--zv-text-muted);
+$gray-color-tree: var(--zv-divider);
+
+//定义全局字体大小
+$font-size-base: 14px;
+$font-size-mid: $font-size-base + 2;
+$font-size-large: $font-size-base + 4;
+$font-size-huge: $font-size-base + 10;
+
+//其他
+$code-block-bg-color: var(--zv-bg-subtle);
+$page-background-color: var(--zv-bg-page);

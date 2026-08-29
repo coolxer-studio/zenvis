@@ -1,0 +1,305 @@
+{
+  "type": "page",
+  "title": "规则列表",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "link",
+      "link": "/asset/rule/new",
+      "label": "添加规则",
+      "primary": true
+    }
+  ],
+  "body": {
+    "type": "crud",
+    "api": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/list",
+    "mode": "cards",
+    "defaultParams": {
+      "perPage": 12
+    },
+    "filter": {
+      "title": "搜索",
+      "body": [
+        {
+          "type": "group",
+          "body": [
+            {
+              "label": "资产",
+              "type": "select",
+              "name": "asset",
+              "searchable": true,
+              "clearable": true,
+              "source": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/asset/list"
+            },
+            {
+              "label": "执行",
+              "type": "select",
+              "name": "action",
+              "searchable": true,
+              "clearable": true,
+              "source": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/action/list"
+            },
+            {
+              "label": "状态",
+              "type": "select",
+              "name": "status",
+              "searchable": true,
+              "clearable": true,
+              "source": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/status/list"
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "type": "reset",
+          "label": "重置"
+        },
+        {
+          "type": "submit",
+          "level": "primary",
+          "label": "查询"
+        }
+      ]
+    },
+    "bulkActions": [
+      {
+        "label": "批量删除",
+        "actionType": "ajax",
+        "api": "delete:/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/bulk/${ids|raw}",
+        "confirmText": "确定要批量删除?"
+      }
+    ],
+    "quickSaveItemApi": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/$id/update",
+    "card": {
+      "header": {
+        "title": "$name",
+        "subTitle": "$description",
+        "subTitlePlaceholder": "暂无说明",
+        "size": 60,
+        "avatar": "<%= ((data.asset=='HOST') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTQ4MCAxNjBIMzJjLTE3LjcgMC0zMi0xNC4zLTMyLTMyVjY0YzAtMTcuNyAxNC4zLTMyIDMyLTMyaDQ0OGMxNy43IDAgMzIgMTQuMyAzMiAzMnY2NGMwIDE3LjctMTQuMyAzMi0zMiAzMnptLTQ4LTg4Yy0xMy4zIDAtMjQgMTAuNy0yNCAyNHMxMC43IDI0IDI0IDI0IDI0LTEwLjcgMjQtMjQtMTAuNy0yNC0yNC0yNHptLTY0IDBjLTEzLjMgMC0yNCAxMC43LTI0IDI0czEwLjcgMjQgMjQgMjQgMjQtMTAuNyAyNC0yNC0xMC43LTI0LTI0LTI0em0xMTIgMjQ4SDMyYy0xNy43IDAtMzItMTQuMy0zMi0zMnYtNjRjMC0xNy43IDE0LjMtMzIgMzItMzJoNDQ4YzE3LjcgMCAzMiAxNC4zIDMyIDMydjY0YzAgMTcuNy0xNC4zIDMyLTMyIDMyem0tNDgtODhjLTEzLjMgMC0yNCAxMC43LTI0IDI0czEwLjcgMjQgMjQgMjQgMjQtMTAuNyAyNC0yNC0xMC43LTI0LTI0LTI0em0tNjQgMGMtMTMuMyAwLTI0IDEwLjctMjQgMjRzMTAuNyAyNCAyNCAyNCAyNC0xMC43IDI0LTI0LTEwLjctMjQtMjQtMjR6bTExMiAyNDhIMzJjLTE3LjcgMC0zMi0xNC4zLTMyLTMydi02NGMwLTE3LjcgMTQuMy0zMiAzMi0zMmg0NDhjMTcuNyAwIDMyIDE0LjMgMzIgMzJ2NjRjMCAxNy43LTE0LjMgMzItMzIgMzJ6bS00OC04OGMtMTMuMyAwLTI0IDEwLjctMjQgMjRzMTAuNyAyNCAyNCAyNCAyNC0xMC43IDI0LTI0LTEwLjctMjQtMjQtMjR6bS02NCAwYy0xMy4zIDAtMjQgMTAuNy0yNCAyNHMxMC43IDI0IDI0IDI0IDI0LTEwLjcgMjQtMjQtMTAuNy0yNC0yNC0yNHoiLz48L3N2Zz4=\")|| ((data.asset=='MOBILE') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTI3MiAwSDQ4QzIxLjUgMCAwIDIxLjUgMCA0OHY0MTZjMCAyNi41IDIxLjUgNDggNDggNDhoMjI0YzI2LjUgMCA0OC0yMS41IDQ4LTQ4VjQ4YzAtMjYuNS0yMS41LTQ4LTQ4LTQ4ek0xNjAgNDgwYy0xNy43IDAtMzItMTQuMy0zMi0zMnMxNC4zLTMyIDMyLTMyIDMyIDE0LjMgMzIgMzItMTQuMyAzMi0zMiAzMnoiLz48L3N2Zz4=\") || ((data.asset=='PC') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTYyNCA0MTZIMzgxLjVjLS43IDE5LjgtMTQuNyAzMi0zMi43IDMySDI4OGMtMTguNyAwLTMzLTE3LjUtMzIuOC0zMkgxNmMtOC44IDAtMTYgNy4yLTE2IDE2djE2YzAgMzUuMiAyOC44IDY0IDY0IDY0aDUxMmMzNS4yIDAgNjQtMjguOCA2NC02NHYtMTZjMC04LjgtNy4yLTE2LTE2LTE2ek01NzYgNDhjMC0yNi40LTIxLjYtNDgtNDgtNDhIMTEyQzg1LjYgMCA2NCAyMS42IDY0IDQ4djMzNmg1MTJWNDh6bS02NCAyNzJIMTI4VjY0aDM4NHYyNTZ6Ii8+PC9zdmc+\") || ((data.asset=='IOT') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTUxMiAxMjhWMzJjMC0xNy43LTE0LjMtMzItMzItMzJoLTk2Yy0xNy43IDAtMzIgMTQuMy0zMiAzMkgxNjBjMC0xNy43LTE0LjMtMzItMzItMzJIMzJDMTQuMyAwIDAgMTQuMyAwIDMydjk2YzAgMTcuNyAxNC4zIDMyIDMyIDMydjE5MmMtMTcuNyAwLTMyIDE0LjMtMzIgMzJ2OTZjMCAxNy43IDE0LjMgMzIgMzIgMzJoOTZjMTcuNyAwIDMyLTE0LjMgMzItMzJoMTkyYzAgMTcuNyAxNC4zIDMyIDMyIDMyaDk2YzE3LjcgMCAzMi0xNC4zIDMyLTMydi05NmMwLTE3LjctMTQuMy0zMi0zMi0zMlYxNjBjMTcuNyAwIDMyLTE0LjMgMzItMzJ6bS05Ni02NGgzMnYzMmgtMzJWNjR6TTY0IDY0aDMydjMySDY0VjY0em0zMiAzODRINjR2LTMyaDMydjMyem0zNTIgMGgtMzJ2LTMyaDMydjMyem0tMzItOTZoLTMyYy0xNy43IDAtMzIgMTQuMy0zMiAzMnYzMkgxNjB2LTMyYzAtMTcuNy0xNC4zLTMyLTMyLTMySDk2VjE2MGgzMmMxNy43IDAgMzItMTQuMyAzMi0zMlY5NmgxOTJ2MzJjMCAxNy43IDE0LjMgMzIgMzIgMzJoMzJ2MTkyeiIvPjwvc3ZnPg==\") || ((data.asset=='PROBE') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNjQwIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDcuMC4wIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTMyMCA0NjIuOEMzMDguMiA0NjcuOSAyOTYuNiA0NzIuNSAyODUuMSA0NzYuM0MzMDEuOCA1MTAuMSAzMTYuMSA1MTIgMzIwIDUxMkMzMjMuOSA1MTIgMzM4LjEgNTEwLjEgMzU0LjkgNDc2LjNDMzQzLjUgNDcyLjQgMzMxLjggNDY3LjkgMzIwIDQ2Mi44ek01MTAgMzIwQzU0MyAzNjUuMiA1NTQuMyA0MTAuOSA1MzMuNiA0NDhDNTEzLjQgNDg0LjMgNDcxLjEgNDk3LjMgNDE4LjQgNDkxLjJDMzk2LjQgNTQzLjMgMzYyLjcgNTc2IDMyMCA1NzZDMjc3LjMgNTc2IDI0My42IDU0My4zIDIyMS42IDQ5MS4yQzE2OC45IDQ5Ny4zIDEyNi42IDQ4NC4zIDEwNi40IDQ0OEM4NS43IDQxMC45IDk3IDM2NS4yIDEzMCAzMjBDOTcgMjc0LjggODUuNyAyMjkuMSAxMDYuNCAxOTJDMTI2LjYgMTU1LjcgMTY4LjkgMTQyLjcgMjIxLjYgMTQ4LjhDMjQzLjYgOTYuNyAyNzcuMiA2NCAzMjAgNjRDMzYyLjggNjQgMzk2LjQgOTYuNyA0MTguNCAxNDguOEM0NzEuMSAxNDIuNyA1MTMuNCAxNTUuNiA1MzMuNiAxOTJDNTU0LjMgMjI5LjEgNTQzIDI3NC44IDUxMCAzMjB6TTQ0NC4yIDM4Ny40QzQ0Mi41IDQwMS42IDQ0MC4zIDQxNS40IDQzNy41IDQyOC42QzQ2OS4zIDQzMCA0NzYuMSA0MTkuOSA0NzcuNyA0MTYuOUM0ODAgNDEyLjcgNDg0LjcgMzk5IDQ2NS44IDM2OC44QzQ1OSAzNzUuMSA0NTEuOCAzODEuMyA0NDQuMiAzODcuNHpNNDM3LjUgMjExLjVDNDQwLjMgMjI0LjYgNDQyLjUgMjM4LjQgNDQ0LjIgMjUyLjdDNDUxLjggMjU4LjggNDU5IDI2NSA0NjUuOCAyNzEuM0M0ODQuNyAyNDEuMSA0ODAgMjI3LjMgNDc3LjcgMjIzLjJDNDc2LjEgMjIwLjMgNDY5LjMgMjEwLjIgNDM3LjUgMjExLjV6TTM1NC45IDE2My43QzMzOC4xIDEyOS45IDMyMy45IDEyOCAzMjAgMTI4QzMxNi4xIDEyOCAzMDEuOSAxMjkuOSAyODUuMSAxNjMuN0MyOTYuNSAxNjcuNiAzMDguMiAxNzIuMSAzMjAgMTc3LjJDMzMxLjggMTcyLjEgMzQzLjQgMTY3LjUgMzU0LjkgMTYzLjd6TTE5NS45IDI1Mi42QzE5Ny42IDIzOC4zIDE5OS44IDIyNC42IDIwMi42IDIxMS40QzE3MC44IDIxMCAxNjQgMjIwLjEgMTYyLjQgMjIzLjFDMTYwLjEgMjI3LjMgMTU1LjQgMjQxIDE3NC4zIDI3MS4yQzE4MS4xIDI2NC45IDE4OC4zIDI1OC43IDE5NS45IDI1Mi42ek0xNzQuMiAzNjguOEMxNTUuMyAzOTkgMTYwIDQxMi44IDE2Mi4zIDQxNi45QzE2My45IDQxOS44IDE3MC43IDQyOS45IDIwMi41IDQyOC42QzE5OS43IDQxNS41IDE5Ny41IDQwMS43IDE5NS44IDM4Ny40QzE4OC4yIDM4MS4zIDE4MSAzNzUuMSAxNzQuMiAzNjguOHpNNDAwIDMyMEM0MDAgMjc1LjggMzY0LjIgMjQwIDMyMCAyNDBDMjc1LjggMjQwIDI0MCAyNzUuOCAyNDAgMzIwQzI0MCAzNjQuMiAyNzUuOCA0MDAgMzIwIDQwMEMzNjQuMiA0MDAgNDAwIDM2NC4yIDQwMCAzMjB6TTMyMCAyODhDMzM3LjcgMjg4IDM1MiAzMDIuMyAzNTIgMzIwQzM1MiAzMzcuNyAzMzcuNyAzNTIgMzIwIDM1MkMzMDIuMyAzNTIgMjg4IDMzNy43IDI4OCAzMjBDMjg4IDMwMi4zIDMwMi4zIDI4OCAzMjAgMjg4eiIvPjwvc3ZnPg==\") || ((data.asset=='APP') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MjggNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTI2NC40IDExNi4zbC0xMzIgODQuMyAxMzIgODQuMy0xMzIgODQuM0wwIDI4NC4xbDEzMi4zLTg0LjNMMCAxMTYuMyAxMzIuMyAzMmwxMzIuMSA4NC4zek0xMzEuNiAzOTUuN2wxMzItODQuMyAxMzIgODQuMy0xMzIgODQuMy0xMzItODQuM3ptMTMyLjgtMTExLjZsMTMyLTg0LjMtMTMyLTgzLjZMMzk1LjcgMzIgNTI4IDExNi4zbC0xMzIuMyA4NC4zTDUyOCAyODQuOGwtMTMyLjMgODQuMy0xMzEuMy04NXoiLz48L3N2Zz4=\") || ((data.asset=='SERVICE') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTEyLjQgMTQ4bDIzMi45IDEwNS43YzYuOCAzLjEgMTQuNSAzLjEgMjEuMyAwbDIzMi45LTEwNS43YzE2LjYtNy41IDE2LjYtMzIuNSAwLTQwTDI2Ni43IDIuM2EyNS42IDI1LjYgMCAwIDAgLTIxLjMgMEwxMi40IDEwOGMtMTYuNiA3LjUtMTYuNiAzMi41IDAgNDB6bTQ4Ny4yIDg4LjNsLTU4LjEtMjYuMy0xNjEuNiA3My4zYy03LjYgMy40LTE1LjYgNS4yLTIzLjkgNS4ycy0xNi4zLTEuNy0yMy45LTUuMkw3MC41IDIxMGwtNTguMSAyNi4zYy0xNi42IDcuNS0xNi42IDMyLjUgMCA0MGwyMzIuOSAxMDUuNmM2LjggMy4xIDE0LjUgMy4xIDIxLjMgMEw0OTkuNiAyNzYuM2MxNi42LTcuNSAxNi42LTMyLjUgMC00MHptMCAxMjcuOGwtNTcuOS0yNi4yLTE2MS45IDczLjRjLTcuNiAzLjQtMTUuNiA1LjItMjMuOSA1LjJzLTE2LjMtMS43LTIzLjktNS4yTDcwLjMgMzM3LjkgMTIuNCAzNjQuMWMtMTYuNiA3LjUtMTYuNiAzMi41IDAgNDBsMjMyLjkgMTA1LjZjNi44IDMuMSAxNC41IDMuMSAyMS4zIDBMNDk5LjYgNDA0LjFjMTYuNi03LjUgMTYuNi0zMi41IDAtNDB6Ii8+PC9zdmc+\") || ((data.asset=='API') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTUwNSAzNTljOS40IDkuNCA5LjQgMjQuNiAwIDMzLjlsLTgwIDgwYy0xNSAxNS00MSA0LjUtNDEtMTdWNDE2aC01OC44YTEyIDEyIDAgMCAxIC04LjgtMy44bC03MC42LTc1LjYgNTMuMy01Ny4xTDM1MiAzMzZoMzJ2LTQwYzAtMjEuNCAyNS45LTMyIDQxLTE3bDgwIDgwek0xMiAxNzZoODRsNTIuOCA1Ni42IDUzLjMtNTcuMS03MC42LTc1LjZBMTIgMTIgMCAwIDAgMTIyLjggOTZIMTJjLTYuNiAwLTEyIDUuNC0xMiAxMnY1NmMwIDYuNiA1LjQgMTIgMTIgMTJ6bTM3MiAwdjQwYzAgMjEuNSAyNiAzMiA0MSAxN2w4MC04MGM5LjQtOS40IDkuNC0yNC42IDAtMzMuOWwtODAtODBDNDA5LjkgMjQgMzg0IDM0LjYgMzg0IDU2Vjk2aC01OC44YTEyIDEyIDAgMCAwIC04LjggMy44TDk2IDMzNkgxMmMtNi42IDAtMTIgNS40LTEyIDEydjU2YzAgNi42IDUuNCAxMiAxMiAxMmgxMTAuOGMzLjMgMCA2LjUtMS40IDguOC0zLjhMMzUyIDE3NmgzMnoiLz48L3N2Zz4=\") || ((data.asset=='LOG') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzODQgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTI4OCAyNDh2MjhjMCA2LjYtNS40IDEyLTEyIDEySDEwOGMtNi42IDAtMTItNS40LTEyLTEydi0yOGMwLTYuNiA1LjQtMTIgMTItMTJoMTY4YzYuNiAwIDEyIDUuNCAxMiAxMnptLTEyIDcySDEwOGMtNi42IDAtMTIgNS40LTEyIDEydjI4YzAgNi42IDUuNCAxMiAxMiAxMmgxNjhjNi42IDAgMTItNS40IDEyLTEydi0yOGMwLTYuNi01LjQtMTItMTItMTJ6bTEwOC0xODguMVY0NjRjMCAyNi41LTIxLjUgNDgtNDggNDhINDhjLTI2LjUgMC00OC0yMS41LTQ4LTQ4VjQ4QzAgMjEuNSAyMS41IDAgNDggMGgyMDQuMUMyNjQuOCAwIDI3NyA1LjEgMjg2IDE0LjFMMzY5LjkgOThjOSA4LjkgMTQuMSAyMS4yIDE0LjEgMzMuOXptLTEyOC04MFYxMjhoNzYuMUwyNTYgNTEuOXpNMzM2IDQ2NFYxNzZIMjMyYy0xMy4zIDAtMjQtMTAuNy0yNC0yNFY0OEg0OHY0MTZoMjg4eiIvPjwvc3ZnPg==\") || ((data.asset=='FILE') && \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzODQgNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTIyNCAxMzZWMEgyNEMxMC43IDAgMCAxMC43IDAgMjR2NDY0YzAgMTMuMyAxMC43IDI0IDI0IDI0aDMzNmMxMy4zIDAgMjQtMTAuNyAyNC0yNFYxNjBIMjQ4Yy0xMy4yIDAtMjQtMTAuOC0yNC0yNHptMTYwLTE0LjF2Ni4xSDI1NlYwaDYuMWM2LjQgMCAxMi41IDIuNSAxNyA3bDk3LjkgOThjNC41IDQuNSA3IDEwLjYgNyAxNi45eiIvPjwvc3ZnPg==\")%>",
+        "avatarClassName": "pull-left thumb b-3x m-r"
+      },
+      "actions": [
+        {
+          "type": "button",
+          "label": "修改规则",
+          "icon": "fa fa-pencil",
+          "actionType": "dialog",
+          "dialog": {
+            "title": "修改规则",
+            "body": {
+              "type": "form",
+              "name": "sample-edit-form",
+              "initApi": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/${id}/view",
+              "api": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/${id}/update",
+              "body": [
+                {
+                  "type": "condition-builder",
+                  "hiddenOn": "asset != 'HOST'",
+                  "label": "条件组件",
+                  "name": "conditions",
+                  "description": "可根据需求拼接查询条件",
+                  "searchable": true,
+                  "fields": [
+                    {
+                      "type": "select",
+                      "name": "level",
+                      "label": "资产等级",
+                      "searchable": true,
+                      "source": "/zenvis/api/v1/entity/asset_host/level/list"
+                    },
+                    {
+                      "type": "select",
+                      "name": "type",
+                      "label": "资产类型",
+                      "searchable": true,
+                      "source": "/zenvis/api/v1/entity/asset_host/type/list"
+                    },
+                    {
+                      "type": "select",
+                      "name": "owner",
+                      "label": "资产归属",
+                      "searchable": true,
+                      "source": "/zenvis/api/v1/entity/asset_host/owner/list"
+                    },
+                    {
+                      "type": "select",
+                      "name": "status",
+                      "label": "状态",
+                      "searchable": true,
+                      "source": "/zenvis/api/v1/entity/asset_host/status/list"
+                    },
+                    {
+                      "type": "select",
+                      "name": "access",
+                      "label": "是否开放",
+                      "searchable": true,
+                      "clearable": true,
+                      "options": [
+                        {
+                          "value": 1,
+                          "label": "开放"
+                        },
+                        {
+                          "value": 0,
+                          "label": "不开放"
+                        }
+                      ]
+                    },
+                    {
+                      "label": "机房",
+                      "type": "text",
+                      "name": "room"
+                    },
+                    {
+                      "label": "机柜号",
+                      "type": "number",
+                      "name": "cabinet_no"
+                    },
+                    {
+                      "label": "机位号",
+                      "type": "number",
+                      "name": "cabinet_no"
+                    },
+                    {
+                      "label": "厂商",
+                      "type": "text",
+                      "name": "manufacturer"
+                    },
+                    {
+                      "label": "型号",
+                      "type": "text",
+                      "name": "model"
+                    },
+                    {
+                      "label": "架构",
+                      "type": "text",
+                      "name": "architecture"
+                    },
+                    {
+                      "label": "系统名称",
+                      "type": "text",
+                      "name": "system_name"
+                    },
+                    {
+                      "label": "系统版本",
+                      "type": "text",
+                      "name": "system_version"
+                    },
+                    {
+                      "label": "局域网IP",
+                      "type": "text",
+                      "name": "lan_ip"
+                    },
+                    {
+                      "label": "外网IP",
+                      "type": "text",
+                      "name": "wan_ip"
+                    },
+                    {
+                      "label": "风险信息",
+                      "type": "text",
+                      "name": "risk_info"
+                    },
+                    {
+                      "label": "资产详情",
+                      "type": "text",
+                      "name": "info"
+                    },
+                    {
+                      "label": "时间",
+                      "children": [
+                        {
+                          "label": "活跃日期",
+                          "type": "datetime",
+                          "name": "update_time"
+                        },
+                        {
+                          "label": "首次日期",
+                          "type": "datetime",
+                          "name": "insert_time"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "button",
+          "label": "删除",
+          "icon": "fa fa-trash",
+          "actionType": "ajax",
+          "confirmText": "您确认要删除?",
+          "api": "delete:/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/$id"
+        }
+      ],
+      "body": [
+        {
+          "name": "status",
+          "label": "状态",
+          "type": "mapping",
+          "map": {
+            "INACTIVE": "<span class='label label-info'>未激活</span>",
+            "ACTIVE": "<span class='label label-success'>激活</span>",
+            "UNAVAILABLE": "<span class='label label-danger'>不可用</span>",
+            "EXPIRED": "<span class='label label-warning'>失效</span>",
+            "*": "<span class='label label-default'>其他</span>"
+          },
+          "quickEdit": {
+            "type": "select",
+            "clearable": true,
+            "saveImmediately": true,
+            "source": "/zenvis/api/v1/plugin/com.coolxer.plugin.asset/rule/status/list"
+          }
+        },
+        {
+          "name": "asset_desc",
+          "label": "资产对象",
+          "type": "text"
+        },
+        {
+          "type": "tpl",
+          "tpl": "${conditions | json |truncate:20}",
+          "name": "conditions",
+          "label": "判断规则",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${conditions | json}"
+            }
+          }
+        },
+        {
+          "name": "action_desc",
+          "label": "执行动作",
+          "type": "text"
+        },
+        {
+          "type": "tpl",
+          "tpl": "${result|truncate:20}",
+          "name": "result",
+          "label": "执行结果",
+          "popOver": {
+            "body": {
+              "type": "text",
+              "value": "${result}"
+            }
+          }
+        },
+        {
+          "name": "create_time",
+          "label": "创建时间"
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间"
+        }
+      ]
+    }
+  }
+}

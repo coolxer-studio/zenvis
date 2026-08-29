@@ -1,0 +1,208 @@
+{
+  "type": "page",
+  "title": "服务资产详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/asset_service/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "服务资产记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "平台记录",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的实际接收时间。",
+              "span": 2
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产治理信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "服务ID",
+              "content": "${id | default:'-'}",
+              "remark": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。"
+            },
+            {
+              "label": "来源",
+              "content": "${source | default:'-'}",
+              "remark": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。"
+            },
+            {
+              "label": "类型",
+              "content": "${type | default:'-'}",
+              "remark": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。"
+            },
+            {
+              "label": "负责人",
+              "content": "${owner | default:'-'}",
+              "remark": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。"
+            },
+            {
+              "label": "状态",
+              "content": "${status | default:'-'}",
+              "remark": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。"
+            },
+            {
+              "label": "标签",
+              "content": "${label | default:'-'}",
+              "remark": "业务标签列表"
+            },
+            {
+              "label": "可访问性",
+              "content": "${access | default:'-'}",
+              "remark": "是否允许访问：1 表示开放，0 表示不开放。"
+            },
+            {
+              "label": "重要等级",
+              "content": "${level | default:'-'}",
+              "remark": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。"
+            },
+            {
+              "label": "风险等级",
+              "content": "${risk | default:'-'}",
+              "remark": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。"
+            },
+            {
+              "label": "风险详情",
+              "content": "${risk_info | default:'-'}",
+              "remark": "风险描述"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "资产在来源系统中的最后更新时间，精确到毫秒。"
+            },
+            {
+              "label": "入库时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产详细属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "扩展信息",
+              "content": "${info | default:'-'}",
+              "remark": "其他 JSON 扩展信息"
+            },
+            {
+              "label": "服务名称",
+              "content": "${service_name | default:'-'}",
+              "remark": "服务名称"
+            },
+            {
+              "label": "服务版本",
+              "content": "${service_version | default:'-'}",
+              "remark": "服务版本号"
+            },
+            {
+              "label": "服务类型",
+              "content": "${service_type | default:'-'}",
+              "remark": "服务分类（如微服务/单体）"
+            },
+            {
+              "label": "运行环境",
+              "content": "${runtime_environment | default:'-'}",
+              "remark": "运行环境（如 JVM、容器）"
+            },
+            {
+              "label": "部署方式",
+              "content": "${deployment_type | default:'-'}",
+              "remark": "部署方式（如 K8s、裸机）"
+            },
+            {
+              "label": "启动命令",
+              "content": "${start_command | default:'-'}",
+              "remark": "服务启动命令或脚本"
+            },
+            {
+              "label": "监听端口",
+              "content": "${port | default:'-'}",
+              "remark": "服务监听端口号"
+            },
+            {
+              "label": "进程名称",
+              "content": "${process_name | default:'-'}",
+              "remark": "服务进程名"
+            },
+            {
+              "label": "进程ID",
+              "content": "${process_id | default:'-'}",
+              "remark": "服务进程ID（可选）"
+            },
+            {
+              "label": "启动参数",
+              "content": "${startup_parameters | default:'-'}",
+              "remark": "启动参数或环境变量"
+            },
+            {
+              "label": "依赖服务",
+              "content": "${dependencies | default:'-'}",
+              "remark": "服务依赖列表"
+            },
+            {
+              "label": "资源使用",
+              "content": "${resource_usage | default:'-'}",
+              "remark": "资源使用描述（JSON）"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

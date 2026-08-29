@@ -1,0 +1,17 @@
+[{
+	"name": "设备指纹策略",
+	"type": "POLICY_CONFIG",
+	"params": "device_id"
+}, {
+	"name": "资管可视化配置",
+	"type": "POLICY_CONFIG",
+	"params": "com.coolxer.plugin.asset"
+}, {
+	"name": "资产管理",
+	"type": "LOW_CODE_APP",
+	"params": "com.coolxer.plugin.asset"
+}, {
+	"name": "资产 IP 命中调查",
+	"type": "LOW_CODE_PAGE",
+	"params": "com.coolxer.plugin.asset.ip-statistics"
+}]

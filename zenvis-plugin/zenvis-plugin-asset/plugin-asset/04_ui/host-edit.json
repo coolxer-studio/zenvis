@@ -1,0 +1,197 @@
+{
+  "type": "page",
+  "title": "维护主机资产 ${params.id}",
+  "remark": null,
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "link",
+      "link": "/hardware/host/list",
+      "label": "返回列表"
+    }
+  ],
+  "body": [
+    {
+      "type": "form",
+      "initApi": "/zenvis/api/v1/entity/asset_host/${params.id}/view",
+      "api": "/zenvis/api/v1/entity/asset_host/${params.id}/update",
+      "redirect": "/hardware/host/list",
+      "controls": [
+        {
+          "type": "tpl",
+          "tpl": "<p>基础信息</p>"
+        },
+        {
+          "type": "input-text",
+          "name": "id",
+          "placeholder": "需要时UUID格式，不填写默认分配uuid值",
+          "label": "资产唯一标识",
+          "size": "full"
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "select",
+              "name": "level",
+              "label": "资产等级",
+              "required": true,
+              "source": "/zenvis/api/v1/entity/asset_host/level/list"
+            },
+            {
+              "type": "select",
+              "name": "type",
+              "label": "资产类型",
+              "required": true,
+              "source": "/zenvis/api/v1/entity/asset_host/type/list"
+            },
+            {
+              "type": "select",
+              "name": "owner",
+              "label": "资产归属",
+              "required": true,
+              "source": "/zenvis/api/v1/entity/asset_host/owner/list"
+            },
+            {
+              "type": "select",
+              "name": "status",
+              "label": "状态",
+              "required": true,
+              "source": "/zenvis/api/v1/entity/asset_host/status/list"
+            },
+            {
+              "type": "switch",
+              "name": "access",
+              "label": "是否可见",
+              "trueValue": 1,
+              "falseValue": 0
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "tpl",
+          "tpl": "<p>位置信息</p>"
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "input-text",
+              "name": "room",
+              "required": true,
+              "label": "机房"
+            },
+            {
+              "type": "input-text",
+              "name": "cabinet_no",
+              "required": true,
+              "label": "机柜号"
+            },
+            {
+              "type": "input-text",
+              "name": "position_no",
+              "required": true,
+              "label": "机位号"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "tpl",
+          "tpl": "<p>设备信息</p>"
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "input-text",
+              "name": "manufacturer",
+              "required": true,
+              "autoComplete": "/zenvis/api/v1/entity/asset_host/manufacturer/auto-complete?term=$term",
+              "label": "厂商"
+            },
+            {
+              "type": "input-text",
+              "name": "model",
+              "required": true,
+              "autoComplete": "/zenvis/api/v1/entity/asset_host/model/auto-complete?term=$term",
+              "label": "型号"
+            },
+            {
+              "type": "input-text",
+              "name": "architecture",
+              "autoComplete": "/zenvis/api/v1/entity/asset_host/architecture/auto-complete?term=$term",
+              "required": true,
+              "label": "架构"
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "input-text",
+              "name": "system_name",
+              "required": true,
+              "autoComplete": "/zenvis/api/v1/entity/asset_host/system_name/auto-complete?term=$term",
+              "label": "系统名称"
+            },
+            {
+              "type": "input-text",
+              "name": "system_version",
+              "required": true,
+              "autoComplete": "/zenvis/api/v1/entity/asset_host/system_version/auto-complete?term=$term",
+              "label": "系统版本"
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "input-text",
+              "name": "cpu_model",
+              "required": true,
+              "label": "CPU型号"
+            },
+            {
+              "type": "input-text",
+              "name": "cpu_cores",
+              "required": true,
+              "label": "CPU核心数"
+            }
+          ]
+        },
+        {
+          "type": "input-text",
+          "name": "memory_size",
+          "required": true,
+          "label": "内存大小"
+        },
+        {
+          "type": "input-text",
+          "name": "disk_size",
+          "required": true,
+          "label": "磁盘空间"
+        },
+        {
+          "type": "input-text",
+          "name": "lan_ip",
+          "required": true,
+          "label": "局域网IP"
+        },
+        {
+          "type": "input-text",
+          "name": "wan_ip",
+          "required": true,
+          "label": "外网IP"
+        }
+      ]
+    }
+  ]
+}

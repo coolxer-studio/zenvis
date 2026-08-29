@@ -1,0 +1,169 @@
+{
+  "type": "page",
+  "title": "手动录入基础资产",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "此入口用于补录资产标识和通用治理属性。硬件规格、网络参数、API 定义等实体专有字段应由真实数据接入流程写入，避免手工数据与来源系统不一致。"
+    },
+    {
+      "type": "form",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/${entity}/add",
+        "requestAdaptor": "var data={...api.data};delete data.entity;Object.keys(data).forEach(function(key){if(data[key]===undefined||data[key]===null||data[key]===''){delete data[key];}});return {...api,data:data};"
+      },
+      "mode": "horizontal",
+      "messages": {
+        "saveSuccess": "基础资产已录入",
+        "saveFailed": "录入失败，请检查资产编号、实体类型和字段格式"
+      },
+      "body": [
+        {
+          "type": "select",
+          "name": "entity",
+          "label": "资产实体",
+          "required": true,
+          "value": "asset_host",
+          "description": "仅用于选择写入的实体，不作为资产字段提交。",
+          "options": [
+            {"label": "主机资产", "value": "asset_host"},
+            {"label": "PC 终端资产", "value": "asset_pc"},
+            {"label": "IoT 设备资产", "value": "asset_iot"},
+            {"label": "移动端设备资产", "value": "asset_mobile"},
+            {"label": "数据探针资产", "value": "asset_probe"},
+            {"label": "应用资产", "value": "asset_app"},
+            {"label": "系统服务资产", "value": "asset_service"},
+            {"label": "API 资产", "value": "asset_api"},
+            {"label": "日志资产", "value": "asset_log"},
+            {"label": "文件资产", "value": "asset_file"}
+          ]
+        },
+        {
+          "type": "input-text",
+          "name": "id",
+          "label": "业务资产编号",
+          "required": true,
+          "description": "填写来源系统中的稳定、不透明资产标识；无需使用 UUID。"
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "select",
+              "name": "source",
+              "label": "数据来源",
+              "required": true,
+              "value": "MANUAL",
+              "options": [
+                {"label": "手动录入", "value": "MANUAL"},
+                {"label": "Agent 监测", "value": "AGENT"},
+                {"label": "主动探测", "value": "PROBE"},
+                {"label": "第三方平台", "value": "THIRD_PARTY"},
+                {"label": "其他", "value": "OTHER"}
+              ]
+            },
+            {
+              "type": "select",
+              "name": "type",
+              "label": "资产类型",
+              "value": "BUSINESS",
+              "options": [
+                {"label": "业务类", "value": "BUSINESS"},
+                {"label": "支撑类", "value": "SUPPORT"}
+              ]
+            },
+            {
+              "type": "select",
+              "name": "owner",
+              "label": "资产归属",
+              "value": "ENTERPRISE",
+              "options": [
+                {"label": "企业", "value": "ENTERPRISE"},
+                {"label": "终端客户", "value": "CUSTOMER"}
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "select",
+              "name": "status",
+              "label": "资产状态",
+              "value": "ONLINE",
+              "options": [
+                {"label": "在网", "value": "ONLINE"},
+                {"label": "停用", "value": "DISABLED"},
+                {"label": "下线", "value": "OFFLINE"},
+                {"label": "删除", "value": "DELETED"}
+              ]
+            },
+            {
+              "type": "select",
+              "name": "level",
+              "label": "重要等级",
+              "value": "GENERAL",
+              "options": [
+                {"label": "辅助资产", "value": "AUXILIARY"},
+                {"label": "一般资产", "value": "GENERAL"},
+                {"label": "次要资产", "value": "MINOR"},
+                {"label": "重要资产", "value": "IMPORTANT"},
+                {"label": "关键资产", "value": "CRITICAL"}
+              ]
+            },
+            {
+              "type": "select",
+              "name": "risk",
+              "label": "风险等级",
+              "value": "NONE",
+              "options": [
+                {"label": "无风险", "value": "NONE"},
+                {"label": "低风险", "value": "LOW"},
+                {"label": "中风险", "value": "MEDIUM"},
+                {"label": "高风险", "value": "HIGH"},
+                {"label": "极高风险", "value": "EXTREME"}
+              ]
+            },
+            {
+              "type": "switch",
+              "name": "access",
+              "label": "允许访问",
+              "value": 1,
+              "trueValue": 1,
+              "falseValue": 0
+            }
+          ]
+        },
+        {
+          "type": "input-tag",
+          "name": "label",
+          "label": "业务标签",
+          "joinValues": true,
+          "extractValue": true,
+          "delimiter": ",",
+          "clearable": true
+        },
+        {
+          "type": "textarea",
+          "name": "risk_info",
+          "label": "风险说明",
+          "minRows": 3,
+          "maxRows": 8
+        },
+        {
+          "type": "textarea",
+          "name": "info",
+          "label": "扩展信息",
+          "value": "{}",
+          "placeholder": "请输入合法 JSON 文本",
+          "minRows": 4,
+          "maxRows": 12
+        }
+      ]
+    }
+  ]
+}

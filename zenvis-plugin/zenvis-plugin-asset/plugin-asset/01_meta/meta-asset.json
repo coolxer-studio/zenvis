@@ -1,0 +1,7404 @@
+{
+  "entity": [
+    {
+      "id": 1,
+      "name": "asset_host",
+      "label": "主机资产",
+      "description": "主机资产表（asset_host）",
+      "table_name": "asset_host",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 2,
+      "name": "asset_pc",
+      "label": "PC终端资产",
+      "description": "PC终端资产表（asset_pc）",
+      "table_name": "asset_pc",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 3,
+      "name": "asset_iot",
+      "label": "IoT设备资产",
+      "description": "IoT设备资产表（asset_iot）",
+      "table_name": "asset_iot",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 4,
+      "name": "asset_mobile",
+      "label": "移动端设备资产",
+      "description": "移动端设备资产表（asset_mobile）",
+      "table_name": "asset_mobile",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 5,
+      "name": "asset_probe",
+      "label": "数据探针SDK资产",
+      "description": "数据探针SDK资产表（asset_probe）",
+      "table_name": "asset_probe",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 6,
+      "name": "asset_app",
+      "label": "APP应用程序资产",
+      "description": "APP应用程序资产表（asset_app）",
+      "table_name": "asset_app",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 7,
+      "name": "asset_service",
+      "label": "系统服务资产",
+      "description": "系统服务资产表（asset_service）",
+      "table_name": "asset_service",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 8,
+      "name": "asset_api",
+      "label": "RESTful API接口资产",
+      "description": "RESTful API接口资产表（asset_api）",
+      "table_name": "asset_api",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 9,
+      "name": "asset_log",
+      "label": "日志资产",
+      "description": "日志资产表（asset_log）",
+      "table_name": "asset_log",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 10,
+      "name": "asset_file",
+      "label": "文件资产",
+      "description": "文件资产表（asset_file）",
+      "table_name": "asset_file",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "ReplacingMergeTree(update_time)",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    }
+  ],
+  "attribute": [
+    {
+      "id": 101,
+      "entity": "asset_host",
+      "name": "id",
+      "label": "资产ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-host?record_id={zenvis_id}"
+    },
+    {
+      "id": 102,
+      "entity": "asset_host",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 103,
+      "entity": "asset_host",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 104,
+      "entity": "asset_host",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 105,
+      "entity": "asset_host",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 106,
+      "entity": "asset_host",
+      "name": "area_code",
+      "label": "区域代码",
+      "description": "行政区域代码",
+      "column_name": "area_code",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 107,
+      "entity": "asset_host",
+      "name": "country",
+      "label": "国家",
+      "description": "国家",
+      "column_name": "country",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 108,
+      "entity": "asset_host",
+      "name": "province",
+      "label": "省份",
+      "description": "省/州",
+      "column_name": "province",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 109,
+      "entity": "asset_host",
+      "name": "city",
+      "label": "城市",
+      "description": "城市",
+      "column_name": "city",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 110,
+      "entity": "asset_host",
+      "name": "county",
+      "label": "区县",
+      "description": "区县",
+      "column_name": "county",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 111,
+      "entity": "asset_host",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 112,
+      "entity": "asset_host",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 113,
+      "entity": "asset_host",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 114,
+      "entity": "asset_host",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 115,
+      "entity": "asset_host",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 116,
+      "entity": "asset_host",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 117,
+      "entity": "asset_host",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 118,
+      "entity": "asset_host",
+      "name": "lan_ip",
+      "label": "内网IP",
+      "description": "内网IPv4地址",
+      "column_name": "lan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 119,
+      "entity": "asset_host",
+      "name": "wan_ip",
+      "label": "外网IP",
+      "description": "外网IPv4地址",
+      "column_name": "wan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 120,
+      "entity": "asset_host",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 121,
+      "entity": "asset_host",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 122,
+      "entity": "asset_host",
+      "name": "room",
+      "label": "机房",
+      "description": "所在机房",
+      "column_name": "room",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 123,
+      "entity": "asset_host",
+      "name": "cabinet_no",
+      "label": "机柜号",
+      "description": "机柜编号",
+      "column_name": "cabinet_no",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 124,
+      "entity": "asset_host",
+      "name": "position_no",
+      "label": "位置号",
+      "description": "机柜内位置编号",
+      "column_name": "position_no",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 125,
+      "entity": "asset_host",
+      "name": "manufacturer",
+      "label": "厂商",
+      "description": "硬件厂商",
+      "column_name": "manufacturer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 126,
+      "entity": "asset_host",
+      "name": "model",
+      "label": "型号",
+      "description": "硬件型号",
+      "column_name": "model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 127,
+      "entity": "asset_host",
+      "name": "architecture",
+      "label": "架构",
+      "description": "CPU架构",
+      "column_name": "architecture",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 128,
+      "entity": "asset_host",
+      "name": "system_name",
+      "label": "系统名称",
+      "description": "操作系统名称",
+      "column_name": "system_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 129,
+      "entity": "asset_host",
+      "name": "system_version",
+      "label": "系统版本",
+      "description": "操作系统版本",
+      "column_name": "system_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 130,
+      "entity": "asset_host",
+      "name": "cpu_model",
+      "label": "CPU型号",
+      "description": "CPU型号",
+      "column_name": "cpu_model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 131,
+      "entity": "asset_host",
+      "name": "cpu_cores",
+      "label": "CPU核数",
+      "description": "CPU核心数量",
+      "column_name": "cpu_cores",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 132,
+      "entity": "asset_host",
+      "name": "memory_size",
+      "label": "内存大小(MB)",
+      "description": "内存容量（单位MB）",
+      "column_name": "memory_size",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 133,
+      "entity": "asset_host",
+      "name": "disk_size",
+      "label": "磁盘大小(GB)",
+      "description": "磁盘容量（单位GB）",
+      "column_name": "disk_size",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 201,
+      "entity": "asset_pc",
+      "name": "id",
+      "label": "资产ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-pc?record_id={zenvis_id}"
+    },
+    {
+      "id": 202,
+      "entity": "asset_pc",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 203,
+      "entity": "asset_pc",
+      "name": "type",
+      "label": "资产类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 204,
+      "entity": "asset_pc",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 205,
+      "entity": "asset_pc",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 206,
+      "entity": "asset_pc",
+      "name": "area_code",
+      "label": "区域代码",
+      "description": "行政区域代码",
+      "column_name": "area_code",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 207,
+      "entity": "asset_pc",
+      "name": "country",
+      "label": "国家",
+      "description": "国家",
+      "column_name": "country",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 208,
+      "entity": "asset_pc",
+      "name": "province",
+      "label": "省份",
+      "description": "省/州",
+      "column_name": "province",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 209,
+      "entity": "asset_pc",
+      "name": "city",
+      "label": "城市",
+      "description": "城市",
+      "column_name": "city",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 210,
+      "entity": "asset_pc",
+      "name": "county",
+      "label": "区县",
+      "description": "区县",
+      "column_name": "county",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 211,
+      "entity": "asset_pc",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 212,
+      "entity": "asset_pc",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 213,
+      "entity": "asset_pc",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 214,
+      "entity": "asset_pc",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 215,
+      "entity": "asset_pc",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 216,
+      "entity": "asset_pc",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 217,
+      "entity": "asset_pc",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 218,
+      "entity": "asset_pc",
+      "name": "lan_ip",
+      "label": "内网IP",
+      "description": "内网IPv4地址",
+      "column_name": "lan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 219,
+      "entity": "asset_pc",
+      "name": "wan_ip",
+      "label": "外网IP",
+      "description": "外网IPv4地址",
+      "column_name": "wan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 220,
+      "entity": "asset_pc",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 221,
+      "entity": "asset_pc",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 222,
+      "entity": "asset_pc",
+      "name": "manufacturer",
+      "label": "厂商",
+      "description": "硬件厂商",
+      "column_name": "manufacturer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 223,
+      "entity": "asset_pc",
+      "name": "model",
+      "label": "型号",
+      "description": "硬件型号",
+      "column_name": "model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 224,
+      "entity": "asset_pc",
+      "name": "architecture",
+      "label": "架构",
+      "description": "CPU架构",
+      "column_name": "architecture",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 225,
+      "entity": "asset_pc",
+      "name": "system_name",
+      "label": "系统名称",
+      "description": "操作系统名称",
+      "column_name": "system_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 226,
+      "entity": "asset_pc",
+      "name": "system_version",
+      "label": "系统版本",
+      "description": "操作系统版本",
+      "column_name": "system_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 227,
+      "entity": "asset_pc",
+      "name": "cpu_model",
+      "label": "CPU型号",
+      "description": "CPU型号",
+      "column_name": "cpu_model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 228,
+      "entity": "asset_pc",
+      "name": "cpu_cores",
+      "label": "CPU核数",
+      "description": "CPU核心数量",
+      "column_name": "cpu_cores",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 229,
+      "entity": "asset_pc",
+      "name": "memory_size",
+      "label": "内存大小(MB)",
+      "description": "内存容量（单位MB）",
+      "column_name": "memory_size",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 230,
+      "entity": "asset_pc",
+      "name": "disk_size",
+      "label": "磁盘大小(GB)",
+      "description": "磁盘容量（单位GB）",
+      "column_name": "disk_size",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 231,
+      "entity": "asset_pc",
+      "name": "gpu_model",
+      "label": "GPU型号",
+      "description": "显卡型号",
+      "column_name": "gpu_model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 232,
+      "entity": "asset_pc",
+      "name": "gpu_brand",
+      "label": "GPU品牌",
+      "description": "显卡品牌",
+      "column_name": "gpu_brand",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 233,
+      "entity": "asset_pc",
+      "name": "gpu_memory_size",
+      "label": "GPU显存(MB)",
+      "description": "显卡显存容量（单位MB）",
+      "column_name": "gpu_memory_size",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 234,
+      "entity": "asset_pc",
+      "name": "gpu_memory_type",
+      "label": "显存类型",
+      "description": "显卡显存类型",
+      "column_name": "gpu_memory_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 235,
+      "entity": "asset_pc",
+      "name": "monitor_brand",
+      "label": "显示器品牌",
+      "description": "显示器品牌",
+      "column_name": "monitor_brand",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 236,
+      "entity": "asset_pc",
+      "name": "monitor_model",
+      "label": "显示器型号",
+      "description": "显示器型号",
+      "column_name": "monitor_model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 237,
+      "entity": "asset_pc",
+      "name": "monitor_resolution",
+      "label": "显示器分辨率",
+      "description": "显示器分辨率",
+      "column_name": "monitor_resolution",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 238,
+      "entity": "asset_pc",
+      "name": "monitor_interface",
+      "label": "显示器接口",
+      "description": "显示器接口类型",
+      "column_name": "monitor_interface",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 301,
+      "entity": "asset_iot",
+      "name": "id",
+      "label": "设备ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-iot?record_id={zenvis_id}"
+    },
+    {
+      "id": 302,
+      "entity": "asset_iot",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 303,
+      "entity": "asset_iot",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 304,
+      "entity": "asset_iot",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 305,
+      "entity": "asset_iot",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 306,
+      "entity": "asset_iot",
+      "name": "area_code",
+      "label": "区域代码",
+      "description": "行政区域代码",
+      "column_name": "area_code",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 307,
+      "entity": "asset_iot",
+      "name": "country",
+      "label": "国家",
+      "description": "国家",
+      "column_name": "country",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 308,
+      "entity": "asset_iot",
+      "name": "province",
+      "label": "省份",
+      "description": "省/州",
+      "column_name": "province",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 309,
+      "entity": "asset_iot",
+      "name": "city",
+      "label": "城市",
+      "description": "城市",
+      "column_name": "city",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 310,
+      "entity": "asset_iot",
+      "name": "county",
+      "label": "区县",
+      "description": "区县",
+      "column_name": "county",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 311,
+      "entity": "asset_iot",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 312,
+      "entity": "asset_iot",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 313,
+      "entity": "asset_iot",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 314,
+      "entity": "asset_iot",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 315,
+      "entity": "asset_iot",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 316,
+      "entity": "asset_iot",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 317,
+      "entity": "asset_iot",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 318,
+      "entity": "asset_iot",
+      "name": "lan_ip",
+      "label": "内网IP",
+      "description": "内网IPv4地址",
+      "column_name": "lan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 319,
+      "entity": "asset_iot",
+      "name": "wan_ip",
+      "label": "外网IP",
+      "description": "外网IPv4地址",
+      "column_name": "wan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 320,
+      "entity": "asset_iot",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 321,
+      "entity": "asset_iot",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 322,
+      "entity": "asset_iot",
+      "name": "device_name",
+      "label": "设备名称",
+      "description": "设备名称/别名",
+      "column_name": "device_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 323,
+      "entity": "asset_iot",
+      "name": "device_type",
+      "label": "设备类型",
+      "description": "IoT设备分类（如传感器、摄像头）",
+      "column_name": "device_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 324,
+      "entity": "asset_iot",
+      "name": "manufacturer",
+      "label": "厂商",
+      "description": "设备制造商",
+      "column_name": "manufacturer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 325,
+      "entity": "asset_iot",
+      "name": "model",
+      "label": "型号",
+      "description": "设备型号",
+      "column_name": "model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 326,
+      "entity": "asset_iot",
+      "name": "serial_number",
+      "label": "序列号",
+      "description": "设备序列号",
+      "column_name": "serial_number",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 327,
+      "entity": "asset_iot",
+      "name": "firmware_version",
+      "label": "固件版本",
+      "description": "当前固件版本号",
+      "column_name": "firmware_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 328,
+      "entity": "asset_iot",
+      "name": "firmware_update_time",
+      "label": "固件更新时间",
+      "description": "最近一次固件升级时间",
+      "column_name": "firmware_update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 329,
+      "entity": "asset_iot",
+      "name": "power_type",
+      "label": "供电方式",
+      "description": "供电方式（如电池/市电/太阳能）",
+      "column_name": "power_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 330,
+      "entity": "asset_iot",
+      "name": "battery_level",
+      "label": "电量",
+      "description": "电池电量百分比（0-100）",
+      "column_name": "battery_level",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 331,
+      "entity": "asset_iot",
+      "name": "sensor_info",
+      "label": "传感器信息",
+      "description": "传感器列表及状态（JSON）",
+      "column_name": "sensor_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 332,
+      "entity": "asset_iot",
+      "name": "communication_protocol",
+      "label": "通信协议",
+      "description": "通信协议（如MQTT/CoAP/LoRa）",
+      "column_name": "communication_protocol",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 401,
+      "entity": "asset_mobile",
+      "name": "id",
+      "label": "设备ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-mobile?record_id={zenvis_id}"
+    },
+    {
+      "id": 402,
+      "entity": "asset_mobile",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 403,
+      "entity": "asset_mobile",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 404,
+      "entity": "asset_mobile",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 405,
+      "entity": "asset_mobile",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 406,
+      "entity": "asset_mobile",
+      "name": "area_code",
+      "label": "区域代码",
+      "description": "行政区域代码",
+      "column_name": "area_code",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 407,
+      "entity": "asset_mobile",
+      "name": "country",
+      "label": "国家",
+      "description": "国家",
+      "column_name": "country",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 408,
+      "entity": "asset_mobile",
+      "name": "province",
+      "label": "省份",
+      "description": "省/州",
+      "column_name": "province",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 409,
+      "entity": "asset_mobile",
+      "name": "city",
+      "label": "城市",
+      "description": "城市",
+      "column_name": "city",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 410,
+      "entity": "asset_mobile",
+      "name": "county",
+      "label": "区县",
+      "description": "区县",
+      "column_name": "county",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 411,
+      "entity": "asset_mobile",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 412,
+      "entity": "asset_mobile",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 413,
+      "entity": "asset_mobile",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 414,
+      "entity": "asset_mobile",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 415,
+      "entity": "asset_mobile",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 416,
+      "entity": "asset_mobile",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 417,
+      "entity": "asset_mobile",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 418,
+      "entity": "asset_mobile",
+      "name": "lan_ip",
+      "label": "内网IP",
+      "description": "内网IPv4地址",
+      "column_name": "lan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 419,
+      "entity": "asset_mobile",
+      "name": "wan_ip",
+      "label": "外网IP",
+      "description": "外网IPv4地址",
+      "column_name": "wan_ip",
+      "column_type": "IPv4",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 420,
+      "entity": "asset_mobile",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 421,
+      "entity": "asset_mobile",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 422,
+      "entity": "asset_mobile",
+      "name": "brand",
+      "label": "品牌",
+      "description": "设备品牌",
+      "column_name": "brand",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 423,
+      "entity": "asset_mobile",
+      "name": "model",
+      "label": "型号",
+      "description": "设备型号",
+      "column_name": "model",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 424,
+      "entity": "asset_mobile",
+      "name": "manufacturer",
+      "label": "厂商",
+      "description": "设备制造商",
+      "column_name": "manufacturer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 425,
+      "entity": "asset_mobile",
+      "name": "system_name",
+      "label": "系统名称",
+      "description": "操作系统名称",
+      "column_name": "system_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 426,
+      "entity": "asset_mobile",
+      "name": "system_version",
+      "label": "系统版本",
+      "description": "操作系统版本",
+      "column_name": "system_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 427,
+      "entity": "asset_mobile",
+      "name": "android_id",
+      "label": "AndroidID",
+      "description": "Android设备唯一ID",
+      "column_name": "android_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 428,
+      "entity": "asset_mobile",
+      "name": "build_id",
+      "label": "BuildID",
+      "description": "系统构建ID",
+      "column_name": "build_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 429,
+      "entity": "asset_mobile",
+      "name": "bluetooth_mac",
+      "label": "蓝牙MAC",
+      "description": "蓝牙MAC地址",
+      "column_name": "bluetooth_mac",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 430,
+      "entity": "asset_mobile",
+      "name": "display_info",
+      "label": "显示信息",
+      "description": "屏幕分辨率/密度",
+      "column_name": "display_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 431,
+      "entity": "asset_mobile",
+      "name": "app_mode",
+      "label": "应用模式",
+      "description": "应用运行模式（如调试/生产）",
+      "column_name": "app_mode",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 432,
+      "entity": "asset_mobile",
+      "name": "instruction_set1",
+      "label": "指令集1",
+      "description": "主要CPU指令集",
+      "column_name": "instruction_set1",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 433,
+      "entity": "asset_mobile",
+      "name": "device_fingerprint",
+      "label": "设备指纹",
+      "description": "设备指纹哈希",
+      "column_name": "device_fingerprint",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 434,
+      "entity": "asset_mobile",
+      "name": "hostname",
+      "label": "主机名",
+      "description": "设备主机名",
+      "column_name": "hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 435,
+      "entity": "asset_mobile",
+      "name": "gyroscope_info",
+      "label": "陀螺仪信息",
+      "description": "陀螺仪传感器信息",
+      "column_name": "gyroscope_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 436,
+      "entity": "asset_mobile",
+      "name": "location",
+      "label": "地理位置",
+      "description": "地理位置描述",
+      "column_name": "location",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 437,
+      "entity": "asset_mobile",
+      "name": "cell_area_code",
+      "label": "蜂窝区域码",
+      "description": "基站区域码",
+      "column_name": "cell_area_code",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 438,
+      "entity": "asset_mobile",
+      "name": "nearby_cell_count",
+      "label": "邻近基站数",
+      "description": "检测到的邻近基站数量",
+      "column_name": "nearby_cell_count",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 439,
+      "entity": "asset_mobile",
+      "name": "bootloader",
+      "label": "Bootloader",
+      "description": "Bootloader版本",
+      "column_name": "bootloader",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 440,
+      "entity": "asset_mobile",
+      "name": "device_form",
+      "label": "设备形态",
+      "description": "设备形态（如手机/平板/手表）",
+      "column_name": "device_form",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 441,
+      "entity": "asset_mobile",
+      "name": "screen_resolution",
+      "label": "屏幕分辨率",
+      "description": "屏幕分辨率（如1080x1920）",
+      "column_name": "screen_resolution",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 442,
+      "entity": "asset_mobile",
+      "name": "os_name",
+      "label": "OS名称",
+      "description": "操作系统名称（Android/iOS）",
+      "column_name": "os_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 443,
+      "entity": "asset_mobile",
+      "name": "imei",
+      "label": "IMEI",
+      "description": "国际移动设备识别码",
+      "column_name": "imei",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 444,
+      "entity": "asset_mobile",
+      "name": "imsi",
+      "label": "IMSI",
+      "description": "国际移动用户识别码",
+      "column_name": "imsi",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 445,
+      "entity": "asset_mobile",
+      "name": "network_mac",
+      "label": "网络MAC",
+      "description": "以太网/Wi-Fi MAC地址",
+      "column_name": "network_mac",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 446,
+      "entity": "asset_mobile",
+      "name": "device_info",
+      "label": "设备信息",
+      "description": "设备详情JSON",
+      "column_name": "device_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 447,
+      "entity": "asset_mobile",
+      "name": "sdk_version",
+      "label": "SDK版本",
+      "description": "探针SDK版本",
+      "column_name": "sdk_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 448,
+      "entity": "asset_mobile",
+      "name": "system_boot",
+      "label": "启动信息",
+      "description": "系统启动信息",
+      "column_name": "system_boot",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 449,
+      "entity": "asset_mobile",
+      "name": "serial_number",
+      "label": "序列号",
+      "description": "设备序列号",
+      "column_name": "serial_number",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 450,
+      "entity": "asset_mobile",
+      "name": "hardware_name",
+      "label": "硬件名称",
+      "description": "硬件名称",
+      "column_name": "hardware_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 451,
+      "entity": "asset_mobile",
+      "name": "instruction_set2",
+      "label": "指令集2",
+      "description": "次要CPU指令集",
+      "column_name": "instruction_set2",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 452,
+      "entity": "asset_mobile",
+      "name": "motherboard_info",
+      "label": "主板信息",
+      "description": "主板信息",
+      "column_name": "motherboard_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 453,
+      "entity": "asset_mobile",
+      "name": "build_date",
+      "label": "构建日期",
+      "description": "系统构建日期",
+      "column_name": "build_date",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 454,
+      "entity": "asset_mobile",
+      "name": "timezone",
+      "label": "时区",
+      "description": "系统时区",
+      "column_name": "timezone",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 455,
+      "entity": "asset_mobile",
+      "name": "wifi_mac",
+      "label": "Wi-Fi MAC",
+      "description": "Wi-Fi MAC地址",
+      "column_name": "wifi_mac",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 456,
+      "entity": "asset_mobile",
+      "name": "cell_id",
+      "label": "基站ID",
+      "description": "当前基站ID",
+      "column_name": "cell_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 457,
+      "entity": "asset_mobile",
+      "name": "carrier_type",
+      "label": "运营商类型",
+      "description": "运营商类型（移动/联通/电信/国际）",
+      "column_name": "carrier_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 501,
+      "entity": "asset_probe",
+      "name": "id",
+      "label": "探针ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-probe?record_id={zenvis_id}"
+    },
+    {
+      "id": 502,
+      "entity": "asset_probe",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 503,
+      "entity": "asset_probe",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 504,
+      "entity": "asset_probe",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 505,
+      "entity": "asset_probe",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 506,
+      "entity": "asset_probe",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 507,
+      "entity": "asset_probe",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 508,
+      "entity": "asset_probe",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 509,
+      "entity": "asset_probe",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 510,
+      "entity": "asset_probe",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 511,
+      "entity": "asset_probe",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 512,
+      "entity": "asset_probe",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 513,
+      "entity": "asset_probe",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 514,
+      "entity": "asset_probe",
+      "name": "probe_name",
+      "label": "探针名称",
+      "description": "探针SDK名称",
+      "column_name": "probe_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 515,
+      "entity": "asset_probe",
+      "name": "probe_version",
+      "label": "探针版本",
+      "description": "探针SDK版本号",
+      "column_name": "probe_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 516,
+      "entity": "asset_probe",
+      "name": "probe_type",
+      "label": "探针类型",
+      "description": "探针类型（如移动端/后端/前端）",
+      "column_name": "probe_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 517,
+      "entity": "asset_probe",
+      "name": "language",
+      "label": "开发语言",
+      "description": "探针SDK开发语言",
+      "column_name": "language",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 518,
+      "entity": "asset_probe",
+      "name": "framework",
+      "label": "框架",
+      "description": "探针所使用框架",
+      "column_name": "framework",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 519,
+      "entity": "asset_probe",
+      "name": "compatible_versions",
+      "label": "兼容版本",
+      "description": "探针兼容的宿主版本范围",
+      "column_name": "compatible_versions",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 520,
+      "entity": "asset_probe",
+      "name": "data_collection_types",
+      "label": "采集类型",
+      "description": "探针采集的数据类型列表",
+      "column_name": "data_collection_types",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 521,
+      "entity": "asset_probe",
+      "name": "encryption_method",
+      "label": "加密方式",
+      "description": "数据加密算法",
+      "column_name": "encryption_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 522,
+      "entity": "asset_probe",
+      "name": "authentication_method",
+      "label": "认证方式",
+      "description": "探针与后端认证方式",
+      "column_name": "authentication_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 523,
+      "entity": "asset_probe",
+      "name": "data_transmission_protocol",
+      "label": "传输协议",
+      "description": "数据上报协议（如 HTTPS/gRPC）",
+      "column_name": "data_transmission_protocol",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 524,
+      "entity": "asset_probe",
+      "name": "file_md5",
+      "label": "文件MD5",
+      "description": "探针安装包MD5",
+      "column_name": "file_md5",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 525,
+      "entity": "asset_probe",
+      "name": "signature_method",
+      "label": "签名算法",
+      "description": "代码签名算法",
+      "column_name": "signature_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 526,
+      "entity": "asset_probe",
+      "name": "certificate_md5",
+      "label": "证书MD5",
+      "description": "签名证书MD5",
+      "column_name": "certificate_md5",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 527,
+      "entity": "asset_probe",
+      "name": "certificate_details",
+      "label": "证书详情",
+      "description": "签名证书详细信息",
+      "column_name": "certificate_details",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 601,
+      "entity": "asset_app",
+      "name": "id",
+      "label": "应用ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-app?record_id={zenvis_id}"
+    },
+    {
+      "id": 602,
+      "entity": "asset_app",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 603,
+      "entity": "asset_app",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 604,
+      "entity": "asset_app",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 605,
+      "entity": "asset_app",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 606,
+      "entity": "asset_app",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 607,
+      "entity": "asset_app",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 608,
+      "entity": "asset_app",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 609,
+      "entity": "asset_app",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 610,
+      "entity": "asset_app",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 611,
+      "entity": "asset_app",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 612,
+      "entity": "asset_app",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 613,
+      "entity": "asset_app",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 614,
+      "entity": "asset_app",
+      "name": "app_name",
+      "label": "应用名称",
+      "description": "应用名称",
+      "column_name": "app_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 615,
+      "entity": "asset_app",
+      "name": "app_version",
+      "label": "应用版本",
+      "description": "应用版本号",
+      "column_name": "app_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 616,
+      "entity": "asset_app",
+      "name": "app_type",
+      "label": "应用类型",
+      "description": "应用分类（如原生/H5/小程序）",
+      "column_name": "app_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 617,
+      "entity": "asset_app",
+      "name": "platform",
+      "label": "平台",
+      "description": "目标平台（iOS/Android/Web）",
+      "column_name": "platform",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 618,
+      "entity": "asset_app",
+      "name": "package_name",
+      "label": "包名",
+      "description": "应用包名/Bundle ID",
+      "column_name": "package_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 619,
+      "entity": "asset_app",
+      "name": "developer",
+      "label": "开发者",
+      "description": "应用开发者",
+      "column_name": "developer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620,
+      "entity": "asset_app",
+      "name": "publish_time",
+      "label": "发布时间",
+      "description": "应用发布时间",
+      "column_name": "publish_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 621,
+      "entity": "asset_app",
+      "name": "update_channel",
+      "label": "更新渠道",
+      "description": "应用更新渠道",
+      "column_name": "update_channel",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 622,
+      "entity": "asset_app",
+      "name": "min_os_version",
+      "label": "最低OS版本",
+      "description": "最低支持系统版本",
+      "column_name": "min_os_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 623,
+      "entity": "asset_app",
+      "name": "target_os_version",
+      "label": "目标OS版本",
+      "description": "推荐系统版本",
+      "column_name": "target_os_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 624,
+      "entity": "asset_app",
+      "name": "permissions",
+      "label": "权限列表",
+      "description": "应用权限清单",
+      "column_name": "permissions",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 625,
+      "entity": "asset_app",
+      "name": "dependencies",
+      "label": "依赖库",
+      "description": "依赖库/框架列表",
+      "column_name": "dependencies",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 626,
+      "entity": "asset_app",
+      "name": "file_md5",
+      "label": "文件MD5",
+      "description": "安装包MD5哈希",
+      "column_name": "file_md5",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 627,
+      "entity": "asset_app",
+      "name": "signature_method",
+      "label": "签名方式",
+      "description": "签名算法",
+      "column_name": "signature_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 628,
+      "entity": "asset_app",
+      "name": "certificate_md5",
+      "label": "证书MD5",
+      "description": "签名证书MD5",
+      "column_name": "certificate_md5",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 629,
+      "entity": "asset_app",
+      "name": "certificate_details",
+      "label": "证书详情",
+      "description": "签名证书详情",
+      "column_name": "certificate_details",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 701,
+      "entity": "asset_service",
+      "name": "id",
+      "label": "服务ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-service?record_id={zenvis_id}"
+    },
+    {
+      "id": 702,
+      "entity": "asset_service",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 703,
+      "entity": "asset_service",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 704,
+      "entity": "asset_service",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 705,
+      "entity": "asset_service",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 706,
+      "entity": "asset_service",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 707,
+      "entity": "asset_service",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 708,
+      "entity": "asset_service",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 709,
+      "entity": "asset_service",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 710,
+      "entity": "asset_service",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 711,
+      "entity": "asset_service",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 712,
+      "entity": "asset_service",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 713,
+      "entity": "asset_service",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 714,
+      "entity": "asset_service",
+      "name": "service_name",
+      "label": "服务名称",
+      "description": "服务名称",
+      "column_name": "service_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 715,
+      "entity": "asset_service",
+      "name": "service_version",
+      "label": "服务版本",
+      "description": "服务版本号",
+      "column_name": "service_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 716,
+      "entity": "asset_service",
+      "name": "service_type",
+      "label": "服务类型",
+      "description": "服务分类（如微服务/单体）",
+      "column_name": "service_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 717,
+      "entity": "asset_service",
+      "name": "runtime_environment",
+      "label": "运行环境",
+      "description": "运行环境（如 JVM、容器）",
+      "column_name": "runtime_environment",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 718,
+      "entity": "asset_service",
+      "name": "deployment_type",
+      "label": "部署方式",
+      "description": "部署方式（如 K8s、裸机）",
+      "column_name": "deployment_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 719,
+      "entity": "asset_service",
+      "name": "start_command",
+      "label": "启动命令",
+      "description": "服务启动命令或脚本",
+      "column_name": "start_command",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 720,
+      "entity": "asset_service",
+      "name": "port",
+      "label": "监听端口",
+      "description": "服务监听端口号",
+      "column_name": "port",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 721,
+      "entity": "asset_service",
+      "name": "process_name",
+      "label": "进程名称",
+      "description": "服务进程名",
+      "column_name": "process_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 722,
+      "entity": "asset_service",
+      "name": "process_id",
+      "label": "进程ID",
+      "description": "服务进程ID（可选）",
+      "column_name": "process_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 723,
+      "entity": "asset_service",
+      "name": "startup_parameters",
+      "label": "启动参数",
+      "description": "启动参数或环境变量",
+      "column_name": "startup_parameters",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 724,
+      "entity": "asset_service",
+      "name": "dependencies",
+      "label": "依赖服务",
+      "description": "服务依赖列表",
+      "column_name": "dependencies",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 725,
+      "entity": "asset_service",
+      "name": "resource_usage",
+      "label": "资源使用",
+      "description": "资源使用描述（JSON）",
+      "column_name": "resource_usage",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 801,
+      "entity": "asset_api",
+      "name": "id",
+      "label": "API ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-api?record_id={zenvis_id}"
+    },
+    {
+      "id": 802,
+      "entity": "asset_api",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 803,
+      "entity": "asset_api",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 804,
+      "entity": "asset_api",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 805,
+      "entity": "asset_api",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 806,
+      "entity": "asset_api",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 807,
+      "entity": "asset_api",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 808,
+      "entity": "asset_api",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 809,
+      "entity": "asset_api",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 810,
+      "entity": "asset_api",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 811,
+      "entity": "asset_api",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 812,
+      "entity": "asset_api",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 813,
+      "entity": "asset_api",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 814,
+      "entity": "asset_api",
+      "name": "api_name",
+      "label": "API名称",
+      "description": "接口名称",
+      "column_name": "api_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 815,
+      "entity": "asset_api",
+      "name": "api_version",
+      "label": "API版本",
+      "description": "接口版本号",
+      "column_name": "api_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 816,
+      "entity": "asset_api",
+      "name": "api_path",
+      "label": "API路径",
+      "description": "接口URL路径",
+      "column_name": "api_path",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 817,
+      "entity": "asset_api",
+      "name": "http_method",
+      "label": "HTTP方法",
+      "description": "HTTP方法（GET/POST/PUT/DELETE）",
+      "column_name": "http_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 818,
+      "entity": "asset_api",
+      "name": "content_type",
+      "label": "内容类型",
+      "description": "请求/响应内容类型",
+      "column_name": "content_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 819,
+      "entity": "asset_api",
+      "name": "request_parameters",
+      "label": "请求参数",
+      "description": "请求参数说明",
+      "column_name": "request_parameters",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 820,
+      "entity": "asset_api",
+      "name": "response_format",
+      "label": "响应格式",
+      "description": "响应数据格式说明",
+      "column_name": "response_format",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 821,
+      "entity": "asset_api",
+      "name": "authentication_type",
+      "label": "认证方式",
+      "description": "接口认证方式（如 OAuth、JWT）",
+      "column_name": "authentication_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 822,
+      "entity": "asset_api",
+      "name": "rate_limit",
+      "label": "限流阈值",
+      "description": "每秒最大请求次数（QPS）",
+      "column_name": "rate_limit",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 823,
+      "entity": "asset_api",
+      "name": "documentation_url",
+      "label": "文档地址",
+      "description": "在线文档URL",
+      "column_name": "documentation_url",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 824,
+      "entity": "asset_api",
+      "name": "service_id",
+      "label": "服务ID",
+      "description": "所属服务系统ID",
+      "column_name": "service_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 825,
+      "entity": "asset_api",
+      "name": "is_deprecated",
+      "label": "已废弃",
+      "description": "接口是否已废弃 0/1",
+      "column_name": "is_deprecated",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 901,
+      "entity": "asset_log",
+      "name": "id",
+      "label": "日志ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-log?record_id={zenvis_id}"
+    },
+    {
+      "id": 902,
+      "entity": "asset_log",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 903,
+      "entity": "asset_log",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 904,
+      "entity": "asset_log",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 905,
+      "entity": "asset_log",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 906,
+      "entity": "asset_log",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 907,
+      "entity": "asset_log",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 908,
+      "entity": "asset_log",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 909,
+      "entity": "asset_log",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 910,
+      "entity": "asset_log",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 911,
+      "entity": "asset_log",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 912,
+      "entity": "asset_log",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 913,
+      "entity": "asset_log",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 914,
+      "entity": "asset_log",
+      "name": "log_name",
+      "label": "日志名称",
+      "description": "日志文件名称",
+      "column_name": "log_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 915,
+      "entity": "asset_log",
+      "name": "log_path",
+      "label": "日志路径",
+      "description": "日志文件路径",
+      "column_name": "log_path",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 916,
+      "entity": "asset_log",
+      "name": "log_type",
+      "label": "日志类型",
+      "description": "日志业务类型",
+      "column_name": "log_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 917,
+      "entity": "asset_log",
+      "name": "log_format",
+      "label": "日志格式",
+      "description": "日志格式（如 JSON、CSV）",
+      "column_name": "log_format",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 918,
+      "entity": "asset_log",
+      "name": "log_time",
+      "label": "日志时间",
+      "description": "日志产生时间",
+      "column_name": "log_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 919,
+      "entity": "asset_log",
+      "name": "log_level",
+      "label": "日志级别",
+      "description": "日志级别（如 INFO、ERROR）",
+      "column_name": "log_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 920,
+      "entity": "asset_log",
+      "name": "process",
+      "label": "进程/服务",
+      "description": "产生日志的进程或服务",
+      "column_name": "process",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 921,
+      "entity": "asset_log",
+      "name": "log_message",
+      "label": "日志内容",
+      "description": "日志正文",
+      "column_name": "log_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1001,
+      "entity": "asset_file",
+      "name": "id",
+      "label": "文件ID",
+      "description": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.asset.detail-file?record_id={zenvis_id}"
+    },
+    {
+      "id": 1002,
+      "entity": "asset_file",
+      "name": "source",
+      "label": "来源",
+      "description": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。",
+      "column_name": "source",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "手动录入": "MANUAL",
+        "Agent 监测": "AGENT",
+        "主动探测": "PROBE",
+        "第三方平台": "THIRD_PARTY",
+        "其他": "OTHER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1003,
+      "entity": "asset_file",
+      "name": "type",
+      "label": "类型",
+      "description": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "业务类": "BUSINESS",
+        "支撑类": "SUPPORT"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1004,
+      "entity": "asset_file",
+      "name": "owner",
+      "label": "负责人",
+      "description": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。",
+      "column_name": "owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "企业": "ENTERPRISE",
+        "终端客户": "CUSTOMER"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1005,
+      "entity": "asset_file",
+      "name": "status",
+      "label": "状态",
+      "description": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "在网": "ONLINE",
+        "停用": "DISABLED",
+        "下线": "OFFLINE",
+        "删除": "DELETED"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1006,
+      "entity": "asset_file",
+      "name": "label",
+      "label": "标签",
+      "description": "业务标签列表",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1007,
+      "entity": "asset_file",
+      "name": "access",
+      "label": "可访问性",
+      "description": "是否允许访问：1 表示开放，0 表示不开放。",
+      "column_name": "access",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "开放": 1,
+        "不开放": 0
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1008,
+      "entity": "asset_file",
+      "name": "level",
+      "label": "重要等级",
+      "description": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。",
+      "column_name": "level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "辅助资产": "AUXILIARY",
+        "一般资产": "GENERAL",
+        "次要资产": "MINOR",
+        "重要资产": "IMPORTANT",
+        "关键资产": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1009,
+      "entity": "asset_file",
+      "name": "risk",
+      "label": "风险等级",
+      "description": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。",
+      "column_name": "risk",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "无风险": "NONE",
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "极高风险": "EXTREME"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1010,
+      "entity": "asset_file",
+      "name": "risk_info",
+      "label": "风险详情",
+      "description": "风险描述",
+      "column_name": "risk_info",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1011,
+      "entity": "asset_file",
+      "name": "info",
+      "label": "扩展信息",
+      "description": "其他 JSON 扩展信息",
+      "column_name": "info",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1012,
+      "entity": "asset_file",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "资产在来源系统中的最后更新时间，精确到毫秒。",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1013,
+      "entity": "asset_file",
+      "name": "insert_time",
+      "label": "入库时间",
+      "description": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1014,
+      "entity": "asset_file",
+      "name": "file_name",
+      "label": "文件名称",
+      "description": "文件名称",
+      "column_name": "file_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 1015,
+      "entity": "asset_file",
+      "name": "file_type",
+      "label": "文件类型",
+      "description": "文件业务类型",
+      "column_name": "file_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 1016,
+      "entity": "asset_file",
+      "name": "file_format",
+      "label": "文件格式",
+      "description": "文件格式/后缀",
+      "column_name": "file_format",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 1017,
+      "entity": "asset_file",
+      "name": "file_path",
+      "label": "文件路径",
+      "description": "文件存储路径",
+      "column_name": "file_path",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 1018,
+      "entity": "asset_file",
+      "name": "file_size",
+      "label": "文件大小",
+      "description": "文件大小（字节）",
+      "column_name": "file_size",
+      "column_type": "Int64",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1019,
+      "entity": "asset_file",
+      "name": "creation_time",
+      "label": "创建时间",
+      "description": "文件创建时间（Unix 时间戳）",
+      "column_name": "creation_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1020,
+      "entity": "asset_file",
+      "name": "modification_time",
+      "label": "修改时间",
+      "description": "文件最后修改时间（Unix 时间戳）",
+      "column_name": "modification_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1021,
+      "entity": "asset_file",
+      "name": "source_system",
+      "label": "来源系统",
+      "description": "来源业务系统",
+      "column_name": "source_system",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 1022,
+      "entity": "asset_file",
+      "name": "file_owner",
+      "label": "文件属主",
+      "description": "文件所有者",
+      "column_name": "file_owner",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 1023,
+      "entity": "asset_file",
+      "name": "permissions",
+      "label": "权限信息",
+      "description": "文件权限/ACL",
+      "column_name": "permissions",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1024,
+      "entity": "asset_file",
+      "name": "is_encrypted",
+      "label": "已加密",
+      "description": "文件是否加密 0/1",
+      "column_name": "is_encrypted",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1025,
+      "entity": "asset_file",
+      "name": "is_compressed",
+      "label": "已压缩",
+      "description": "文件是否压缩 0/1",
+      "column_name": "is_compressed",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 1026,
+      "entity": "asset_file",
+      "name": "file_hash",
+      "label": "文件哈希",
+      "description": "文件哈希值（MD5/SHA256）",
+      "column_name": "file_hash",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    }
+  ],
+  "operator": [
+    {
+      "id": 7,
+      "name": "between",
+      "label": "之间"
+    },
+    {
+      "id": 1,
+      "name": "equal",
+      "label": "等于"
+    },
+    {
+      "id": 5,
+      "name": "greatequalthan",
+      "label": "大于等于"
+    },
+    {
+      "id": 3,
+      "name": "greatthan",
+      "label": "大于"
+    },
+    {
+      "id": 8,
+      "name": "in",
+      "label": "包扩"
+    },
+    {
+      "id": 10,
+      "name": "isnotnull",
+      "label": "不为空"
+    },
+    {
+      "id": 9,
+      "name": "isnull",
+      "label": "为空"
+    },
+    {
+      "id": 6,
+      "name": "lessequalthan",
+      "label": "小于等于"
+    },
+    {
+      "id": 4,
+      "name": "lessthan",
+      "label": "小于"
+    },
+    {
+      "id": 11,
+      "name": "match",
+      "label": "模糊匹配"
+    },
+    {
+      "id": 2,
+      "name": "notequal",
+      "label": "不等于"
+    }
+  ]
+}

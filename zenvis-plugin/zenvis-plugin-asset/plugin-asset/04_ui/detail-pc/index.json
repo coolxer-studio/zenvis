@@ -1,0 +1,273 @@
+{
+  "type": "page",
+  "title": "PC 终端资产详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/asset_pc/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "PC 终端资产记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "平台记录",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的实际接收时间。",
+              "span": 2
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产治理信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "资产ID",
+              "content": "${id | default:'-'}",
+              "remark": "来源系统中的业务资产标识；用于去重、检索和关联，保持为不透明字符串。"
+            },
+            {
+              "label": "来源",
+              "content": "${source | default:'-'}",
+              "remark": "资产数据来源；取值为 MANUAL（手动录入）、AGENT（Agent 监测）、PROBE（主动探测）、THIRD_PARTY（第三方平台）或 OTHER（其他）。"
+            },
+            {
+              "label": "资产类型",
+              "content": "${type | default:'-'}",
+              "remark": "资产业务分类；BUSINESS 表示业务类资产，SUPPORT 表示支撑类资产。"
+            },
+            {
+              "label": "负责人",
+              "content": "${owner | default:'-'}",
+              "remark": "资产归属；ENTERPRISE 表示企业资产，CUSTOMER 表示终端客户资产。"
+            },
+            {
+              "label": "状态",
+              "content": "${status | default:'-'}",
+              "remark": "资产生命周期状态；支持 ONLINE、DISABLED、OFFLINE、DELETED。"
+            },
+            {
+              "label": "标签",
+              "content": "${label | default:'-'}",
+              "remark": "业务标签列表"
+            },
+            {
+              "label": "可访问性",
+              "content": "${access | default:'-'}",
+              "remark": "是否允许访问：1 表示开放，0 表示不开放。"
+            },
+            {
+              "label": "重要等级",
+              "content": "${level | default:'-'}",
+              "remark": "资产重要等级；从 AUXILIARY、GENERAL、MINOR、IMPORTANT 到 CRITICAL 逐级提高。"
+            },
+            {
+              "label": "风险等级",
+              "content": "${risk | default:'-'}",
+              "remark": "当前风险等级；支持 NONE、LOW、MEDIUM、HIGH、EXTREME。"
+            },
+            {
+              "label": "风险详情",
+              "content": "${risk_info | default:'-'}",
+              "remark": "风险描述"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "资产在来源系统中的最后更新时间，精确到毫秒。"
+            },
+            {
+              "label": "入库时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "业务数据声明的入库时间，精确到毫秒；平台实际接收时间请使用 zenvis_insert_time。"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "资产详细属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "区域代码",
+              "content": "${area_code | default:'-'}",
+              "remark": "行政区域代码"
+            },
+            {
+              "label": "国家",
+              "content": "${country | default:'-'}",
+              "remark": "国家"
+            },
+            {
+              "label": "省份",
+              "content": "${province | default:'-'}",
+              "remark": "省/州"
+            },
+            {
+              "label": "城市",
+              "content": "${city | default:'-'}",
+              "remark": "城市"
+            },
+            {
+              "label": "区县",
+              "content": "${county | default:'-'}",
+              "remark": "区县"
+            },
+            {
+              "label": "扩展信息",
+              "content": "${info | default:'-'}",
+              "remark": "其他 JSON 扩展信息"
+            },
+            {
+              "label": "网络类型",
+              "content": "${net_type | default:'-'}",
+              "remark": "网络类型"
+            },
+            {
+              "label": "内网IP",
+              "content": "${lan_ip | default:'-'}",
+              "remark": "内网IPv4地址"
+            },
+            {
+              "label": "外网IP",
+              "content": "${wan_ip | default:'-'}",
+              "remark": "外网IPv4地址"
+            },
+            {
+              "label": "厂商",
+              "content": "${manufacturer | default:'-'}",
+              "remark": "硬件厂商"
+            },
+            {
+              "label": "型号",
+              "content": "${model | default:'-'}",
+              "remark": "硬件型号"
+            },
+            {
+              "label": "架构",
+              "content": "${architecture | default:'-'}",
+              "remark": "CPU架构"
+            },
+            {
+              "label": "系统名称",
+              "content": "${system_name | default:'-'}",
+              "remark": "操作系统名称"
+            },
+            {
+              "label": "系统版本",
+              "content": "${system_version | default:'-'}",
+              "remark": "操作系统版本"
+            },
+            {
+              "label": "CPU型号",
+              "content": "${cpu_model | default:'-'}",
+              "remark": "CPU型号"
+            },
+            {
+              "label": "CPU核数",
+              "content": "${cpu_cores | default:'-'}",
+              "remark": "CPU核心数量"
+            },
+            {
+              "label": "内存大小(MB)",
+              "content": "${memory_size | default:'-'}",
+              "remark": "内存容量（单位MB）"
+            },
+            {
+              "label": "磁盘大小(GB)",
+              "content": "${disk_size | default:'-'}",
+              "remark": "磁盘容量（单位GB）"
+            },
+            {
+              "label": "GPU型号",
+              "content": "${gpu_model | default:'-'}",
+              "remark": "显卡型号"
+            },
+            {
+              "label": "GPU品牌",
+              "content": "${gpu_brand | default:'-'}",
+              "remark": "显卡品牌"
+            },
+            {
+              "label": "GPU显存(MB)",
+              "content": "${gpu_memory_size | default:'-'}",
+              "remark": "显卡显存容量（单位MB）"
+            },
+            {
+              "label": "显存类型",
+              "content": "${gpu_memory_type | default:'-'}",
+              "remark": "显卡显存类型"
+            },
+            {
+              "label": "显示器品牌",
+              "content": "${monitor_brand | default:'-'}",
+              "remark": "显示器品牌"
+            },
+            {
+              "label": "显示器型号",
+              "content": "${monitor_model | default:'-'}",
+              "remark": "显示器型号"
+            },
+            {
+              "label": "显示器分辨率",
+              "content": "${monitor_resolution | default:'-'}",
+              "remark": "显示器分辨率"
+            },
+            {
+              "label": "显示器接口",
+              "content": "${monitor_interface | default:'-'}",
+              "remark": "显示器接口类型"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

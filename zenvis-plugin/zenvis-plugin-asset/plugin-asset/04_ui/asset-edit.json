@@ -1,0 +1,133 @@
+{
+  "type": "page",
+  "title": "维护资产治理属性",
+  "remark": "记录标识：${params.id}",
+  "toolbar": [
+    {
+      "type": "button",
+      "actionType": "goBack",
+      "label": "返回列表"
+    }
+  ],
+  "body": [
+    {
+      "type": "form",
+      "initApi": "/zenvis/api/v1/entity/${params.entity}/${params.id}/view",
+      "api": "/zenvis/api/v1/entity/${params.entity}/${params.id}/update",
+      "messages": {
+        "saveSuccess": "资产治理属性已更新",
+        "saveFailed": "更新失败，请确认记录仍存在且字段格式正确"
+      },
+      "controls": [
+        {
+          "type": "input-text",
+          "name": "id",
+          "label": "业务资产编号",
+          "disabled": true,
+          "description": "此编号来自来源系统；当前更新接口使用平台 zenvis_id 定位记录。"
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "select",
+              "name": "source",
+              "label": "数据来源",
+              "options": [
+                {"label": "手动录入", "value": "MANUAL"},
+                {"label": "Agent 监测", "value": "AGENT"},
+                {"label": "主动探测", "value": "PROBE"},
+                {"label": "第三方平台", "value": "THIRD_PARTY"},
+                {"label": "其他", "value": "OTHER"}
+              ]
+            },
+            {
+              "type": "select",
+              "name": "type",
+              "label": "资产类型",
+              "options": [
+                {"label": "业务类", "value": "BUSINESS"},
+                {"label": "支撑类", "value": "SUPPORT"}
+              ]
+            },
+            {
+              "type": "select",
+              "name": "owner",
+              "label": "资产归属",
+              "options": [
+                {"label": "企业", "value": "ENTERPRISE"},
+                {"label": "终端客户", "value": "CUSTOMER"}
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "body": [
+            {
+              "type": "select",
+              "name": "status",
+              "label": "资产状态",
+              "options": [
+                {"label": "在网", "value": "ONLINE"},
+                {"label": "停用", "value": "DISABLED"},
+                {"label": "下线", "value": "OFFLINE"},
+                {"label": "删除", "value": "DELETED"}
+              ],
+              "clearable": true
+            },
+            {
+              "type": "select",
+              "name": "level",
+              "label": "重要等级",
+              "options": [
+                {"label": "辅助资产", "value": "AUXILIARY"},
+                {"label": "一般资产", "value": "GENERAL"},
+                {"label": "次要资产", "value": "MINOR"},
+                {"label": "重要资产", "value": "IMPORTANT"},
+                {"label": "关键资产", "value": "CRITICAL"}
+              ],
+              "clearable": true
+            },
+            {
+              "type": "select",
+              "name": "risk",
+              "label": "风险等级",
+              "options": [
+                {"label": "无风险", "value": "NONE"},
+                {"label": "低风险", "value": "LOW"},
+                {"label": "中风险", "value": "MEDIUM"},
+                {"label": "高风险", "value": "HIGH"},
+                {"label": "极高风险", "value": "EXTREME"}
+              ],
+              "clearable": true
+            },
+            {
+              "type": "switch",
+              "name": "access",
+              "label": "允许访问",
+              "trueValue": 1,
+              "falseValue": 0
+            }
+          ]
+        },
+        {
+          "type": "input-tag",
+          "name": "label",
+          "label": "业务标签",
+          "joinValues": true,
+          "extractValue": true,
+          "delimiter": ",",
+          "clearable": true
+        },
+        {
+          "type": "textarea",
+          "name": "risk_info",
+          "label": "风险说明",
+          "minRows": 3,
+          "maxRows": 8
+        }
+      ]
+    }
+  ]
+}

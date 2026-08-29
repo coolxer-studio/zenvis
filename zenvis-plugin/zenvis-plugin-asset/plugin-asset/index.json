@@ -1,0 +1,8 @@
+{
+	"name":"资产管理",
+	"package_name":"com.coolxer.plugin.asset",
+	"version":"1.3.1",
+	"description":"统一管理主机、终端、IoT、移动设备、探针、应用、服务、API、日志和文件资产，提供分类标记、状态维护、风险分级、详情查看、IP 命中调查和治理态势分析。",
+	"author":"CoolXer",
+	"icon":"icon.png"
+}

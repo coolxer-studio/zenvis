@@ -1,0 +1,190 @@
+{
+  "type": "page",
+  "title": "资产概览",
+  "body": [
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "asset_host",
+            "asset_pc",
+            "asset_iot",
+            "asset_mobile",
+            "asset_probe",
+            "asset_app",
+            "asset_service",
+            "asset_api",
+            "asset_log",
+            "asset_file"
+          ],
+          "time_range": {"preset": "TODAY"},
+          "comparison": "NONE"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){out[r.entity]=Number(r.all_time_count||0);out[r.entity+'_increase']=Number(r.current_value||0);});return {status:0,msg:'',data:out};"
+      },
+      "body": {
+        "type": "grid",
+        "gap": "md",
+        "columns": [
+          {
+            "md": 2,
+            "body": {"type": "panel", "title": "服务器设备", "body": "<div style='font-size:28px;font-weight:700'>${asset_host || 0}</div><div>今日新增 ${asset_host_increase || 0}</div>"}
+          },
+          {
+            "md": 2,
+            "body": {"type": "panel", "title": "PC 设备", "body": "<div style='font-size:28px;font-weight:700'>${asset_pc || 0}</div><div>今日新增 ${asset_pc_increase || 0}</div>"}
+          },
+          {
+            "md": 2,
+            "body": {"type": "panel", "title": "IOT 设备", "body": "<div style='font-size:28px;font-weight:700'>${asset_iot || 0}</div><div>今日新增 ${asset_iot_increase || 0}</div>"}
+          },
+          {
+            "md": 2,
+            "body": {"type": "panel", "title": "移动端设备", "body": "<div style='font-size:28px;font-weight:700'>${asset_mobile || 0}</div><div>今日新增 ${asset_mobile_increase || 0}</div>"}
+          },
+          {
+            "md": 2,
+            "body": {"type": "panel", "title": "探针资产", "body": "<div style='font-size:28px;font-weight:700'>${asset_probe || 0}</div><div>今日新增 ${asset_probe_increase || 0}</div>"}
+          },
+          {
+            "md": 2,
+            "body": {"type": "panel", "title": "应用资产", "body": "<div style='font-size:28px;font-weight:700'>${asset_app || 0}</div><div>今日新增 ${asset_app_increase || 0}</div>"}
+          },
+          {
+            "md": 3,
+            "body": {"type": "panel", "title": "服务资产", "body": "<div style='font-size:28px;font-weight:700'>${asset_service || 0}</div><div>今日新增 ${asset_service_increase || 0}</div>"}
+          },
+          {
+            "md": 3,
+            "body": {"type": "panel", "title": "API 资产", "body": "<div style='font-size:28px;font-weight:700'>${asset_api || 0}</div><div>今日新增 ${asset_api_increase || 0}</div>"}
+          },
+          {
+            "md": 3,
+            "body": {"type": "panel", "title": "日志数据", "body": "<div style='font-size:28px;font-weight:700'>${asset_log || 0}</div><div>今日新增 ${asset_log_increase || 0}</div>"}
+          },
+          {
+            "md": 3,
+            "body": {"type": "panel", "title": "文件数据", "body": "<div style='font-size:28px;font-weight:700'>${asset_file || 0}</div><div>今日新增 ${asset_file_increase || 0}</div>"}
+          }
+        ]
+      }
+    },
+    {
+      "type": "chart",
+      "height": 380,
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/trend/query",
+        "data": {
+          "entities": [
+            "asset_host",
+            "asset_pc",
+            "asset_iot",
+            "asset_mobile",
+            "asset_probe",
+            "asset_app",
+            "asset_service",
+            "asset_api",
+            "asset_log",
+            "asset_file"
+          ],
+          "time_range": {"preset": "LAST_7_DAYS"},
+          "granularity": "DAY"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+      },
+      "config": {
+        "title": {"text": "近 7 天资产趋势"},
+        "tooltip": {"trigger": "axis"},
+        "legend": {},
+        "dataset": "${chart_dataset}",
+        "xAxis": {"type": "category"},
+        "yAxis": {"type": "value", "minInterval": 1},
+        "series": "${chart_series}"
+      }
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 380,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {"entity": "asset_host", "dimension": "level", "label": "服务器设备"},
+                  {"entity": "asset_pc", "dimension": "level", "label": "PC设备"},
+                  {"entity": "asset_iot", "dimension": "level", "label": "IOT设备"},
+                  {"entity": "asset_mobile", "dimension": "level", "label": "移动端设备"},
+                  {"entity": "asset_probe", "dimension": "level", "label": "探针资产"},
+                  {"entity": "asset_app", "dimension": "level", "label": "应用资产"},
+                  {"entity": "asset_service", "dimension": "level", "label": "服务资产"},
+                  {"entity": "asset_api", "dimension": "level", "label": "API资产"},
+                  {"entity": "asset_log", "dimension": "level", "label": "日志数据"},
+                  {"entity": "asset_file", "dimension": "level", "label": "文件数据"}
+                ],
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {"text": "资产等级总览"},
+              "tooltip": {"trigger": "axis"},
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {"type": "value"},
+              "yAxis": {"type": "category"},
+              "series": "${chart_series}"
+            }
+          }
+        },
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 380,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {"entity": "asset_host", "dimension": "risk", "label": "服务器设备"},
+                  {"entity": "asset_pc", "dimension": "risk", "label": "PC设备"},
+                  {"entity": "asset_iot", "dimension": "risk", "label": "IOT设备"},
+                  {"entity": "asset_mobile", "dimension": "risk", "label": "移动端设备"},
+                  {"entity": "asset_probe", "dimension": "risk", "label": "探针资产"},
+                  {"entity": "asset_app", "dimension": "risk", "label": "应用资产"},
+                  {"entity": "asset_service", "dimension": "risk", "label": "服务资产"},
+                  {"entity": "asset_api", "dimension": "risk", "label": "API资产"},
+                  {"entity": "asset_log", "dimension": "risk", "label": "日志数据"},
+                  {"entity": "asset_file", "dimension": "risk", "label": "文件数据"}
+                ],
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {"text": "资产风险总览"},
+              "tooltip": {"trigger": "axis"},
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {"type": "value"},
+              "yAxis": {"type": "category"},
+              "series": "${chart_series}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

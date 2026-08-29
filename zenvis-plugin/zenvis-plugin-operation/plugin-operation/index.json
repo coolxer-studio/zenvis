@@ -1,0 +1,8 @@
+{
+  "name": "运营分析",
+  "package_name": "com.coolxer.plugin.operation",
+  "version": "1.2.1",
+  "description": "统一采集十类用户行为与应用质量事件，提供实体检索、详情查看、IP 命中调查、真实数据概览和可停用的模拟数据服务。",
+  "author": "CoolXer",
+  "icon": "icon.png"
+}

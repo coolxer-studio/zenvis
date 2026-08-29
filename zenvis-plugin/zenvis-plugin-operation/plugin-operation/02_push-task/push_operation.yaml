@@ -1,0 +1,477 @@
+---
+# 测试用途：默认每 5 秒随机生成一条运营样例。可在平台推送任务页面停用。
+sources:
+  generator_operation_samples:
+    type: "demo_logs"
+    format: "shuffle"
+    interval: ${OPERATION_DEMO_INTERVAL_SECONDS:-5}
+    lines:
+      - '{"operation_type":"operation_page_event","user_id":"user001","start_id":"start001","page_path":"/home","page_name":"首页","referrer":"/login","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_performance_event","user_id":"user001","start_id":"start001","cpu_usage":35.5,"cpu_user":20.1,"cpu_system":10.2,"cpu_idle":69.7,"memory_total":16384,"memory_used":8192,"memory_usage":50.0,"virtual_memory_total":8192,"virtual_memory_used":4096,"swap_total":2048,"swap_used":1024,"disk_read_speed":120.5,"disk_write_speed":110.3,"disk_throughput":230.8,"disk_iops":150,"network_send_rate":500.2,"network_receive_rate":480.1,"network_packet_loss":0.01,"network_latency":20.5,"longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_network_event","user_id":"user001","start_id":"start001","source_ip":"192.168.1.10","source_port":"12345","target_ip":"43.129.1.10","target_port":"80","protocol":"TCP","request_time":"2025-08-12 12:12:12","response_time":"2025-08-12 12:12:12","request_content":"GET /api/data","response_content":"{\"status\":200}","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_location_event","user_id":"user001","start_id":"start001","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_extend_event","user_id":"user001","start_id":"start001","extend":{"extra":"扩展信息"},"longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_crash_event","user_id":"user001","start_id":"start001","message":"NullPointerException","stack_trace":"at Main.main(Main.java:10)","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_anr_event","user_id":"user001","start_id":"start001","page_path":"/home","page_name":"首页","anr_gap":5000,"longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_click_event","user_id":"user001","start_id":"start001","click_x":120.5,"click_y":300.8,"component_type":"Button","component_name":"提交按钮","page_path":"/form","page_name":"表单页","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_api_call_event","user_id":"user001","start_id":"start001","caller":"UserService","callee":"AuthService","function_name":"login","function_params":{"username":"test"},"function_return":{"result":"success"},"longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+      - '{"operation_type":"operation_start_event","user_id":"user001","device_id":"device001","device_model":"iPhone 14","device_os":"iOS 16.5","app_id":"app001","app_name":"测试App","package_name":"com.example.test","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+
+transforms:
+  parse_operation_sample:
+    type: "remap"
+    inputs:
+      - "generator_operation_samples"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw_message = to_string(.message) ?? ""
+      parsed, parse_error = parse_json(raw_message)
+      assert_eq!(parse_error, null, message: "operation 模拟数据必须是合法 JSON")
+      assert!(is_object(parsed), message: "operation 模拟数据 JSON 根节点必须是对象")
+      . = object!(parsed)
+      assert!(
+        .operation_type == "operation_start_event" ||
+        .operation_type == "operation_click_event" ||
+        .operation_type == "operation_page_event" ||
+        .operation_type == "operation_api_call_event" ||
+        .operation_type == "operation_network_event" ||
+        .operation_type == "operation_extend_event" ||
+        .operation_type == "operation_performance_event" ||
+        .operation_type == "operation_location_event" ||
+        .operation_type == "operation_crash_event" ||
+        .operation_type == "operation_anr_event",
+        message: "operation 模拟数据 operation_type 不受支持"
+      )
+      .id = uuid_v4()
+      current_time = format_timestamp!(now(), format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+      .update_time = current_time
+      .insert_time = current_time
+
+  route_operation_sample:
+    type: "route"
+    inputs:
+      - "parse_operation_sample"
+    route:
+      operation_start_event: '.operation_type == "operation_start_event"'
+      operation_click_event: '.operation_type == "operation_click_event"'
+      operation_page_event: '.operation_type == "operation_page_event"'
+      operation_api_call_event: '.operation_type == "operation_api_call_event"'
+      operation_network_event: '.operation_type == "operation_network_event"'
+      operation_extend_event: '.operation_type == "operation_extend_event"'
+      operation_performance_event: '.operation_type == "operation_performance_event"'
+      operation_location_event: '.operation_type == "operation_location_event"'
+      operation_crash_event: '.operation_type == "operation_crash_event"'
+      operation_anr_event: '.operation_type == "operation_anr_event"'
+
+  prepare_operation_start_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_start_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_click_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_click_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_page_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_page_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_api_call_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_api_call_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_network_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_network_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_extend_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_extend_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_performance_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_performance_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_location_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_location_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_crash_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_crash_event"
+    source: |-
+      del(.operation_type)
+
+  prepare_operation_anr_event:
+    type: "remap"
+    inputs:
+      - "route_operation_sample.operation_anr_event"
+    source: |-
+      del(.operation_type)
+
+sinks:
+  operation_sample_invalid_console:
+    type: "console"
+    inputs:
+      - "parse_operation_sample.dropped"
+      - "route_operation_sample._unmatched"
+    encoding:
+      codec: "json"
+
+  operation_start_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_start_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_start_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_click_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_click_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_click_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_page_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_page_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_page_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_api_call_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_api_call_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_api_call_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_network_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_network_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_network_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_extend_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_extend_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_extend_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_performance_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_performance_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_performance_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_location_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_location_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_location_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_crash_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_crash_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_crash_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  operation_anr_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "prepare_operation_anr_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "operation_anr_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+tests:
+  - name: "合法样例应完成补充并进入 operation_page_event 分支"
+    inputs:
+      - insert_at: "parse_operation_sample"
+        type: "log"
+        log_fields:
+          message: '{"operation_type":"operation_page_event","user_id":"user001","start_id":"start001","page_path":"/home","page_name":"首页","referrer":"/login","longitude":116.397,"latitude":39.908,"country":"中国","province":"北京市","city":"北京市","county":"东城区","net_type":"WIFI","lan_ip":"192.168.1.10","wan_ip":"43.129.1.10","event_time":"2025-08-12 12:12:12"}'
+    outputs:
+      - extract_from: "route_operation_sample.operation_page_event"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.operation_type, "operation_page_event")
+              assert!(is_string(.id))
+              assert!(is_string(.update_time))
+              assert!(is_string(.insert_time))
+              true
+
+  - name: "非法 JSON 应进入 dropped 并保留原文"
+    inputs:
+      - insert_at: "parse_operation_sample"
+        type: "log"
+        log_fields:
+          message: "{not-json"
+    outputs:
+      - extract_from: "parse_operation_sample.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(to_string!(.message), "{not-json")
+              assert!(contains(to_string!(.metadata.dropped.message), "合法 JSON"))
+              true

@@ -1,0 +1,101 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/index"
+      },
+      {
+        "children": [
+          {
+            "label": "运营行为概览",
+            "url": "index",
+            "icon": "fa-solid fa-house",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=index.json"
+          },
+          {
+            "label": "行为事件",
+            "icon": "fa-solid fa-layer-group",
+            "children": [
+              {
+                "label": "启动事件",
+                "url": "/start/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=start-list.json"
+              },
+              {
+                "label": "点击事件",
+                "url": "/click/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=click-list.json"
+              },
+              {
+                "label": "页面访问事件",
+                "url": "/page/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=page-list.json"
+              },
+              {
+                "label": "函数调用事件",
+                "url": "/apicall/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=apicall-list.json"
+              },
+              {
+                "label": "网络请求事件",
+                "url": "/network/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=network-list.json"
+              },
+              {
+                "label": "用户拓展事件",
+                "url": "/extend/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=extend-list.json"
+              }
+            ]
+          },
+          {
+            "label": "状态指标",
+            "icon": "fa-solid fa-layer-group",
+            "children": [
+              {
+                "label": "资源利用状态",
+                "url": "/performance/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=performance-list.json"
+              },
+              {
+                "label": "位置信息状态",
+                "url": "/location/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=location-list.json"
+              }
+            ]
+          },
+          {
+            "label": "应用质量",
+            "icon": "fa-solid fa-layer-group",
+            "children": [
+              {
+                "label": "崩溃事件",
+                "url": "/crash/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=crash-list.json"
+              },
+              {
+                "label": "无响应事件",
+                "url": "/anr/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.operation/get?file_name=anr-list.json"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

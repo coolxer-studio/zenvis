@@ -1,0 +1,343 @@
+{
+  "type": "page",
+  "title": "运营行为概览",
+  "body": [
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "operation_start_event",
+            "operation_click_event",
+            "operation_page_event",
+            "operation_api_call_event",
+            "operation_network_event",
+            "operation_extend_event",
+            "operation_performance_event",
+            "operation_location_event",
+            "operation_crash_event",
+            "operation_anr_event"
+          ],
+          "time_range": {
+            "preset": "TODAY"
+          },
+          "comparison": "NONE"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){out[r.entity]=Number(r.all_time_count||0);out[r.entity+'_increase']=Number(r.current_value||0);});return {status:0,msg:'',data:out};"
+      },
+      "body": {
+        "type": "grid",
+        "gap": "md",
+        "columns": [
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "启动事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_start_event || 0}</div><div>今日新增 ${operation_start_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "点击事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_click_event || 0}</div><div>今日新增 ${operation_click_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "页面访问事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_page_event || 0}</div><div>今日新增 ${operation_page_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "函数调用事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_api_call_event || 0}</div><div>今日新增 ${operation_api_call_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "网络请求事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_network_event || 0}</div><div>今日新增 ${operation_network_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "用户拓展事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_extend_event || 0}</div><div>今日新增 ${operation_extend_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "资源利用状态",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_performance_event || 0}</div><div>今日新增 ${operation_performance_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "位置信息状态",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_location_event || 0}</div><div>今日新增 ${operation_location_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "崩溃事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_crash_event || 0}</div><div>今日新增 ${operation_crash_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 2,
+            "body": {
+              "type": "panel",
+              "title": "无响应事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${operation_anr_event || 0}</div><div>今日新增 ${operation_anr_event_increase || 0}</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "chart",
+      "height": 380,
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/trend/query",
+        "data": {
+          "entities": [
+            "operation_start_event",
+            "operation_click_event",
+            "operation_page_event",
+            "operation_api_call_event",
+            "operation_network_event",
+            "operation_extend_event",
+            "operation_performance_event",
+            "operation_location_event",
+            "operation_crash_event",
+            "operation_anr_event"
+          ],
+          "time_range": {
+            "preset": "LAST_7_DAYS"
+          },
+          "granularity": "DAY"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+      },
+      "config": {
+        "title": {
+          "text": "近 7 天变化趋势"
+        },
+        "tooltip": {
+          "trigger": "axis"
+        },
+        "legend": {},
+        "dataset": "${chart_dataset}",
+        "xAxis": {
+          "type": "category"
+        },
+        "yAxis": {
+          "type": "value",
+          "minInterval": 1
+        },
+        "series": "${chart_series}"
+      }
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "operation_start_event",
+                    "dimension": "net_type",
+                    "label": "启动事件"
+                  },
+                  {
+                    "entity": "operation_click_event",
+                    "dimension": "net_type",
+                    "label": "点击事件"
+                  },
+                  {
+                    "entity": "operation_page_event",
+                    "dimension": "net_type",
+                    "label": "页面访问事件"
+                  },
+                  {
+                    "entity": "operation_api_call_event",
+                    "dimension": "net_type",
+                    "label": "函数调用事件"
+                  },
+                  {
+                    "entity": "operation_network_event",
+                    "dimension": "net_type",
+                    "label": "网络请求事件"
+                  },
+                  {
+                    "entity": "operation_extend_event",
+                    "dimension": "net_type",
+                    "label": "用户拓展事件"
+                  },
+                  {
+                    "entity": "operation_performance_event",
+                    "dimension": "net_type",
+                    "label": "资源利用状态"
+                  },
+                  {
+                    "entity": "operation_location_event",
+                    "dimension": "net_type",
+                    "label": "位置信息状态"
+                  },
+                  {
+                    "entity": "operation_crash_event",
+                    "dimension": "net_type",
+                    "label": "崩溃事件"
+                  },
+                  {
+                    "entity": "operation_anr_event",
+                    "dimension": "net_type",
+                    "label": "无响应事件"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "网络类型分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        },
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "operation_start_event",
+                    "dimension": "city",
+                    "label": "启动事件"
+                  },
+                  {
+                    "entity": "operation_click_event",
+                    "dimension": "city",
+                    "label": "点击事件"
+                  },
+                  {
+                    "entity": "operation_page_event",
+                    "dimension": "city",
+                    "label": "页面访问事件"
+                  },
+                  {
+                    "entity": "operation_api_call_event",
+                    "dimension": "city",
+                    "label": "函数调用事件"
+                  },
+                  {
+                    "entity": "operation_network_event",
+                    "dimension": "city",
+                    "label": "网络请求事件"
+                  },
+                  {
+                    "entity": "operation_extend_event",
+                    "dimension": "city",
+                    "label": "用户拓展事件"
+                  },
+                  {
+                    "entity": "operation_performance_event",
+                    "dimension": "city",
+                    "label": "资源利用状态"
+                  },
+                  {
+                    "entity": "operation_location_event",
+                    "dimension": "city",
+                    "label": "位置信息状态"
+                  },
+                  {
+                    "entity": "operation_crash_event",
+                    "dimension": "city",
+                    "label": "崩溃事件"
+                  },
+                  {
+                    "entity": "operation_anr_event",
+                    "dimension": "city",
+                    "label": "无响应事件"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "城市分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

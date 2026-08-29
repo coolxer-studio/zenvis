@@ -1,0 +1,205 @@
+{
+  "type": "page",
+  "title": "运营 IP 命中调查",
+  "remark": "在同一实体的多个 IP 字段间执行 OR 匹配，每条记录最多计数一次。",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "body": "可从列表中的 IP 链接进入，也可手工输入 IPv4 地址。"
+    },
+    {
+      "type": "form",
+      "name": "operation-ip-search-form",
+      "mode": "inline",
+      "target": "operation-ip-statistics-service",
+      "wrapWithPanel": true,
+      "data": {
+        "ip": "${ip}"
+      },
+      "body": [
+        {
+          "type": "input-text",
+          "name": "ip",
+          "label": "IP 地址",
+          "placeholder": "例如 192.168.1.10",
+          "required": true,
+          "clearable": true,
+          "size": "lg"
+        }
+      ],
+      "actions": [
+        {
+          "type": "submit",
+          "label": "查询",
+          "level": "primary"
+        },
+        {
+          "type": "reset",
+          "label": "清空"
+        }
+      ]
+    },
+    {
+      "type": "service",
+      "name": "operation-ip-statistics-service",
+      "initFetchOn": "!!this.ip",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/value-statistics/query",
+        "data": {
+          "focus_value": "${ip}",
+          "mappings": [
+            {
+              "entity": "operation_start_event",
+              "label": "启动事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_click_event",
+              "label": "点击事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_page_event",
+              "label": "页面访问事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_api_call_event",
+              "label": "函数调用事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_network_event",
+              "label": "网络请求事件",
+              "match_fields": [
+                "source_ip",
+                "target_ip",
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_extend_event",
+              "label": "用户拓展事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_performance_event",
+              "label": "资源利用状态",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_location_event",
+              "label": "位置信息状态",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_crash_event",
+              "label": "崩溃事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            },
+            {
+              "entity": "operation_anr_event",
+              "label": "无响应事件",
+              "match_fields": [
+                "lan_ip",
+                "wan_ip"
+              ],
+              "time_field": "zenvis_insert_time",
+              "criteria_list": [],
+              "criteria_logic": "or"
+            }
+          ],
+          "time_range": {
+            "preset": "ALL_TIME"
+          }
+        }
+      },
+      "messages": {
+        "fetchFailed": "IP 统计查询失败，请检查地址、权限或服务状态"
+      },
+      "body": [
+        {
+          "type": "cards",
+          "source": "${result.rows}",
+          "placeholder": "未查询到匹配记录",
+          "card": {
+            "header": {
+              "title": "${label}",
+              "subTitle": "匹配字段：${match_fields}"
+            },
+            "body": [
+              {
+                "type": "property",
+                "column": 2,
+                "items": [
+                  {
+                    "label": "目标 IP",
+                    "content": "${value}"
+                  },
+                  {
+                    "label": "命中记录数",
+                    "content": "${count}"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

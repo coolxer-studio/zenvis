@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS t_operation_board (
+    id INT NOT NULL AUTO_INCREMENT,
+    create_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    create_by INT NULL,
+    update_by INT NULL,
+    is_delete INT NOT NULL DEFAULT 0,
+    last_board BIGINT NULL,
+    next_board BIGINT NULL,
+    policy VARCHAR(255) NULL,
+    event VARCHAR(255) NULL,
+    metrics VARCHAR(255) NULL,
+    conditions TEXT NULL,
+    icon VARCHAR(255) NULL,
+    title VARCHAR(255) NULL,
+    view VARCHAR(255) NULL,
+    PRIMARY KEY (id),
+    INDEX idx_operation_board_last (last_board),
+    INDEX idx_operation_board_next (next_board)
+);

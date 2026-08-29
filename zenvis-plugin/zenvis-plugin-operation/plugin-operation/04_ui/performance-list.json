@@ -1,0 +1,282 @@
+{
+  "type": "page",
+  "title": "资源利用状态列表",
+  "remark": "资源利用状态表，记录设备性能及资源使用情况",
+  "body": [
+    {
+      "type": "crud",
+      "name": "crud-performance",
+      "primaryField": "zenvis_id",
+      "api": "/zenvis/api/v1/entity/operation_performance_event/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "event_time",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "label": "事件唯一标识",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.operation.detail-performance?record_id=${zenvis_id}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${id | default:'-'}"
+          },
+          "copyable": true
+        },
+        {
+          "name": "user_id",
+          "label": "用户ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "start_id",
+          "label": "启动ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "cpu_usage",
+          "label": "CPU总利用率",
+          "sortable": true
+        },
+        {
+          "name": "cpu_user",
+          "label": "CPU用户态利用率",
+          "sortable": true
+        },
+        {
+          "name": "cpu_system",
+          "label": "CPU系统态利用率",
+          "sortable": true
+        },
+        {
+          "name": "cpu_idle",
+          "label": "CPU空闲率",
+          "sortable": true
+        },
+        {
+          "name": "memory_total",
+          "label": "物理内存总量(KB)",
+          "sortable": true
+        },
+        {
+          "name": "memory_used",
+          "label": "物理内存使用量(KB)",
+          "sortable": true
+        },
+        {
+          "name": "memory_usage",
+          "label": "物理内存利用率",
+          "sortable": true
+        },
+        {
+          "name": "virtual_memory_total",
+          "label": "虚拟内存总量(KB)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "virtual_memory_used",
+          "label": "虚拟内存使用量(KB)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "swap_total",
+          "label": "交换空间总量(KB)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "swap_used",
+          "label": "交换空间使用量(KB)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "disk_read_speed",
+          "label": "磁盘读取速度(KB/s)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "disk_write_speed",
+          "label": "磁盘写入速度(KB/s)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "disk_throughput",
+          "label": "磁盘总吞吐量(KB/s)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "disk_iops",
+          "label": "磁盘IOPS",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "network_send_rate",
+          "label": "网络发送速率(KB/s)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "network_receive_rate",
+          "label": "网络接收速率(KB/s)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "network_packet_loss",
+          "label": "网络丢包率",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "network_latency",
+          "label": "网络延迟(ms)",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "longitude",
+          "label": "经度",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "latitude",
+          "label": "纬度",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "country",
+          "label": "国家",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "province",
+          "label": "省份",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "city",
+          "label": "城市",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "county",
+          "label": "区县",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "net_type",
+          "label": "网络类型",
+          "sortable": true,
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "lan_ip",
+          "label": "局域网IP",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.operation.ip-statistics?ip=${lan_ip}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${lan_ip | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "wan_ip",
+          "label": "因特网IP",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.operation.ip-statistics?ip=${wan_ip}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${wan_ip | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "name": "insert_time",
+          "label": "创建时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "name": "event_time",
+          "label": "事件发生时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "width": 160,
+          "buttons": [
+            {
+              "type": "button-group",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "查看",
+                  "level": "info",
+                  "actionType": "link",
+                  "link": "/#/service/low-code-page/com.coolxer.plugin.operation.detail-performance?record_id=${zenvis_id}"
+                },
+                {
+                  "type": "button",
+                  "label": "删除",
+                  "level": "danger",
+                  "actionType": "ajax",
+                  "confirmText": "确认删除这条记录？",
+                  "api": "delete:/zenvis/api/v1/entity/operation_performance_event/$zenvis_id"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无数据"
+    }
+  ]
+}

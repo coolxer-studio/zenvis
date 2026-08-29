@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8"/>
+    <title>Vectum</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge"/>
+    <link rel="icon" href="images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="sdk/sdk.css"/>
+    <link rel="stylesheet" href="sdk/helper.css"/>
+    <link rel="stylesheet" href="sdk/iconfont.css"/>
+
+    <!-- 这是默认主题所需的，如果是其他主题则不需要 -->
+    <!-- 从 1.1.0 开始 sdk.css 将不支持 IE 11，如果要支持 IE11 请引用这个 css，并把前面那个删了 -->
+    <!-- <link rel="stylesheet" href="sdk-ie11.css" /> -->
+    <!-- 不过 amis 开发团队几乎没测试过 IE 11 下的效果，所以可能有细节功能用不了，如果发现请报 issue -->
+    <style>
+		html,
+		body,
+		.app-wrapper {
+			position: relative;
+			width: 100%;
+			height: 100%;
+			margin: 0;
+			padding: 0;
+		}
+
+    </style>
+</head>
+
+<body>
+<div id="root" class="app-wrapper"></div>
+<script src="sdk/sdk.js"></script>
+<script type="text/javascript">
+(function () {
+	let amis = amisRequire('amis/embed');
+	let authTokenStorageKey = 'vectum.auth.token';
+	let memoryAuthToken = '';
+	let authPromptVisible = false;
+
+	function getAuthToken() {
+		try {
+			return window.localStorage.getItem(authTokenStorageKey) || memoryAuthToken || '';
+		} catch (e) {
+			return memoryAuthToken || '';
+		}
+	}
+
+	function setAuthToken(token) {
+		memoryAuthToken = token || '';
+		try {
+			if (token) {
+				window.localStorage.setItem(authTokenStorageKey, token);
+			} else {
+				window.localStorage.removeItem(authTokenStorageKey);
+			}
+		} catch (e) {
+			// localStorage 不可用时使用内存 token。
+		}
+	}
+
+	function promptAuthToken() {
+		if (authPromptVisible) {
+			return getAuthToken();
+		}
+		authPromptVisible = true;
+		let token = window.prompt('请输入 Vectum 访问 Token');
+		authPromptVisible = false;
+		if (token) {
+			setAuthToken(token.trim());
+		}
+		return getAuthToken();
+	}
+
+	function ensureAuthToken() {
+		if (!getAuthToken()) {
+			promptAuthToken();
+		}
+	}
+
+	function appendAuthHeader(config) {
+		let token = getAuthToken();
+		config.headers = config.headers || {};
+		if (token) {
+			config.headers.Authorization = 'Bearer ' + token;
+		}
+		return config;
+	}
+
+	function handleUnauthorizedResponse() {
+		setAuthToken('');
+		let token = promptAuthToken();
+		if (token) {
+			window.location.reload();
+		}
+	}
+
+	ensureAuthToken();
+	// 通过替换下面这个配置来生成不同页面
+	let amisJSON = {
+	"type": "page",
+	"title": "数推服务管理",
+	"remark": null,
+	"toolbar": [{
+		"type": "button",
+		"actionType": "dialog",
+		"label": "创建数推服务",
+		"primary": true,
+		"dialog": {
+			"title": "创建数推任务",
+			"mode": "horizontal",
+			"size": "lg",
+			"body": {
+				"type": "form",
+				"api": "/vectum/api/v1/task/add",
+				"body": [{
+						"label": "数推服务名称",
+						"name": "name",
+						"type": "input-text",
+						"required": true
+					},
+					{
+						"label": "描述说明",
+						"type": "textarea",
+						"name": "description",
+						"required": true,
+						"clearable": true
+					},
+					{
+						"label": "备注",
+						"type": "textarea",
+						"name": "mark",
+						"clearable": true
+					},
+					{
+						"label": "推送配置",
+						"name": "config",
+						"type": "editor",
+						"language": "yaml",
+						"editorTheme": "vs-dark",
+						"required": true
+					},
+					{
+						"type": "hidden",
+						"name": "source",
+						"value": "WEB"
+					}
+				]
+			}
+		}
+	}],
+	"body": [{
+		"type": "crud",
+		"api": "/vectum/api/v1/task/all",
+		"loadDataOnce": true,
+		"autoGenerateFilter": true,
+		"columns": [{
+				"name": "id",
+				"label": "ID",
+				"type": "text",
+				"toggled": true
+			},
+			{
+				"name": "name",
+				"label": "数推服务名称",
+				"type": "text",
+				"searchable": true,
+				"toggled": true
+			},
+			{
+				"name": "description",
+				"label": "描述",
+				"type": "text",
+				"searchable": true,
+				"toggled": true
+			},
+			{
+				"type": "tpl",
+				"tpl": "${config | json |truncate:60}",
+				"name": "config",
+				"label": "配置",
+				"toggled": true,
+				"popOver": {
+					"body": {
+						"type": "code",
+						"language": "yaml",
+						"maxHeight": 400,
+						"editorTheme": "vs-dark",
+						"value": "${config}"
+					}
+				}
+			},
+			{
+				"name": "status",
+				"label": "状态",
+				"type": "status",
+				"source": {
+					"running": {
+						"label": "运行中",
+						"icon": "rolling"
+					},
+					"running[error]": {
+						"label": "不稳定运行中",
+						"icon": "rolling"
+					},
+					"stopped": {
+						"label": "未运行",
+						"icon": "warning"
+					},
+					"error": {
+						"label": "异常",
+						"icon": "fail"
+					}
+				},
+				"toggled": true
+			},
+			{
+				"name": "pid",
+				"label": "进程id",
+				"type": "text",
+				"searchable": true,
+				"toggled": true
+			},
+			{
+				"name": "source",
+				"label": "来源",
+				"type": "text",
+				"searchable": true,
+				"toggled": true
+			},
+			{
+				"name": "mark",
+				"label": "备注",
+				"type": "text",
+				"searchable": true,
+				"toggled": true
+			},
+			{
+				"name": "update_time",
+				"label": "更新时间",
+				"type": "text",
+				"toggled": true
+			},
+			{
+				"name": "create_time",
+				"label": "创建时间",
+				"type": "text",
+				"toggled": true
+			},
+			{
+				"type": "operation",
+				"label": "操作",
+				"width": 200,
+				"buttons": [{
+						"type": "button",
+						"icon": "fa fa-pause-circle text-danger",
+						"hiddenOn": "status == 'stopped'",
+						"actionType": "ajax",
+						"confirmText": "您确认要停止?",
+						"api": "post:/vectum/api/v1/task/$id/toggle"
+					},
+					{
+						"type": "button",
+						"icon": "fa fa-play-circle text-info",
+						"hiddenOn": "status != 'stopped'",
+						"actionType": "ajax",
+						"confirmText": "您确认要启动?",
+						"api": "post:/vectum/api/v1/task/$id/toggle"
+					},
+					{
+						"type": "button",
+						"icon": "fa fa-pencil",
+						"actionType": "dialog",
+						"dialog": {
+							"size": "lg",
+							"title": "编辑",
+							"body": {
+								"type": "form",
+								"name": "sample-edit-form",
+								"api": "PUT:/vectum/api/v1/task/$id",
+								"body": [{
+										"label": "数推服务名称",
+										"name": "name",
+										"type": "input-text",
+										"required": true
+									},
+									{
+										"label": "描述说明",
+										"type": "textarea",
+										"name": "description",
+										"required": true,
+										"clearable": true
+									},
+									{
+										"label": "备注",
+										"type": "textarea",
+										"name": "mark",
+										"clearable": true
+									},
+									{
+										"label": "推送配置",
+										"name": "config",
+										"type": "editor",
+										"language": "yaml",
+										"editorTheme": "vs-dark",
+										"required": true
+									},
+									{
+										"type": "hidden",
+										"name": "source",
+										"value": "WEB"
+									}
+								]
+							}
+						}
+					}, {
+						"type": "button",
+						"icon": "fa fa-sticky-note text-dark",
+						"actionType": "dialog",
+						"dialog": {
+							"size": "full",
+							"title": "查看日志",
+							"body": {
+								"type": "tabs",
+								"tabsMode": "simple",
+								"tabs": [{
+										"title": "控制台日志",
+										"body": [{
+											"type": "log",
+											"operation": [
+												"showLineNumber",
+												"filter",
+												"restart"
+											],
+											"source": "/vectum/api/v1/task/$id/log?log_type=console"
+										}]
+									},
+									{
+										"title": "系统日志",
+										"body": [{
+											"type": "log",
+											"operation": [
+												"showLineNumber",
+												"filter",
+												"restart"
+											],
+											"source": "/vectum/api/v1/task/$id/log?log_type=system"
+										}]
+									}
+								]
+							}
+						}
+					},
+					{
+						"type": "button",
+						"icon": "fa fa-times text-danger",
+						"actionType": "ajax",
+						"confirmText": "您确认要删除?",
+						"api": "delete:/vectum/api/v1/task/$id"
+					}
+				],
+				"toggled": true
+			}
+		]
+	}]
+};
+	let amisScoped = amis.embed('#root', amisJSON, {}, {
+		requestAdaptor: function (config) {
+			return appendAuthHeader(config);
+		},
+		responseAdaptor: function (api, payload, query, request, response) {
+			if (response && response.status === 401) {
+				handleUnauthorizedResponse();
+			}
+			return payload;
+		}
+	});
+})();
+
+
+</script>
+</body>
+
+</html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vectum MCP Data Push"
+  short_description: "Generate, deploy, and repair Vectum Vector tasks"
+  default_prompt: "Use $vectum-data-integration to generate a Vector config, create the Vectum task through MCP, and iterate until it runs normally."

@@ -1,0 +1,212 @@
+services:
+  vectum:
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum:latest-${ARCH}
+    container_name: vectum
+    hostname: vectum
+    ports:
+      - "11002:11002"
+    volumes:
+      - workspace-data:/workspace
+      - sftp-data:/sftp-upload
+      - vector-data:/var/lib/vector
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: prod
+      JAVA_OPTS: -Xms512m -Xmx1024m -XX:+UseG1GC
+      VECTUM_AUTH_TOKEN: sk-vectum-token
+    restart: unless-stopped
+    networks:
+      - vectum-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      sftp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11002/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+        labels: "service"
+    labels:
+      - "app=vectum"
+      - "version=latest"
+      - "description=Vectum Data Pipeline Management Tool"
+
+  sftp:
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/kalioz-sftp:latest-${ARCH}
+    container_name: sftp
+    hostname: sftp
+    ports:
+      - "2222:22"
+    environment:
+      SFTP_USERS: vectum:vectum123:1001
+      TZ: Asia/Shanghai
+    volumes:
+      - sftp-data:/home/vectum/upload
+    command: bash -c "chown -R 1001:1001 /home/vectum/upload && /usr/sbin/sshd -D"
+    restart: unless-stopped
+    networks:
+      - vectum-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "pgrep sshd || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    labels:
+      - "app=sftp"
+      - "version=latest"
+
+  clickhouse:
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/clickhouse-server:25.9-${ARCH}
+    container_name: clickhouse
+    hostname: clickhouse
+    environment:
+      TZ: Asia/Shanghai
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: vectum123
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+      - "9009:9009"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - clickhouse-logs:/var/log/clickhouse-server
+      - clickhouse-data:/var/lib/clickhouse
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - vectum-network
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "default", "--password", "vectum123", "--query", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "5"
+    labels:
+      - "app=clickhouse"
+      - "version=25.9"
+
+  kafka:
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/apache-kafka:4.2.0-${ARCH}
+    container_name: kafka
+    hostname: kafka
+    user: "0:0"
+    environment:
+      TZ: Asia/Shanghai
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - "9094:9094"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - kafka-data:/tmp/kafka-logs
+    restart: unless-stopped
+    networks:
+      - vectum-network
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "5"
+    labels:
+      - "app=kafka"
+      - "version=4.2.0"
+
+networks:
+  vectum-network:
+    driver: bridge
+    name: vectum-network
+    labels:
+      - "network=vectum"
+
+volumes:
+  sftp-data:
+    driver: local
+    name: vectum-sftp-data
+  kafka-data:
+    driver: local
+    name: vectum-kafka-data
+  clickhouse-data:
+    driver: local
+    name: vectum-clickhouse-data
+  clickhouse-logs:
+    driver: local
+    name: vectum-clickhouse-logs
+  vector-data:
+    driver: local
+    name: vectum-vector-data
+  workspace-data:
+    driver: local
+    name: vectum-workspace-data

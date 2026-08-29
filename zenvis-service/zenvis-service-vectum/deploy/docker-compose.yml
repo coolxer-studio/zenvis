@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  vectum:
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum:latest-amd64
+    container_name: vectum
+    ports:
+      - "11002:11002"
+    volumes:
+      - workspace-data:/workspace
+      - vector-data:/var/lib/vector
+    environment:
+      TZ: Asia/Shanghai
+      VECTUM_AUTH_TOKEN: sk-vectum-token
+      ZENVIS_BUSINESS_SERVICE_BASE_URL: ${ZENVIS_BUSINESS_SERVICE_BASE_URL:-http://zenvis-backend:11001}
+      ZENVIS_BUSINESS_SERVICE_INSTANCE_ID: ${ZENVIS_BUSINESS_SERVICE_INSTANCE_ID:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11002/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  vector-data:
+    driver: local
+  workspace-data:
+    driver: local

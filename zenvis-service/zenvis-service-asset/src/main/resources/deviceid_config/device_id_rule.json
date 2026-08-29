@@ -1,0 +1,24 @@
+{
+  "android": {
+    "key_list": ["macWlan0", "macWlan1", "macP2p0", "imei", "imsi", "iccid", "serial", "fileUidData", "fileUidSystem", "fileUidCache", "fileUidVendor", "androidId", "widevineId", "oaid", "bootId", "guid"],
+    "rate": 100
+  },
+  "ios": {
+    "key_list": [
+      "cfuuid", "idfa", "idfv", "guid"
+    ],
+    "rate": 100
+  },
+  "h5": {
+    "key_list": ["guid"],
+    "rate": 100
+  },
+  "host": {
+    "key_list": ["guid"],
+    "rate": 100
+  },
+  "wechat": {
+    "key_list": ["guid"],
+    "rate": 100
+  }
+}

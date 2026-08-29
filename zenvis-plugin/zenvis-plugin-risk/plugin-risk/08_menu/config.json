@@ -1,0 +1,22 @@
+[
+  {
+    "name": "风险评级策略",
+    "type": "POLICY_CONFIG",
+    "params": "rating"
+  },
+  {
+    "name": "风控可视化配置",
+    "type": "POLICY_CONFIG",
+    "params": "com.coolxer.plugin.risk"
+  },
+  {
+    "name": "风险监控",
+    "type": "LOW_CODE_APP",
+    "params": "com.coolxer.plugin.risk"
+  },
+  {
+    "name": "风险 IP 命中调查",
+    "type": "LOW_CODE_PAGE",
+    "params": "com.coolxer.plugin.risk.ip-statistics"
+  }
+]

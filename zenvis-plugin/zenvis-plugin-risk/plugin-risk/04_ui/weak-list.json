@@ -1,0 +1,168 @@
+{
+  "type": "page",
+  "title": "弱口令风险列表",
+  "remark": "弱口令风险表，记录检测到的弱口令及其相关信息",
+  "body": [
+    {
+      "type": "crud",
+      "name": "crud-weak",
+      "primaryField": "zenvis_id",
+      "api": "/zenvis/api/v1/entity/risk_weak/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "update_time",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "label": "唯一标识",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-weak?record_id=${zenvis_id}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${id | default:'-'}"
+          },
+          "copyable": true
+        },
+        {
+          "name": "user_id",
+          "label": "用户ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "start_id",
+          "label": "启动ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "asset_id",
+          "label": "资产ID",
+          "sortable": true,
+          "copyable": true
+        },
+        {
+          "name": "username",
+          "label": "用户名",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "password_type",
+          "label": "弱口令类型",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "verification_method",
+          "label": "验证方法",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "verification_result",
+          "label": "验证结果",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "label",
+          "label": "标签",
+          "sortable": true,
+          "type": "tpl",
+          "tpl": "${label | json}"
+        },
+        {
+          "name": "risk_level",
+          "label": "风险等级",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "name": "net_type",
+          "label": "网络类型",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "lan_ip",
+          "label": "局域网IP",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip=${lan_ip}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${lan_ip | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "wan_ip",
+          "label": "因特网IP",
+          "sortable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip=${wan_ip}",
+          "body": {
+            "type": "tpl",
+            "tpl": "${wan_ip | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "name": "insert_time",
+          "label": "创建时间",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range"
+          },
+          "toggled": false
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "width": 160,
+          "buttons": [
+            {
+              "type": "button-group",
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "查看",
+                  "level": "info",
+                  "actionType": "link",
+                  "link": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-weak?record_id=${zenvis_id}"
+                },
+                {
+                  "type": "button",
+                  "label": "删除",
+                  "level": "danger",
+                  "actionType": "ajax",
+                  "confirmText": "确认删除这条记录？",
+                  "api": "delete:/zenvis/api/v1/entity/risk_weak/$zenvis_id"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无数据"
+    }
+  ]
+}

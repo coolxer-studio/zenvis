@@ -1,0 +1,2409 @@
+{
+  "entity": [
+    {
+      "id": 6201,
+      "name": "risk_event",
+      "label": "风险事件",
+      "description": "风险事件表，记录各类威胁事件的汇总信息及风险等级",
+      "table_name": "zenvis.risk_event",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 6202,
+      "name": "risk_data",
+      "label": "数据风险",
+      "description": "数据风险表，记录数据泄露、篡改等数据相关威胁详情",
+      "table_name": "zenvis.risk_data",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 6203,
+      "name": "risk_vulnerability",
+      "label": "漏洞风险",
+      "description": "漏洞风险表，记录检测到的系统/应用漏洞及其详细信息",
+      "table_name": "zenvis.risk_vulnerability",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 6204,
+      "name": "risk_baseline",
+      "label": "基线风险",
+      "description": "基线风险表，记录配置基线检查中发现的不合规项",
+      "table_name": "zenvis.risk_baseline",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 6205,
+      "name": "risk_weak",
+      "label": "弱口令风险",
+      "description": "弱口令风险表，记录检测到的弱口令及其相关信息",
+      "table_name": "zenvis.risk_weak",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    },
+    {
+      "id": 6206,
+      "name": "risk_attack",
+      "label": "攻击风险",
+      "description": "攻击风险表，记录检测到的攻击行为及其威胁详情",
+      "table_name": "zenvis.risk_attack",
+      "data_source": "clickhouse",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "id"
+        ],
+        "partition_by": "id"
+      },
+      "sort_column": "update_time"
+    }
+  ],
+  "attribute": [
+    {
+      "id": 620001,
+      "entity": "risk_event",
+      "name": "id",
+      "label": "唯一标识",
+      "description": "事件唯一标识",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-event?record_id={zenvis_id}"
+    },
+    {
+      "id": 620002,
+      "entity": "risk_event",
+      "name": "user_id",
+      "label": "用户ID",
+      "description": "用户ID",
+      "column_name": "user_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620003,
+      "entity": "risk_event",
+      "name": "start_id",
+      "label": "启动ID",
+      "description": "启动ID",
+      "column_name": "start_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620004,
+      "entity": "risk_event",
+      "name": "asset_id",
+      "label": "资产ID",
+      "description": "资产ID",
+      "column_name": "asset_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620005,
+      "entity": "risk_event",
+      "name": "type",
+      "label": "威胁类型",
+      "description": "威胁类型",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620006,
+      "entity": "risk_event",
+      "name": "detail",
+      "label": "威胁详情",
+      "description": "威胁详情",
+      "column_name": "detail",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620007,
+      "entity": "risk_event",
+      "name": "label",
+      "label": "标签",
+      "description": "标签",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620008,
+      "entity": "risk_event",
+      "name": "risk_level",
+      "label": "风险等级",
+      "description": "风险等级",
+      "column_name": "risk_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "严重风险": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620009,
+      "entity": "risk_event",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620010,
+      "entity": "risk_event",
+      "name": "lan_ip",
+      "label": "局域网IP",
+      "description": "局域网IP",
+      "column_name": "lan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 620011,
+      "entity": "risk_event",
+      "name": "wan_ip",
+      "label": "因特网IP",
+      "description": "因特网IP",
+      "column_name": "wan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 620012,
+      "entity": "risk_event",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "更新时间",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620013,
+      "entity": "risk_event",
+      "name": "insert_time",
+      "label": "创建时间",
+      "description": "创建时间",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620014,
+      "entity": "risk_data",
+      "name": "id",
+      "label": "唯一标识",
+      "description": "唯一标识",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-datarisk?record_id={zenvis_id}"
+    },
+    {
+      "id": 620015,
+      "entity": "risk_data",
+      "name": "user_id",
+      "label": "用户ID",
+      "description": "用户ID",
+      "column_name": "user_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620016,
+      "entity": "risk_data",
+      "name": "start_id",
+      "label": "启动ID",
+      "description": "启动ID",
+      "column_name": "start_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620017,
+      "entity": "risk_data",
+      "name": "asset_id",
+      "label": "资产ID",
+      "description": "资产ID",
+      "column_name": "asset_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620018,
+      "entity": "risk_data",
+      "name": "type",
+      "label": "威胁类型",
+      "description": "威胁类型",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620019,
+      "entity": "risk_data",
+      "name": "detail",
+      "label": "威胁详情",
+      "description": "威胁详情",
+      "column_name": "detail",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620020,
+      "entity": "risk_data",
+      "name": "verification_method",
+      "label": "验证方法",
+      "description": "验证方法",
+      "column_name": "verification_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "自动检测": "自动检测",
+        "人工审核": "人工审核"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620021,
+      "entity": "risk_data",
+      "name": "verification_result",
+      "label": "验证结果",
+      "description": "验证结果",
+      "column_name": "verification_result",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "通过": "PASS",
+        "未通过": "FAIL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620022,
+      "entity": "risk_data",
+      "name": "label",
+      "label": "标签",
+      "description": "标签",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620023,
+      "entity": "risk_data",
+      "name": "risk_level",
+      "label": "风险等级",
+      "description": "风险等级",
+      "column_name": "risk_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "严重风险": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620024,
+      "entity": "risk_data",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620025,
+      "entity": "risk_data",
+      "name": "lan_ip",
+      "label": "局域网IP",
+      "description": "局域网IP",
+      "column_name": "lan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 620026,
+      "entity": "risk_data",
+      "name": "wan_ip",
+      "label": "因特网IP",
+      "description": "因特网IP",
+      "column_name": "wan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 620027,
+      "entity": "risk_data",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "更新时间",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620028,
+      "entity": "risk_data",
+      "name": "insert_time",
+      "label": "创建时间",
+      "description": "创建时间",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620029,
+      "entity": "risk_vulnerability",
+      "name": "id",
+      "label": "漏洞风险唯一标识",
+      "description": "漏洞风险唯一标识",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-vulnerability?record_id={zenvis_id}"
+    },
+    {
+      "id": 620030,
+      "entity": "risk_vulnerability",
+      "name": "user_id",
+      "label": "用户ID",
+      "description": "用户ID",
+      "column_name": "user_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620031,
+      "entity": "risk_vulnerability",
+      "name": "start_id",
+      "label": "启动ID",
+      "description": "启动ID",
+      "column_name": "start_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620032,
+      "entity": "risk_vulnerability",
+      "name": "asset_id",
+      "label": "资产ID",
+      "description": "资产ID",
+      "column_name": "asset_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620033,
+      "entity": "risk_vulnerability",
+      "name": "vulnerability_name",
+      "label": "漏洞名称",
+      "description": "漏洞名称",
+      "column_name": "vulnerability_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620034,
+      "entity": "risk_vulnerability",
+      "name": "vulnerability_id",
+      "label": "漏洞编号",
+      "description": "漏洞编号",
+      "column_name": "vulnerability_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620035,
+      "entity": "risk_vulnerability",
+      "name": "vulnerability_category",
+      "label": "漏洞分类",
+      "description": "漏洞分类",
+      "column_name": "vulnerability_category",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620036,
+      "entity": "risk_vulnerability",
+      "name": "vulnerability_description",
+      "label": "漏洞描述",
+      "description": "漏洞描述",
+      "column_name": "vulnerability_description",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620037,
+      "entity": "risk_vulnerability",
+      "name": "cvss_score",
+      "label": "CVSS评分",
+      "description": "CVSS评分",
+      "column_name": "cvss_score",
+      "column_type": "Float64",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620038,
+      "entity": "risk_vulnerability",
+      "name": "cvss_vector",
+      "label": "CVSS向量",
+      "description": "CVSS向量",
+      "column_name": "cvss_vector",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620039,
+      "entity": "risk_vulnerability",
+      "name": "affected_scope",
+      "label": "影响范围",
+      "description": "影响范围",
+      "column_name": "affected_scope",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620040,
+      "entity": "risk_vulnerability",
+      "name": "affected_component",
+      "label": "影响组件",
+      "description": "影响组件",
+      "column_name": "affected_component",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620041,
+      "entity": "risk_vulnerability",
+      "name": "affected_version",
+      "label": "影响版本",
+      "description": "影响版本",
+      "column_name": "affected_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620042,
+      "entity": "risk_vulnerability",
+      "name": "fixed_version",
+      "label": "修复版本",
+      "description": "修复版本",
+      "column_name": "fixed_version",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620043,
+      "entity": "risk_vulnerability",
+      "name": "fix_suggestion",
+      "label": "修复建议",
+      "description": "修复建议",
+      "column_name": "fix_suggestion",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620044,
+      "entity": "risk_vulnerability",
+      "name": "vulnerability_status",
+      "label": "漏洞状态",
+      "description": "漏洞状态",
+      "column_name": "vulnerability_status",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "未修复": "未修复",
+        "已修复": "已修复"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620045,
+      "entity": "risk_vulnerability",
+      "name": "verification_method",
+      "label": "验证方法",
+      "description": "验证方法",
+      "column_name": "verification_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "自动检测": "自动检测",
+        "人工审核": "人工审核"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620046,
+      "entity": "risk_vulnerability",
+      "name": "verification_result",
+      "label": "验证结果",
+      "description": "验证结果",
+      "column_name": "verification_result",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "通过": "PASS",
+        "未通过": "FAIL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620047,
+      "entity": "risk_vulnerability",
+      "name": "label",
+      "label": "标签",
+      "description": "标签",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620048,
+      "entity": "risk_vulnerability",
+      "name": "risk_level",
+      "label": "风险等级",
+      "description": "风险等级",
+      "column_name": "risk_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "严重风险": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620049,
+      "entity": "risk_vulnerability",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620050,
+      "entity": "risk_vulnerability",
+      "name": "lan_ip",
+      "label": "局域网IP",
+      "description": "局域网IP",
+      "column_name": "lan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 620051,
+      "entity": "risk_vulnerability",
+      "name": "wan_ip",
+      "label": "因特网IP",
+      "description": "因特网IP",
+      "column_name": "wan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 620052,
+      "entity": "risk_vulnerability",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "更新时间",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620053,
+      "entity": "risk_vulnerability",
+      "name": "insert_time",
+      "label": "创建时间",
+      "description": "创建时间",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620054,
+      "entity": "risk_baseline",
+      "name": "id",
+      "label": "唯一标识",
+      "description": "唯一标识",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-baseline?record_id={zenvis_id}"
+    },
+    {
+      "id": 620055,
+      "entity": "risk_baseline",
+      "name": "user_id",
+      "label": "用户ID",
+      "description": "用户ID",
+      "column_name": "user_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620056,
+      "entity": "risk_baseline",
+      "name": "start_id",
+      "label": "启动ID",
+      "description": "启动ID",
+      "column_name": "start_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620057,
+      "entity": "risk_baseline",
+      "name": "asset_id",
+      "label": "资产ID",
+      "description": "资产ID",
+      "column_name": "asset_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620058,
+      "entity": "risk_baseline",
+      "name": "configuration_name",
+      "label": "配置项名称",
+      "description": "配置项名称",
+      "column_name": "configuration_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620059,
+      "entity": "risk_baseline",
+      "name": "expected_value",
+      "label": "预期配置值",
+      "description": "预期配置值",
+      "column_name": "expected_value",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620060,
+      "entity": "risk_baseline",
+      "name": "current_value",
+      "label": "当前配置值",
+      "description": "当前配置值",
+      "column_name": "current_value",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620061,
+      "entity": "risk_baseline",
+      "name": "verification_method",
+      "label": "验证方法",
+      "description": "验证方法",
+      "column_name": "verification_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "自动检测": "自动检测",
+        "人工审核": "人工审核"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620062,
+      "entity": "risk_baseline",
+      "name": "verification_result",
+      "label": "验证结果",
+      "description": "验证结果",
+      "column_name": "verification_result",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "通过": "PASS",
+        "未通过": "FAIL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620063,
+      "entity": "risk_baseline",
+      "name": "label",
+      "label": "标签",
+      "description": "标签",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620064,
+      "entity": "risk_baseline",
+      "name": "risk_level",
+      "label": "风险等级",
+      "description": "风险等级",
+      "column_name": "risk_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "严重风险": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620065,
+      "entity": "risk_baseline",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620066,
+      "entity": "risk_baseline",
+      "name": "lan_ip",
+      "label": "局域网IP",
+      "description": "局域网IP",
+      "column_name": "lan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 620067,
+      "entity": "risk_baseline",
+      "name": "wan_ip",
+      "label": "因特网IP",
+      "description": "因特网IP",
+      "column_name": "wan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 620068,
+      "entity": "risk_baseline",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "更新时间",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620069,
+      "entity": "risk_baseline",
+      "name": "insert_time",
+      "label": "创建时间",
+      "description": "创建时间",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620070,
+      "entity": "risk_weak",
+      "name": "id",
+      "label": "唯一标识",
+      "description": "唯一标识",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-weak?record_id={zenvis_id}"
+    },
+    {
+      "id": 620071,
+      "entity": "risk_weak",
+      "name": "user_id",
+      "label": "用户ID",
+      "description": "用户ID",
+      "column_name": "user_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620072,
+      "entity": "risk_weak",
+      "name": "start_id",
+      "label": "启动ID",
+      "description": "启动ID",
+      "column_name": "start_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620073,
+      "entity": "risk_weak",
+      "name": "asset_id",
+      "label": "资产ID",
+      "description": "资产ID",
+      "column_name": "asset_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620074,
+      "entity": "risk_weak",
+      "name": "username",
+      "label": "用户名",
+      "description": "使用该弱口令的用户名",
+      "column_name": "username",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620075,
+      "entity": "risk_weak",
+      "name": "password",
+      "label": "弱口令",
+      "description": "弱口令",
+      "column_name": "password",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620076,
+      "entity": "risk_weak",
+      "name": "password_type",
+      "label": "弱口令类型",
+      "description": "弱口令类型",
+      "column_name": "password_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620077,
+      "entity": "risk_weak",
+      "name": "verification_method",
+      "label": "验证方法",
+      "description": "验证方法",
+      "column_name": "verification_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "自动检测": "自动检测",
+        "人工审核": "人工审核"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620078,
+      "entity": "risk_weak",
+      "name": "verification_result",
+      "label": "验证结果",
+      "description": "验证结果",
+      "column_name": "verification_result",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "通过": "PASS",
+        "未通过": "FAIL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620079,
+      "entity": "risk_weak",
+      "name": "label",
+      "label": "标签",
+      "description": "标签",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620080,
+      "entity": "risk_weak",
+      "name": "risk_level",
+      "label": "风险等级",
+      "description": "风险等级",
+      "column_name": "risk_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "严重风险": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620081,
+      "entity": "risk_weak",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620082,
+      "entity": "risk_weak",
+      "name": "lan_ip",
+      "label": "局域网IP",
+      "description": "局域网IP",
+      "column_name": "lan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 620083,
+      "entity": "risk_weak",
+      "name": "wan_ip",
+      "label": "因特网IP",
+      "description": "因特网IP",
+      "column_name": "wan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 620084,
+      "entity": "risk_weak",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "更新时间",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620085,
+      "entity": "risk_weak",
+      "name": "insert_time",
+      "label": "创建时间",
+      "description": "创建时间",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620086,
+      "entity": "risk_attack",
+      "name": "id",
+      "label": "唯一标识",
+      "description": "唯一标识",
+      "column_name": "id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.detail-attackrisk?record_id={zenvis_id}"
+    },
+    {
+      "id": 620087,
+      "entity": "risk_attack",
+      "name": "user_id",
+      "label": "用户ID",
+      "description": "用户ID",
+      "column_name": "user_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620088,
+      "entity": "risk_attack",
+      "name": "start_id",
+      "label": "启动ID",
+      "description": "启动ID",
+      "column_name": "start_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620089,
+      "entity": "risk_attack",
+      "name": "asset_id",
+      "label": "资产ID",
+      "description": "资产ID",
+      "column_name": "asset_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false
+    },
+    {
+      "id": 620090,
+      "entity": "risk_attack",
+      "name": "type",
+      "label": "威胁类型",
+      "description": "威胁类型",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": true
+    },
+    {
+      "id": 620091,
+      "entity": "risk_attack",
+      "name": "detail",
+      "label": "威胁详情",
+      "description": "威胁详情",
+      "column_name": "detail",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620092,
+      "entity": "risk_attack",
+      "name": "verification_method",
+      "label": "验证方法",
+      "description": "验证方法",
+      "column_name": "verification_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "自动检测": "自动检测",
+        "人工审核": "人工审核"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620093,
+      "entity": "risk_attack",
+      "name": "verification_result",
+      "label": "验证结果",
+      "description": "验证结果",
+      "column_name": "verification_result",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "通过": "PASS",
+        "未通过": "FAIL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620094,
+      "entity": "risk_attack",
+      "name": "label",
+      "label": "标签",
+      "description": "标签",
+      "column_name": "label",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620095,
+      "entity": "risk_attack",
+      "name": "risk_level",
+      "label": "风险等级",
+      "description": "风险等级",
+      "column_name": "risk_level",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": true,
+      "mapping": {
+        "低风险": "LOW",
+        "中风险": "MEDIUM",
+        "高风险": "HIGH",
+        "严重风险": "CRITICAL"
+      },
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620096,
+      "entity": "risk_attack",
+      "name": "net_type",
+      "label": "网络类型",
+      "description": "网络类型",
+      "column_name": "net_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620097,
+      "entity": "risk_attack",
+      "name": "lan_ip",
+      "label": "局域网IP",
+      "description": "局域网IP",
+      "column_name": "lan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={lan_ip}"
+    },
+    {
+      "id": 620098,
+      "entity": "risk_attack",
+      "name": "wan_ip",
+      "label": "因特网IP",
+      "description": "因特网IP",
+      "column_name": "wan_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "isnull",
+        "isnotnull",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.risk.ip-statistics?ip={wan_ip}"
+    },
+    {
+      "id": 620099,
+      "entity": "risk_attack",
+      "name": "update_time",
+      "label": "更新时间",
+      "description": "更新时间",
+      "column_name": "update_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    },
+    {
+      "id": 620100,
+      "entity": "risk_attack",
+      "name": "insert_time",
+      "label": "创建时间",
+      "description": "创建时间",
+      "column_name": "insert_time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "lessthan",
+        "greatequalthan",
+        "lessequalthan",
+        "between",
+        "in",
+        "isnull",
+        "isnotnull"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": false,
+      "auto_complete": false
+    }
+  ],
+  "operator": [
+    {
+      "id": 7,
+      "name": "between",
+      "label": "之间"
+    },
+    {
+      "id": 1,
+      "name": "equal",
+      "label": "等于"
+    },
+    {
+      "id": 5,
+      "name": "greatequalthan",
+      "label": "大于等于"
+    },
+    {
+      "id": 3,
+      "name": "greatthan",
+      "label": "大于"
+    },
+    {
+      "id": 8,
+      "name": "in",
+      "label": "包含"
+    },
+    {
+      "id": 10,
+      "name": "isnotnull",
+      "label": "不为空"
+    },
+    {
+      "id": 9,
+      "name": "isnull",
+      "label": "为空"
+    },
+    {
+      "id": 6,
+      "name": "lessequalthan",
+      "label": "小于等于"
+    },
+    {
+      "id": 4,
+      "name": "lessthan",
+      "label": "小于"
+    },
+    {
+      "id": 11,
+      "name": "match",
+      "label": "模糊匹配"
+    },
+    {
+      "id": 2,
+      "name": "notequal",
+      "label": "不等于"
+    }
+  ]
+}

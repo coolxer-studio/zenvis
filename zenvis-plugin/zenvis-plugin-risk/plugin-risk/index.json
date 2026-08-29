@@ -1,0 +1,8 @@
+{
+  "name": "风险监控",
+  "package_name": "com.coolxer.plugin.risk",
+  "version": "1.2.1",
+  "description": "统一管理六类安全风险数据，提供风险检索、详情查看、IP 命中调查、真实数据态势和可停用的模拟数据服务。",
+  "author": "CoolXer",
+  "icon": "icon.png"
+}

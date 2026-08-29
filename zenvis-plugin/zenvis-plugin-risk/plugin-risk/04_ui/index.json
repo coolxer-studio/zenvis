@@ -1,0 +1,258 @@
+{
+  "type": "page",
+  "title": "安全风险概览",
+  "body": [
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "risk_event",
+            "risk_data",
+            "risk_vulnerability",
+            "risk_baseline",
+            "risk_weak",
+            "risk_attack"
+          ],
+          "time_range": {
+            "preset": "TODAY"
+          },
+          "comparison": "NONE"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){out[r.entity]=Number(r.all_time_count||0);out[r.entity+'_increase']=Number(r.current_value||0);});return {status:0,msg:'',data:out};"
+      },
+      "body": {
+        "type": "grid",
+        "gap": "md",
+        "columns": [
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "风险事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${risk_event || 0}</div><div>今日新增 ${risk_event_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "数据风险",
+              "body": "<div style='font-size:28px;font-weight:700'>${risk_data || 0}</div><div>今日新增 ${risk_data_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "漏洞风险",
+              "body": "<div style='font-size:28px;font-weight:700'>${risk_vulnerability || 0}</div><div>今日新增 ${risk_vulnerability_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "基线风险",
+              "body": "<div style='font-size:28px;font-weight:700'>${risk_baseline || 0}</div><div>今日新增 ${risk_baseline_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "弱口令风险",
+              "body": "<div style='font-size:28px;font-weight:700'>${risk_weak || 0}</div><div>今日新增 ${risk_weak_increase || 0}</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "攻击风险",
+              "body": "<div style='font-size:28px;font-weight:700'>${risk_attack || 0}</div><div>今日新增 ${risk_attack_increase || 0}</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "chart",
+      "height": 380,
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/trend/query",
+        "data": {
+          "entities": [
+            "risk_event",
+            "risk_data",
+            "risk_vulnerability",
+            "risk_baseline",
+            "risk_weak",
+            "risk_attack"
+          ],
+          "time_range": {
+            "preset": "LAST_7_DAYS"
+          },
+          "granularity": "DAY"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+      },
+      "config": {
+        "title": {
+          "text": "近 7 天变化趋势"
+        },
+        "tooltip": {
+          "trigger": "axis"
+        },
+        "legend": {},
+        "dataset": "${chart_dataset}",
+        "xAxis": {
+          "type": "category"
+        },
+        "yAxis": {
+          "type": "value",
+          "minInterval": 1
+        },
+        "series": "${chart_series}"
+      }
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "risk_event",
+                    "dimension": "risk_level",
+                    "label": "风险事件"
+                  },
+                  {
+                    "entity": "risk_data",
+                    "dimension": "risk_level",
+                    "label": "数据风险"
+                  },
+                  {
+                    "entity": "risk_vulnerability",
+                    "dimension": "risk_level",
+                    "label": "漏洞风险"
+                  },
+                  {
+                    "entity": "risk_baseline",
+                    "dimension": "risk_level",
+                    "label": "基线风险"
+                  },
+                  {
+                    "entity": "risk_weak",
+                    "dimension": "risk_level",
+                    "label": "弱口令风险"
+                  },
+                  {
+                    "entity": "risk_attack",
+                    "dimension": "risk_level",
+                    "label": "攻击风险"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "风险等级分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        },
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "risk_data",
+                    "dimension": "verification_result",
+                    "label": "数据风险"
+                  },
+                  {
+                    "entity": "risk_vulnerability",
+                    "dimension": "verification_result",
+                    "label": "漏洞风险"
+                  },
+                  {
+                    "entity": "risk_baseline",
+                    "dimension": "verification_result",
+                    "label": "基线风险"
+                  },
+                  {
+                    "entity": "risk_weak",
+                    "dimension": "verification_result",
+                    "label": "弱口令风险"
+                  },
+                  {
+                    "entity": "risk_attack",
+                    "dimension": "verification_result",
+                    "label": "攻击风险"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "验证结果分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

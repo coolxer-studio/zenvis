@@ -1,0 +1,77 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/index"
+      },
+      {
+        "children": [
+          {
+            "label": "安全风险概览",
+            "url": "index",
+            "icon": "fa-solid fa-house",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=index.json"
+          },
+          {
+            "label": "风险管理",
+            "icon": "fa-solid fa-layer-group",
+            "children": [
+              {
+                "label": "风险事件",
+                "url": "/event/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=event-list.json"
+              },
+              {
+                "label": "数据风险",
+                "url": "/datarisk/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=datarisk-list.json"
+              }
+            ]
+          },
+          {
+            "label": "脆弱性检测",
+            "icon": "fa-solid fa-layer-group",
+            "children": [
+              {
+                "label": "漏洞风险",
+                "url": "/vulnerability/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=vulnerability-list.json"
+              },
+              {
+                "label": "基线风险",
+                "url": "/baseline/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=baseline-list.json"
+              },
+              {
+                "label": "弱口令风险",
+                "url": "/weak/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=weak-list.json"
+              }
+            ]
+          },
+          {
+            "label": "威胁监测",
+            "icon": "fa-solid fa-layer-group",
+            "children": [
+              {
+                "label": "攻击风险",
+                "url": "/attackrisk/list",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.risk/get?file_name=attackrisk-list.json"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

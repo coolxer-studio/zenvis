@@ -1,0 +1,136 @@
+{
+  "type": "page",
+  "title": "攻击风险详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/risk_attack/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "事件属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。"
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 实际接收时间。"
+            },
+            {
+              "label": "唯一标识",
+              "content": "${id | default:'-'}",
+              "remark": "唯一标识"
+            },
+            {
+              "label": "用户ID",
+              "content": "${user_id | default:'-'}",
+              "remark": "用户ID"
+            },
+            {
+              "label": "启动ID",
+              "content": "${start_id | default:'-'}",
+              "remark": "启动ID"
+            },
+            {
+              "label": "资产ID",
+              "content": "${asset_id | default:'-'}",
+              "remark": "资产ID"
+            },
+            {
+              "label": "威胁类型",
+              "content": "${type | default:'-'}",
+              "remark": "威胁类型"
+            },
+            {
+              "label": "威胁详情",
+              "content": "${detail | default:'-'}",
+              "remark": "威胁详情"
+            },
+            {
+              "label": "验证方法",
+              "content": "${verification_method | default:'-'}",
+              "remark": "验证方法"
+            },
+            {
+              "label": "验证结果",
+              "content": "${verification_result | default:'-'}",
+              "remark": "验证结果"
+            },
+            {
+              "label": "标签",
+              "content": "${label | default:'-'}",
+              "remark": "标签"
+            },
+            {
+              "label": "风险等级",
+              "content": "${risk_level | default:'-'}",
+              "remark": "风险等级"
+            },
+            {
+              "label": "网络类型",
+              "content": "${net_type | default:'-'}",
+              "remark": "网络类型"
+            },
+            {
+              "label": "局域网IP",
+              "content": "${lan_ip | default:'-'}",
+              "remark": "局域网IP"
+            },
+            {
+              "label": "因特网IP",
+              "content": "${wan_ip | default:'-'}",
+              "remark": "因特网IP"
+            },
+            {
+              "label": "更新时间",
+              "content": "${update_time | default:'-'}",
+              "remark": "更新时间"
+            },
+            {
+              "label": "创建时间",
+              "content": "${insert_time | default:'-'}",
+              "remark": "创建时间"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "探针数据采集",
+  "package_name": "com.coolxer.plugin.synap",
+  "version": "1.2.0",
+  "description": "从探针 Kafka 主题接收标准消息，将 Android、H5、iOS、Host、WeChat 和 Server 事实统一写入单一实体，并提供 Server 严格校验、异常隔离、详情与参数聚合分析。",
+  "author": "CoolXer",
+  "icon": "icon.png"
+}

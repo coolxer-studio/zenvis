@@ -1,0 +1,172 @@
+{
+  "type": "page",
+  "title": "探针消息详情",
+  "remark": "记录 ID：${record_id}",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/synap_agent_message/${record_id}/view",
+        "adaptor": "function decodeHtml(value){var entities={'&quot;':'\"','&#34;':'\"','&#x22;':'\"','&apos;':\"'\",'&#39;':\"'\",'&#x27;':\"'\",'&lt;':'<','&#60;':'<','&#x3c;':'<','&gt;':'>','&#62;':'>','&#x3e;':'>','&amp;':'&','&#38;':'&','&#x26;':'&'},result=value;for(var i=0;i<3;i++){var next=result.replace(/&(quot|apos|lt|gt|amp|#34|#39|#60|#62|#38|#x22|#x27|#x3c|#x3e|#x26);/gi,function(match){return entities[match.toLowerCase()]||match;});if(next===result){break;}result=next;}return result;}function isJsonText(value){var text=value.trim();if(text.length<2){return false;}var first=text.charAt(0),last=text.charAt(text.length-1);return first==='{'&&last==='}'||first==='['&&last===']'||first==='\"'&&last==='\"';}function normalize(value,depth){if(depth>8||value===null||value===undefined){return value;}if(Array.isArray(value)){return value.map(function(item){return normalize(item,depth+1);});}if(typeof value==='object'){var object={};Object.keys(value).forEach(function(key){object[key]=normalize(value[key],depth+1);});return object;}if(typeof value!=='string'){return value;}if(isJsonText(value)){try{return normalize(JSON.parse(value),depth+1);}catch(e){}}var decoded=decodeHtml(value);if(decoded!==value&&isJsonText(decoded)){try{return normalize(JSON.parse(decoded),depth+1);}catch(e){}}return decoded;}function normalizeList(value){if(value===null||value===undefined||value===''){return [];}if(Array.isArray(value)){return normalize(value,0);}var normalized=normalize(value,0);if(Array.isArray(normalized)){return normalized;}if(normalized&&typeof normalized==='object'){return [normalized];}if(typeof normalized==='string'){try{return normalize(JSON.parse('['+normalized+']'),0);}catch(e){return [normalized];}}return [normalized];}if(payload&&payload.data){payload.data.fact_display=normalize(payload.data.fact,0);payload.data.agendas_display=normalizeList(payload.data.agendas);payload.data.punishes_display=normalizeList(payload.data.punishes);payload.data.raw_message_display=normalize(payload.data.raw_message,0);}return payload;"
+      },
+      "messages": {
+        "fetchFailed": "探针消息不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "核心信息",
+          "column": 3,
+          "items": [
+            {"label": "设备 ID", "content": "${guid}"},
+            {"label": "启动 ID", "content": "${start_id}"},
+            {"label": "消息 ID", "content": "${message_id}"},
+            {"label": "批次 ID", "content": "${batch_id}"},
+            {"label": "事实类型", "content": "${fact_type}"},
+            {"label": "客户端时间", "content": "${client_time}"},
+            {"label": "服务端时间", "content": "${server_time}"},
+            {"label": "平台", "content": "${platform}"},
+            {"label": "应用名称", "content": "${app_name}"},
+            {"label": "应用包名", "content": "${app_package}"},
+            {"label": "应用版本", "content": "${app_version}"},
+            {"label": "SDK 版本", "content": "${sdk_version}"},
+            {"label": "用户 ID", "content": "${user_id}"},
+            {"label": "规则 ID", "content": "${rule}"}
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "传输与请求上下文",
+          "column": 3,
+          "items": [
+            {"label": "请求来源 IP", "content": "${request_ip}"},
+            {"label": "客户端观察时间", "content": "${observed_at}"},
+            {"label": "消息序号", "content": "${sequence}"},
+            {"label": "传输信任级别", "content": "${transport_trust}"},
+            {"label": "序列观察结果", "content": "${sequence_observation}"},
+            {"label": "服务端接收时间", "content": "${server_received_at}"},
+            {"label": "客户端时钟偏差(ms)", "content": "${client_server_skew_ms}"},
+            {"label": "请求 ASN", "content": "${request_asn}"},
+            {"label": "请求网络类别", "content": "${request_network_category}"},
+            {"label": "请求 Origin", "content": "${request_origin}"},
+            {"label": "Fetch 上下文", "content": "${fetch_site} / ${fetch_mode} / ${fetch_dest}"},
+            {"label": "请求 User-Agent", "content": "${request_user_agent}"},
+            {"label": "TLS 指纹", "content": "${request_tls_fingerprint}"},
+            {"label": "IP 信誉", "content": "${request_ip_reputation}"}
+          ]
+        },
+        {
+          "type": "divider",
+          "visibleOn": "!!this.risk_detector_version"
+        },
+        {
+          "type": "property",
+          "title": "风险评估",
+          "column": 3,
+          "visibleOn": "!!this.risk_detector_version",
+          "items": [
+            {"label": "检测器版本", "content": "${risk_detector_version}"},
+            {"label": "规则版本", "content": "${risk_rule_version}"},
+            {"label": "风险分数", "content": "${risk_score}"},
+            {"label": "置信度", "content": "${risk_confidence}"},
+            {"label": "证据数", "content": "${risk_evidence_count}"},
+            {"label": "仅观察", "content": "${risk_observation ? '是' : '否'}"},
+            {"label": "信任级别", "content": "${risk_trust_level}"},
+            {"label": "原因码", "content": "${risk_reason_codes}"}
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "终端与网络",
+          "column": 3,
+          "items": [
+            {"label": "设备厂商", "content": "${manufacturer}"},
+            {"label": "设备型号", "content": "${model}"},
+            {"label": "系统", "content": "${system_name} ${system_version}"},
+            {"label": "网络类型", "content": "${net_type}"},
+            {"label": "内网 IP", "content": "${lan_ip}"},
+            {"label": "外网 IP", "content": "${wan_ip}"},
+            {"label": "经纬度", "content": "${latitude}, ${longitude}"},
+            {"label": "国家/省份", "content": "${country} ${province}"},
+            {"label": "城市/区县", "content": "${city} ${county}"},
+            {"label": "街道", "content": "${thoroughfare}"}
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "property",
+          "title": "Kafka 定位",
+          "column": 4,
+          "items": [
+            {"label": "主题", "content": "${source_topic}"},
+            {"label": "分区", "content": "${source_partition}"},
+            {"label": "偏移量", "content": "${source_offset}"},
+            {"label": "Kafka 时间", "content": "${kafka_timestamp}"}
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "tabs",
+          "tabs": [
+            {
+              "title": "事实详情",
+              "body": {
+                "type": "json",
+                "source": "${fact_display}"
+              }
+            },
+            {
+              "title": "识别详情",
+              "body": {
+                "type": "json",
+                "source": "${agendas_display}"
+              }
+            },
+            {
+              "title": "处置详情",
+              "body": {
+                "type": "json",
+                "source": "${punishes_display}"
+              }
+            },
+            {
+              "title": "原始消息",
+              "body": {
+                "type": "json",
+                "source": "${raw_message_display}"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

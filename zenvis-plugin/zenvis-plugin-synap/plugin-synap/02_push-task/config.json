@@ -1,0 +1,7 @@
+[
+  {
+    "name": "探针 Kafka 消息入库",
+    "description": "消费 Android、H5、iOS、Host、WeChat 和 Server 探针事实主题，统一写入 synap_agent_message；Server 使用严格协议校验，异常记录发送到插件专属 DLQ。",
+    "config": "synap-kafka-to-clickhouse.yaml"
+  }
+]

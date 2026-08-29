@@ -1,0 +1,564 @@
+{
+  "type": "page",
+  "title": "探针参数聚合分析",
+  "remark": "支持按设备 ID、IP 地址或启动 ID 分析探针消息，并从命中总量、时间趋势、时间轴以及事实类型、探针 SDK、识别标签和处置类型分布等视角展示聚合结果。",
+  "data": {
+    "query_type": "${guid ? 'guid' : start_id ? 'start_id' : 'ip'}",
+    "query_value": "${guid || start_id || ip || ''}",
+    "time_preset": "LAST_7_DAYS"
+  },
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "body": "从设备 ID、IP 或启动 ID 链接进入时会自动查询；也可以修改参数类型、参数值和统计周期后重新聚合。"
+    },
+    {
+      "type": "form",
+      "name": "parameter-analytics-form",
+      "mode": "inline",
+      "target": "parameter-analytics-service",
+      "wrapWithPanel": true,
+      "panelClassName": "panel-default",
+      "body": [
+        {
+          "type": "select",
+          "name": "query_type",
+          "label": "参数类型",
+          "required": true,
+          "clearable": false,
+          "options": [
+            {
+              "label": "设备 ID",
+              "value": "guid"
+            },
+            {
+              "label": "IP 地址",
+              "value": "ip"
+            },
+            {
+              "label": "启动 ID",
+              "value": "start_id"
+            }
+          ]
+        },
+        {
+          "type": "input-text",
+          "name": "query_value",
+          "label": "${query_type === 'guid' ? '设备 ID' : query_type === 'start_id' ? '启动 ID' : 'IP 地址'}",
+          "placeholder": "${query_type === 'guid' ? '例如 device-001' : query_type === 'start_id' ? '例如 1785883324589' : '例如 192.168.1.10 或 2001:db8::10'}",
+          "required": true,
+          "clearable": true,
+          "size": "lg"
+        },
+        {
+          "type": "select",
+          "name": "time_preset",
+          "label": "统计周期",
+          "required": true,
+          "clearable": false,
+          "options": [
+            {
+              "label": "近 24 小时",
+              "value": "LAST_24_HOURS"
+            },
+            {
+              "label": "近 7 天",
+              "value": "LAST_7_DAYS"
+            },
+            {
+              "label": "近 30 天",
+              "value": "LAST_30_DAYS"
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "type": "submit",
+          "label": "聚合查询",
+          "level": "primary"
+        },
+        {
+          "type": "reset",
+          "label": "重置"
+        }
+      ]
+    },
+    {
+      "type": "service",
+      "name": "parameter-analytics-service",
+      "initFetchOn": "!!(this.query_value || this.guid || this.start_id || this.ip)",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/value-statistics/query",
+        "data": {
+          "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+          "focus_value": "${query_value || guid || start_id || ip}",
+          "time_preset": "${time_preset || 'LAST_7_DAYS'}"
+        },
+        "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';api.data={focus_value:value,mappings:[{entity:'synap_agent_message',label:type==='guid'?'设备 ID 命中':type==='start_id'?'启动 ID 命中':'IP 地址命中',match_fields:type==='guid'?['guid']:type==='start_id'?['start_id']:['lan_ip','wan_ip'],time_field:'zenvis_insert_time',criteria_list:[],criteria_logic:'or'}],time_range:{preset:preset}};return api;",
+        "adaptor": "var d=payload&&payload.data?payload.data:{};var r=d.result||{};var row=r.rows&&r.rows[0]?r.rows[0]:{};return {status:0,msg:'',data:{total:r.total||0,focus_value:r.focus_value||'',match_fields:(row.match_fields||[]).join('、')}};"
+      },
+      "messages": {
+        "fetchFailed": "参数聚合查询失败，请检查输入值、权限或服务状态"
+      },
+      "body": [
+        {
+          "type": "grid",
+          "columns": [
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "聚合参数",
+                "body": "<div style='height:72px;display:flex;flex-direction:column;justify-content:center'><div style='font-size:22px;line-height:32px;font-weight:700;color:#2563eb;word-break:break-all'>${focus_value}</div><div class='text-muted' style='line-height:22px'>${query_type === 'guid' ? '设备 ID' : query_type === 'start_id' ? '启动 ID' : 'IP 地址'}</div></div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "命中消息数",
+                "body": "<div style='height:72px;display:flex;flex-direction:column;justify-content:center'><div style='font-size:34px;line-height:38px;font-weight:800;color:#059669'>${total}</div><div class='text-muted' style='line-height:22px'>当前统计周期内的去重记录数</div></div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "查询范围",
+                "body": "<div style='height:72px;display:flex;flex-direction:column;justify-content:center'><div style='font-size:22px;line-height:32px;font-weight:700;color:#7c3aed'>${time_preset === 'LAST_24_HOURS' ? '近 24 小时' : time_preset === 'LAST_30_DAYS' ? '近 30 天' : '近 7 天'}</div><div class='text-muted' style='line-height:22px'>匹配字段：${match_fields}</div></div>"
+              }
+            }
+          ]
+        },
+        {
+          "type": "service",
+          "name": "parameter-hit-time-service",
+          "api": {
+            "method": "post",
+            "url": "/zenvis/api/v1/entity/trend/query",
+            "data": {
+              "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+              "focus_value": "${query_value || guid || start_id || ip}",
+              "time_preset": "${time_preset || 'LAST_7_DAYS'}"
+            },
+            "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var criteria=type==='guid'?[{attribute:'guid',operator:'equal',value_list:[value]}]:type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={series:[{entity:'synap_agent_message',label:type==='guid'?'设备 ID 命中':type==='start_id'?'启动 ID 命中':'IP 地址命中',metric:{name:'hit_count',operation:'COUNT',label:'命中消息数'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or'}],time_range:{preset:preset},granularity:preset==='LAST_30_DAYS'?'DAY':'HOUR',comparison:'NONE',criteria_list:[],criteria_logic:'and'};return api;",
+            "adaptor": "var d=payload&&payload.data?payload.data:{};var o=d.echarts&&d.echarts.option?d.echarts.option:{};var rows=d.result&&d.result.rows?d.result.rows:[];var series=(o.series||[]).map(function(item){return Object.assign({},item,{smooth:true,showSymbol:false,areaStyle:{opacity:0.12}});});return {status:0,msg:'',data:{dataset:o.dataset||{source:[]},series:series,trend_rows:rows}};"
+          },
+          "body": {
+            "type": "tabs",
+            "tabsMode": "line",
+            "tabs": [
+              {
+                "title": "分布统计",
+                "body": {
+                  "type": "service",
+                  "name": "parameter-hit-distribution-sample-service",
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/retrieval/do",
+                    "data": {
+                      "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                      "focus_value": "${query_value || guid || start_id || ip}",
+                      "time_preset": "${time_preset || 'LAST_7_DAYS'}",
+                      "trend_rows": "${trend_rows}"
+                    },
+                    "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var hours=preset==='LAST_24_HOURS'?24:preset==='LAST_30_DAYS'?720:168;var end=new Date();var start=new Date(end.getTime()-hours*60*60*1000);function pad(n){return String(n).padStart(2,'0');}function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}var q=String.fromCharCode(39);var safe=value.split(q).join(q+q);var match=type==='guid'?'guid = '+q+safe+q:type==='start_id'?'start_id = '+q+safe+q:'(lan_ip = '+q+safe+q+' or wan_ip = '+q+safe+q+')';api.trendRows=Array.isArray(api.data.trend_rows)?api.data.trend_rows:[];api.timelinePreset=preset;api.data={type:'advanced',entity:'synap_agent_message',sql:match+' and zenvis_insert_time >= '+q+fmt(start)+q+' and zenvis_insert_time < '+q+fmt(end)+q,display_list:[{entity:'synap_agent_message',attribute_list:['zenvis_insert_time','fact_type','agenda_tags','punish_types']}],page:1,size:100,sort_by:'zenvis_insert_time',order:'desc'};return api;",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{};var records=Array.isArray(d.datalist)?d.datalist:[];var total=Number(d.total||0);var trend=api&&Array.isArray(api.trendRows)?api.trendRows:[];var preset=api&&api.timelinePreset?api.timelinePreset:'LAST_7_DAYS';var groups=Object.create(null);var agendaCounts=Object.create(null);var punishCounts=Object.create(null);function add(list,value){var text=value===undefined||value===null?'':String(value).trim();if(text&&list.indexOf(text)<0){list.push(text);}}function values(value){if(Array.isArray(value)){return value;}if(value===undefined||value===null||value===''){return [];}if(typeof value==='string'){try{var parsed=JSON.parse(value);if(Array.isArray(parsed)){return parsed;}}catch(e){}return value.split(',');}return [value];}function countDistinct(target,value){var seen=Object.create(null);values(value).forEach(function(item){var text=item===undefined||item===null?'':String(item).trim();if(text&&!seen[text]){seen[text]=true;target[text]=(target[text]||0)+1;}});}function topRows(target){return Object.keys(target).map(function(name){return {name:name,value:target[name]};}).sort(function(a,b){return b.value-a.value||String(a.name).localeCompare(String(b.name));}).slice(0,10);}function group(bucket){if(!groups[bucket]){groups[bucket]={count:0,categories:[],tags:[],punishes:[]};}return groups[bucket];}trend.forEach(function(row){var count=Number(row.value||0);if(count>0){group(String(row.bucket||'')).count=count;}});records.forEach(function(record){var raw=String(record.zenvis_insert_time||'').replace('T',' ');var bucket=preset==='LAST_30_DAYS'?raw.slice(0,10):raw.slice(0,13)+':00:00';if(bucket){var item=group(bucket);if(!item.count){item.count+=1;}add(item.categories,record.fact_type);values(record.agenda_tags).forEach(function(value){add(item.tags,value);});values(record.punish_types).forEach(function(value){add(item.punishes,value);});}countDistinct(agendaCounts,record.agenda_tags);countDistinct(punishCounts,record.punish_types);});var timeline=Object.keys(groups).filter(function(bucket){return bucket&&groups[bucket].count>0;}).sort().map(function(bucket){var item=groups[bucket];var category=item.categories.length?item.categories.join('、'):'无';var tags=item.tags.length?item.tags.join('、'):'无';var punishes=item.punishes.length?item.punishes.join('、'):'无';return {time:bucket,title:'命中 '+item.count+' 条消息',detail:'数据类别：'+category+'；识别标签：'+tags+'；处置类型：'+punishes,color:item.count>=10?'#059669':'#2563eb'};});var agendaRows=topRows(agendaCounts);var punishRows=topRows(punishCounts);return {status:0,msg:'',data:{timeline_items:timeline,timeline_count:timeline.length,timeline_truncated:total>records.length,timeline_loaded:records.length,timeline_total:total,sample_loaded:records.length,sample_total:total,sample_truncated:total>records.length,agenda_distribution_count:agendaRows.length,punish_distribution_count:punishRows.length,agenda_dataset:{dimensions:['name','value'],source:agendaRows},punish_dataset:{dimensions:['name','value'],source:punishRows}}};"
+                  },
+                  "messages": {
+                    "fetchFailed": "分布统计样本明细查询失败，请检查权限或服务状态"
+                  },
+                  "body": {
+                    "type": "container",
+                    "body": [
+                      {
+                        "type": "alert",
+                        "level": "info",
+                        "showIcon": true,
+                        "visibleOn": "!this.sample_truncated",
+                        "body": "事实类型和探针 SDK 为当前周期全量统计；识别标签和处置类型基于最近 ${sample_loaded} 条明细统计，每条消息内相同值只计一次，最多展示 Top 10。"
+                      },
+                      {
+                        "type": "alert",
+                        "level": "warning",
+                        "showIcon": true,
+                        "visibleOn": "this.sample_truncated",
+                        "body": "当前周期命中 ${sample_total} 条记录；事实类型和探针 SDK 为全量统计，识别标签和处置类型仅基于最近 ${sample_loaded} 条明细统计，每条消息内相同值只计一次，最多展示 Top 10。"
+                      },
+                      {
+                        "type": "grid",
+                        "columns": [
+                          {
+                            "md": 6,
+                            "body": {
+                              "type": "chart",
+                              "name": "parameter-fact-type-distribution",
+                              "height": 340,
+                              "api": {
+                                "method": "post",
+                                "url": "/zenvis/api/v1/entity/distribution/query",
+                                "data": {
+                                  "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                                  "focus_value": "${query_value || guid || start_id || ip}",
+                                  "time_preset": "${time_preset || 'LAST_7_DAYS'}",
+                                  "dimension": "fact_type"
+                                },
+                                "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var criteria=type==='guid'?[{attribute:'guid',operator:'equal',value_list:[value]}]:type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={entity:'synap_agent_message',dimension:api.data.dimension,label:'事实类型',time_range:{preset:api.data.time_preset||'LAST_7_DAYS'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or',limit:10,include_null:false};return api;",
+                                "adaptor": "var d=payload&&payload.data?payload.data:{};var rows=d.result&&d.result.rows?d.result.rows:[];return {status:0,msg:'',data:{pie_data:rows.map(function(row){return {name:row.bucket,value:row.value};}),fact_distribution_count:rows.length}};"
+                              },
+                              "config": {
+                                "title": {
+                                  "text": "事实类型分布"
+                                },
+                                "tooltip": {
+                                  "trigger": "item"
+                                },
+                                "legend": {
+                                  "type": "scroll",
+                                  "orient": "vertical",
+                                  "right": 12,
+                                  "top": 54,
+                                  "bottom": 20
+                                },
+                                "graphic": {
+                                  "type": "text",
+                                  "left": "center",
+                                  "top": "middle",
+                                  "silent": true,
+                                  "style": {
+                                    "text": "${fact_distribution_count ? '' : '暂无事实类型数据'}",
+                                    "fill": "#9ca3af",
+                                    "fontSize": 14
+                                  }
+                                },
+                                "series": [
+                                  {
+                                    "name": "事实类型",
+                                    "type": "pie",
+                                    "radius": [
+                                      "42%",
+                                      "70%"
+                                    ],
+                                    "center": [
+                                      "38%",
+                                      "56%"
+                                    ],
+                                    "avoidLabelOverlap": true,
+                                    "data": "${pie_data}"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "md": 6,
+                            "body": {
+                              "type": "chart",
+                              "name": "parameter-sdk-version-distribution",
+                              "height": 340,
+                              "api": {
+                                "method": "post",
+                                "url": "/zenvis/api/v1/entity/distribution/query",
+                                "data": {
+                                  "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                                  "focus_value": "${query_value || guid || start_id || ip}",
+                                  "time_preset": "${time_preset || 'LAST_7_DAYS'}",
+                                  "dimension": "sdk_version"
+                                },
+                                "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var criteria=type==='guid'?[{attribute:'guid',operator:'equal',value_list:[value]}]:type==='start_id'?[{attribute:'start_id',operator:'equal',value_list:[value]}]:[{attribute:'lan_ip',operator:'equal',value_list:[value]},{attribute:'wan_ip',operator:'equal',value_list:[value]}];api.data={entity:'synap_agent_message',dimension:api.data.dimension,label:'探针 SDK',time_range:{preset:api.data.time_preset||'LAST_7_DAYS'},time_field:'zenvis_insert_time',criteria_list:criteria,criteria_logic:'or',limit:10,include_null:false};return api;",
+                                "adaptor": "var d=payload&&payload.data?payload.data:{};var rows=d.result&&d.result.rows?d.result.rows:[];return {status:0,msg:'',data:{sdk_pie_data:rows.map(function(row){return {name:row.bucket,value:row.value};}),sdk_distribution_count:rows.length}};"
+                              },
+                              "config": {
+                                "title": {
+                                  "text": "探针 SDK 分布"
+                                },
+                                "tooltip": {
+                                  "trigger": "item"
+                                },
+                                "legend": {
+                                  "type": "scroll",
+                                  "orient": "vertical",
+                                  "right": 12,
+                                  "top": 54,
+                                  "bottom": 20
+                                },
+                                "graphic": {
+                                  "type": "text",
+                                  "left": "center",
+                                  "top": "middle",
+                                  "silent": true,
+                                  "style": {
+                                    "text": "${sdk_distribution_count ? '' : '暂无探针 SDK 数据'}",
+                                    "fill": "#9ca3af",
+                                    "fontSize": 14
+                                  }
+                                },
+                                "series": [
+                                  {
+                                    "name": "探针 SDK",
+                                    "type": "pie",
+                                    "radius": [
+                                      "42%",
+                                      "70%"
+                                    ],
+                                    "center": [
+                                      "38%",
+                                      "56%"
+                                    ],
+                                    "avoidLabelOverlap": true,
+                                    "data": "${sdk_pie_data}"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "md": 6,
+                            "body": {
+                              "type": "chart",
+                              "name": "parameter-agenda-tag-distribution",
+                              "height": 340,
+                              "config": {
+                                "title": {
+                                  "text": "识别标签分布",
+                                  "subtext": "最近 ${sample_loaded} 条明细样本 · Top 10"
+                                },
+                                "tooltip": {
+                                  "trigger": "axis",
+                                  "axisPointer": {
+                                    "type": "shadow"
+                                  }
+                                },
+                                "grid": {
+                                  "top": 78,
+                                  "left": 168,
+                                  "right": 48,
+                                  "bottom": 36
+                                },
+                                "dataset": "${agenda_dataset}",
+                                "xAxis": {
+                                  "type": "value",
+                                  "minInterval": 1,
+                                  "name": "消息数"
+                                },
+                                "yAxis": {
+                                  "type": "category",
+                                  "axisLabel": {
+                                    "width": 148,
+                                    "overflow": "truncate"
+                                  }
+                                },
+                                "graphic": {
+                                  "type": "text",
+                                  "left": "center",
+                                  "top": "middle",
+                                  "silent": true,
+                                  "style": {
+                                    "text": "${agenda_distribution_count ? '' : '暂无识别标签数据'}",
+                                    "fill": "#9ca3af",
+                                    "fontSize": 14
+                                  }
+                                },
+                                "series": [
+                                  {
+                                    "name": "样本消息数",
+                                    "type": "bar",
+                                    "encode": {
+                                      "x": "value",
+                                      "y": "name"
+                                    },
+                                    "label": {
+                                      "show": true,
+                                      "position": "right"
+                                    },
+                                    "itemStyle": {
+                                      "color": "#2563eb"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "md": 6,
+                            "body": {
+                              "type": "chart",
+                              "name": "parameter-punish-type-distribution",
+                              "height": 340,
+                              "config": {
+                                "title": {
+                                  "text": "处置类型分布",
+                                  "subtext": "最近 ${sample_loaded} 条明细样本 · Top 10"
+                                },
+                                "tooltip": {
+                                  "trigger": "axis",
+                                  "axisPointer": {
+                                    "type": "shadow"
+                                  }
+                                },
+                                "grid": {
+                                  "top": 78,
+                                  "left": 90,
+                                  "right": 48,
+                                  "bottom": 36
+                                },
+                                "dataset": "${punish_dataset}",
+                                "xAxis": {
+                                  "type": "value",
+                                  "minInterval": 1,
+                                  "name": "消息数"
+                                },
+                                "yAxis": {
+                                  "type": "category",
+                                  "name": "类型值"
+                                },
+                                "graphic": {
+                                  "type": "text",
+                                  "left": "center",
+                                  "top": "middle",
+                                  "silent": true,
+                                  "style": {
+                                    "text": "${punish_distribution_count ? '' : '暂无处置类型数据'}",
+                                    "fill": "#9ca3af",
+                                    "fontSize": 14
+                                  }
+                                },
+                                "series": [
+                                  {
+                                    "name": "样本消息数",
+                                    "type": "bar",
+                                    "encode": {
+                                      "x": "value",
+                                      "y": "name"
+                                    },
+                                    "label": {
+                                      "show": true,
+                                      "position": "right"
+                                    },
+                                    "itemStyle": {
+                                      "color": "#7c3aed"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "title": "趋势图",
+                "body": {
+                  "type": "chart",
+                  "name": "parameter-hit-trend-chart",
+                  "height": 380,
+                  "config": {
+                    "title": {
+                      "text": "命中时间趋势",
+                      "subtext": "按时间分桶展示消息命中变化"
+                    },
+                    "tooltip": {
+                      "trigger": "axis"
+                    },
+                    "legend": {
+                      "top": 42
+                    },
+                    "grid": {
+                      "top": 88,
+                      "left": 56,
+                      "right": 28,
+                      "bottom": 72
+                    },
+                    "dataset": "${dataset}",
+                    "xAxis": {
+                      "type": "category",
+                      "boundaryGap": false,
+                      "axisLabel": {
+                        "hideOverlap": true
+                      }
+                    },
+                    "yAxis": {
+                      "type": "value",
+                      "minInterval": 1
+                    },
+                    "dataZoom": [
+                      {
+                        "type": "inside"
+                      },
+                      {
+                        "type": "slider",
+                        "height": 20,
+                        "bottom": 18
+                      }
+                    ],
+                    "series": "${series}"
+                  }
+                }
+              },
+              {
+                "title": "时间轴",
+                "body": {
+                  "type": "service",
+                  "name": "parameter-hit-timeline-detail-service",
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/retrieval/do",
+                    "data": {
+                      "query_type": "${query_type || (guid ? 'guid' : start_id ? 'start_id' : 'ip')}",
+                      "focus_value": "${query_value || guid || start_id || ip}",
+                      "time_preset": "${time_preset || 'LAST_7_DAYS'}",
+                      "trend_rows": "${trend_rows}"
+                    },
+                    "requestAdaptor": "var type=api.data.query_type==='guid'?'guid':api.data.query_type==='start_id'?'start_id':'ip';var value=api.data.focus_value===undefined||api.data.focus_value===null?'':String(api.data.focus_value).trim();var preset=api.data.time_preset||'LAST_7_DAYS';var hours=preset==='LAST_24_HOURS'?24:preset==='LAST_30_DAYS'?720:168;var end=new Date();var start=new Date(end.getTime()-hours*60*60*1000);function pad(n){return String(n).padStart(2,'0');}function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}var q=String.fromCharCode(39);var safe=value.split(q).join(q+q);var match=type==='guid'?'guid = '+q+safe+q:type==='start_id'?'start_id = '+q+safe+q:'(lan_ip = '+q+safe+q+' or wan_ip = '+q+safe+q+')';api.trendRows=Array.isArray(api.data.trend_rows)?api.data.trend_rows:[];api.timelinePreset=preset;api.data={type:'advanced',entity:'synap_agent_message',sql:match+' and zenvis_insert_time >= '+q+fmt(start)+q+' and zenvis_insert_time < '+q+fmt(end)+q,display_list:[{entity:'synap_agent_message',attribute_list:['zenvis_insert_time','fact_type','agenda_tags','punish_types']}],page:1,size:100,sort_by:'zenvis_insert_time',order:'desc'};return api;",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{};var records=Array.isArray(d.datalist)?d.datalist:[];var total=Number(d.total||0);var trend=api&&Array.isArray(api.trendRows)?api.trendRows:[];var preset=api&&api.timelinePreset?api.timelinePreset:'LAST_7_DAYS';var groups=Object.create(null);var agendaCounts=Object.create(null);var punishCounts=Object.create(null);function add(list,value){var text=value===undefined||value===null?'':String(value).trim();if(text&&list.indexOf(text)<0){list.push(text);}}function values(value){if(Array.isArray(value)){return value;}if(value===undefined||value===null||value===''){return [];}if(typeof value==='string'){try{var parsed=JSON.parse(value);if(Array.isArray(parsed)){return parsed;}}catch(e){}return value.split(',');}return [value];}function countDistinct(target,value){var seen=Object.create(null);values(value).forEach(function(item){var text=item===undefined||item===null?'':String(item).trim();if(text&&!seen[text]){seen[text]=true;target[text]=(target[text]||0)+1;}});}function topRows(target){return Object.keys(target).map(function(name){return {name:name,value:target[name]};}).sort(function(a,b){return b.value-a.value||String(a.name).localeCompare(String(b.name));}).slice(0,10);}function group(bucket){if(!groups[bucket]){groups[bucket]={count:0,categories:[],tags:[],punishes:[]};}return groups[bucket];}trend.forEach(function(row){var count=Number(row.value||0);if(count>0){group(String(row.bucket||'')).count=count;}});records.forEach(function(record){var raw=String(record.zenvis_insert_time||'').replace('T',' ');var bucket=preset==='LAST_30_DAYS'?raw.slice(0,10):raw.slice(0,13)+':00:00';if(bucket){var item=group(bucket);if(!item.count){item.count+=1;}add(item.categories,record.fact_type);values(record.agenda_tags).forEach(function(value){add(item.tags,value);});values(record.punish_types).forEach(function(value){add(item.punishes,value);});}countDistinct(agendaCounts,record.agenda_tags);countDistinct(punishCounts,record.punish_types);});var timeline=Object.keys(groups).filter(function(bucket){return bucket&&groups[bucket].count>0;}).sort().map(function(bucket){var item=groups[bucket];var category=item.categories.length?item.categories.join('、'):'无';var tags=item.tags.length?item.tags.join('、'):'无';var punishes=item.punishes.length?item.punishes.join('、'):'无';return {time:bucket,title:'命中 '+item.count+' 条消息',detail:'数据类别：'+category+'；识别标签：'+tags+'；处置类型：'+punishes,color:item.count>=10?'#059669':'#2563eb'};});var agendaRows=topRows(agendaCounts);var punishRows=topRows(punishCounts);return {status:0,msg:'',data:{timeline_items:timeline,timeline_count:timeline.length,timeline_truncated:total>records.length,timeline_loaded:records.length,timeline_total:total,sample_loaded:records.length,sample_total:total,sample_truncated:total>records.length,agenda_distribution_count:agendaRows.length,punish_distribution_count:punishRows.length,agenda_dataset:{dimensions:['name','value'],source:agendaRows},punish_dataset:{dimensions:['name','value'],source:punishRows}}};"
+                  },
+                  "messages": {
+                    "fetchFailed": "时间轴分类明细查询失败，请检查权限或服务状态"
+                  },
+                  "body": {
+                    "type": "container",
+                    "style": {
+                      "height": "380px",
+                      "overflowY": "auto",
+                      "padding": "16px 24px"
+                    },
+                    "body": [
+                      {
+                        "type": "alert",
+                        "level": "warning",
+                        "showIcon": true,
+                        "visibleOn": "this.timeline_truncated",
+                        "body": "当前周期命中 ${timeline_total} 条记录；时间轴数量来自全量趋势聚合，数据类别、识别标签和处置类型基于最近 100 条明细汇总。"
+                      },
+                      {
+                        "type": "alert",
+                        "level": "info",
+                        "showIcon": true,
+                        "visibleOn": "!this.timeline_items || !this.timeline_items.length",
+                        "body": "当前统计周期内没有可展示的命中时间节点。"
+                      },
+                      {
+                        "type": "timeline",
+                        "source": "${timeline_items}",
+                        "mode": "right",
+                        "direction": "vertical",
+                        "reverse": true,
+                        "visibleOn": "this.timeline_items && this.timeline_items.length"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

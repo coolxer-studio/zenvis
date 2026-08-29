@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration debug="false">
+
+  <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-3level %logger{50} - %msg %n"/>
+  <property name="PATTERN-COLOR" value="%green(%d{yyyy-MM-dd HH:mm:ss.SSS}) [%thread] %highlight(%-5level) %green(%logger{50}) - %highlight(%msg) %n"/>
+
+  <property name="LOG_FILE" value="logJava" />
+  <property name="LOG_PATH" value="./logs" />
+  <property name="MAX_HISTORY_DAY" value="15" />
+  <property name="MAX_FILE_SIZE" value="1MB" />
+
+  <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${PATTERN-COLOR}</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="Routing" class="ch.qos.logback.core.rolling.RollingFileAppender">
+
+    <file>${LOG_PATH}/all.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <!-- daily rollover -->
+      <fileNamePattern>${LOG_PATH}/all.%d.%i.log</fileNamePattern>
+      <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+        <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+      </timeBasedFileNamingAndTriggeringPolicy>
+      <maxHistory>${MAX_HISTORY_DAY}</maxHistory>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="Info" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_PATH}/info.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <!-- 文件名称 -->
+      <fileNamePattern>${LOG_PATH}/info.%d.%i.log</fileNamePattern>
+      <!-- 文件最大保存历史数量 -->
+      <MaxHistory>30</MaxHistory>
+      <!--文件大小10M 超过创建新文件-->
+      <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+        <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+      </timeBasedFileNamingAndTriggeringPolicy>
+      <!--日志文件保留天数-->
+      <maxHistory>${MAX_HISTORY_DAY}</maxHistory>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.LevelFilter">
+      <level>INFO</level>
+      <onMatch>ACCEPT</onMatch>
+      <onMismatch>DENY</onMismatch>
+    </filter>
+  </appender>
+
+  <appender name="Error" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_PATH}/error.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <!-- 文件名称 -->
+      <fileNamePattern>${LOG_PATH}/error.%d.%i.log</fileNamePattern>
+      <!-- 文件最大保存历史数量 -->
+      <MaxHistory>30</MaxHistory>
+      <!--文件大小10M 超过创建新文件-->
+      <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+        <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+      </timeBasedFileNamingAndTriggeringPolicy>
+      <!--日志文件保留天数-->
+      <maxHistory>${MAX_HISTORY_DAY}</maxHistory>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.LevelFilter">
+      <level>ERROR</level>
+      <onMatch>ACCEPT</onMatch>
+      <onMismatch>DENY</onMismatch>
+    </filter>
+  </appender>
+
+  <root level="info">
+    <appender-ref ref="Console"/>
+    <appender-ref ref="Routing"/>
+    <appender-ref ref="Error"/>
+    <appender-ref ref="Info"/>
+  </root>
+
+</configuration>
+

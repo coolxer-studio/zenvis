@@ -1,0 +1,78 @@
+[{
+  "name": "默认策略",
+  "app_id": 1,
+  "code": "default",
+  "computation_period": 7,
+  "grade_rules": {
+    "低风险": {
+      "from": 0,
+      "to": 50
+    },
+    "中风险": {
+      "from": 50,
+      "to": 100
+    },
+    "高风险": {
+      "from": 100,
+      "to": null
+    }
+  },
+  "status": 1,
+  "score_rules": [{
+    "tag": "ROOT:HIGH",
+    "basic_score": 40,
+    "superposition_score": 4,
+    "top_score": 80
+  }, {
+    "tag": "cydia:HIGH",
+    "basic_score": 40,
+    "superposition_score": 4,
+    "top_score": 80
+  }, {
+    "tag": "格式化:HIGH",
+    "basic_score": 40,
+    "superposition_score": 4,
+    "top_score": 80
+  }, {
+    "tag": "开发模式:HIGH",
+    "basic_score": 40,
+    "superposition_score": 4,
+    "top_score": 80
+  }, {
+    "tag": "打开开发工具:LOW",
+    "basic_score": 10,
+    "superposition_score": 2,
+    "top_score": 20
+  }]
+}, {
+  "name": "测试策略02",
+  "app_id": 1,
+  "code": "test_code_02",
+  "computation_period": 30,
+  "grade_rules": {
+    "低风险": {
+      "from": 0,
+      "to": 100
+    },
+    "中风险": {
+      "from": 100,
+      "to": 300
+    },
+    "高风险": {
+      "from": 300,
+      "to": null
+    }
+  },
+  "status": 1,
+  "score_rules": [{
+    "tag": "ROOT:HIGH",
+    "basic_score": 40,
+    "superposition_score": 4,
+    "top_score": 80
+  }, {
+    "tag": "swizzling:HIGH",
+    "basic_score": 40,
+    "superposition_score": 4,
+    "top_score": 80
+  }]
+}]

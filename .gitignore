@@ -9,3 +9,13 @@
 /deploy/.zenvis/
 
 .pnpm-store/
+
+# 先忽略 zenvis-plugin 下全部
+zenvis-plugin/*
+
+# 白名单：不忽略指定子目录
+!zenvis-plugin/zenvis-plugin-asset/
+!zenvis-plugin/zenvis-plugin-operation/
+!zenvis-plugin/zenvis-plugin-risk/
+!zenvis-plugin/zenvis-plugin-synap/
+!zenvis-plugin/zenvis-plugin-user-event/

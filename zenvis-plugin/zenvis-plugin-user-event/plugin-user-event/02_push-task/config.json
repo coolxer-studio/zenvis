@@ -1,0 +1,7 @@
+[
+  {
+    "name": "用户事件数据入库服务",
+    "description": "主要用于测试验证场景的数据产生和入库，数据随机自动生成（每隔5秒）",
+    "config": "push_user-event.toml"
+  }
+]

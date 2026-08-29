@@ -1,0 +1,12 @@
+[
+  {
+    "name": "用户事件可视化配置",
+    "type": "POLICY_CONFIG",
+    "params": "com.coolxer.plugin.user.event"
+  },
+  {
+    "name": "用户事件管理",
+    "type": "LOW_CODE_PAGE",
+    "params": "com.coolxer.plugin.user.event"
+  }
+]

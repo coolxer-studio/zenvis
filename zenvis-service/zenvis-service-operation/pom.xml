@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.0</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.coolxer.operation</groupId>
+	<artifactId>operation-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>operation-service</name>
+	<description>operation-service project for Spring Boot</description>
+	<properties>
+		<java.version>17</java.version>
+		<proguard.version>7.2.1</proguard.version>
+		<proguard-maven-plugin.version>2.5.3</proguard-maven-plugin.version>
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<scope>runtime</scope>
+			<optional>true</optional>
+		</dependency>
+
+<!--		<dependency>-->
+<!--			<groupId>org.springframework.boot</groupId>-->
+<!--			<artifactId>spring-boot-docker-compose</artifactId>-->
+<!--			<scope>runtime</scope>-->
+<!--			<optional>true</optional>-->
+<!--		</dependency>-->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- swagger doc -->
+		<dependency>
+			<groupId>io.springfox</groupId>
+			<artifactId>springfox-boot-starter</artifactId>
+			<version>3.0.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>io.springfox</groupId>
+			<artifactId>springfox-swagger-ui</artifactId>
+			<version>3.0.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.12.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+
+		<!--proguard-->
+		<dependency>
+			<groupId>com.guardsquare</groupId>
+			<artifactId>proguard-base</artifactId>
+			<version>7.1.0</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.guardsquare</groupId>
+			<artifactId>proguard-core</artifactId>
+			<version>7.1.0</version>
+			<scope>runtime</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<finalName>application</finalName>
+		<plugins>
+			<plugin>
+				<groupId>com.github.wvengen</groupId>
+				<artifactId>proguard-maven-plugin</artifactId>
+				<version>${proguard-maven-plugin.version}</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>proguard</goal>
+						</goals>
+					</execution>
+				</executions>
+
+				<configuration>
+					<proguardVersion>${proguard.version}</proguardVersion>
+					<injar>${project.build.finalName}.jar</injar>
+					<outjar>${project.build.finalName}.jar</outjar>
+					<obfuscate>true</obfuscate>
+					<proguardInclude>${basedir}/proguard.cfg</proguardInclude>
+
+					<options>
+						<!--关闭部分默认开启的选项，不做收缩（删除注释、未被引用代码）、字节码级别的优化-->
+						<option>-dontshrink</option>
+						<option>-dontoptimize</option>
+						<!--保持目录结构，否则spring的自动注入无法使用-->
+						<option>-keepdirectories</option>
+						<!--对于类成员的命名的混淆采取唯一策略-->
+						<option>-useuniqueclassmembernames</option>
+						<!--混淆时不生成大小写混合的类名（windows上大小写不敏感），默认是可以大小写混合-->
+						<option>-dontusemixedcaseclassnames </option>
+						<!--混淆类名之后，对使用Class.forName('className')之类的地方进行相应替代-->
+						<option>-adaptclassstrings</option>
+
+						<!--对异常、注解信息在runtime予以保留，不然影响springboot启动-->
+						<option>-keepattributes
+							Exceptions,InnerClasses,Signature,Deprecated,SourceFile,LineNumberTable,*Annotation*,EnclosingMethod
+						</option>
+
+						<!--此选项将保存接口中的所有原始名称（不混淆）-->
+						<!-- <option>-keepnames interface ** { *; }</option> -->
+						<!--此选项将保存所有软件包中的所有原始接口文件（不进行混淆）-->
+						<!--<option>-keep interface * extends * { *; }</option>-->
+						<!--此选项将保留所有原始方法参数,controller如果参数也混淆会导致传参映射不上  -->
+						<option>-keepparameternames</option>
+						<!--保留枚举成员及方法-->
+						<option>-keepclassmembers enum * { *; }</option>
+						<!--不混淆所有类,保存原始定义的注解-->
+						<option>-keepclassmembers class * {
+                            @org.springframework.context.annotation.Bean *;
+                            @org.springframework.beans.factory.annotation.Autowired *;
+                            @org.springframework.beans.factory.annotation.Value *;
+                            @org.springframework.stereotype.Service *;
+                            @org.springframework.stereotype.Component *;
+                            }
+                        </option>
+						<!--忽略warn消息-->
+						<option>-ignorewarnings</option>
+						<!--忽略note消息-->
+						<option>-dontnote</option>
+					</options>
+					<!--java 11+ -->
+					<libs>
+						<lib>${java.home}/jmods/</lib>
+					</libs>
+				</configuration>
+				<dependencies>
+					<dependency>
+						<groupId>com.guardsquare</groupId>
+						<artifactId>proguard-base</artifactId>
+						<version>${proguard.version}</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+			<plugin>
+				<groupId>org.graalvm.buildtools</groupId>
+				<artifactId>native-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+			<!--去除不需要的文件-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>2.3.2</version>
+				<configuration>
+					<excludes>
+						<exclude>**/application.properties</exclude>
+						<exclude>rating_config/**</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

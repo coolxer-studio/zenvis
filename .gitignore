@@ -10,8 +10,9 @@
 
 .pnpm-store/
 
-# 先忽略 zenvis-plugin 下全部
+# 先忽略 zenvis-plugin、zenvis-service 下全部
 zenvis-plugin/*
+zenvis-service/*
 
 # 白名单：不忽略指定子目录
 !zenvis-plugin/zenvis-plugin-asset/
@@ -19,3 +20,8 @@ zenvis-plugin/*
 !zenvis-plugin/zenvis-plugin-risk/
 !zenvis-plugin/zenvis-plugin-synap/
 !zenvis-plugin/zenvis-plugin-user-event/
+
+!zenvis-service/zenvis-service-vectum/
+!zenvis-service/zenvis-service-asset/
+!zenvis-service/zenvis-service-operation/
+!zenvis-service/zenvis-service-risk/

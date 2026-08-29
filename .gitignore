@@ -3,10 +3,6 @@
 # 所有子目录里的 .DS_Store
 **/.DS_Store
 
-# 子项目单独git维护
-/zenvis-plugin/
-/zenvis-service/
-
 # Local deployment state and secrets
 /deploy/.env
 /deploy/backups/

@@ -11,11 +11,11 @@ ZenVis 是一个面向企业数据分析场景的配置化应用框架，将数�
 | `agent-skills` | ZenVis 插件创建与校验技能 | Codex Skill |
 | `doc` | 产品、部署、插件、AI、业务服务、架构、开发与 API 文档中心 | Markdown、Docsify 4 |
 | `deploy` | Docker Compose、Helm、开放配置、初始化脚本和运行数据目录 | Docker Compose、Helm、Bash、Nginx |
-| `zenvis-backend` | 独立git项目维护，平台 API、系统管理、检索、插件生命周期、DIH 与业务服务管理 | Java 17、Spring Boot 3.2.0、Spring AI 1.1.0-M4 |
-| `zenvis-frontend` | 独立git项目维护，管理控制台、检索、看板、低代码页面与 DIH 工作台 | Vue 3.5、TypeScript 6、Vite 8、Element Plus 2.14 |
-| `zenvis-plugin` | 独立git项目维护，统一维护平台、社区与企业插件，以及插件 API 扩展和打包工具 | JSON/YAML、Java、AMIS、HTML、tar.gz |
+| `zenvis-backend` | 平台 API、系统管理、检索、插件生命周期、DIH 与业务服务管理 | Java 17、Spring Boot 3.2.0、Spring AI 1.1.0-M4 |
+| `zenvis-frontend` | 管理控制台、检索、看板、低代码页面与 DIH 工作台 | Vue 3.5、TypeScript 6、Vite 8、Element Plus 2.14 |
+| `zenvis-plugin` | 统一维护平台、社区与企业插件，以及插件 API 扩展和打包工具 | JSON/YAML、Java、AMIS、HTML、tar.gz |
 | `zenvis-dependencies` | 公共依赖，Starter、SDK、客户端库等可复用依赖，当前包含业务服务接入 Starter | Spring Boot 3.x、Java 17 |
-| `zenvis-service` | 独立git项目维护，独立业务服务集合，当前包含实时网络拓扑分析和 TraceHub 安全溯源查询服务 | Go、Vue 3、AntV G6、Kafka、Redis、MCP |
+| `zenvis-service` | 独立业务服务集合，当前包含实时网络拓扑分析和 TraceHub 安全溯源查询服务 | Go、Vue 3、AntV G6、Kafka、Redis、MCP |
 
 
 各独立工作树和子服务以自身 `README.md` 为构建与维护入口；跨模块的产品、架构、部署、使用与开发说明统一维护在根目录的 [ZenVis 文档中心](doc/README.md)。

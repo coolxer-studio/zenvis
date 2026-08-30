@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.coolxer.asset</groupId>
-	<artifactId>asset-service</artifactId>
+	<artifactId>zenvis-service-asset</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>asset-service</name>
-	<description>asset-service project for Spring Boot</description>
+	<name>zenvis-service-asset</name>
+	<description>zenvis-service-asset project for Spring Boot</description>
 	<properties>
 		<java.version>17</java.version>
 		<proguard.version>7.2.1</proguard.version>

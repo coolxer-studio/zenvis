@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.coolxer.operation</groupId>
-	<artifactId>operation-service</artifactId>
+	<artifactId>zenvis-service-operation</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>operation-service</name>
-	<description>operation-service project for Spring Boot</description>
+	<name>zenvis-service-operation</name>
+	<description>zenvis-service-operation project for Spring Boot</description>
 	<properties>
 		<java.version>17</java.version>
 		<proguard.version>7.2.1</proguard.version>

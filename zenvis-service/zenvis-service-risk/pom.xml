@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.coolxer.risk</groupId>
-	<artifactId>risk-service</artifactId>
+	<artifactId>zenvis-service-risk</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>risk-service</name>
-	<description>risk-service project for Spring Boot</description>
+	<name>zenvis-service-risk</name>
+	<description>zenvis-service-risk project for Spring Boot</description>
 	<properties>
 		<java.version>17</java.version>
 		<proguard.version>7.2.1</proguard.version>

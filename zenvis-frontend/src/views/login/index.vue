@@ -6,13 +6,11 @@
     <section class="brand-panel" :style="bannerStyle">
       <div class="brand-overlay"></div>
       <div class="brand-content">
-        <h1>{{ systemInfo?.systemTitle || 'ZenVis' }}</h1>
-        <h2>{{ systemInfo?.productName || '数据分析应用框架' }}</h2>
+        <h1>{{ systemInfo?.systemTitle }}</h1>
+        <h2>{{ systemInfo?.productName }}</h2>
         <p>
           {{
-            systemInfo?.productIntroduction ||
-            '一个基于配置实现的数据存储、可视化及业务扩展的框架平台，实现在通用的数据分析框架之上构建业务应用。提供智能分析能力，全方位满足数据处理、展示、扩展与深度分析需求。'
-          }}
+            systemInfo?.productIntroduction }}
         </p>
         <div class="feature-grid">
           <div class="feature-item">
@@ -37,8 +35,8 @@
           <img v-if="systemInfo?.systemLogo" :src="logoUrl" class="login-logo" alt="系统标识" />
           <span v-else class="login-logo-fallback"><span></span></span>
           <div>
-            <strong>{{ systemInfo?.systemTitle || 'ZenVis' }}</strong>
-            <small>{{ systemInfo?.systemSubtitle || 'Unified Situation Awareness' }}</small>
+            <strong>{{ systemInfo?.systemTitle }}</strong>
+            <small>{{ systemInfo?.systemSubtitle }}</small>
           </div>
         </div>
 
@@ -114,7 +112,7 @@
         </div>
       </div>
 
-      <footer>{{ systemInfo?.copyright || '© ZenVis Security Operations' }}</footer>
+      <footer>{{ systemInfo?.copyright }}</footer>
     </section>
   </main>
 </template>

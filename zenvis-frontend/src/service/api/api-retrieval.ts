@@ -1,4 +1,5 @@
-import { request } from '@/service/request-wrapper';
+import { download, request } from '@/service/request-wrapper';
+import type { AxiosResponse } from 'axios';
 import {
   EntityResponse,
   AttributeResponse,
@@ -53,6 +54,13 @@ export class RetrievalService {
     options: { signal?: AbortSignal; silent?: boolean } = {},
   ): Promise<listResponse<Record<string, unknown>>> {
     return request<listResponse<Record<string, unknown>>>(`${prefix}/do`, params, 'POST', options);
+  }
+
+  static async exportCsv(
+    params: RetrievalSearchRequest,
+    options: { signal?: AbortSignal; silent?: boolean } = {},
+  ): Promise<AxiosResponse<Blob>> {
+    return download(`${prefix}/export`, params, options);
   }
 
   static async createRule(params: RuleParams): Promise<RuleResponse> {

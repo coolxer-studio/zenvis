@@ -5,6 +5,7 @@ import com.coolxer.model.retrieval.dto.RetrievalRequestDto;
 import com.coolxer.model.retrieval.vo.RetrievalRuleConfigVo;
 import com.coolxer.model.retrieval.vo.RetrievalRuleDetailVo;
 import com.coolxer.model.retrieval.vo.DataListVo;
+import com.coolxer.model.retrieval.vo.RetrievalExportResult;
 import com.coolxer.service.retrieval.RetrievalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 class RetrievalControllerTest {
 
@@ -99,6 +101,28 @@ class RetrievalControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(0));
+    }
+
+    @Test
+    void exportReturnsCsvDownloadHeaders() throws Exception {
+        when(service.exportByCriteria(org.mockito.ArgumentMatchers.any(RetrievalRequestDto.class)))
+                .thenReturn(new RetrievalExportResult("\ufeff名称\r\n\"a\"\r\n".getBytes(), 1, true, 1));
+
+        mockMvc.perform(post("/api/v1/retrieval/export")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "entity":"asset",
+                                  "display_list":[{"entity":"asset","attribute_list":["name"]}],
+                                  "page":99,
+                                  "size":1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("asset-")))
+                .andExpect(header().string("X-Exported-Rows", "1"))
+                .andExpect(header().string("X-Export-Truncated", "true"))
+                .andExpect(header().string("X-Export-Limit", "1"));
     }
 
     @Test

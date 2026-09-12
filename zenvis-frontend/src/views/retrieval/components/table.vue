@@ -1,8 +1,20 @@
 <template>
   <div style="position: relative">
-    <el-popover :visible="colShow" placement="bottom-end" :width="240" :popper-options="{ modifiers: [{ name: 'preventOverflow', options: { boundary: 'viewport' } }] }">
+    <div class="table-actions">
+      <el-button
+        type="primary"
+        plain
+        size="small"
+        :loading="exporting"
+        :disabled="exportDisabled"
+        @click.stop="emit('on-export')"
+      >
+        <el-icon><Download /></el-icon>
+        导出
+      </el-button>
+      <el-popover :visible="colShow" placement="bottom-end" :width="240" :popper-options="{ modifiers: [{ name: 'preventOverflow', options: { boundary: 'viewport' } }] }">
       <template #reference>
-        <div style="cursor: pointer;position: absolute;top: -40px;right: 0" @click.stop="colShow = !colShow">列
+        <div class="column-trigger" @click.stop="colShow = !colShow">列
           <el-icon v-if="colShow"><ArrowUp /></el-icon>
           <el-icon v-else><Bottom /></el-icon>
         </div>
@@ -36,7 +48,8 @@
           <div>请先选择实体</div>
         </template>
       </div>
-    </el-popover>
+      </el-popover>
+    </div>
     <el-table
       :data="state.data"
       v-loading="state.loading"
@@ -116,7 +129,7 @@
 
 <script setup lang="ts">
 import { ElMessage } from 'element-plus';
-import { ArrowDown, Search, Bottom, ArrowUp, DocumentCopy } from '@element-plus/icons-vue';
+import { ArrowDown, Search, Bottom, ArrowUp, DocumentCopy, Download } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import type {
   RetrievalTableChange,
@@ -127,11 +140,19 @@ import type {
 import { resolveRetrievalLink } from '@/utils/retrieval-link';
 import { copyTextToClipboard } from '@/utils/clipboard';
 
-const props = defineProps<{ state: RetrievalTableState }>();
+const props = withDefaults(defineProps<{
+  state: RetrievalTableState;
+  exporting?: boolean;
+  exportDisabled?: boolean;
+}>(), {
+  exporting: false,
+  exportDisabled: false,
+});
 const emit = defineEmits<{
   (event: 'on-display', value: { entity: string; attributeList: RetrievalTableColumn[] }): void;
   (event: 'on-change', value: RetrievalTableChange): void;
   (event: 'on-click', value: unknown): void;
+  (event: 'on-export'): void;
 }>();
 
 const tableKey = ref(0);
@@ -189,7 +210,6 @@ function getSelect(value: string[]) {
   const selected = new Set(value);
   const displayColumns = props.state.sourceColumns.filter(column => selected.has(column.dataIndex));
   emit('on-display', { entity: props.state.entity, attributeList: displayColumns });
-  colShow.value = false;
 }
 
 function resolveLink(column: RetrievalTableColumn, row: Record<string, unknown>) {
@@ -229,6 +249,18 @@ onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick)
 </script>
 
 <style lang="scss" scoped>
+  .table-actions {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .column-trigger {
+    cursor: pointer;
+  }
   .all-filter{
     border-top: 1px solid #bec1c6;
     height: 35px;

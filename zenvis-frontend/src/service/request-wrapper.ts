@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig } from 'axios';
+import axios, { AxiosRequestConfig, type AxiosResponse } from 'axios';
 // 引入el 提示框，这个项目里用什么组件库这里引什么
 import { newMessageError } from '@/utils/tool';
 import { apiResponse } from '@u/util-common';
@@ -82,4 +82,21 @@ export function request<R>(
   }
 
   return requestClient(config).then(res => apiResponse<R>(res, options));
+}
+
+/** Request a file response that does not use the platform JSON response wrapper. */
+export function download(
+  url: string,
+  data: unknown = {},
+  options: RequestOptions = {},
+): Promise<AxiosResponse<Blob>> {
+  const config: AxiosRequestConfig & { silent?: boolean } = {
+    method: 'POST',
+    url,
+    data,
+    responseType: 'blob',
+    silent: options.silent,
+    signal: options.signal,
+  };
+  return requestClient.request<Blob>(config);
 }

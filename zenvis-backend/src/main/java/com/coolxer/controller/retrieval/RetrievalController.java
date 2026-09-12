@@ -14,12 +14,20 @@ import com.coolxer.model.retrieval.vo.DataEntityResultVo;
 import com.coolxer.model.retrieval.vo.DataListVo;
 import com.coolxer.model.retrieval.vo.IdVo;
 import com.coolxer.model.retrieval.vo.RetrievalRuleDetailVo;
+import com.coolxer.model.retrieval.vo.RetrievalExportResult;
 import com.coolxer.service.retrieval.RetrievalService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * 检索
@@ -42,6 +50,21 @@ public class RetrievalController extends BaseController {
         validateRetrievalRequest(retrievalRequestDTO);
         DataListVo dataList = retrievalService.retrievalByCriteria(retrievalRequestDTO);
         return ResponseWrap.success(dataList);
+    }
+
+    @PostMapping(value = "/export", produces = "text/csv;charset=UTF-8")
+    @Operation(summary = "导出检索数据", description = "按当前检索条件和排序导出 CSV，最多导出配置允许的条数")
+    public ResponseEntity<byte[]> exportByCriteria(@RequestBody RetrievalRequestDto retrievalRequestDTO) {
+        validateRetrievalRequest(retrievalRequestDTO);
+        RetrievalExportResult result = retrievalService.exportByCriteria(retrievalRequestDTO);
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        return ResponseEntity.ok()
+                .header("Content-Disposition", attachmentFilename(retrievalRequestDTO.getEntity() + "-" + timestamp + ".csv"))
+                .header("X-Exported-Rows", String.valueOf(result.exportedRows()))
+                .header("X-Export-Truncated", String.valueOf(result.truncated()))
+                .header("X-Export-Limit", String.valueOf(result.limit()))
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(result.content());
     }
 
     // 创建检索规则
@@ -168,6 +191,11 @@ public class RetrievalController extends BaseController {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "当前用户未登录");
         }
         return user.getId();
+    }
+
+    private String attachmentFilename(String filename) {
+        return "attachment; filename*=UTF-8''" + URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 
 }

@@ -6,7 +6,6 @@
     <section class="brand-panel" :style="bannerStyle">
       <div class="brand-overlay"></div>
       <div class="brand-content">
-        <h1>{{ systemInfo?.systemTitle }}</h1>
         <h2>{{ systemInfo?.productName }}</h2>
         <p>
           {{

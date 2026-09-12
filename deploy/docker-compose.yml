@@ -150,10 +150,10 @@ services:
         max-size: 200m
         max-file: "5"
 
-  vectum-service:
+  zenvis-service-vectum:
     <<: *common
-    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/vectum:${VECTUM_VERSION:-latest}-${ARCH:?ARCH is required}
-    container_name: vectum-service
+    image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/zenvis-service-vectum:${VECTUM_VERSION:-latest}-${ARCH:?ARCH is required}
+    container_name: zenvis-service-vectum
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       VECTUM_AUTH_TOKEN: ${VECTUM_AUTH_TOKEN:?VECTUM_AUTH_TOKEN is required}

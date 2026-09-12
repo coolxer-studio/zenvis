@@ -10,6 +10,7 @@ import com.coolxer.model.retrieval.query.DataQueryContext;
 import com.coolxer.model.retrieval.rule.DisplayAttribute;
 import com.coolxer.model.retrieval.rule.RetrievalCriteria;
 import com.coolxer.model.retrieval.rule.RetrievalRule;
+import com.coolxer.model.retrieval.rule.RetrievalPageable;
 import com.coolxer.model.retrieval.vo.*;
 import com.coolxer.service.retrieval.DataQueryService;
 import com.coolxer.service.retrieval.MetaDataService;
@@ -20,9 +21,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -45,6 +50,14 @@ public class RetrievalServiceImpl implements RetrievalService {
     @Autowired
     com.coolxer.service.retrieval.RetrievalAccessPolicy retrievalAccessPolicy;
 
+    @Autowired(required = false)
+    ObjectMapper objectMapper;
+
+    @Value("${app.retrieval.export.max-rows:10000}")
+    private int maxExportRows = 10_000;
+
+    private static final int EXPORT_PAGE_SIZE = 100;
+
     @Override
     public DataListVo retrievalByCriteria(RetrievalRequestDto retrievalRequestDto) {
         retrievalAccessPolicy.checkRead(retrievalRequestDto == null ? null : retrievalRequestDto.getEntity());
@@ -55,6 +68,94 @@ public class RetrievalServiceImpl implements RetrievalService {
         retrievalDataListVo.setTotal(queryContext.getTotal());
         retrievalDataListVo.setToken(queryContext.getContextId());
         return retrievalDataListVo;
+    }
+
+    @Override
+    public RetrievalExportResult exportByCriteria(RetrievalRequestDto retrievalRequestDto) {
+        if (maxExportRows < 1) {
+            throw new IllegalStateException("检索导出条数上限必须大于 0");
+        }
+        retrievalAccessPolicy.checkRead(retrievalRequestDto == null ? null : retrievalRequestDto.getEntity());
+        RetrievalRule retrievalRule = retrievalRuleService.generateRetrievalRule(retrievalRequestDto);
+        List<DataAttribute> attributes = exportAttributes(retrievalRule);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        BigDecimal total = BigDecimal.ZERO;
+        RetrievalPageable originalPageable = retrievalRule.getRetrievalPageable();
+        String sortBy = originalPageable == null ? null : originalPageable.getSortBy();
+        String order = originalPageable == null ? null : originalPageable.getOrder();
+
+        for (int page = 1; rows.size() < maxExportRows; page++) {
+            retrievalRule.setRetrievalPageable(new RetrievalPageable(page, EXPORT_PAGE_SIZE, sortBy, order));
+            DataQueryContext queryContext = dataQueryService.query(retrievalRule);
+            total = queryContext.getTotal() == null ? BigDecimal.ZERO : queryContext.getTotal();
+            List<Map<String, Object>> pageRows = queryContext.getResultList();
+            if (CollectionUtils.isEmpty(pageRows)) {
+                break;
+            }
+            int remaining = maxExportRows - rows.size();
+            rows.addAll(pageRows.subList(0, Math.min(remaining, pageRows.size())));
+            if (BigDecimal.valueOf(rows.size()).compareTo(total) >= 0) {
+                break;
+            }
+        }
+
+        return new RetrievalExportResult(
+                encodeCsv(attributes, rows),
+                rows.size(),
+                total.compareTo(BigDecimal.valueOf(rows.size())) > 0,
+                maxExportRows);
+    }
+
+    private List<DataAttribute> exportAttributes(RetrievalRule retrievalRule) {
+        if (CollectionUtils.isEmpty(retrievalRule.getDisplayAttributes())
+                || CollectionUtils.isEmpty(retrievalRule.getDisplayAttributes().get(0).getAttributeList())) {
+            throw new ApiException(ResultCodeEnum.DISPLAY_LIMIT_ERROR);
+        }
+        return retrievalRule.getDisplayAttributes().get(0).getAttributeList();
+    }
+
+    private byte[] encodeCsv(List<DataAttribute> attributes, List<Map<String, Object>> rows) {
+        Map<String, Long> labels = attributes.stream()
+                .collect(Collectors.groupingBy(
+                        attribute -> StringUtils.defaultIfBlank(attribute.getLabel(), attribute.getName()),
+                        LinkedHashMap::new,
+                        Collectors.counting()));
+        StringBuilder csv = new StringBuilder("\ufeff");
+        csv.append(attributes.stream()
+                        .map(attribute -> csvValue(exportHeader(attribute, labels)))
+                        .collect(Collectors.joining(",")))
+                .append("\r\n");
+        for (Map<String, Object> row : rows) {
+            for (int index = 0; index < attributes.size(); index++) {
+                if (index > 0) {
+                    csv.append(',');
+                }
+                csv.append(csvValue(row.get(attributes.get(index).getName())));
+            }
+            csv.append("\r\n");
+        }
+        return csv.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String exportHeader(DataAttribute attribute, Map<String, Long> labels) {
+        String label = StringUtils.defaultIfBlank(attribute.getLabel(), attribute.getName());
+        return labels.getOrDefault(label, 0L) > 1 ? label + " (" + attribute.getName() + ")" : label;
+    }
+
+    private String csvValue(Object value) {
+        String text;
+        if (value == null) {
+            text = "";
+        } else if (value instanceof CharSequence || value instanceof Number || value instanceof Boolean || value instanceof Character) {
+            text = String.valueOf(value);
+        } else {
+            try {
+                text = objectMapper == null ? String.valueOf(value) : objectMapper.writeValueAsString(value);
+            } catch (Exception ignored) {
+                text = String.valueOf(value);
+            }
+        }
+        return "\"" + text.replace("\"", "\"\"") + "\"";
     }
 
     @Override

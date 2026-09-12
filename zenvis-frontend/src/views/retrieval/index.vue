@@ -157,9 +157,12 @@
 
     <DataList
       :state="tableState"
+      :exporting="exporting"
+      :export-disabled="exportDisabled"
       @on-change="onTableChange"
       @on-display="changeDisplayColumns"
       @on-click="showJsonData"
+      @on-export="exportData"
     />
 
     <el-dialog v-model="visibleJson" class="json-data-model" width="800px" title="数据查看">
@@ -216,6 +219,7 @@ const visible = ref(false);
 const visibleSave = ref(false);
 const visibleJson = ref(false);
 const saving = ref(false);
+const exporting = ref(false);
 const formRef = ref<FormInstance>();
 const formRule = reactive({ name: '' });
 const formRules: FormRules = { name: [{ required: true, message: '请输入名称', trigger: 'blur' }] };
@@ -311,6 +315,15 @@ const remainingIssues = computed(() =>
     return true;
   }),
 );
+
+const exportDisabled = computed(() => {
+  const displayFields = currentFilter.value.display_list?.[0]?.attribute_list || [];
+  return tableState.loading
+    || exporting.value
+    || !currentFilter.value.entity
+    || !displayFields.length
+    || remainingIssues.value.length > 0;
+});
 
 const invalidRuleCount = computed(
   () => ruleList.value.filter(rule => rule.status === 'invalid').length,
@@ -563,6 +576,59 @@ function search(config: RetrievalSearchRequest) {
   currentFilter.value = cloneConfig(config);
   tableState.pagination.current = 1;
   void getData();
+}
+
+function downloadName(contentDisposition: string | undefined, entity: string): string {
+  const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // Use the stable fallback below when a proxy has corrupted the header.
+    }
+  }
+  return `${entity}-export.csv`;
+}
+
+async function exportData() {
+  if (exportDisabled.value) return;
+  const config = cloneConfig(currentFilter.value);
+  const entity = config.entity as string;
+  exporting.value = true;
+  try {
+    const response = await RetrievalService.exportCsv(
+      {
+        ...config,
+        page: undefined,
+        size: undefined,
+        ...currentSorter.value,
+      },
+      { silent: true },
+    );
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(response.data);
+    link.href = objectUrl;
+    link.download = downloadName(response.headers['content-disposition'], entity);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+    const exported = response.headers['x-exported-rows'] || '0';
+    const limit = response.headers['x-export-limit'] || exported;
+    if (String(response.headers['x-export-truncated']).toLowerCase() === 'true') {
+      ElMessage.warning(`匹配结果超过导出上限，已按当前排序导出前 ${limit} 条`);
+    } else {
+      ElMessage.success(`已导出 ${exported} 条记录`);
+    }
+  } catch (error) {
+    const message =
+      (error as { msg?: string; message?: string })?.msg ||
+      (error as { message?: string })?.message ||
+      '导出失败';
+    ElMessage.error(message);
+  } finally {
+    exporting.value = false;
+  }
 }
 
 async function getData() {

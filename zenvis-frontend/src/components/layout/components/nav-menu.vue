@@ -177,9 +177,8 @@ const submit = async (params: Record<string, string>) => {
   encryptor.setPublicKey(res.key);
   const encryptedPassword = encryptor.encrypt(params.password) || '';
   await UserService.editPassword({
-    oldPassword: encryptor.encrypt(params.old_password) || '',
-    newPassword: encryptedPassword,
-    confirmPassword: encryptedPassword,
+    old_password: encryptor.encrypt(params.old_password) || '',
+    password: encryptedPassword,
   });
   ElMessage.success('密码已更新，请重新登录');
   showPassword.value = false;

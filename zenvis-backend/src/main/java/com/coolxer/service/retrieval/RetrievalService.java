@@ -6,10 +6,13 @@ import com.coolxer.model.retrieval.vo.DataAttributeResultVo;
 import com.coolxer.model.retrieval.vo.DataEntityResultVo;
 import com.coolxer.model.retrieval.vo.DataListVo;
 import com.coolxer.model.retrieval.vo.RetrievalRuleDetailVo;
+import com.coolxer.model.retrieval.vo.RetrievalExportResult;
 
 public interface RetrievalService {
 
     DataListVo retrievalByCriteria(RetrievalRequestDto retrievalRequestDto);
+
+    RetrievalExportResult exportByCriteria(RetrievalRequestDto retrievalRequestDto);
 
     DataListVo retrievalByRuleId(Integer ruleId, Integer ownerId);
 

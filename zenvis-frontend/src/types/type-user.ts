@@ -33,9 +33,8 @@ export type LogoutResponse = {
 
 // 修改密码参数
 export type EditPasswordParams = {
-  oldPassword: string;
-  newPassword: string;
-  confirmPassword: string;
+  old_password: string;
+  password: string;
 };
 
 // 修改密码响应

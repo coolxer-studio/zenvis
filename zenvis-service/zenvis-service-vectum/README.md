@@ -2,7 +2,7 @@
 
 ![图标](doc/slogan.png)
 
-**Vectum** 是一款基于 **Vector** 封装的轻量级数据管道管理工具，面向运维/DevOps 团队，提供**可视化界面 + RESTful API + MCP 协议**三位一体能力，用于统一管理、调度、监控多实例 Vector 数据采集任务，支持日志、指标、安全审计数据的全链路采集、转换与转发。
+**zenvis-service-vectum** 是一款基于 **Vector** 封装的轻量级数据管道管理工具，面向运维/DevOps 团队，提供**可视化界面 + RESTful API + MCP 协议**三位一体能力，用于统一管理、调度、监控多实例 Vector 数据采集任务，支持日志、指标、安全审计数据的全链路采集、转换与转发。
 
 ---
 
@@ -11,7 +11,7 @@
 ### 1. docker-compose 运行
 
 ```bash
-cd vectum/deploy
+cd zenvis-service-vectum/deploy
 export VECTUM_AUTH_TOKEN='change-me'
 docker-compose up -d
 ```
@@ -147,7 +147,7 @@ Vectum = **Vector 多实例编排 + 可视化运维 + API 化管理 + MCP 智能
 
 ```bash
 # 进入项目目录
-cd vectum
+cd zenvis-service-vectum
 
 # 编译项目
 mvn clean compile
@@ -176,7 +176,7 @@ VECTUM_AUTH_TOKEN='change-me' java -jar target/application.jar --spring.config.l
 PUSH_IMAGE=true ./build.sh
 
 # 运行容器
-docker run -d -p 11002:11002 -e VECTUM_AUTH_TOKEN='change-me' crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum:latest-{arch}
+docker run -d -p 11002:11002 -e VECTUM_AUTH_TOKEN='change-me' crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-service-vectum:latest-{arch}
 ```
 
 **构建参数说明：**
@@ -291,7 +291,7 @@ sinks:
 ## 七、项目结构
 
 ```
-vectum/
+zenvis-service-vectum/
 ├── src/main/java/com/coolxer/
 │   ├── Application.java              # 启动类
 │   ├── controller/                   # REST API 控制器

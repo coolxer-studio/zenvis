@@ -1,6 +1,6 @@
-# Vectum 案例说明
+# zenvis-service-vectum 案例说明
 
-本文档描述基于 Vectum 实现的数据管道传输案例，实现从 SFTP 获取数据 → Kafka 消息队列 → ClickHouse 数据存储的完整批量数据传输链路。
+本文档描述基于 zenvis-service-vectum 实现的数据管道传输案例，实现从 SFTP 获取数据 → Kafka 消息队列 → ClickHouse 数据存储的完整批量数据传输链路。
 
 > **注意：**    
 > 本案例仅用于演示和测试，不建议在生产环境中直接使用。  
@@ -16,7 +16,7 @@
 ## 快速启动
 
 ```bash
-cd vectum/deploy/example
+cd zenvis-service-vectum/deploy/example
 docker-compose up -d
 ```
 
@@ -184,7 +184,7 @@ docker exec -it clickhouse clickhouse-client -u default --password vectum123 -q 
 
 | 服务         | 镜像                                   | 端口             | 说明             |
 | ---------- | ------------------------------------ | -------------- | -------------- |
-| vectum     | coolxer-studio/vectum:latest         | 11002          | Vectum 主应用     |
+| zenvis-service-vectum     | coolxer-studio/zenvis-service-vectum:latest         | 11002          | Vectum 主应用     |
 | sftp       | coolxer-studio/atmoz-sftp:latest     | 2222           | SFTP 文件传输服务    |
 | zookeeper  | coolxer-studio/bitnami-zookeeper:3.8 | 2181           | ZooKeeper 协调服务 |
 | kafka      | coolxer-studio/bitnami-kafka:3.2.0   | 9092           | Kafka 消息队列     |

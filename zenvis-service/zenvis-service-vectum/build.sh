@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IMAGE_NAME="crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/vectum"
+IMAGE_NAME="crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-service-vectum"
 IMAGE_TAG="1.0.1"
 DATE_TAG=$(date +%Y%m%d)
 VECTOR_VERSION="0.55.0"

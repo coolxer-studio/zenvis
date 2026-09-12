@@ -191,6 +191,7 @@ compose_init() {
     set_env_value "$ENV_FILE" CLICKHOUSE_PASSWORD "$(random_password)"
     set_env_value "$ENV_FILE" REDIS_PASSWORD "$(random_password)"
     set_env_value "$ENV_FILE" KAFKA_CLUSTER_ID "$(random_kafka_cluster_id)"
+    set_env_value "$ENV_FILE" MINIO_ROOT_PASSWORD "$(random_password)"
     set_env_value "$ENV_FILE" API_BEARER_TOKEN "sk-zenvis-$(random_hex 24)"
     set_env_value "$ENV_FILE" MCP_BEARER_TOKEN "sk-mcp-$(random_hex 24)"
     set_env_value "$ENV_FILE" VECTUM_AUTH_TOKEN "sk-vectum-$(random_hex 24)"
@@ -210,8 +211,8 @@ validate_required_env() {
     for key in ARCH ZENVIS_IMAGE_REGISTRY ZENVIS_WEB_BIND_ADDRESS \
         ZENVIS_API_BIND_ADDRESS ZENVIS_INFRA_BIND_ADDRESS ZENVIS_WEB_PORT \
         ZENVIS_API_PORT VECTUM_PORT MYSQL_ROOT_PASSWORD MYSQL_PASSWORD \
-        CLICKHOUSE_PASSWORD REDIS_PASSWORD KAFKA_CLUSTER_ID API_BEARER_TOKEN \
-        MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD \
+        CLICKHOUSE_PASSWORD REDIS_PASSWORD KAFKA_CLUSTER_ID MINIO_ROOT_PASSWORD \
+        API_BEARER_TOKEN MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD \
         ZENVIS_BOOTSTRAP_ADMIN_PASSWORD; do
         if [[ -z "$(env_value "$key")" ]]; then
             missing="${missing} ${key}"
@@ -481,6 +482,8 @@ k8s_init() {
             --from-literal=CLICKHOUSE_PASSWORD="$(random_password)" \
             --from-literal=REDIS_PASSWORD="$(random_password)" \
             --from-literal=KAFKA_CLUSTER_ID="$(random_kafka_cluster_id)" \
+            --from-literal=MINIO_ROOT_USER="minioadmin" \
+            --from-literal=MINIO_ROOT_PASSWORD="$(random_password)" \
             --from-literal=API_BEARER_TOKEN="sk-zenvis-$(random_hex 24)" \
             --from-literal=MCP_BEARER_TOKEN="sk-mcp-$(random_hex 24)" \
             --from-literal=VECTUM_AUTH_TOKEN="sk-vectum-$(random_hex 24)" \
@@ -492,7 +495,7 @@ k8s_init() {
     fi
     local required_key encoded_value missing_keys=""
     for required_key in MYSQL_ROOT_PASSWORD MYSQL_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD \
-        KAFKA_CLUSTER_ID API_BEARER_TOKEN MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN \
+        KAFKA_CLUSTER_ID MINIO_ROOT_PASSWORD API_BEARER_TOKEN MCP_BEARER_TOKEN VECTUM_AUTH_TOKEN \
         ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD ZENVIS_BOOTSTRAP_ADMIN_PASSWORD; do
         encoded_value="$(kubectl -n "$K8S_NAMESPACE" get secret "$secret_name" \
             -o "jsonpath={.data.${required_key}}" 2>/dev/null || true)"

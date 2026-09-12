@@ -150,6 +150,33 @@ services:
         max-size: 200m
         max-file: "5"
 
+  minio-service:
+    <<: *common
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/minio:RELEASE.2025-09-07T16-13-09Z-${ARCH:?ARCH is required}
+    container_name: minio-service
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    ports:
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:19000:9000"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:19001:9001"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./data/minio/data:/data
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+
   zenvis-service-vectum:
     <<: *common
     image: ${ZENVIS_IMAGE_REGISTRY:?run ./zenvisctl compose init}/zenvis-service-vectum:${VECTUM_VERSION:-latest}-${ARCH:?ARCH is required}
@@ -213,6 +240,9 @@ services:
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-}
       OPENAI_COMPLETION_URL: ${OPENAI_COMPLETION_URL:-}
       OPENAI_COMPLETION_MODEL: ${OPENAI_COMPLETION_MODEL:-}
+      MINIO_ENDPOINT: http://minio-service:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     ports:
       - "${ZENVIS_API_BIND_ADDRESS}:${ZENVIS_API_PORT}:11001"
     volumes:
@@ -227,6 +257,8 @@ services:
       mysql-service:
         condition: service_healthy
       clickhouse-service:
+        condition: service_healthy
+      minio-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:11001/actuator/health/readiness"]

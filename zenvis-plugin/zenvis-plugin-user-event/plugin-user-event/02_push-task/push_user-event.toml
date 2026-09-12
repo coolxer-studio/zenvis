@@ -29,12 +29,12 @@
 [sinks.my_clickhouse_sink]
   type = "clickhouse"
   inputs = ["parse_json"]
-  endpoint = "http://clickhouse-service:8123"
-  database = "zenvis"
+  endpoint = "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+  database = "${CLICKHOUSE_DATABASE:-zenvis}"
   table = "msg_user_event"
   auth.strategy = "basic"
-  auth.user = "default"
-  auth.password = "Zv!7838a780d3282638940f3b3eAa"
+  auth.user = "${CLICKHOUSE_USER:-default}"
+  auth.password = "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
   skip_unknown_fields = true
 
 # 输出数据到日志

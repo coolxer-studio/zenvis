@@ -25,3 +25,6 @@ zenvis-service/*
 !zenvis-service/zenvis-service-asset/
 !zenvis-service/zenvis-service-operation/
 !zenvis-service/zenvis-service-risk/
+
+# AI智能体
+.trae

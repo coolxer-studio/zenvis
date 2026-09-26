@@ -241,7 +241,7 @@
 														"type": "wrapper",
 														"body": {
 															"type": "service",
-															"api": "/zenvis/api/v1/system/plugin/${id}/doc/view?file=${doc_name}",
+															"api": "/zenvis/api/v1/system/plugin/${id}/doc/view?file=${doc_name|default:README.md}",
 															"body": {
 																"type": "markdown",
 																"value": "${value | url_decode}"

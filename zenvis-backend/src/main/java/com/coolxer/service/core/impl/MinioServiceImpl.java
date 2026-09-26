@@ -16,7 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -168,6 +170,58 @@ public class MinioServiceImpl implements MinioService {
             throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "列出文件失败：" + e.getMessage());
         }
         return objectNames;
+    }
+
+    @Override
+    public List<Map<String, Object>> listDirectory(String prefix, String bucketName) {
+        if (StringUtils.isBlank(bucketName)) {
+            bucketName = minioProperties.getBucketName();
+        }
+        String normalizedPrefix;
+        if (StringUtils.isBlank(prefix) || prefix.equals("/")) {
+            normalizedPrefix = "";
+        } else {
+            normalizedPrefix = prefix.endsWith("/") ? prefix : prefix + "/";
+        }
+        List<Map<String, Object>> items = new ArrayList<>();
+        try {
+            Iterable<Result<Item>> results = minioClient.listObjects(ListObjectsArgs.builder()
+                    .bucket(bucketName)
+                    .prefix(normalizedPrefix)
+                    .delimiter("/")
+                    .recursive(false)
+                    .build());
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                Map<String, Object> map = new HashMap<>();
+                if (item.isDir()) {
+                    String dirName = item.objectName();
+                    // 去掉前缀，保留最后一级目录名
+                    if (dirName.endsWith("/")) {
+                        dirName = dirName.substring(0, dirName.length() - 1);
+                    }
+                    int lastSlash = dirName.lastIndexOf('/');
+                    String name = lastSlash >= 0 ? dirName.substring(lastSlash + 1) : dirName;
+                    map.put("name", name);
+                    map.put("path", item.objectName());
+                    map.put("type", "directory");
+                } else {
+                    String objName = item.objectName();
+                    int lastSlash = objName.lastIndexOf('/');
+                    String name = lastSlash >= 0 ? objName.substring(lastSlash + 1) : objName;
+                    map.put("name", name);
+                    map.put("path", objName);
+                    map.put("type", "file");
+                    map.put("size", item.size());
+                    map.put("lastModified", item.lastModified() != null ? item.lastModified().toInstant().toEpochMilli() : null);
+                }
+                items.add(map);
+            }
+        } catch (Exception e) {
+            log.error("Failed to list directory: {}", e.getMessage(), e);
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "列出目录失败：" + e.getMessage());
+        }
+        return items;
     }
 
     @Override

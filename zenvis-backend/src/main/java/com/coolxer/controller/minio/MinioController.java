@@ -3,6 +3,7 @@ package com.coolxer.controller.minio;
 import com.coolxer.controller.BaseController;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.core.vo.MinioFileVo;
+import com.coolxer.model.core.vo.MinioItemVo;
 import com.coolxer.service.core.MinioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +24,8 @@ import java.io.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPOutputStream;
 
 @Slf4j
@@ -147,6 +150,27 @@ public class MinioController extends BaseController {
             log.error("Failed to setup tar.gz stream: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    @GetMapping("/list")
+    @Operation(summary = "列出目录内容", description = "获取指定目录下的子目录和文件列表（非递归）")
+    public ResponseWrap<List<MinioItemVo>> list(
+            @RequestParam(value = "path", required = false, defaultValue = "") String path,
+            @RequestParam(value = "bucket", required = false) String bucket) {
+        List<Map<String, Object>> items = minioService.listDirectory(path, bucket);
+        List<MinioItemVo> voList = items.stream().map(item -> {
+            MinioItemVo vo = MinioItemVo.builder()
+                    .name((String) item.get("name"))
+                    .path((String) item.get("path"))
+                    .type((String) item.get("type"))
+                    .build();
+            if ("file".equals(item.get("type"))) {
+                vo.setSize(item.get("size") != null ? ((Number) item.get("size")).longValue() : null);
+                vo.setLastModified(item.get("lastModified") != null ? ((Number) item.get("lastModified")).longValue() : null);
+            }
+            return vo;
+        }).collect(Collectors.toList());
+        return ResponseWrap.success(voList);
     }
 
     @DeleteMapping

@@ -40,6 +40,7 @@
         <commonmark.version>0.28.0</commonmark.version>
         <jsoup.version>1.22.2</jsoup.version>
         <openhtmltopdf.version>1.1.37</openhtmltopdf.version>
+        <minio.version>8.5.11</minio.version>
     </properties>
 
     <profiles>
@@ -312,6 +313,13 @@
             <artifactId>proguard-base</artifactId>
             <version>${proguard-base.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- MinIO Java SDK -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>${minio.version}</version>
         </dependency>
     </dependencies>
 

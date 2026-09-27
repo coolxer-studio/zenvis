@@ -1,4 +1,0 @@
-interface:
-  display_name: "Zenvis 插件创建"
-  short_description: "从数据字典创建、校验并打包完整 Zenvis 插件"
-  default_prompt: "使用 $create-zenvis-plugin 根据输入数据字典创建、校验并打包 Zenvis 插件。"

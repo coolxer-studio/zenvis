@@ -22,6 +22,7 @@
 							"label": "上传插件包",
 							"accept": ".tar.gz",
 							"drag": true,
+							"useChunk": false,
 							"receiver": "/zenvis/api/v1/system/plugin/upload",
 							"autoFill": {
 								"name": "${name}",
@@ -491,6 +492,7 @@
 									"label": "上传更高版本插件包",
 									"accept": ".tar.gz",
 									"drag": true,
+									"useChunk": false,
 									"hiddenOn": "data.hide_confirm",
 									"receiver": "/zenvis/api/v1/system/plugin/upload",
 									"onEvent": {

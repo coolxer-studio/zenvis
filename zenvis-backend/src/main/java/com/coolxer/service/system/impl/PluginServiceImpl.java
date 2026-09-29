@@ -2492,9 +2492,16 @@ public class PluginServiceImpl implements PluginService {
                 throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "HTML看板文件不存在: " + dashboardDto.getHtmlPath());
             }
             Path targetRoot = requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot());
-            Path target = requireChildPath(targetRoot.resolve(relativeHtmlPath), targetRoot);
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            Path parentDir = relativeHtmlPath.getParent();
+            if (parentDir != null && parentDir.getNameCount() > 0) {
+                Path sourceDir = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(parentDir), pluginPackTool.getDashboardHtmlPath());
+                Path targetDir = requireChildPath(targetRoot.resolve(parentDir), targetRoot);
+                WalkFileUtil.copy(sourceDir, targetDir);
+            } else {
+                Path target = requireChildPath(targetRoot.resolve(relativeHtmlPath), targetRoot);
+                Files.createDirectories(target.getParent());
+                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            }
             copiedPaths.add(targetRoot);
             dashboardDto.setHtmlPath(packageName + "/" + toUnixPath(relativeHtmlPath));
         } else if (type == DashboardType.LINK && StringUtils.isBlank(dashboardDto.getUrl())) {
@@ -2523,9 +2530,16 @@ public class PluginServiceImpl implements PluginService {
                 Path relativePath = exportHtmlPagePath(packageName, dashboard.getHtmlPath());
                 Path source = requireChildPath(htmlPageRoot().resolve(packageName).resolve(relativePath), requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
                 if (Files.exists(source) && Files.isRegularFile(source)) {
-                    Path target = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relativePath), pluginPackTool.getDashboardHtmlPath());
-                    Files.createDirectories(target.getParent());
-                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                    Path parentDir = relativePath.getParent();
+                    if (parentDir != null && parentDir.getNameCount() > 0) {
+                        Path sourceDir = requireChildPath(htmlPageRoot().resolve(packageName).resolve(parentDir), requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+                        Path targetDir = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(parentDir), pluginPackTool.getDashboardHtmlPath());
+                        WalkFileUtil.copy(sourceDir, targetDir);
+                    } else {
+                        Path target = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relativePath), pluginPackTool.getDashboardHtmlPath());
+                        Files.createDirectories(target.getParent());
+                        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
                     dashboardDto.setHtmlPath(toUnixPath(relativePath));
                 }
             }

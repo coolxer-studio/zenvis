@@ -34,6 +34,17 @@
               "clearable": true
             },
             {
+              "label": "传输类型",
+              "name": "transport_type",
+              "type": "select",
+              "required": true,
+              "value": "SSE",
+              "options": [
+                { "label": "SSE", "value": "SSE" },
+                { "label": "Streamable HTTP", "value": "STREAMABLE_HTTP" }
+              ]
+            },
+            {
               "label": "基础地址",
               "name": "base_url",
               "type": "input-url",
@@ -42,11 +53,12 @@
               "placeholder": "http://127.0.0.1:11002"
             },
             {
-              "label": "SSE Endpoint",
+              "label": "Endpoint 路径",
               "name": "sse_endpoint",
               "type": "input-text",
               "value": "/sse",
-              "required": true
+              "required": true,
+              "description": "SSE 类型默认 /sse，Streamable HTTP 类型默认 /mcp"
             },
             {
               "label": "启用",
@@ -727,6 +739,17 @@
           "toggled": true
         },
         {
+          "name": "transport_type",
+          "label": "传输类型",
+          "type": "mapping",
+          "map": {
+            "SSE": "<span class='label label-info'>SSE</span>",
+            "STREAMABLE_HTTP": "<span class='label label-success'>Streamable HTTP</span>",
+            "*": "<span class='label label-default'>未知</span>"
+          },
+          "toggled": true
+        },
+        {
           "name": "enabled",
           "label": "启用",
           "type": "mapping",
@@ -946,6 +969,16 @@
                       "clearable": true
                     },
                     {
+                      "label": "传输类型",
+                      "name": "transport_type",
+                      "type": "select",
+                      "required": true,
+                      "options": [
+                        { "label": "SSE", "value": "SSE" },
+                        { "label": "Streamable HTTP", "value": "STREAMABLE_HTTP" }
+                      ]
+                    },
+                    {
                       "label": "基础地址",
                       "name": "base_url",
                       "type": "input-url",
@@ -953,10 +986,11 @@
                       "clearable": true
                     },
                     {
-                      "label": "SSE Endpoint",
+                      "label": "Endpoint 路径",
                       "name": "sse_endpoint",
                       "type": "input-text",
-                      "required": true
+                      "required": true,
+                      "description": "SSE 类型默认 /sse，Streamable HTTP 类型默认 /mcp"
                     },
                     {
                       "label": "启用",

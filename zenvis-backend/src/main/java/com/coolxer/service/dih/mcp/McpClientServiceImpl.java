@@ -3,6 +3,7 @@ package com.coolxer.service.dih.mcp;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.enums.McpApprovalPolicy;
 import com.coolxer.commons.enums.McpToolSourceType;
+import com.coolxer.commons.enums.McpTransportType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.dao.mysql.entity.McpToolPolicyConfig;
@@ -19,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PreDestroy;
 import lombok.AllArgsConstructor;
@@ -62,6 +64,7 @@ import java.util.zip.CRC32;
 public class McpClientServiceImpl implements McpClientService {
 
     private static final String DEFAULT_SSE_ENDPOINT = "/sse";
+    private static final String DEFAULT_STREAMABLE_HTTP_ENDPOINT = "/mcp";
     private static final int DEFAULT_REQUEST_TIMEOUT_SECONDS = 30;
     private static final int DEFAULT_CONNECT_TIMEOUT_SECONDS = 10;
     private static final int MAX_PROMPT_CHARS = 8000;
@@ -467,6 +470,18 @@ public class McpClientServiceImpl implements McpClientService {
         String baseUrl = resolvePlaceholders(config.getBaseUrl());
         validateBaseUrl(baseUrl);
         Map<String, String> headers = parseHeaders(config.getHeaders());
+
+        McpTransportType transportType = config.getTransportType() != null
+                ? config.getTransportType() : McpTransportType.SSE;
+
+        if (transportType == McpTransportType.STREAMABLE_HTTP) {
+            return createStreamableHttpClient(baseUrl, config, headers);
+        } else {
+            return createSseClient(baseUrl, config, headers);
+        }
+    }
+
+    private McpSyncClient createSseClient(String baseUrl, McpServerConfig config, Map<String, String> headers) {
         HttpClientSseClientTransport.Builder transportBuilder = HttpClientSseClientTransport.builder(baseUrl)
                 .sseEndpoint(config.getSseEndpoint())
                 .connectTimeout(Duration.ofSeconds(config.getConnectTimeoutSeconds()));
@@ -475,6 +490,23 @@ public class McpClientServiceImpl implements McpClientService {
                     headers.forEach(builder::header));
         }
         HttpClientSseClientTransport transport = transportBuilder.build();
+        return McpClient.sync(transport)
+                .clientInfo(new McpSchema.Implementation(config.getCode(), config.getName(), clientVersion))
+                .requestTimeout(Duration.ofSeconds(config.getRequestTimeoutSeconds()))
+                .initializationTimeout(Duration.ofSeconds(config.getRequestTimeoutSeconds()))
+                .build();
+    }
+
+    private McpSyncClient createStreamableHttpClient(String baseUrl, McpServerConfig config,
+                                                     Map<String, String> headers) {
+        HttpClientStreamableHttpTransport.Builder transportBuilder = HttpClientStreamableHttpTransport.builder(baseUrl)
+                .endpoint(config.getSseEndpoint())
+                .connectTimeout(Duration.ofSeconds(config.getConnectTimeoutSeconds()));
+        if (!headers.isEmpty()) {
+            transportBuilder.httpRequestCustomizer((builder, method, endpoint, body, context) ->
+                    headers.forEach(builder::header));
+        }
+        HttpClientStreamableHttpTransport transport = transportBuilder.build();
         return McpClient.sync(transport)
                 .clientInfo(new McpSchema.Implementation(config.getCode(), config.getName(), clientVersion))
                 .requestTimeout(Duration.ofSeconds(config.getRequestTimeoutSeconds()))
@@ -598,7 +630,12 @@ public class McpClientServiceImpl implements McpClientService {
         config.setCode(normalizeCode(config.getCode()));
         config.setName(StringUtils.trim(config.getName()));
         config.setBaseUrl(StringUtils.removeEnd(StringUtils.trim(config.getBaseUrl()), "/"));
-        config.setSseEndpoint(normalizeEndpoint(config.getSseEndpoint()));
+        if (config.getTransportType() == null) {
+            config.setTransportType(McpTransportType.SSE);
+        }
+        String defaultEndpoint = config.getTransportType() == McpTransportType.STREAMABLE_HTTP
+                ? DEFAULT_STREAMABLE_HTTP_ENDPOINT : DEFAULT_SSE_ENDPOINT;
+        config.setSseEndpoint(normalizeEndpoint(config.getSseEndpoint(), defaultEndpoint));
         config.setEnabled(config.getEnabled() == null || config.getEnabled());
         config.setRequestTimeoutSeconds(defaultPositive(config.getRequestTimeoutSeconds(), DEFAULT_REQUEST_TIMEOUT_SECONDS));
         config.setConnectTimeoutSeconds(defaultPositive(config.getConnectTimeoutSeconds(), DEFAULT_CONNECT_TIMEOUT_SECONDS));
@@ -622,7 +659,11 @@ public class McpClientServiceImpl implements McpClientService {
     }
 
     private static String normalizeEndpoint(String endpoint) {
-        String normalized = StringUtils.defaultIfBlank(StringUtils.trim(endpoint), DEFAULT_SSE_ENDPOINT);
+        return normalizeEndpoint(endpoint, DEFAULT_SSE_ENDPOINT);
+    }
+
+    private static String normalizeEndpoint(String endpoint, String defaultEndpoint) {
+        String normalized = StringUtils.defaultIfBlank(StringUtils.trim(endpoint), defaultEndpoint);
         return normalized.startsWith("/") ? normalized : "/" + normalized;
     }
 

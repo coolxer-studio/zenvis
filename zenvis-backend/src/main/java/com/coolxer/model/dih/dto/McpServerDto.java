@@ -1,5 +1,6 @@
 package com.coolxer.model.dih.dto;
 
+import com.coolxer.commons.enums.McpTransportType;
 import lombok.Data;
 
 @Data
@@ -30,4 +31,9 @@ public class McpServerDto {
      * 来源，用于区分插件导入资源。
      */
     private String source;
+
+    /**
+     * 传输类型：SSE 或 STREAMABLE_HTTP。
+     */
+    private McpTransportType transportType;
 }

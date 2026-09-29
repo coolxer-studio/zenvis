@@ -1,10 +1,13 @@
 package com.coolxer.dao.mysql.entity;
 
+import com.coolxer.commons.enums.McpTransportType;
 import com.coolxer.dao.mysql.constant.MysqlFinalTableName;
 import com.coolxer.model.dih.dto.McpServerDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -104,6 +107,13 @@ public class McpServerConfig extends BaseEntity {
     @Column(name = "source", length = 256)
     private String source = "default";
 
+    /**
+     * 传输类型：SSE 或 Streamable HTTP。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transport_type", length = 32)
+    private McpTransportType transportType = McpTransportType.SSE;
+
     public void updateFromDto(McpServerDto dto) {
         if (dto.getCode() != null) {
             this.code = dto.getCode();
@@ -134,6 +144,9 @@ public class McpServerConfig extends BaseEntity {
         }
         if (dto.getSource() != null) {
             this.source = dto.getSource();
+        }
+        if (dto.getTransportType() != null) {
+            this.transportType = dto.getTransportType();
         }
     }
 }

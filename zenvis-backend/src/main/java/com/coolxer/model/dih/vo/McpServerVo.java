@@ -1,5 +1,6 @@
 package com.coolxer.model.dih.vo;
 
+import com.coolxer.commons.enums.McpTransportType;
 import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.configuration.JacksonConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -46,6 +47,8 @@ public class McpServerVo implements Serializable {
 
     private String source;
 
+    private McpTransportType transportType;
+
     private Date createTime;
 
     private Date updateTime;
@@ -78,6 +81,7 @@ public class McpServerVo implements Serializable {
         this.lastConnectedTime = config.getLastConnectedTime();
         this.toolCount = toolCount;
         this.source = config.getSource();
+        this.transportType = config.getTransportType();
         this.createTime = config.getCreateTime();
         this.updateTime = config.getUpdateTime();
     }

@@ -56,7 +56,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URLEncoder;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -267,6 +269,96 @@ public class PluginServiceImpl implements PluginService {
         } catch (IOException e) {
             throw invalidPluginPackage(e.getMessage());
         }
+    }
+
+    @Override
+    public Plugin downloadFromUrl(String downloadUrl, PluginDto pluginDto) {
+        checkCreateOrUpdate(pluginDto);
+        String filePath = downloadPackage(downloadUrl, pluginDto.getPackageName());
+        // 创建插件记录
+        Plugin plugin = new Plugin();
+        plugin.updateFromDto(pluginDto);
+        plugin.setPluginPath(filePath);
+        plugin.setStatus(PluginStatusType.UN_INSTALL);
+        plugin.setOperationMessage("下载完成，待安装");
+        plugin.setOperationError(null);
+        if (StringUtils.isEmpty(plugin.getIcon())) {
+            plugin.setIcon("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAADrklEQVR4nO2dOWgVURiFPyVBtAha+lwQlwi2ro0xnUU0plDxRhG10xiLWGovagQrFRVcSkshuASNgmgTt0pLLRQRF1xAweXJwH0gwRff8s+8O3fOgVMOPM5355//zr3vDkiSJEmSJEmSJEmSJElSbZoBdALdQA+wBXCBeRcwBBwBbgDvgHIT/go8B64D+4F5rQh+OrAS2BZAwK5O9wMngbdNgqj4F3AFWJBV+HMDHemuTu8Gxo0gJP4M9KYd/tKcjno3yd1wzRBCcjccSHPkxxS++wvCuDGE3jQetjGUHTdJOfpgXI5KlgBWBxCSS9lnDQEkPmc5+mMsPW6CtwPvDQH89GW7aXUGEI7LyDeM74IBCwDdAQTjMvJRYwAjFgA2BBCMy8hDxgCSGXPTirn7cf/ohiwBfLEA4ArmsrEFAAHIlcsCgAAIAALgBEAAygKAALQ6EFd0AEV4E+q8d4QIoCeAYFxGPhgigGUBBOMy8tUQAUwBuqr84K3AWmARMBNo8+4AZgPLgU0ZBjgIXASeAq+B794vgVvAMLCzyrXDfhElOAAVCAs8iPXAGmC+D7uWaxNAfSkGPwCM+QXx/wXyDXgAnAYOA8eBe8DvFMI3A2Ch9knuJNeET/hQ0wgvKgCVu2G5YfiXUhy5UQL43zPF1TnyQw8/SACVctTXZM0PuewEDwD/YHYN+k4AweYewJQGW9TBGrudUBy0VjT44G11qNEAKDUA4EkAoUYDoKMBAG8CCDUaAG0NAMhL95MLAO0CkL8S9DqAUKMBUNJDOH9t6IUAQi30RGy/JmI2WtxA+BWPBRBsrgHoZVwEr6OP5qQUBSUtyES4JDkceDkyG7kLgXUTFuXba7x2ccqL8vuA23Usyt8HTgGHfCm7m2I5a1pTffDVtqV0+YBnTdiWUvJ9fpbbUgb8POEx8MqHnfgFMOp3QFTblnIs1G0p2phFawHob6q0FoA259JaAK5gLgsAAiAACIATAAEoCwAC0OpAnAAUy2UBQACKemDTHuPwP1kAKNK7oIPGAJ5ZANChfbT20L4iHVs5agxgrwWAohzcusP44NYfVge3JloVQEAuZZ83Hv1nMP5gw+YAQnIpdj8fjbuf5KQAU82O+Pj6h4bhJ4v7G0lJnZFB6PffgrEMP/kTYaqaE0k52gM8Mi47yZwpE03zO9y25XTUnzKs+cmov5xGza+1RV0S+GesdvsZbjLJumnQan7xM9wRvyHMrNWUJEmSJEmSJEmSJEmSiFp/AAmQ4TkXK5gLAAAAAElFTkSuQmCC");
+        }
+        return pluginRepository.save(plugin);
+    }
+
+    @Override
+    public String downloadPackage(String downloadUrl, String packageName) {
+        try {
+            Path directory = pluginRoot();
+            if (!Files.exists(directory)) {
+                Files.createDirectories(directory);
+            }
+            Path tempDir = directory.resolve("temp").resolve(DateUtil.getCurrentDateTime().replace(" ", "/"));
+            if (!Files.exists(tempDir)) {
+                Files.createDirectories(tempDir);
+            }
+            // 从URL中提取文件名
+            String fileName = Paths.get(new URL(downloadUrl).getPath()).getFileName().toString();
+            if (StringUtils.isBlank(fileName) || !fileName.endsWith(".tar.gz")) {
+                fileName = packageName.replace(".", "-") + ".tar.gz";
+            }
+            Path filePath = requireChildPath(tempDir.resolve(fileName), directory);
+
+            // 下载文件（手动处理重定向，兼容Gitee）
+            downloadFileWithRedirects(downloadUrl, filePath);
+
+            // 验证tar.gz格式
+            TarGzUtil.validateTarGz(filePath);
+
+            return filePath.toString();
+        } catch (IOException e) {
+            throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "下载插件失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 带重定向的文件下载，支持最多5次重定向
+     */
+    private void downloadFileWithRedirects(String urlStr, Path destPath) throws IOException {
+        String currentUrl = urlStr;
+        int redirects = 0;
+        int maxRedirects = 5;
+        while (redirects < maxRedirects) {
+            URL url = new URL(currentUrl);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            conn.setInstanceFollowRedirects(false);
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(300000);
+            try {
+                int code = conn.getResponseCode();
+                if (code >= 200 && code < 300) {
+                    try (InputStream is = conn.getInputStream()) {
+                        Files.copy(is, destPath, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    return;
+                } else if (code == HttpURLConnection.HTTP_MOVED_TEMP
+                        || code == HttpURLConnection.HTTP_MOVED_PERM
+                        || code == HttpURLConnection.HTTP_SEE_OTHER
+                        || code == 307 || code == 308) {
+                    String location = conn.getHeaderField("Location");
+                    if (location == null) {
+                        throw new IOException("重定向无 Location 头，状态码: " + code);
+                    }
+                    URL base = new URL(currentUrl);
+                    currentUrl = new URL(base, location).toString();
+                    redirects++;
+                } else {
+                    throw new IOException("下载失败，HTTP 状态码: " + code);
+                }
+            } finally {
+                conn.disconnect();
+            }
+        }
+        throw new IOException("重定向次数过多: " + redirects);
     }
 
     @Override

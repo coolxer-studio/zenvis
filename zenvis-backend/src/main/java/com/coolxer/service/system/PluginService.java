@@ -68,6 +68,24 @@ public interface PluginService {
     PluginVo uploadFile(MultipartFile file);
 
     /**
+     * 从URL下载插件包并创建插件记录
+     *
+     * @param downloadUrl 下载地址
+     * @param pluginDto   插件信息
+     * @return 插件实体
+     */
+    Plugin downloadFromUrl(String downloadUrl, PluginDto pluginDto);
+
+    /**
+     * 从URL下载插件包到本地临时目录，返回本地文件路径
+     *
+     * @param downloadUrl 下载地址
+     * @param packageName 插件包名（用于生成文件名）
+     * @return 本地文件路径
+     */
+    String downloadPackage(String downloadUrl, String packageName);
+
+    /**
      * icon转base64
      *
      * @param file

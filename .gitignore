@@ -20,6 +20,7 @@ zenvis-service/*
 !zenvis-plugin/zenvis-plugin-risk/
 !zenvis-plugin/zenvis-plugin-synap/
 !zenvis-plugin/zenvis-plugin-user-event/
+!zenvis-plugin/market-plugins.json
 
 !zenvis-service/zenvis-service-vectum/
 !zenvis-service/zenvis-service-asset/

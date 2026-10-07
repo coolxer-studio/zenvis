@@ -80,6 +80,217 @@
 					]
 				}
 			}
+		},
+		{
+			"type": "button",
+			"actionType": "dialog",
+			"label": "插件市场",
+			"icon": "fa fa-shopping-bag",
+			"level": "default",
+			"dialog": {
+				"title": "插件市场",
+				"size": "full",
+				"body": {
+					"name": "market_plugin_list",
+						"type": "crud",
+						"api": "/zenvis/api/v1/system/plugin/market/list",
+						"mode": "cards",
+						"columnsCount": 4,
+						"loadDataOnce": true,
+						"loadDataOnceFetchOnFilter": false,
+						"perPage": 12,
+					"perPageAvailable": [12, 24, 48, 96],
+					"footerToolbar": ["statistics", "switch-per-page", "pagination"],
+					"filter": {
+						"title": "搜索",
+						"body": [
+							{
+								"label": "插件名称",
+								"type": "input-text",
+								"name": "name",
+								"clearable": true,
+								"placeholder": "通过插件名称搜索",
+								"size": "lg"
+							},
+							{
+								"label": "插件包名",
+								"type": "input-text",
+								"name": "package_name",
+								"clearable": true,
+								"placeholder": "通过插件包名搜索",
+								"size": "lg"
+							}
+						],
+						"actions": [
+							{
+								"type": "reset",
+								"label": "重置"
+							},
+							{
+								"type": "submit",
+								"level": "primary",
+								"label": "查询"
+							}
+						]
+					},
+					"card": {
+						"header": {
+							"title": "$name",
+							"subTitle": "${description | truncate:24}",
+							"subTitlePlaceholder": "暂无说明",
+							"avatar": "${icon}",
+							"avatarClassName": "pull-left b-3x m-r w-12 h-12"
+						},
+						"body": [
+							{
+								"name": "package_name",
+								"label": "包名",
+								"type": "tpl",
+								"tpl": "${package_name|truncate:24}",
+								"popOver": {
+									"trigger": "hover",
+									"position": "left-top",
+									"showIcon": false,
+									"body": {
+										"type": "tpl",
+										"tpl": "${package_name}"
+									}
+								}
+							},
+							{
+								"name": "version",
+								"label": "版本",
+								"type": "text"
+							},
+							{
+								"name": "author",
+								"label": "作者",
+								"type": "text"
+							},
+							{
+								"name": "update_time",
+								"label": "更新时间"
+							}
+						],
+						"actionsCount": 2,
+						"actions": [
+							{
+								"type": "button",
+								"label": "下载",
+								"icon": "fa fa-download text-success",
+								"level": "primary",
+								"visibleOn": "this.market_status === 'not_installed'",
+								"actionType": "ajax",
+								"api": {
+									"method": "post",
+									"url": "/zenvis/api/v1/system/plugin/market/${id}/download",
+									"messages": {
+										"success": "插件下载成功，待前往插件管理安装生效",
+										"failed": "插件下载失败，请稍后重试"
+									}
+								},
+								"confirmText": "确认下载插件 ${name} (${version})？",
+								"onEvent": {
+									"success": {
+										"actions": [
+											{
+												"actionType": "reload",
+												"target": "plugin_list"
+											},
+											{
+												"actionType": "reload",
+												"target": "market_plugin_list"
+											}
+										]
+									}
+								}
+							},
+							{
+								"type": "button",
+								"label": "已安装",
+								"icon": "fa fa-check-circle text-success",
+								"level": "success",
+								"disabled": true,
+								"visibleOn": "this.market_status === 'installed'"
+							},
+							{
+								"type": "button",
+								"label": "升级",
+								"icon": "fa fa-arrow-up text-warning",
+								"level": "warning",
+								"visibleOn": "this.market_status === 'upgradeable'",
+								"actionType": "ajax",
+								"api": {
+									"method": "post",
+									"url": "/zenvis/api/v1/system/plugin/market/${id}/upgrade",
+									"messages": {
+										"success": "插件升级任务已提交，请稍候",
+										"failed": "插件升级失败，请稍后重试"
+									}
+								},
+								"confirmText": "确认将插件 ${name} 从 ${local_version} 升级到 ${version}？",
+								"onEvent": {
+									"success": {
+										"actions": [
+											{
+												"actionType": "reload",
+												"target": "plugin_list"
+											},
+											{
+												"actionType": "reload",
+												"target": "market_plugin_list"
+											}
+										]
+									}
+								}
+							},
+							{
+								"type": "button",
+								"label": "详情",
+								"icon": "fa fa-info-circle text-info",
+								"actionType": "dialog",
+								"dialog": {
+									"title": "插件详情",
+									"size": "lg",
+									"body": {
+										"type": "grid",
+										"columns": [
+											{
+												"md": 3,
+												"body": [
+													{
+														"type": "image",
+														"src": "${icon}",
+														"className": "w-24 h-24"
+													}
+												]
+											},
+											{
+												"md": 9,
+												"body": [
+													{
+															"type": "tpl",
+															"tpl": "<h3>${name}</h3><p class=\"text-muted\">${package_name} v${version}</p><p>作者：${author}</p><p>${description}</p>"
+														},
+														{
+															"type": "button",
+															"label": "查看插件详情",
+															"icon": "fa fa-external-link",
+															"level": "link",
+															"actionType": "url",
+															"url": "${detail_url}",
+															"blank": true
+														}
+												]
+											}
+										]
+									}
+								}
+							}
+						]
+					}
+				}
+			}
 		}
 	],
 	"body": [

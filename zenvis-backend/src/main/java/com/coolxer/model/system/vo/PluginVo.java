@@ -69,6 +69,31 @@ public class PluginVo implements Serializable {
     private String pluginPath;
 
     /**
+     * 市场插件下载地址
+     */
+    private String downloadUrl;
+
+    /**
+     * 插件详情链接
+     */
+    private String detailUrl;
+
+    /**
+     * 市场插件状态：not_installed-未安装 installed-已安装 upgradeable-可升级
+     */
+    private String marketStatus;
+
+    /**
+     * 本地插件ID（市场插件匹配到本地插件时使用）
+     */
+    private Integer localId;
+
+    /**
+     * 本地插件版本（市场插件匹配到本地插件时使用）
+     */
+    private String localVersion;
+
+    /**
      * 升级候选包路径。
      */
     private String pendingUpgradePath;

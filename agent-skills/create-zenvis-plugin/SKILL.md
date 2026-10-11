@@ -45,6 +45,7 @@ plugin-name/
 ├── README.md
 ├── icon.png
 ├── 00_doc/
+│   └── README.md          # required: documentation entry point
 ├── 01_meta/
 ├── 02_push-task/
 ├── 03_api/
@@ -183,6 +184,7 @@ Do not create a demo push service unless the user explicitly requests one.
 
 ### Transform safely
 
+- Treat VRL cast/parse functions (`to_string`, `to_int`, `to_float`, `to_bool`, `to_timestamp`, `parse_json`, `parse_regex`, `parse_timestamp`, and similar) as fallible whenever the argument's type cannot be statically verified — for example any event field from a dynamic source such as a syslog-decoded `.appname`. Always coalesce or handle the error: `appname = to_string(.appname) ?? ""` or `appname, err = to_string(.appname)`. Never write a bare `x = to_string(.field)`; it fails `vector validate` with `error[E103]: unhandled fallible assignment`, which then cascades into `error[E701]: undefined variable` for every later reference to that variable. Choose the `??` fallback (empty string, `0`, `{}`) so the downstream contract stays valid.
 - Ensure each transform emits exactly the Meta attribute names for its entity.
 - Validate the expected field count before indexing split arrays.
 - Route malformed rows to a DLQ with source code, raw record, and error reason.
@@ -215,6 +217,14 @@ When the plugin requires cross-entity IP investigation:
 5. Return zero for entities without IP fields and retain them in the type overview when required.
 6. Pass multi-entity query parameters as a comma-separated scalar unless the current server explicitly supports bracket notation. Avoid `entities[0]` style URLs that Tomcat may reject.
 7. Configure IP Meta attributes with `link_template` to this page.
+
+### Match menu type with the 04_ui entry file
+
+The `08_menu` type and the `04_ui` layout must match, otherwise the frontend iframe crashes at render time:
+
+- `LOW_CODE_APP` (params = plugin package name) **requires `04_ui/site.json`**. The app shell must be `{ "status": 0, "msg": "", "data": { "pages": [ ... ] } }`; every navigation entry needs `url`, optional `icon`, and `schemaApi: "get:/zenvis/api/v1/config/<package_name>/get?file_name=<page>.json"`. The menu renders through `/amis/app.html`, which fetches `file_name=site.json`; when that file is missing the backend returns an error payload without `data`, and the amis SDK throws `Uncaught (in promise) TypeError: Cannot read properties of undefined (reading 'pages')` and the page stays broken.
+- `LOW_CODE_PAGE` (params = config index: the package name for root-level `04_ui` files, or `<package_name>.<subdir>` for bundle subdirectories) does **not** need `site.json`. A standalone page schema root-level `04_ui/index.json` (`{ "type": "page", ... }`) is sufficient; the menu renders through `/amis/page.html`, which fetches `file_name=index.json` directly.
+- Never declare `LOW_CODE_APP` when only a standalone `index.json` page exists. Either change the menu to `LOW_CODE_PAGE`, or add a `site.json` app shell whose `data.pages` navigation references every page via `schemaApi` (including each structured entity's list page and the IP investigation page when present).
 
 Validate the low-code schema shape expected by the current SDK. In particular, distinguish a low-code app with `data.pages` from a standalone low-code page schema.
 
@@ -257,6 +267,7 @@ For the HTML page:
 
 ## Document and Version
 
+- **`00_doc/README.md` is required.** Every plugin must include a documentation entry point at `00_doc/README.md` that introduces the plugin, lists the documents in the directory, and summarizes the data model, push-task architecture, UI pages, dashboards, menus, and usage steps. Use the same language as the plugin's user-facing labels.
 - Copy or reference the authoritative source specification in `00_doc/` when permitted.
 - Update the source document when the user adds a new definition.
 - Document entity mapping, type mapping, directory conventions, environment variables, Base64 policy, and operational limitations.
@@ -269,19 +280,21 @@ For the HTML page:
 Run validation proportional to the change:
 
 1. Parse every JSON file.
-2. Parse YAML and run `vector validate` using the production Vector version or container when available.
+2. Parse YAML and run `vector validate` using the production Vector version or container when available. Every remap VRL block must compile — a config that has never passed `vector validate` must not be handed off.
 3. Confirm entity count equals the structured-definition count.
 4. Confirm entity names, tables, Kafka topics, transforms, sinks, UI pages, and dashboard entity lists are aligned.
-5. Compare every transform output field with the corresponding Meta attributes; report missing and extra fields.
-6. Run the complete “Validate Meta as a contract” checklist, including first-attribute detail links, IP links, copy flags, and reserved-field exclusions.
-7. Generate representative data for every definition and exercise source → Kafka → ClickHouse when infrastructure is available.
-8. Run targeted backend/frontend tests for any platform changes.
-9. Compile inline dashboard JavaScript and perform browser visual QA for material dashboard changes.
-10. Remove packaging noise such as `.DS_Store`.
-11. Build the plugin with the repository’s build script.
-12. Inspect the archive itself, not only the source tree:
+5. Confirm every `08_menu` entry matches its `04_ui` entry file: `LOW_CODE_APP` requires a `site.json` app shell with `data.pages` navigation, while `LOW_CODE_PAGE` requires a standalone page-schema `index.json` at the config index it points to.
+6. Compare every transform output field with the corresponding Meta attributes; report missing and extra fields.
+7. Run the complete “Validate Meta as a contract” checklist, including first-attribute detail links, IP links, copy flags, and reserved-field exclusions.
+8. Generate representative data for every definition and exercise source → Kafka → ClickHouse when infrastructure is available.
+9. Run targeted backend/frontend tests for any platform changes.
+10. Compile inline dashboard JavaScript and perform browser visual QA for material dashboard changes.
+11. Remove packaging noise such as `.DS_Store`.
+12. Build the plugin with the repository’s build script.
+13. Inspect the archive itself, not only the source tree:
     - verify `index.json` and version;
     - verify the latest Meta, push-task, UI, dashboard, and menu configs;
+    - verify `00_doc/README.md` is present;
     - verify static HTML and documentation are present;
     - verify the archive does not contain stale configuration from a previous build.
 

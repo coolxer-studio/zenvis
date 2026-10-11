@@ -50,9 +50,9 @@ plugin-name/
 ├── 02_push-task/
 ├── 03_api/
 ├── 04_ui/
-├── 05_dashboard/
-│   ├── config.json
 │   └── html-page/
+├── 05_dashboard/
+│   └── config.json
 ├── 06_mcp/
 ├── 07_skill/
 └── 08_menu/
@@ -225,6 +225,7 @@ The `08_menu` type and the `04_ui` layout must match, otherwise the frontend ifr
 - `LOW_CODE_APP` (params = plugin package name) **requires `04_ui/site.json`**. The app shell must be `{ "status": 0, "msg": "", "data": { "pages": [ ... ] } }`; every navigation entry needs `url`, optional `icon`, and `schemaApi: "get:/zenvis/api/v1/config/<package_name>/get?file_name=<page>.json"`. The menu renders through `/amis/app.html`, which fetches `file_name=site.json`; when that file is missing the backend returns an error payload without `data`, and the amis SDK throws `Uncaught (in promise) TypeError: Cannot read properties of undefined (reading 'pages')` and the page stays broken.
 - `LOW_CODE_PAGE` (params = config index: the package name for root-level `04_ui` files, or `<package_name>.<subdir>` for bundle subdirectories) does **not** need `site.json`. A standalone page schema root-level `04_ui/index.json` (`{ "type": "page", ... }`) is sufficient; the menu renders through `/amis/page.html`, which fetches `file_name=index.json` directly.
 - Never declare `LOW_CODE_APP` when only a standalone `index.json` page exists. Either change the menu to `LOW_CODE_PAGE`, or add a `site.json` app shell whose `data.pages` navigation references every page via `schemaApi` (including each structured entity's list page and the IP investigation page when present).
+- `04_ui/html-page/` is the reserved directory for static HTML dashboards. The installer excludes it from low-code bundle validation (no `site.json`/`index.json` required) and installs it through the Dashboard service instead; `html_path` in `05_dashboard/config.json` resolves relative to it.
 
 Validate the low-code schema shape expected by the current SDK. In particular, distinguish a low-code app with `data.pages` from a standalone low-code page schema.
 
@@ -250,8 +251,9 @@ For `05_dashboard/config.json`:
 ]
 ```
 
-- Place that file at `05_dashboard/html-page/security-overview.html`.
+- Place that file at `04_ui/html-page/security-overview.html`.
 - Do not put `/html-page/`, `/zenvis/html-page/`, the package name, or a deployment URL in `html_path` unless the checked-out installer contract explicitly says otherwise.
+- Do not use the legacy `05_dashboard/html-page/` location for new work; the installer only keeps it for backward compatibility with old packages.
 - Allow the installer to copy the file and derive its runtime public URL.
 
 For the HTML page:

@@ -87,7 +87,7 @@ public class PluginServiceImpl implements PluginService {
     private static final String PLUGIN_SKILL_DIR_NAME = "07_skill";
     private static final String PLUGIN_MENU_DIR_NAME = "08_menu";
     private static final String DASHBOARD_LOW_CODE_DIR_NAME = "low-code";
-    private static final String DASHBOARD_HTML_PAGE_DIR_NAME = "html-page";
+    private static final String UI_HTML_PAGE_DIR_NAME = "html-page";
     private static final String PLUGIN_UPGRADE_DIR_NAME = "upgrade";
     private static final String UPGRADE_SNAPSHOT_FILE_NAME = "snapshot.json";
     private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
@@ -2440,6 +2440,10 @@ public class PluginServiceImpl implements PluginService {
                 if (!Files.isDirectory(entry)) {
                     throw invalidPluginPackage("04_ui 包含不支持的文件类型: " + name);
                 }
+                if (UI_HTML_PAGE_DIR_NAME.equals(name)) {
+                    // html-page 为静态 HTML 看板保留目录，由看板流程安装，不作为低代码 bundle
+                    continue;
+                }
                 if (name.endsWith("_config")) {
                     throw invalidPluginPackage("04_ui 子目录名不能包含 _config 后缀: " + name);
                 }
@@ -2625,10 +2629,10 @@ public class PluginServiceImpl implements PluginService {
                     Path parentDir = relativePath.getParent();
                     if (parentDir != null && parentDir.getNameCount() > 0) {
                         Path sourceDir = requireChildPath(htmlPageRoot().resolve(packageName).resolve(parentDir), requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
-                        Path targetDir = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(parentDir), pluginPackTool.getDashboardHtmlPath());
+                        Path targetDir = requireChildPath(pluginPackTool.getUiHtmlPagePath().resolve(parentDir), pluginPackTool.getUiHtmlPagePath());
                         WalkFileUtil.copy(sourceDir, targetDir);
                     } else {
-                        Path target = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relativePath), pluginPackTool.getDashboardHtmlPath());
+                        Path target = requireChildPath(pluginPackTool.getUiHtmlPagePath().resolve(relativePath), pluginPackTool.getUiHtmlPagePath());
                         Files.createDirectories(target.getParent());
                         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
                     }
@@ -2945,7 +2949,7 @@ public class PluginServiceImpl implements PluginService {
         private Path skillPath;
         private Path dashboardPath;
         private Path dashboardLowCodePath;
-        private Path dashboardHtmlPath;
+        private Path uiHtmlPagePath;
         private Path mcpPath;
 
         public PluginPackTool buildPacker(String workspaceDir, String packageName) {
@@ -2977,7 +2981,7 @@ public class PluginServiceImpl implements PluginService {
             this.skillPath = pluginFilePath.resolve(PLUGIN_SKILL_DIR_NAME);
             this.dashboardPath = pluginFilePath.resolve(PLUGIN_DASHBOARD_DIR_NAME);
             this.dashboardLowCodePath = dashboardPath.resolve(DASHBOARD_LOW_CODE_DIR_NAME);
-            this.dashboardHtmlPath = dashboardPath.resolve(DASHBOARD_HTML_PAGE_DIR_NAME);
+            this.uiHtmlPagePath = uiPath.resolve(UI_HTML_PAGE_DIR_NAME);
             this.mcpPath = pluginFilePath.resolve(PLUGIN_MCP_DIR_NAME);
             return this;
         }
@@ -2991,9 +2995,9 @@ public class PluginServiceImpl implements PluginService {
                 WalkFileUtil.mkdir(pushTaskPath);
                 WalkFileUtil.mkdir(apiPath);
                 WalkFileUtil.mkdir(uiPath);
+                WalkFileUtil.mkdir(uiHtmlPagePath);
                 WalkFileUtil.mkdir(dashboardPath);
                 WalkFileUtil.mkdir(dashboardLowCodePath);
-                WalkFileUtil.mkdir(dashboardHtmlPath);
                 WalkFileUtil.mkdir(mcpPath);
                 WalkFileUtil.mkdir(skillPath);
                 WalkFileUtil.mkdir(menuPath);
@@ -3218,7 +3222,11 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public Path getDashboardHtmlPath() {
-            return dashboardHtmlPath;
+            // HTML 看板规范位置为 04_ui/html-page；兼容旧包回落到 05_dashboard/html-page。
+            // 必须在读取时动态判断：安装流程 init() 早于解压，构造期目录尚不存在。
+            return Files.isDirectory(uiHtmlPagePath)
+                    ? uiHtmlPagePath
+                    : dashboardPath.resolve(UI_HTML_PAGE_DIR_NAME);
         }
     }
 

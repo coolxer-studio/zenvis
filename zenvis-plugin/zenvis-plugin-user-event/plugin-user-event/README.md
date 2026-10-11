@@ -159,8 +159,8 @@ curl http://localhost:8080/api/v1/plugin/com.coolxer.plugin.user.event/user/list
 01_meta/         检索元数据与 ClickHouse 表结构
 02_push-task/    数推任务配置
 03_api/          API Jar，可为空
-04_ui/           低代码 UI 配置
-05_dashboard/    数据看板配置，内置用户事件 HTML 大屏看板
+04_ui/           低代码 UI 配置，内置用户事件 HTML 大屏看板（04_ui/html-page/）
+05_dashboard/    数据看板配置
 06_mcp/          MCP 服务配置，当前 config.json 为空数组
 07_skill/        Skill 目录，当前为空能力占位
 08_menu/         菜单配置，安装流程最后写入

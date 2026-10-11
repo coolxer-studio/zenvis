@@ -44,6 +44,21 @@
 
 平铺文件继续安装到 `<package_name>_config`。已有插件可以保持该布局；新建插件优先使用多配置目录，以避免应用、统计页和详情页共用一个配置索引。
 
+### 保留目录 html-page
+
+```text
+04_ui/
+└── html-page/
+    └── security-overview.html
+```
+
+`html-page` 是静态 HTML 看板的保留目录名，由 Dashboard 服务安装，不参与低代码配置校验：
+
+- 不要求包含 `site.json` 或 `index.json`；
+- 不生成配置索引，也不会复制到低代码配置目录；
+- 目录内支持多级子目录，用于多页面静态站点；
+- HTML_PAGE 看板的 `html_path` 相对于该目录解析。
+
 ## 低代码应用
 
 `site.json` 组织应用导航和页面配置：
@@ -102,8 +117,7 @@ GET /zenvis/api/v1/entity/example_event/{record_id}/view
 ```text
 05_dashboard/
 ├── config.json
-├── low-code/
-└── html-page/
+└── low-code/
 ```
 
 `config.json` 是与当前 `DashboardDto` 对齐的数组。支持：
@@ -111,7 +125,7 @@ GET /zenvis/api/v1/entity/example_event/{record_id}/view
 | 类型 | 关键字段 | 说明 |
 | --- | --- | --- |
 | `LOW_CODE_PAGE` | `config_index` | 读取 `low-code/<config_index>_config/` |
-| `HTML_PAGE` | `html_path` | 读取 `html-page/` 下的相对文件 |
+| `HTML_PAGE` | `html_path` | 读取 `04_ui/html-page/` 下的相对文件，旧包兼容 `05_dashboard/html-page/` |
 | `LINK` | `url` | 受控外部链接 |
 | `BUILT` | 平台内置配置 | 通常不由业务插件创建 |
 
@@ -131,10 +145,10 @@ GET /zenvis/api/v1/entity/example_event/{record_id}/view
 文件位于：
 
 ```text
-05_dashboard/html-page/security-overview.html
+04_ui/html-page/security-overview.html
 ```
 
-`html_path` 只填写相对于 `html-page` 的路径，不添加包名、部署前缀、`/html-page/` 或绝对 URL。安装器会复制文件并生成运行时路径。
+`html_path` 只填写相对于 `html-page` 目录的路径，不添加包名、部署前缀、`/html-page/` 或绝对 URL。安装器会复制文件并生成运行时路径。旧包的 `05_dashboard/html-page/` 位置仍可安装，但新建插件应使用 `04_ui/html-page/`。
 
 HTML 看板应：
 
@@ -229,10 +243,10 @@ Dashboard `code` 全局唯一并保持稳定。升级时平台用它匹配原看
 
 ## 检查清单
 
-- 每个多配置子目录都有 `site.json` 或 `index.json`。
+- 每个多配置子目录都有 `site.json` 或 `index.json`（保留目录 `html-page` 除外）。
 - 子目录名不带 `_config`，所有引用使用完整配置索引。
 - Entity 列表、详情页、Meta 链接和 API 路径一致。
-- Dashboard Code 唯一，HTML 路径为插件内相对路径。
+- Dashboard Code 唯一，HTML 路径为插件内相对路径，静态 HTML 位于 `04_ui/html-page/`。
 - Menu Type、Params 和实际页面类型一致。
 - 安装后已为目标角色分配菜单。
 - 页面覆盖加载、空数据、错误和刷新状态。

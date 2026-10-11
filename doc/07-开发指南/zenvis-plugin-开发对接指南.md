@@ -94,9 +94,9 @@ plugin-xxx/
 │   └── migrations/mysql/
 ├── api-src/                        # 源码仓库存在，归档排除
 ├── 04_ui/
-├── 05_dashboard/
-│   ├── config.json
 │   └── html-page/
+├── 05_dashboard/
+│   └── config.json
 ├── 06_mcp/
 ├── 07_skill/
 └── 08_menu/
@@ -110,8 +110,8 @@ plugin-xxx/
 | `02_push-task` | Vectum/Vector 任务注册与配置 |
 | `03_api` | 最多一个动态 API 薄 Jar，以及 MySQL 迁移 |
 | `api-src` | 动态 API Java 源码和测试，不进入归档 |
-| `04_ui` | 低代码应用、独立页面和详情页 |
-| `05_dashboard` | 看板配置和静态 HTML |
+| `04_ui` | 低代码应用、独立页面和详情页，保留目录 `html-page` 存放静态 HTML 看板 |
+| `05_dashboard` | 看板配置和低代码看板 |
 | `06_mcp` | 插件 MCP 服务配置 |
 | `07_skill` | 平台运行时 Skill |
 | `08_menu` | 安装生命周期最后导入的菜单 |
@@ -212,7 +212,7 @@ V002__add_status_index.sql
 - 详情页通过当前实体 API 读取记录，不复用错误实体。
 - URL 只允许相对路径或安全的 `http/https`。
 
-`05_dashboard/config.json` 使用当前 `DashboardDto` 数组。HTML 看板的 `html_path` 是相对 `05_dashboard/html-page` 的插件内路径，不包含运行时 `/zenvis/html-page/` 前缀。
+`05_dashboard/config.json` 使用当前 `DashboardDto` 数组。HTML 看板的 `html_path` 是相对 `04_ui/html-page` 的插件内路径，不包含运行时 `/zenvis/html-page/` 前缀；旧包的 `05_dashboard/html-page` 位置仍可安装。
 
 ### 6. 文档与版本
 

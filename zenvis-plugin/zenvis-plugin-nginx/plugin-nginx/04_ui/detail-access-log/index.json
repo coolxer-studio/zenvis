@@ -1,0 +1,136 @@
+{
+  "type": "page",
+  "title": "Nginx访问日志详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/nginx_access_log/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "访问日志属性",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。"
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 实际接收时间。"
+            },
+            {
+              "label": "客户端IP",
+              "content": "${remote_addr | default:'-'}",
+              "remark": "发起 HTTP 请求的客户端 IP 地址。"
+            },
+            {
+              "label": "请求时间",
+              "content": "${time_local | default:'-'}",
+              "remark": "Nginx 记录的本地请求时间。"
+            },
+            {
+              "label": "请求方法",
+              "content": "${method | default:'-'}",
+              "remark": "HTTP 请求方法。"
+            },
+            {
+              "label": "请求URI",
+              "content": "${uri | default:'-'}",
+              "remark": "请求 URI，包含路径和查询参数。"
+            },
+            {
+              "label": "协议版本",
+              "content": "${protocol | default:'-'}",
+              "remark": "HTTP 协议版本。"
+            },
+            {
+              "label": "状态码",
+              "content": "${status | default:'-'}",
+              "remark": "HTTP 响应状态码。"
+            },
+            {
+              "label": "响应大小",
+              "content": "${body_bytes_sent | default:'-'}",
+              "remark": "响应主体字节数。"
+            },
+            {
+              "label": "来源页",
+              "content": "${http_referer | default:'-'}",
+              "remark": "HTTP Referer 头。"
+            },
+            {
+              "label": "User-Agent",
+              "content": "${http_user_agent | default:'-'}",
+              "remark": "HTTP User-Agent 头。"
+            },
+            {
+              "label": "请求耗时",
+              "content": "${request_time | default:'-'}",
+              "remark": "请求处理总耗时（秒）。"
+            },
+            {
+              "label": "上游地址",
+              "content": "${upstream_addr | default:'-'}",
+              "remark": "上游服务器地址。"
+            },
+            {
+              "label": "上游耗时",
+              "content": "${upstream_response_time | default:'-'}",
+              "remark": "上游响应耗时（秒）。"
+            },
+            {
+              "label": "完整请求行",
+              "content": "${request_line | default:'-'}",
+              "remark": "客户端发送的完整请求行。"
+            },
+            {
+              "label": "服务端地址",
+              "content": "${server_addr | default:'-'}",
+              "remark": "Nginx 接收请求的服务器地址。"
+            },
+            {
+              "label": "虚拟主机名",
+              "content": "${server_name | default:'-'}",
+              "remark": "匹配到的 server_name 配置值。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

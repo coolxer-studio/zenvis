@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Nginx日志Syslog采集",
+    "description": "Vector 在 UDP 514 端口启动 Syslog 服务，接收 Nginx 转发的 access/error 日志（RFC3164），按 tag 打标后转发到 Kafka 原始消息队列，不做解析或转换。",
+    "config": "nginx-syslog-to-kafka.yaml"
+  },
+  {
+    "name": "Nginx日志解析入库",
+    "description": "从 Kafka 消费 Nginx 原始日志，解析 access_log（JSON）和 error_log（正则），映射字段后写入 ClickHouse 表。非法日志进入死信队列。",
+    "config": "nginx-kafka-to-clickhouse.yaml"
+  }
+]

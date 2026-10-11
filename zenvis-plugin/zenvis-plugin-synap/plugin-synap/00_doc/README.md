@@ -294,7 +294,7 @@ DLQ Sink 开启：
 
 配置中的环境变量均带有插件默认值；生产部署仍应显式覆盖连接凭据。Vectum 覆盖变量需要同时：
 
-1. 把覆盖变量注入 `vectum-service`；
+1. 把覆盖变量注入 `zenvis-service-vectum`；
 2. 将变量名加入 `VECTUM_VECTOR_ALLOWED_ENV`；
 3. 重启 Vectum；
 4. 在 Zenvis 中重新启动推送任务。

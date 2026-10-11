@@ -1,0 +1,351 @@
+---
+# Nginx Kafka → ClickHouse 解析入库
+# 从 Kafka 消费 Nginx 原始日志消息，解析 access_log（JSON 格式）和 error_log（正则格式），
+# 映射到 Meta 定义的实体字段，写入对应的 ClickHouse 表。
+
+sources:
+  nginx_access_kafka:
+    type: "kafka"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    group_id: "${NGINX_ACCESS_GROUP_ID:-nginx-access-clickhouse-v1}"
+    topics:
+      - "${NGINX_ACCESS_TOPIC:-nginx-access-raw}"
+    auto_offset_reset: "earliest"
+    decoding:
+      codec: "bytes"
+
+  nginx_error_kafka:
+    type: "kafka"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    group_id: "${NGINX_ERROR_GROUP_ID:-nginx-error-clickhouse-v1}"
+    topics:
+      - "${NGINX_ERROR_TOPIC:-nginx-error-raw}"
+    auto_offset_reset: "earliest"
+    decoding:
+      codec: "bytes"
+
+transforms:
+  parse_nginx_access_log:
+    type: "remap"
+    inputs:
+      - "nginx_access_kafka"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw_kafka_message = to_string(.message) ?? ""
+      parsed_event, event_err = parse_json(raw_kafka_message)
+      assert_eq!(event_err, null, message: "Nginx access Kafka 消息必须是合法 JSON")
+      assert!(is_object(parsed_event), message: "Nginx access Kafka 消息根节点必须是对象")
+      event = object!(parsed_event)
+      log_line = to_string(event.message) ?? ""
+      assert!(log_line != "", message: "Nginx access 日志行不能为空")
+
+      parsed, log_err = parse_json(log_line)
+      assert_eq!(log_err, null, message: "Nginx access 日志必须是合法 JSON")
+      assert!(is_object(parsed), message: "Nginx access 日志 JSON 根节点必须是对象")
+      log = object!(parsed)
+
+      out = {}
+      out.remote_addr = strip_whitespace(to_string(log.remote_addr) ?? "")
+      assert!(out.remote_addr != "", message: "Nginx access 日志缺少必填字段 remote_addr")
+
+      raw_time = to_string(log.time_local) ?? ""
+      parsed_time, time_err = parse_timestamp(raw_time, format: "%d/%b/%Y:%H:%M:%S %z")
+      if time_err != null {
+        parsed_time, time_err = parse_timestamp(raw_time, format: "%d/%b/%Y:%H:%M:%S")
+      }
+      if time_err != null {
+        parsed_time, time_err = parse_timestamp(raw_time, format: "%+")
+      }
+      assert_eq!(time_err, null, message: "Nginx access 日志 time_local 格式无法解析")
+      out.time_local = format_timestamp!(parsed_time, format: "%Y-%m-%d %H:%M:%S", timezone: "Asia/Shanghai")
+
+      out.method = to_string(log.method) ?? ""
+      out.uri = to_string(log.uri) ?? ""
+      out.protocol = to_string(log.protocol) ?? ""
+      out.status = to_int(log.status) ?? 0
+      out.body_bytes_sent = to_int(log.body_bytes_sent) ?? 0
+      out.http_referer = to_string(log.http_referer) ?? ""
+      out.http_user_agent = to_string(log.http_user_agent) ?? ""
+
+      rt_val = to_string(log.request_time) ?? ""
+      if rt_val == "" || rt_val == "-" {
+        out.request_time = 0.0
+      } else {
+        out.request_time = to_float(rt_val) ?? 0.0
+      }
+
+      out.upstream_addr = to_string(log.upstream_addr) ?? ""
+      urt_val = to_string(log.upstream_response_time) ?? ""
+      if urt_val == "" || urt_val == "-" {
+        out.upstream_response_time = 0.0
+      } else {
+        out.upstream_response_time = to_float(urt_val) ?? 0.0
+      }
+      out.request_line = to_string(log.request_line) ?? ""
+      out.server_addr = to_string(log.server_addr) ?? ""
+      out.server_name = to_string(log.server_name) ?? ""
+
+      . = out
+
+  parse_nginx_error_log:
+    type: "remap"
+    inputs:
+      - "nginx_error_kafka"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw_kafka_message = to_string(.message) ?? ""
+      parsed_event, event_err = parse_json(raw_kafka_message)
+      assert_eq!(event_err, null, message: "Nginx error Kafka 消息必须是合法 JSON")
+      assert!(is_object(parsed_event), message: "Nginx error Kafka 消息根节点必须是对象")
+      event = object!(parsed_event)
+      log_line = to_string(event.message) ?? ""
+      assert!(log_line != "", message: "Nginx error 日志行不能为空")
+
+      parsed, log_err = parse_regex(log_line, r'^(?P<date_time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#(?P<tid>\d+): ?(?:\*(?P<conn_id>\d+) )?(?P<msg>.*)$')
+      assert_eq!(log_err, null, message: "Nginx error 日志格式不匹配标准格式")
+      p = object!(parsed)
+
+      out = {}
+      raw_dt = p.date_time
+      parsed_dt, dt_err = parse_timestamp(raw_dt, format: "%Y/%m/%d %H:%M:%S")
+      if dt_err != null {
+        parsed_dt, dt_err = parse_timestamp(raw_dt, format: "%+")
+      }
+      assert_eq!(dt_err, null, message: "Nginx error 日志时间格式无法解析")
+      out.log_time = format_timestamp!(parsed_dt, format: "%Y-%m-%d %H:%M:%S", timezone: "Asia/Shanghai")
+
+      out.level = p.level
+      out.pid = to_int(p.pid) ?? 0
+      out.tid = to_int(p.tid) ?? 0
+      out.connection_id = to_int(p.conn_id) ?? 0
+      full_msg = p.msg
+      out.message = full_msg
+
+      out.client_addr = ""
+      client_match, client_m_err = parse_regex(full_msg, r'(?i)client[^0-9]*?(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})')
+      if client_m_err == null && is_object(client_match) {
+        out.client_addr = client_match.ip
+      }
+
+      out.server_addr = ""
+      server_match, server_m_err = parse_regex(full_msg, r'(?i)server:\s*(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})')
+      if server_m_err == null && is_object(server_match) {
+        out.server_addr = server_match.ip
+      }
+
+      . = out
+
+sinks:
+  nginx_access_dead_letter:
+    type: "kafka"
+    inputs:
+      - "parse_nginx_access_log.dropped"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${NGINX_ACCESS_DLQ_TOPIC:-nginx-access-dead-letter}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: true
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+  nginx_error_dead_letter:
+    type: "kafka"
+    inputs:
+      - "parse_nginx_error_log.dropped"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${NGINX_ERROR_DLQ_TOPIC:-nginx-error-dead-letter}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: true
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+  nginx_access_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "parse_nginx_access_log"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "nginx_access_log"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  nginx_error_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "parse_nginx_error_log"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "nginx_error_log"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+tests:
+  - name: "合法 access 日志应完成解析并入库"
+    inputs:
+      - insert_at: "parse_nginx_access_log"
+        type: "log"
+        log_fields:
+          message: '{"message":"{\"remote_addr\":\"192.168.1.100\",\"time_local\":\"10/Oct/2026:12:34:56 +0800\",\"method\":\"GET\",\"uri\":\"/index.html\",\"protocol\":\"HTTP/1.1\",\"status\":200,\"body_bytes_sent\":612,\"http_referer\":\"\",\"http_user_agent\":\"Mozilla/5.0\",\"request_time\":0.001,\"upstream_addr\":\"\",\"upstream_response_time\":\"\",\"request_line\":\"GET /index.html HTTP/1.1\",\"server_addr\":\"10.0.0.1\",\"server_name\":\"localhost\"}","log_type":"access"}'
+    outputs:
+      - extract_from: "parse_nginx_access_log"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.remote_addr, "192.168.1.100")
+              assert_eq!(.time_local, "2026-10-10 12:34:56")
+              assert_eq!(.method, "GET")
+              assert_eq!(.uri, "/index.html")
+              assert_eq!(.status, 200)
+              assert_eq!(.request_time, 0.001)
+              assert_eq!(.upstream_response_time, 0.0)
+              assert_eq!(.server_name, "localhost")
+              true
+
+  - name: "缺少 remote_addr 的 access 日志应进入死信"
+    inputs:
+      - insert_at: "parse_nginx_access_log"
+        type: "log"
+        log_fields:
+          message: '{"message":"{\"time_local\":\"10/Oct/2026:12:34:56 +0800\",\"method\":\"GET\",\"status\":200}","log_type":"access"}'
+    outputs:
+      - extract_from: "parse_nginx_access_log.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "合法 error 日志应完成解析"
+    inputs:
+      - insert_at: "parse_nginx_error_log"
+        type: "log"
+        log_fields:
+          message: '{"message":"2026/10/10 12:34:56 [error] 1234#5678: *6789 client 192.168.1.100 server: 10.0.0.1, request: GET /bad HTTP/1.1, host: example.com","log_type":"error"}'
+    outputs:
+      - extract_from: "parse_nginx_error_log"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.log_time, "2026-10-10 12:34:56")
+              assert_eq!(.level, "error")
+              assert_eq!(.pid, 1234)
+              assert_eq!(.tid, 5678)
+              assert_eq!(.connection_id, 6789)
+              assert_eq!(.client_addr, "192.168.1.100")
+              assert_eq!(.server_addr, "10.0.0.1")
+              assert!(contains(.message, "client 192.168.1.100"))
+              true
+
+  - name: "无连接 ID 的 error 日志应正常解析"
+    inputs:
+      - insert_at: "parse_nginx_error_log"
+        type: "log"
+        log_fields:
+          message: '{"message":"2026/10/10 12:34:56 [notice] 1234#5678: signal 1 (SIGHUP) received","log_type":"error"}'
+    outputs:
+      - extract_from: "parse_nginx_error_log"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.level, "notice")
+              assert_eq!(.pid, 1234)
+              assert_eq!(.connection_id, 0)
+              assert_eq!(.client_addr, "")
+              true
+
+  - name: "格式错误的 error 日志应进入死信"
+    inputs:
+      - insert_at: "parse_nginx_error_log"
+        type: "log"
+        log_fields:
+          message: '{"message":"not a valid nginx error log line","log_type":"error"}'
+    outputs:
+      - extract_from: "parse_nginx_error_log.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "带上游响应时间的 access 日志应正确解析浮点数"
+    inputs:
+      - insert_at: "parse_nginx_access_log"
+        type: "log"
+        log_fields:
+          message: '{"message":"{\"remote_addr\":\"10.0.0.1\",\"time_local\":\"10/Oct/2026:12:34:56 +0800\",\"method\":\"POST\",\"uri\":\"/api/data\",\"protocol\":\"HTTP/2.0\",\"status\":502,\"body_bytes_sent\":0,\"http_referer\":\"https://example.com\",\"http_user_agent\":\"curl/7.88\",\"request_time\":1.234,\"upstream_addr\":\"192.168.10.1:8080\",\"upstream_response_time\":\"0.567\",\"request_line\":\"POST /api/data HTTP/2.0\",\"server_addr\":\"10.0.0.2\",\"server_name\":\"api.example.com\"}","log_type":"access"}'
+    outputs:
+      - extract_from: "parse_nginx_access_log"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.status, 502)
+              assert_eq!(.request_time, 1.234)
+              assert_eq!(.upstream_response_time, 0.567)
+              assert_eq!(.upstream_addr, "192.168.10.1:8080")
+              assert_eq!(.server_name, "api.example.com")
+              true

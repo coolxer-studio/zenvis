@@ -1,0 +1,94 @@
+---
+# Nginx Syslog 采集 → Kafka
+# Vector 在 UDP 514 端口启动 Syslog 接收服务，接收 Nginx 通过 access_log/error_log 的
+# syslog 指令转发的日志（RFC3164 格式，tag 分别为 nginx_access / nginx_error）。
+# 解析后原始日志行保留在 .message 字段，按 tag 打 log_type 标后路由到对应 Kafka 原始消息队列。
+# 采集端不做日志内容解析或转换，仅做原始转发，保证可回溯。
+
+sources:
+  nginx_syslog_udp:
+    type: "socket"
+    mode: "udp"
+    address: "0.0.0.0:514"
+    max_length: 262144
+    decoding:
+      codec: "syslog"
+
+transforms:
+  tag_log_type:
+    type: "remap"
+    inputs:
+      - "nginx_syslog_udp"
+    source: |-
+      # nginx syslog 的 tag 经解析后映射到 .appname：nginx_access → access，nginx_error → error
+      appname = to_string(.appname) ?? ""
+      .log_type = if appname == "nginx_access" {
+        "access"
+      } else if appname == "nginx_error" {
+        "error"
+      } else {
+        "unknown"
+      }
+
+  route_log_type:
+    type: "route"
+    inputs:
+      - "tag_log_type"
+    route:
+      access: '.log_type == "access"'
+      error: '.log_type == "error"'
+
+sinks:
+  nginx_access_kafka:
+    type: "kafka"
+    inputs:
+      - "route_log_type.access"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${NGINX_ACCESS_TOPIC:-nginx-access-raw}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+  nginx_error_kafka:
+    type: "kafka"
+    inputs:
+      - "route_log_type.error"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${NGINX_ERROR_TOPIC:-nginx-error-raw}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+  nginx_file_unmatched_console:
+    type: "console"
+    inputs:
+      - "route_log_type._unmatched"
+    target: "stdout"
+    encoding:
+      codec: "json"

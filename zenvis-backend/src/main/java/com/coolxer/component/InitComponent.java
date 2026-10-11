@@ -110,6 +110,9 @@ public class InitComponent implements CommandLineRunner {
                 log.error("加载插件 API 失败: {}", pluginVo.getPackageName(), e);
             }
         });
+
+        // Bootstrap 目录预置插件一次性自动安装（flag 文件控制仅执行一次，异步不阻塞启动）
+        pluginService.bootstrapInstall();
     }
 
 

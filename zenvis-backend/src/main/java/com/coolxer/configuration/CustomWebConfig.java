@@ -30,6 +30,12 @@ public class CustomWebConfig {
     private String pluginPath;
 
     /**
+     * 插件 Bootstrap 一次性自动安装目录
+     */
+    @Value("${app.paths.plugins.bootstrap:${app.paths.plugins}/bootstrap}")
+    private String bootstrapPluginsPath;
+
+    /**
      * AI Skill 配置目录
      */
     @Value("${app.paths.skills:${app.paths.config.base:.}/skill_config}")

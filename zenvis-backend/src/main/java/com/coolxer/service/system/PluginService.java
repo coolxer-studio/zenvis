@@ -133,6 +133,12 @@ public interface PluginService {
     void recoverInterruptedUpgrades();
 
     /**
+     * 启动时扫描 Bootstrap 目录，一次性自动注册并安装预置插件包；
+     * 处理完成后写入 .bootstrap-install.flag，此后不再自动安装。
+     */
+    void bootstrapInstall();
+
+    /**
      * 获取插件readme
      *
      * @param id

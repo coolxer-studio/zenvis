@@ -90,6 +90,7 @@ public class PluginServiceImpl implements PluginService {
     private static final String UI_HTML_PAGE_DIR_NAME = "html-page";
     private static final String PLUGIN_UPGRADE_DIR_NAME = "upgrade";
     private static final String UPGRADE_SNAPSHOT_FILE_NAME = "snapshot.json";
+    private static final String BOOTSTRAP_FLAG_FILE_NAME = ".bootstrap-install.flag";
     private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
     private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
     private static final Pattern URI_SCHEME_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
@@ -495,11 +496,7 @@ public class PluginServiceImpl implements PluginService {
         if (!status.canInstall()) {
             throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
         }
-        validatePackageName(plugin.getPackageName());
-        safePluginPackagePath(plugin.getPluginPath());
-        resetLogs(id);
-        updateOperationState(plugin, PluginStatusType.INSTALLING, "安装已开始", null, true);
-        Plugin saved = pluginRepository.save(plugin);
+        Plugin saved = startInstall(id);
         try {
             submitPluginOperation(
                     id, PluginStatusType.INSTALL_FAILED, "安装", () -> executeInstall(id));
@@ -510,6 +507,137 @@ public class PluginServiceImpl implements PluginService {
             throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "插件安装任务提交失败");
         }
         return new PluginVo(saved);
+    }
+
+    /**
+     * 安装前置状态流转：校验包名与包文件、重置日志并置为 INSTALLING。
+     * 由界面安装与 Bootstrap 自动安装两条路径复用。
+     */
+    private Plugin startInstall(Long id) {
+        Plugin plugin = getPluginOrThrow(id);
+        validatePackageName(plugin.getPackageName());
+        safePluginPackagePath(plugin.getPluginPath());
+        resetLogs(id);
+        updateOperationState(plugin, PluginStatusType.INSTALLING, "安装已开始", null, true);
+        return pluginRepository.save(plugin);
+    }
+
+    /**
+     * 启动时扫描 Bootstrap 目录，一次性自动注册并安装预置插件包。
+     * flag 文件（.bootstrap-install.flag）控制仅执行一次；目录为空时不落 flag，
+     * 保留后续放置插件包后重启再触发的能力。
+     */
+    @Override
+    public void bootstrapInstall() {
+        Path bootstrapDir = Paths.get(customWebConfig.getBootstrapPluginsPath()).toAbsolutePath().normalize();
+        Path flagFile = bootstrapDir.resolve(BOOTSTRAP_FLAG_FILE_NAME);
+        if (Files.exists(flagFile)) {
+            log.info("Bootstrap 插件初始化标记已存在，跳过预置插件自动安装: {}", flagFile);
+            return;
+        }
+        List<Path> packages = listBootstrapPackages(bootstrapDir);
+        if (packages.isEmpty()) {
+            log.info("Bootstrap 插件目录为空，跳过预置插件自动安装: {}", bootstrapDir);
+            return;
+        }
+        List<Long> pendingInstallIds = new ArrayList<>();
+        for (Path packagePath : packages) {
+            try {
+                TarGzUtil.validateTarGz(packagePath);
+                String pluginJsonString = TarGzUtil.readRootFile(packagePath, "index.json");
+                if (StringUtils.isBlank(pluginJsonString)) {
+                    throw invalidPluginPackage("插件包缺少 index.json");
+                }
+                PluginVo pluginVo = JacksonUtil.toObject(pluginJsonString, PluginVo.class);
+                if (pluginVo == null || StringUtils.isBlank(pluginVo.getName()) || StringUtils.isBlank(pluginVo.getPackageName())) {
+                    throw invalidPluginPackage("插件包 index.json 缺少插件名称或包名");
+                }
+                if (isPackageExist(pluginVo.getPackageName())) {
+                    log.info("Bootstrap 插件已存在记录，跳过注册: {} ({})",
+                            pluginVo.getPackageName(), packagePath.getFileName());
+                    continue;
+                }
+                if (StringUtils.isNotBlank(pluginVo.getIcon()) && !ImageDataUriUtil.isDataUrl(pluginVo.getIcon())) {
+                    String iconBase64 = TarGzUtil.readBase64File(packagePath, pluginVo.getIcon());
+                    if (iconBase64 == null) {
+                        throw invalidPluginPackage("插件图标文件不存在");
+                    }
+                    pluginVo.setIcon(ImageDataUriUtil.toDataUri(pluginVo.getIcon(), iconBase64));
+                }
+                // 复制到插件包运行目录后注册，Bootstrap 目录保持只读，界面删除不会误删源包
+                Path directory = pluginRoot();
+                if (!Files.exists(directory)) {
+                    Files.createDirectories(directory);
+                }
+                Path tempDir = directory.resolve("temp").resolve(DateUtil.getCurrentDateTime().replace(" ", "/"));
+                if (!Files.exists(tempDir)) {
+                    Files.createDirectories(tempDir);
+                }
+                Path packageCopy = requireChildPath(tempDir.resolve(packagePath.getFileName().toString()), directory);
+                Files.copy(packagePath, packageCopy, StandardCopyOption.REPLACE_EXISTING);
+
+                PluginDto pluginDto = new PluginDto();
+                pluginDto.setName(pluginVo.getName());
+                pluginDto.setPackageName(pluginVo.getPackageName());
+                pluginDto.setVersion(pluginVo.getVersion());
+                pluginDto.setDescription(pluginVo.getDescription());
+                pluginDto.setAuthor(pluginVo.getAuthor());
+                pluginDto.setIcon(pluginVo.getIcon());
+                pluginDto.setPluginPath(packageCopy.toString());
+                Plugin saved = create(pluginDto);
+                pendingInstallIds.add(saved.getId().longValue());
+                log.info("Bootstrap 插件已注册，待自动安装: {} {} ({})",
+                        pluginVo.getName(), pluginVo.getPackageName(), pluginVo.getVersion());
+            } catch (Exception e) {
+                log.error("Bootstrap 插件包处理失败，跳过: {}", packagePath.getFileName(), e);
+            }
+        }
+        if (pendingInstallIds.isEmpty()) {
+            // 全部已注册（处理中途重启的恢复场景）或全部为坏包，仍落 flag 保证一次性语义
+            writeBootstrapFlag(flagFile);
+            return;
+        }
+        pluginOperationExecutor.submit(() -> {
+            try {
+                // 串行安装，避免并行安装对 Meta/ClickHouse/菜单写入的竞争
+                for (Long pluginId : pendingInstallIds) {
+                    try {
+                        startInstall(pluginId);
+                        executeInstall(pluginId);
+                    } catch (Exception e) {
+                        log.error("Bootstrap 插件安装失败: id={}", pluginId, e);
+                    }
+                }
+            } finally {
+                writeBootstrapFlag(flagFile);
+            }
+        });
+    }
+
+    private List<Path> listBootstrapPackages(Path bootstrapDir) {
+        if (!Files.isDirectory(bootstrapDir)) {
+            return Collections.emptyList();
+        }
+        try (Stream<Path> paths = Files.list(bootstrapDir)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> StringUtils.endsWithIgnoreCase(path.getFileName().toString(), ".tar.gz"))
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                    .toList();
+        } catch (IOException e) {
+            log.error("扫描 Bootstrap 插件目录失败: {}", bootstrapDir, e);
+            return Collections.emptyList();
+        }
+    }
+
+    private void writeBootstrapFlag(Path flagFile) {
+        try {
+            if (!Files.exists(flagFile)) {
+                Files.createFile(flagFile);
+            }
+            log.info("Bootstrap 插件初始化完成，已写入标记文件: {}", flagFile);
+        } catch (IOException e) {
+            log.error("写入 Bootstrap 初始化标记失败: {}", flagFile, e);
+        }
     }
 
     @Override

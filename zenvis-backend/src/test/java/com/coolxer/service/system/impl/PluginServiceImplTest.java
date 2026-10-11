@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -876,9 +877,145 @@ class PluginServiceImplTest {
         verify(pluginRepository).save(plugin);
     }
 
+    @Test
+    void bootstrapSkipsWhenFlagAlreadyExists() throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+        ReflectionTestUtils.setField(service, "pluginOperationExecutor", executor);
+        Path bootstrapDir = pluginRoot.resolve("bootstrap");
+        Files.createDirectories(bootstrapDir);
+        Files.write(bootstrapDir.resolve("demo.tar.gz"), tarGz(Map.of("index.json", "{")));
+        Files.createFile(bootstrapDir.resolve(".bootstrap-install.flag"));
+
+        service.bootstrapInstall();
+
+        verify(pluginRepository, never()).save(any());
+        verify(executor, never()).submit(any(Runnable.class));
+    }
+
+    @Test
+    void bootstrapSkipsAndKeepsFlagAbsentWhenNoPackages() throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+
+        // 目录不存在
+        service.bootstrapInstall();
+
+        verify(pluginRepository, never()).save(any());
+        assertThat(pluginRoot.resolve("bootstrap/.bootstrap-install.flag")).doesNotExist();
+
+        // 目录存在但为空
+        service.bootstrapInstall();
+        assertThat(pluginRoot.resolve("bootstrap/.bootstrap-install.flag")).doesNotExist();
+        Files.createDirectories(pluginRoot.resolve("bootstrap"));
+        service.bootstrapInstall();
+        assertThat(pluginRoot.resolve("bootstrap/.bootstrap-install.flag")).doesNotExist();
+        verify(pluginRepository, never()).save(any());
+    }
+
+    @Test
+    void bootstrapRegistersNewPackageUnderPluginRootAndDefersFlag() throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
+        AtomicReference<Runnable> taskRef = new AtomicReference<>();
+        doAnswer(invocation -> {
+            taskRef.set(invocation.getArgument(0));
+            return null;
+        }).when(executor).submit(any(Runnable.class));
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+        ReflectionTestUtils.setField(service, "pluginOperationExecutor", executor);
+        Path bootstrapDir = pluginRoot.resolve("bootstrap");
+        Files.createDirectories(bootstrapDir);
+        Files.write(bootstrapDir.resolve("demo.tar.gz"), bootstrapPackageBytes());
+        when(pluginRepository.findByPackageName("com.acme.demo")).thenReturn(Optional.empty());
+        when(pluginRepository.save(any(Plugin.class))).thenAnswer(invocation -> {
+            Plugin saved = invocation.getArgument(0);
+            saved.setId(9);
+            return saved;
+        });
+
+        service.bootstrapInstall();
+
+        ArgumentCaptor<Plugin> captor = ArgumentCaptor.forClass(Plugin.class);
+        verify(pluginRepository).save(captor.capture());
+        Plugin registered = captor.getValue();
+        assertThat(registered.getStatus()).isEqualTo(PluginStatusType.UN_INSTALL);
+        assertThat(registered.getPackageName()).isEqualTo("com.acme.demo");
+        assertThat(registered.getName()).isEqualTo("Demo");
+        assertThat(Path.of(registered.getPluginPath()).toAbsolutePath().normalize())
+                .startsWith(pluginRoot.toAbsolutePath().normalize())
+                .isRegularFile();
+        // 安装任务异步执行，flag 在任务结束后才写入
+        assertThat(taskRef.get()).isNotNull();
+        assertThat(bootstrapDir.resolve(".bootstrap-install.flag")).doesNotExist();
+    }
+
+    @Test
+    void bootstrapWritesFlagWhenAllPackagesAlreadyRegistered() throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+        Path bootstrapDir = pluginRoot.resolve("bootstrap");
+        Files.createDirectories(bootstrapDir);
+        Files.write(bootstrapDir.resolve("demo.tar.gz"), bootstrapPackageBytes());
+        when(pluginRepository.findByPackageName("com.acme.demo")).thenReturn(Optional.of(new Plugin()));
+
+        service.bootstrapInstall();
+
+        verify(pluginRepository, never()).save(any());
+        assertThat(bootstrapDir.resolve(".bootstrap-install.flag")).isRegularFile();
+    }
+
+    @Test
+    void bootstrapContinuesPastCorruptPackageAndRegistersFollowingValidPackage() throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+        ReflectionTestUtils.setField(service, "pluginOperationExecutor", executor);
+        Path bootstrapDir = pluginRoot.resolve("bootstrap");
+        Files.createDirectories(bootstrapDir);
+        // 损坏包：缺少 index.json
+        Files.write(bootstrapDir.resolve("broken.tar.gz"), tarGz(Map.of("other.txt", "content")));
+        Files.write(bootstrapDir.resolve("demo.tar.gz"), bootstrapPackageBytes());
+        when(pluginRepository.findByPackageName(anyString())).thenReturn(Optional.empty());
+        when(pluginRepository.save(any(Plugin.class))).thenAnswer(invocation -> {
+            Plugin saved = invocation.getArgument(0);
+            saved.setId(10);
+            return saved;
+        });
+
+        service.bootstrapInstall();
+
+        ArgumentCaptor<Plugin> captor = ArgumentCaptor.forClass(Plugin.class);
+        verify(pluginRepository).save(captor.capture());
+        assertThat(captor.getValue().getPackageName()).isEqualTo("com.acme.demo");
+        assertThat(bootstrapDir.resolve("broken.tar.gz")).exists();
+    }
+
+    private byte[] bootstrapPackageBytes() throws Exception {
+        return tarGz(Map.of(
+                "index.json", """
+                        {
+                          "name": "Demo",
+                          "package_name": "com.acme.demo",
+                          "version": "1.0.0",
+                          "description": "demo",
+                          "author": "tester",
+                          "icon": "data:image/png;base64,AA=="
+                        }
+                        """
+        ));
+    }
+
     private PluginServiceImpl newService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "pluginPath", pluginRoot.toString());
+        ReflectionTestUtils.setField(customWebConfig, "bootstrapPluginsPath", pluginRoot.resolve("bootstrap").toString());
         ReflectionTestUtils.setField(customWebConfig, "configPath", pluginRoot.resolve("config").toString());
         ReflectionTestUtils.setField(customWebConfig, "htmlPagePath", pluginRoot.resolve("html-page").toString());
         PluginServiceImpl service = new PluginServiceImpl();

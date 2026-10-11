@@ -22,6 +22,16 @@ Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHous
 
 需要定制时，在首次启动前编辑 `deploy/.env`。不要把生成文件复制回 `.env.example`。
 
+## 预置插件（可选）
+
+首次部署通常需要安装插件才能看到业务效果。可在首次启动前，将插件包放入 `deploy/open_config/plugin-package_config/bootstrap/` 目录：
+
+```bash
+cp /path/to/plugin-xxx.tar.gz deploy/open_config/plugin-package_config/bootstrap/
+```
+
+首次启动时 zenvis-backend 会自动注册并安装目录中的全部插件包，处理完成后生成标记文件 `.bootstrap-install.flag`，此后重启不再自动安装（卸载或删除插件也不会复活）。安装失败可在「插件管理」界面重试；需要重新触发时删除标记文件后重启。详见 `deploy/open_config/plugin-package_config/bootstrap/index.md`。
+
 ## 检查与启动
 
 ```bash

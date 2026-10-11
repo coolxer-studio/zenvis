@@ -106,6 +106,15 @@ public class LoginController extends BaseController {
     }
 
     /**
+     * 获取当前登录用户的权限菜单（用于菜单变更后前端刷新，无需重新登录）.
+     */
+    @GetMapping(value = "/permission")
+    @Operation(summary = "当前用户权限", description = "返回当前登录用户的权限菜单树与用户信息")
+    public ResponseWrap<LoginVo> permission() {
+        return ResponseWrap.success(loginService.buildUserInfo(getSessionUser()));
+    }
+
+    /**
      * 退出登录接口.
      */
     @PostMapping(value = "/sign-out")

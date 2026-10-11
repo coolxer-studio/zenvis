@@ -76,14 +76,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowDown, Lock, SwitchButton } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import JSEncrypt from 'jsencrypt';
 
 import { UserService } from '@/service/api';
-import { clearLoginSession, getPermissionList, getUserInfo } from '@u/auth-session';
+import {
+  clearLoginSession,
+  getPermissionList,
+  getUserInfo,
+  setLoginSession,
+} from '@u/auth-session';
 import Password from './nav-password.vue';
 
 defineOptions({ name: 'NavMenu' });
@@ -97,15 +102,34 @@ type PermissionItem = {
   children?: PermissionItem[];
 };
 
+let permissionRefreshed = false; // SPA 生命周期内仅拉取一次，浏览器刷新后重置
+
 const router = useRouter();
 const route = useRoute();
-const menuList = getPermissionList<PermissionItem[]>() || [];
-const userInfo = getUserInfo<{ name?: string; email?: string }>() || {};
+const menuList = ref<PermissionItem[]>(getPermissionList<PermissionItem[]>() || []);
+const userInfo = ref(getUserInfo<{ name?: string; email?: string }>() || {});
 const showPassword = ref(false);
 const currentKey = ref('');
 const userInitial = computed(() =>
-  (userInfo.name || userInfo.email || 'U').trim().slice(0, 1).toUpperCase(),
+  ((userInfo.value.name || userInfo.value.email || 'U') as string).trim().slice(0, 1).toUpperCase(),
 );
+
+const refreshPermission = async () => {
+  if (permissionRefreshed) return;
+  permissionRefreshed = true;
+  try {
+    const res = await UserService.getPermission();
+    setLoginSession(res);
+    menuList.value = (res.permission as PermissionItem[]) || [];
+    userInfo.value = (res.user as { name?: string; email?: string }) || userInfo.value;
+  } catch {
+    // 拉取失败时保留本地缓存
+  }
+};
+
+onMounted(() => {
+  refreshPermission();
+});
 
 const findActiveKey = (items: PermissionItem[], routeName: string, menuParam: string): string => {
   for (const item of items) {
@@ -127,7 +151,7 @@ watch(
     const menuParam = Array.isArray(rawMenuParam)
       ? rawMenuParam[0] || ''
       : String(rawMenuParam || '');
-    currentKey.value = findActiveKey(menuList, String(routeName || ''), menuParam);
+    currentKey.value = findActiveKey(menuList.value, String(routeName || ''), menuParam);
   },
   { immediate: true },
 );

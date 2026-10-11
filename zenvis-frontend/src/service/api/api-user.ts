@@ -1,4 +1,5 @@
 import { request } from '@/service/request-wrapper';
+import type { LoginSessionPayload } from '@u/auth-session';
 import {
   EncryptKeyResponse,
   LoginParams,
@@ -17,6 +18,10 @@ export class UserService {
 
   static async doLogin(params: LoginParams): Promise<LoginResponse> {
     return request<LoginResponse>(`${prefix}/login/sign-in`, params);
+  }
+
+  static async getPermission(): Promise<LoginSessionPayload> {
+    return request<LoginSessionPayload>(`${prefix}/login/permission`, '', 'GET');
   }
 
   static async doLogOut(): Promise<LogoutResponse> {

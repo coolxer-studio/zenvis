@@ -274,6 +274,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         dataAttributeVo.setLabel(dataAttribute.getLabel());
         dataAttributeVo.setDescription(dataAttribute.getDescription());
         dataAttributeVo.setLinkTemplate(dataAttribute.getLinkTemplate());
+        dataAttributeVo.setLinkCondition(dataAttribute.getLinkCondition());
         dataAttributeVo.setAutoComplete(dataAttribute.isAutoComplete());
         dataAttributeVo.setCopyable(dataAttribute.isCopyable());
         if (Objects.nonNull(dataAttribute.getRetrievalType())) {
@@ -344,6 +345,7 @@ public class RetrievalServiceImpl implements RetrievalService {
             selectAttributeVo.setName(attribute.getName());
             selectAttributeVo.setLabel(attribute.getLabel());
             selectAttributeVo.setLinkTemplate(attribute.getLinkTemplate());
+            selectAttributeVo.setLinkCondition(attribute.getLinkCondition());
             selectAttributeVo.setCopyable(attribute.isCopyable());
             if (Objects.nonNull(attribute.getDisplayType())) {
                 selectAttributeVo.setDisplayType(attribute.getDisplayType());
@@ -362,6 +364,7 @@ public class RetrievalServiceImpl implements RetrievalService {
                     selectAttributeVo.setName(attribute.getName());
                     selectAttributeVo.setLabel(attribute.getLabel());
                     selectAttributeVo.setLinkTemplate(attribute.getLinkTemplate());
+                    selectAttributeVo.setLinkCondition(attribute.getLinkCondition());
                     selectAttributeVo.setCopyable(attribute.isCopyable());
                     if (Objects.nonNull(attribute.getDisplayType())) {
                         selectAttributeVo.setDisplayType(attribute.getDisplayType());

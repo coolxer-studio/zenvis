@@ -522,6 +522,7 @@ public class RetrievalRuleServiceImpl implements RetrievalRuleService {
         vo.setSearchType(attribute.getSearchType());
         vo.setDisplayType(attribute.getDisplayType());
         vo.setLinkTemplate(attribute.getLinkTemplate());
+        vo.setLinkCondition(attribute.getLinkCondition());
         vo.setAutoComplete(attribute.isAutoComplete());
         vo.setCopyable(attribute.isCopyable());
         vo.setOperatorList(attribute.getOperators() == null ? List.of() : attribute.getOperators().stream()

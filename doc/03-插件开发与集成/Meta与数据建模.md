@@ -107,6 +107,7 @@ Meta 是插件数据能力的核心契约。它同时决定检索实体、ClickH
 | `copyable` | 是否提供复制操作 |
 | `mapping` | 展示值与存储值之间的受限映射 |
 | `link_template` | 当前行字段驱动的安全跳转模板 |
+| `link_condition` | 链接展示条件，满足条件时才渲染为可点击链接 |
 
 描述应写清格式、单位、枚举、分隔符、编码和条件必填关系，不要只重复字段标签。
 
@@ -177,6 +178,40 @@ Attribute 引用的每个 Operator 必须能在合并后的 Meta 中解析。
 - 平台字段 `{zenvis_id}`。
 
 禁止协议相对 URL、反斜杠路径、控制字符以及 `javascript:`、`data:`、`blob:`、`file:` 等协议。旧的 `aggregate_link` 已废弃。
+
+`link_condition` 用于控制链接是否展示，结构如下：
+
+```json
+{
+  "link_template": "/#/service/low-code-page/com.example.plugin.analytics.detail-event?record_id={zenvis_id}",
+  "link_condition": {
+    "field": "status",
+    "operator": "equal",
+    "value": "success"
+  }
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `field` | 是 | 条件字段名，必须是同一 Entity 下已定义的 Attribute 逻辑名（含 `zenvis_id`） |
+| `operator` | 是 | 比较操作符，支持列表见下方 |
+| `value` | 视操作符而定 | 比较值，`isnull` / `isnotnull` 时不需要 |
+
+支持的操作符：
+
+| 操作符 | 含义 | 是否需要 value |
+| --- | --- | --- |
+| `equal` | 等于（字符串比较） | 是 |
+| `notequal` | 不等于（字符串比较） | 是 |
+| `isnull` | 为空（null、undefined、空字符串均视为空） | 否 |
+| `isnotnull` | 不为空 | 否 |
+| `greatthan` | 大于（数值比较，转换失败则条件不成立） | 是 |
+| `greatequalthan` | 大于等于（数值比较） | 是 |
+| `lessthan` | 小于（数值比较） | 是 |
+| `lessequalthan` | 小于等于（数值比较） | 是 |
+
+`link_condition` 必须与 `link_template` 同时使用；条件不满足时该单元格显示为普通文本，不展示链接样式也不可点击。不配置 `link_condition` 时行为不变，只要链接能解析成功就展示。
 
 推荐的详情链接：
 

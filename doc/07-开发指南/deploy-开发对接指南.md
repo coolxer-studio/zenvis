@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | `zenvis-frontend` | Nginx 和前端静态资源 | `11000` |
 | `zenvis-backend` | Spring Boot 平台 API | `11001` |
-| `vectum-service` | 推送任务和 Vector 运行服务 | `11002` |
+| `zenvis-service-vectum` | 推送任务和 Vector 运行服务 | `11002` |
 | `mysql-service` | 平台关系数据 | `3306` |
 | `clickhouse-service` | 插件实体分析数据 | `8123`、`9000`、`9009` |
 | `redis-service` | Session、缓存和运行状态 | `6379` |
@@ -116,7 +116,7 @@ docker compose ps
 ```bash
 docker compose up -d \
   redis-service redis-stack-service mysql-service \
-  clickhouse-service kafka-service vectum-service
+  clickhouse-service kafka-service zenvis-service-vectum
 ```
 
 ### 查看状态和日志
@@ -124,7 +124,7 @@ docker compose up -d \
 ```bash
 docker compose ps
 docker compose logs --tail=200 zenvis-backend
-docker compose logs --tail=200 vectum-service
+docker compose logs --tail=200 zenvis-service-vectum
 docker compose logs -f zenvis-frontend
 ```
 

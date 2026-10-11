@@ -2,6 +2,7 @@ package com.coolxer.service.retrieval.impl;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.retrieval.meta.DataAttribute;
+import com.coolxer.model.retrieval.meta.DataAttribute.LinkCondition;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.DataOperator;
 import com.coolxer.model.retrieval.meta.MetaData;
@@ -46,6 +47,11 @@ public class MetaDataServiceImpl implements MetaDataService {
     private static final Pattern URI_SCHEME = Pattern.compile("^[A-Za-z][A-Za-z0-9+.-]*:");
     private static final Pattern HTTP_URL = Pattern.compile("^https?://", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONTROL_CHARACTER = Pattern.compile("[\\x00-\\x1F\\x7F]");
+    private static final Set<String> LINK_CONDITION_OPERATORS = Set.of(
+            "equal", "notequal", "isnull", "isnotnull",
+            "greatthan", "greatequalthan", "lessthan", "lessequalthan"
+    );
+    private static final Set<String> LINK_CONDITION_VALUELESS_OPERATORS = Set.of("isnull", "isnotnull");
     private static final Map<String, String> DEFAULT_OPERATOR_LABEL_MAP = new LinkedHashMap<>();
 
     static {
@@ -75,6 +81,7 @@ public class MetaDataServiceImpl implements MetaDataService {
             LoadedMetadata loaded = readMetaData(metadataPath);
             supplementBuiltInAttributes(loaded.metaData(), metadataPath, loaded.sourceByObject());
             normalizeLinkTemplates(loaded.metaData());
+            normalizeLinkConditions(loaded.metaData());
             supplementOperators(loaded.metaData());
             MetadataSnapshot next = buildSnapshot(loaded.metaData(), metadataPath, loaded.sourceByObject());
             snapshotRef.set(next);
@@ -103,6 +110,7 @@ public class MetaDataServiceImpl implements MetaDataService {
             String source = normalizedFiles.toString();
             supplementBuiltInAttributes(loaded.metaData(), source, loaded.sourceByObject());
             normalizeLinkTemplates(loaded.metaData());
+            normalizeLinkConditions(loaded.metaData());
             supplementOperators(loaded.metaData());
             return buildSnapshot(loaded.metaData(), source, loaded.sourceByObject()).metaData();
         } catch (IOException e) {
@@ -205,6 +213,7 @@ public class MetaDataServiceImpl implements MetaDataService {
 
         for (DataAttribute attribute : safe(metaData.getAttribute())) {
             validateLinkTemplate(attribute, attributesByEntity, sourceOf(attribute, sourceByObject, sourcePath));
+            validateLinkCondition(attribute, attributesByEntity, sourceOf(attribute, sourceByObject, sourcePath));
         }
 
         for (DataEntity entity : entitiesByName.values()) {
@@ -314,6 +323,38 @@ public class MetaDataServiceImpl implements MetaDataService {
         }
     }
 
+    private void normalizeLinkConditions(MetaData metaData) {
+        if (metaData == null) {
+            return;
+        }
+        for (DataAttribute attribute : safe(metaData.getAttribute())) {
+            if (attribute == null || attribute.getLinkCondition() == null) {
+                continue;
+            }
+            LinkCondition condition = attribute.getLinkCondition();
+            if (StringUtils.isBlank(condition.getField())) {
+                condition.setField(null);
+            } else {
+                condition.setField(condition.getField().trim());
+            }
+            if (StringUtils.isBlank(condition.getOperator())) {
+                condition.setOperator(null);
+            } else {
+                condition.setOperator(condition.getOperator().trim());
+            }
+            if (condition.getValue() != null) {
+                if (StringUtils.isBlank(condition.getValue())) {
+                    condition.setValue(null);
+                } else {
+                    condition.setValue(condition.getValue().trim());
+                }
+            }
+            if (condition.getField() == null && condition.getOperator() == null) {
+                attribute.setLinkCondition(null);
+            }
+        }
+    }
+
     private void validateLinkTemplate(DataAttribute attribute,
                                       Map<String, Map<String, DataAttribute>> attributesByEntity,
                                       String sourcePath) {
@@ -361,6 +402,54 @@ public class MetaDataServiceImpl implements MetaDataService {
         } catch (URISyntaxException ex) {
             throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
                     + "的link_template地址不合法");
+        }
+    }
+
+    private void validateLinkCondition(DataAttribute attribute,
+                                       Map<String, Map<String, DataAttribute>> attributesByEntity,
+                                       String sourcePath) {
+        if (attribute == null || attribute.getLinkCondition() == null) {
+            return;
+        }
+        LinkCondition condition = attribute.getLinkCondition();
+        // 1. 配置了 link_condition 但未配置 link_template
+        if (StringUtils.isBlank(attribute.getLinkTemplate())) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_condition必须与link_template配合使用");
+        }
+        // 2. field 必填
+        if (StringUtils.isBlank(condition.getField())) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_condition.field不能为空");
+        }
+        // 3. operator 必填且必须在支持列表中
+        if (StringUtils.isBlank(condition.getOperator())) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_condition.operator不能为空");
+        }
+        if (!LINK_CONDITION_OPERATORS.contains(condition.getOperator())) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_condition.operator不支持: " + condition.getOperator()
+                    + "，支持的操作符: " + String.join(", ", LINK_CONDITION_OPERATORS));
+        }
+        // 4. field 必须是当前 Entity 下存在的 Attribute
+        if (!attributesByEntity.getOrDefault(attribute.getEntity(), Collections.emptyMap())
+                .containsKey(condition.getField())) {
+            throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                    + "的link_condition.field引用未知属性: " + condition.getField());
+        }
+        // 5. isnull/isnotnull 不需要 value；其他操作符必须有 value
+        boolean valueless = LINK_CONDITION_VALUELESS_OPERATORS.contains(condition.getOperator());
+        if (valueless) {
+            if (StringUtils.isNotBlank(condition.getValue())) {
+                throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                        + "的link_condition操作符" + condition.getOperator() + "不需要value");
+            }
+        } else {
+            if (StringUtils.isBlank(condition.getValue())) {
+                throw invalid(sourcePath, "字段" + attribute.getEntity() + "." + attribute.getName()
+                        + "的link_condition操作符" + condition.getOperator() + "必须设置value");
+            }
         }
     }
 

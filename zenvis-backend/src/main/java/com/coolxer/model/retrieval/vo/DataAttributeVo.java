@@ -1,5 +1,6 @@
 package com.coolxer.model.retrieval.vo;
 
+import com.coolxer.model.retrieval.meta.DataAttribute;
 import lombok.Data;
 
 import java.util.List;
@@ -20,6 +21,8 @@ public class DataAttributeVo {
     private String description;
 
     private String linkTemplate;
+
+    private DataAttribute.LinkCondition linkCondition;
 
     private boolean autoComplete;
 

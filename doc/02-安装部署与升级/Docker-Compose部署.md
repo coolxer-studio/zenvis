@@ -48,7 +48,7 @@ Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHous
 | --- | --- | --- |
 | Web | `zenvis-frontend:11000` | `0.0.0.0:11000` |
 | Backend | `zenvis-backend:11001` | `127.0.0.1:11001` |
-| Vectum | `vectum-service:11002` | `127.0.0.1:11002` |
+| Vectum | `zenvis-service-vectum:11002` | `127.0.0.1:11002` |
 | MySQL | `mysql-service:3306` | `127.0.0.1:3306` |
 | ClickHouse HTTP/TCP | `clickhouse-service:8123/9000` | `127.0.0.1:8123/9000` |
 | Redis | `redis-service:6379` | `127.0.0.1:6379` |

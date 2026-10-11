@@ -1,5 +1,6 @@
 package com.coolxer.model.retrieval.vo;
 
+import com.coolxer.model.retrieval.meta.DataAttribute;
 import lombok.Data;
 
 import java.util.List;
@@ -16,6 +17,8 @@ public class SelectAttributeVo {
     private String operatorName;
 
     private String linkTemplate;
+
+    private DataAttribute.LinkCondition linkCondition;
 
     private boolean copyable;
 

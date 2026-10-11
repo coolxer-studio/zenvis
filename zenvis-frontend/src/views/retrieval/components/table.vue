@@ -213,7 +213,7 @@ function getSelect(value: string[]) {
 }
 
 function resolveLink(column: RetrievalTableColumn, row: Record<string, unknown>) {
-  return resolveRetrievalLink(column.linkTemplate, row);
+  return resolveRetrievalLink(column.linkTemplate, row, column.linkCondition);
 }
 
 function openLink(column: RetrievalTableColumn, row: Record<string, unknown>) {

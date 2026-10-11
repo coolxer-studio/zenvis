@@ -117,6 +117,11 @@ public class DataAttribute {
      */
     private String linkTemplate;
 
+    /**
+     * 链接展示条件，满足条件时才展示为可点击链接
+     */
+    private LinkCondition linkCondition;
+
     @JsonGetter("link_template")
     public String getLinkTemplate() {
         return linkTemplate;
@@ -139,11 +144,76 @@ public class DataAttribute {
         throw new IllegalArgumentException("link_template仅支持字符串");
     }
 
+    @JsonGetter("link_condition")
+    public LinkCondition getLinkCondition() {
+        return linkCondition;
+    }
+
+    public void setLinkCondition(LinkCondition linkCondition) {
+        this.linkCondition = linkCondition;
+    }
+
+    @JsonSetter("link_condition")
+    public void readLinkCondition(JsonNode linkConditionNode) {
+        if (linkConditionNode == null || linkConditionNode.isNull()) {
+            linkCondition = null;
+            return;
+        }
+        if (!linkConditionNode.isObject()) {
+            throw new IllegalArgumentException("link_condition必须是对象结构");
+        }
+        LinkCondition condition = new LinkCondition();
+        JsonNode fieldNode = linkConditionNode.get("field");
+        if (fieldNode != null && !fieldNode.isNull()) {
+            if (!fieldNode.isTextual()) {
+                throw new IllegalArgumentException("link_condition.field必须是字符串");
+            }
+            condition.setField(fieldNode.textValue());
+        }
+        JsonNode operatorNode = linkConditionNode.get("operator");
+        if (operatorNode != null && !operatorNode.isNull()) {
+            if (!operatorNode.isTextual()) {
+                throw new IllegalArgumentException("link_condition.operator必须是字符串");
+            }
+            condition.setOperator(operatorNode.textValue());
+        }
+        JsonNode valueNode = linkConditionNode.get("value");
+        if (valueNode != null && !valueNode.isNull()) {
+            if (!valueNode.isTextual()) {
+                throw new IllegalArgumentException("link_condition.value必须是字符串");
+            }
+            condition.setValue(valueNode.textValue());
+        }
+        this.linkCondition = condition;
+    }
+
     @JsonAnySetter
     public void rejectDeprecatedLinkField(String propertyName, JsonNode ignoredValue) {
         if (DEPRECATED_LINK_FIELD.equals(propertyName)) {
             throw new IllegalArgumentException("旧跳转链接字段已废弃，请使用link_template");
         }
+    }
+
+    /**
+     * 链接展示条件
+     */
+    @Data
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static class LinkCondition {
+        /**
+         * 条件字段名，引用同一Entity下的Attribute逻辑名
+         */
+        private String field;
+
+        /**
+         * 比较操作符
+         */
+        private String operator;
+
+        /**
+         * 比较值，isnull/isnotnull时不需要
+         */
+        private String value;
     }
 
 }

@@ -45,6 +45,22 @@ export type OperatorItem = {
   label: string;
 };
 
+export type LinkConditionOperator =
+  | 'equal'
+  | 'notequal'
+  | 'isnull'
+  | 'isnotnull'
+  | 'greatthan'
+  | 'greatequalthan'
+  | 'lessthan'
+  | 'lessequalthan';
+
+export type LinkCondition = {
+  field: string;
+  operator: LinkConditionOperator;
+  value?: string;
+};
+
 export type TAttributeListResponse = {
   name: string;
   label: string;
@@ -54,6 +70,7 @@ export type TAttributeListResponse = {
   search_type?: string;
   display_type?: string;
   link_template?: string;
+  link_condition?: LinkCondition;
   copyable?: boolean;
   auto_complete?: boolean;
 };
@@ -64,6 +81,7 @@ export type SelectAttributeItem = {
   display_type?: string;
   operator_name?: string;
   link_template?: string;
+  link_condition?: LinkCondition;
   copyable?: boolean;
   value_list?: string[];
 };
@@ -146,6 +164,7 @@ export type RetrievalTableColumn = {
   title: string;
   dataIndex: string;
   linkTemplate?: string;
+  linkCondition?: LinkCondition;
   copyable?: boolean;
   resizable: boolean;
   width: number;

@@ -98,7 +98,7 @@ Controller 负责 HTTP 契约和参数校验，Service 负责业务规则、权�
 ```bash
 docker compose -f deploy/docker-compose.yml up -d \
   redis-service redis-stack-service mysql-service \
-  clickhouse-service kafka-service vectum-service
+  clickhouse-service kafka-service zenvis-service-vectum
 ```
 
 如果只开发不涉及 RAG 或推送任务的功能，可以按实际依赖减少服务，但完整测试仍应覆盖相应组件。

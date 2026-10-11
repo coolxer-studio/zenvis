@@ -541,6 +541,7 @@ function applyColumns(
     title: attribute.label,
     dataIndex: attribute.name,
     linkTemplate: attribute.link_template,
+    linkCondition: attribute.link_condition,
     copyable: attribute.copyable,
     resizable: true,
     width,

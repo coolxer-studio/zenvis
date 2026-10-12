@@ -1490,7 +1490,7 @@ public class PluginServiceImpl implements PluginService {
                 deleteIfExists(uiConfigPath(dashboard.getConfigIndex()));
             }
         }
-        deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+        // 静态 HTML 页面由 replacePluginUi -> installPluginUi 统一管理，看板对账不再触碰 html-page 目录
 
         List<Path> copiedPaths = new ArrayList<>();
         for (DashboardDto definition : definitions) {
@@ -1812,7 +1812,7 @@ public class PluginServiceImpl implements PluginService {
                 deleteIfExists(uiConfigPath(dashboard.getConfigIndex()));
             }
         }
-        deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+        // 静态 HTML 页面目录已由 cleanupPluginUi 统一清理
     }
 
     private void restoreConfigDirectories(Path snapshotRoot) throws IOException {
@@ -2482,9 +2482,6 @@ public class PluginServiceImpl implements PluginService {
 
     private List<Path> installPluginUi(String packageName, Path pluginUiPath) throws IOException {
         PluginUiLayout layout = inspectPluginUi(packageName, pluginUiPath, true);
-        if (layout.isEmpty()) {
-            return Collections.emptyList();
-        }
 
         List<Path> copiedPaths = new ArrayList<>();
         try {
@@ -2504,6 +2501,14 @@ public class PluginServiceImpl implements PluginService {
                 copiedPaths.add(target);
                 WalkFileUtil.copy(bundle.sourcePath(), target);
             }
+            // 拷贝静态 HTML 页面目录，与看板配置解耦：只要 04_ui/html-page 存在就安装到 html-page/<packageName>/
+            Path htmlPageSource = pluginUiPath.resolve(UI_HTML_PAGE_DIR_NAME);
+            if (Files.isDirectory(htmlPageSource)) {
+                Path htmlPageTarget = requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot());
+                deleteIfExists(htmlPageTarget);
+                copiedPaths.add(htmlPageTarget);
+                WalkFileUtil.copy(htmlPageSource, htmlPageTarget);
+            }
             return copiedPaths;
         } catch (IOException | RuntimeException e) {
             try {
@@ -2517,9 +2522,6 @@ public class PluginServiceImpl implements PluginService {
 
     private void exportPluginUi(String packageName, Path installedUiPath, Path exportUiPath) throws IOException {
         PluginUiLayout layout = inspectPluginUi(packageName, installedUiPath, false);
-        if (layout.isEmpty()) {
-            return;
-        }
 
         if (!layout.legacyFiles().isEmpty()) {
             Path legacySource = requireUiConfigDirectory(packageName);
@@ -2530,6 +2532,13 @@ public class PluginServiceImpl implements PluginService {
             Path target = requireChildPath(exportUiPath.resolve(bundle.directoryName()), exportUiPath);
             WalkFileUtil.copy(source, target);
         }
+        // 导出静态 HTML 页面目录（与看板配置解耦，存在即导出）
+        Path htmlPageSource = requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot());
+        if (Files.isDirectory(htmlPageSource)) {
+            Path htmlPageTarget = requireChildPath(exportUiPath.resolve(UI_HTML_PAGE_DIR_NAME), exportUiPath);
+            deleteIfExists(htmlPageTarget);
+            WalkFileUtil.copy(htmlPageSource, htmlPageTarget);
+        }
     }
 
     private void cleanupPluginUi(String packageName, Path installedUiPath) throws IOException {
@@ -2539,6 +2548,8 @@ public class PluginServiceImpl implements PluginService {
         layout.bundles().stream()
                 .map(bundle -> uiConfigPath(bundle.configIndex()))
                 .forEach(uiPaths::add);
+        // 清理静态 HTML 页面目录（与低代码配置一同归 UI 层管理）
+        uiPaths.add(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
         deletePluginUiPaths(uiPaths);
     }
 
@@ -2569,7 +2580,7 @@ public class PluginServiceImpl implements PluginService {
                     throw invalidPluginPackage("04_ui 包含不支持的文件类型: " + name);
                 }
                 if (UI_HTML_PAGE_DIR_NAME.equals(name)) {
-                    // html-page 为静态 HTML 看板保留目录，由看板流程安装，不作为低代码 bundle
+                    // html-page 为静态 HTML 页面保留目录，由 installPluginUi 直接安装，不作为低代码 bundle
                     continue;
                 }
                 if (name.endsWith("_config")) {
@@ -2710,23 +2721,13 @@ public class PluginServiceImpl implements PluginService {
             WalkFileUtil.copy(source, target);
             copiedPaths.add(target);
         } else if (type == DashboardType.HTML_PAGE) {
+            // 静态 HTML 页面已由 installPluginUi 整体拷贝到 html-page/<packageName>/，
+            // 此处仅校验源文件存在并将 html_path 归一化为 packageName/相对路径。
             Path relativeHtmlPath = normalizeRelativePath(dashboardDto.getHtmlPath(), "HTML看板路径");
             Path source = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(relativeHtmlPath), pluginPackTool.getDashboardHtmlPath());
             if (!Files.exists(source) || !Files.isRegularFile(source)) {
                 throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "HTML看板文件不存在: " + dashboardDto.getHtmlPath());
             }
-            Path targetRoot = requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot());
-            Path parentDir = relativeHtmlPath.getParent();
-            if (parentDir != null && parentDir.getNameCount() > 0) {
-                Path sourceDir = requireChildPath(pluginPackTool.getDashboardHtmlPath().resolve(parentDir), pluginPackTool.getDashboardHtmlPath());
-                Path targetDir = requireChildPath(targetRoot.resolve(parentDir), targetRoot);
-                WalkFileUtil.copy(sourceDir, targetDir);
-            } else {
-                Path target = requireChildPath(targetRoot.resolve(relativeHtmlPath), targetRoot);
-                Files.createDirectories(target.getParent());
-                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-            copiedPaths.add(targetRoot);
             dashboardDto.setHtmlPath(packageName + "/" + toUnixPath(relativeHtmlPath));
         } else if (type == DashboardType.LINK && StringUtils.isBlank(dashboardDto.getUrl())) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY);
@@ -2794,7 +2795,7 @@ public class PluginServiceImpl implements PluginService {
         for (Dashboard dashboard : dashboards) {
             dashboardRepository.deleteById(dashboard.getId());
         }
-        deleteIfExists(requireChildPath(htmlPageRoot().resolve(packageName), htmlPageRoot()));
+        // 静态 HTML 页面目录已改由 cleanupPluginUi 统一清理
     }
 
     private List<String> createPluginMcpServers(Long id, String packageName, PluginPackTool pluginPackTool) {

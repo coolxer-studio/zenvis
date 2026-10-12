@@ -1,0 +1,7 @@
+[
+  {
+    "name": "流量包分析",
+    "type": "HTML_PAGE",
+    "params": "/zenvis/html-page/com.coolxer.plugin.wireview/wireview/index.html"
+  }
+]

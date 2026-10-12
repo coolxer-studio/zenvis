@@ -22,6 +22,7 @@ zenvis-service/*
 !zenvis-plugin/zenvis-plugin-user-event/
 !zenvis-plugin/zenvis-plugin-nginx/
 !zenvis-plugin/zenvis-plugin-rzweb/
+!zenvis-plugin/zenvis-plugin-wireview/
 !zenvis-plugin/market-plugins.json
 
 !zenvis-service/zenvis-service-vectum/

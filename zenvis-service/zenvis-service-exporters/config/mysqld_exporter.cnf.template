@@ -1,0 +1,12 @@
+; mysqld_exporter 连接配置（模板）
+; 由 scripts/entrypoint.sh 渲染为 /etc/zenvis-exporters/mysqld_exporter.cnf（权限 0600）。
+; 目标地址通过 --mysqld.address 指定，本文件只负责凭据。
+;
+; 权限要求：用于采集的 MySQL 账号至少需要
+;   PROCESS, REPLICATION CLIENT, SELECT
+; 默认使用 root 账号（MYSQL_ROOT_PASSWORD），也可通过 MYSQL_EXPORTER_USER /
+; MYSQL_EXPORTER_PASSWORD 指定专用账号，详见 README。
+
+[client]
+user=__MYSQL_EXPORTER_USER__
+password=__MYSQL_EXPORTER_PASSWORD__

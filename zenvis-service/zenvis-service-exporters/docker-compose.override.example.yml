@@ -1,0 +1,26 @@
+# 与 ZenVis 主栈一起编排的 override 示例（仅参考，不自动应用）。
+#
+# 用法（在仓库根目录执行）：
+#   1) 复制 ClickHouse 原生指标配置到主栈配置目录：
+#        mkdir -p deploy/config/clickhouse
+#        cp zenvis-service/zenvis-service-exporters/config/clickhouse-prometheus.xml \
+#           deploy/config/clickhouse/prometheus.xml
+#   2) 用 override 启动：
+#        docker compose -f deploy/docker-compose.yml \
+#                       -f zenvis-service/zenvis-service-exporters/docker-compose.override.example.yml up -d
+#
+# 说明：
+#   - ClickHouse 通过 config.d 挂载启用内置 Prometheus 端点（:9363），由 Prometheus 直连。
+#   - MinIO 通过 MINIO_PROMETHEUS_AUTH_TYPE=public 暴露内置指标端点；若要保持 jwt 鉴权，
+#     请改用 `mc admin prometheus generate` 生成 bearer_token 并配置到 Prometheus，见 README。
+
+services:
+  clickhouse-service:
+    ports:
+      - "${ZENVIS_INFRA_BIND_ADDRESS:-127.0.0.1}:9363:9363"
+    volumes:
+      - ./config/clickhouse/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+
+  minio-service:
+    environment:
+      MINIO_PROMETHEUS_AUTH_TYPE: "public"

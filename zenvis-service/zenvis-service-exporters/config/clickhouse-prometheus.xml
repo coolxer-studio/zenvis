@@ -1,0 +1,17 @@
+<clickhouse>
+    <!-- ClickHouse 内置 Prometheus 指标端点。
+         将该文件复制/挂载到 clickhouse-server 容器的
+         /etc/clickhouse-server/config.d/prometheus.xml 后，
+         即可通过 http://<clickhouse>:9363/metrics 采集指标。
+         参见 ZenVis 根 README 与 docs/监控 说明。 -->
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <asynchronous_metrics>true</asynchronous_metrics>
+        <events>true</events>
+        <errors>true</errors>
+        <histograms>true</histograms>
+        <dimensional_metrics>true</dimensional_metrics>
+    </prometheus>
+</clickhouse>

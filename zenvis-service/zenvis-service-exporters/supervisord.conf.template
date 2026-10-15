@@ -1,0 +1,72 @@
+; ZenVis Exporters 容器进程托管配置（模板）
+; 该文件由 scripts/entrypoint.sh 渲染（替换 __XXX__ 占位符）后写入同目录 supervisord.conf。
+; 使用 __XXX__ 而不是 supervisord 的 %(ENV_xxx)s，是为了让密码中的特殊字符不会破坏解析。
+
+[supervisord]
+nodaemon=true
+logfile=/var/log/zenvis-exporters/supervisord.log
+logfile_maxbytes=10MB
+logfile_backups=3
+loglevel=info
+pidfile=/var/log/zenvis-exporters/supervisord.pid
+childlogdir=/var/log/zenvis-exporters
+
+[unix_http_server]
+file=/var/log/zenvis-exporters/supervisor.sock
+chmod=0700
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///var/log/zenvis-exporters/supervisor.sock
+
+[program:mysqld_exporter]
+command=/usr/local/bin/mysqld_exporter
+    --config.my-cnf=/etc/zenvis-exporters/mysqld_exporter.cnf
+    --mysqld.address=__MYSQL_HOST__:__MYSQL_PORT__
+    --web.listen-address=:__MYSQLD_EXPORTER_PORT__
+    --web.telemetry-path=/metrics
+autostart=true
+autorestart=true
+startsecs=3
+startretries=10
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:redis_exporter]
+; redis 与 redis-stack 共用 REDIS_PASSWORD，通过 /scrape?target= 做多目标采集。
+command=/usr/local/bin/redis_exporter
+    --redis.addr=redis://__REDIS_HOST__:__REDIS_PORT__
+    --redis.password=__REDIS_PASSWORD__
+    --web.listen-address=:__REDIS_EXPORTER_PORT__
+    --web.telemetry-path=/metrics
+autostart=true
+autorestart=true
+startsecs=3
+startretries=10
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:kafka_exporter]
+command=/usr/local/bin/kafka_exporter
+    --kafka.server=__KAFKA_BOOTSTRAP_SERVERS__
+    --web.listen-address=:__KAFKA_EXPORTER_PORT__
+autostart=true
+autorestart=true
+startsecs=3
+startretries=10
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0

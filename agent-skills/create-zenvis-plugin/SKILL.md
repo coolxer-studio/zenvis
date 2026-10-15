@@ -75,8 +75,7 @@ plugin-name/
 │   ├── ip-statistics/
 │   └── html-page/               # reserved: static HTML, no low-code validation
 ├── 05_dashboard/
-│   ├── config.json
-│   └── low-code/<config_index>_config/
+│   └── config.json              # dashboard registration only; never page content
 ├── 06_mcp/
 │   └── config.json              # [] when the plugin registers no MCP server
 ├── 07_skill/
@@ -176,6 +175,7 @@ Inspect current backend and ClickHouse support, then use the narrowest semantica
 | Explicit JSON object/value | `column_type: "json"`, `display_type: "json"` |
 
 - Do not infer JSON or arrays from punctuation in one example. Require the specification to declare JSON semantics or repeated values.
+- A `json` attribute selects the ClickHouse `JSON` column, which requires an object at the root; wrap a documented top-level array as `{"<key>": [...]}` before the sink. The backend returns it serialized with `toJSONString`, so every UI surface showing it must use the `|raw` filter — see Render `column_type: "json"` attributes as JSON.
 - Preserve mixed IPv4/IPv6 as `String` unless the checked-out platform explicitly supports the required mixed IP type.
 - Convert documented timestamps in Vector to the chosen ClickHouse time representation. Use `retrieval_type: "date"` only when the stored representation or current frontend contract requires date-input conversion; do not add it mechanically to ordinary `DateTime` fields.
 - Decode Base64 only under the ingestion rules below. Store explicitly decoded JSON as `json`, explicitly decoded readable text as `String`, and unspecified or opaque Base64 as `String`. State the chosen behavior in `description`.
@@ -237,10 +237,18 @@ Meta upgrades are additive-only: existing entities and attributes cannot be dele
 
 Default to YAML (`.yaml`/`.yml`). Do not generate TOML or JSON unless explicitly requested or maintaining a proven legacy task; stable TOML tasks may stay as-is and should not be rewritten merely for format uniformity.
 
-Create two services for a standard data pipeline:
+Choose the pipeline shape from the real source mechanism. Do not add stages the source does not need.
+
+**If the source is already a vendor/upstream Kafka topic, consume it directly.** Do not add a Kafka→Kafka "raw forward" service — re-publishing a vendor topic into a plugin topic adds latency, duplication, and a second retention/offset boundary for no data benefit, and the upstream topic already *is* the raw, replayable store. Register a single Kafka-to-ClickHouse task:
+
+- Consume the upstream topic with a **dedicated consumer group owned by the plugin** (never the vendor exporter's group), so the plugin cannot disturb the upstream exporter cursor or any vendor audit path.
+- Make the source topic, group id, and DLQ topic configurable via environment variables.
+- Document that raw retention and replay now depend on the **upstream** topic's retention policy, and tell operators to raise it if long-horizon reprocessing is required.
+
+**Only for non-Kafka sources (SFTP/landed files, UDP syslog, HTTP APIs, and similar) use two services:**
 
 1. Source-to-Kafka:
-   - Follow the source mechanism declared by the specification, such as SFTP-landed files, UDP syslog, or an existing vendor Kafka topic.
+   - Follow the source mechanism declared by the specification, such as SFTP-landed files or UDP syslog.
    - Forward each raw record unchanged using Kafka `raw_message` encoding.
    - Do not parse, decode, rename, enrich, or drop business fields.
 2. Kafka-to-ClickHouse:
@@ -404,7 +412,7 @@ Column conventions observed in shipped plugins:
 }
 ```
 
-- Render JSON cells with a truncated `tpl` plus a `popOver` containing a `json` component.
+- Render JSON cells with a truncated `tpl` plus a `popOver` containing a `json` component, and resolve the value with `|raw` (see Render `column_type: "json"` attributes as JSON).
 
 Keep API entity names aligned with Meta; do not use a combined endpoint as a shortcut.
 
@@ -413,6 +421,58 @@ Keep API entity names aligned with Meta; do not use a combined endpoint as a sho
 - Build `detail-<meaning>/index.json` per entity, querying `GET /zenvis/api/v1/entity/{entity}/{record_id}/view` and keying off the `record_id` query parameter.
 - A cross-entity IP investigation page (`04_ui/ip-statistics/index.json`) should: provide an IP input with optional `ip` query parameter; match source/destination IP fields with OR semantics within each entity so a row counts once; return zero (or explicit N/A) for entities without IP fields while retaining them in the overview when required; pass multi-entity parameters as a comma-separated scalar (avoid bracket notation such as `entities[0]` that Tomcat may reject); and link actual IP attributes to this page.
 - Detail and IP pages usually have no menu entry; they are reached through Meta/column links.
+
+### Render `column_type: "json"` attributes as JSON
+
+Every attribute declared `column_type: "json"` (with `display_type: "json"`) must render as an expandable JSON tree wherever it appears, never as an escaped string.
+
+Why the naive form breaks: the backend serializes a `json` column with ClickHouse `toJSONString(...)`, so both `GET /zenvis/api/v1/entity/{entity}/{record_id}/view` and the `/list` rows deliver this attribute as a JSON **string**, not an object/array. An amis `{ "type": "json" }` renderer only builds a tree when its resolved `value` is already an object; given a string it wraps the text in a single-key `{"string": "..."}` node. If that string also passed through a template or `html` filter, the embedded quotes arrive HTML-escaped as `&quot;` and the payload is unreadable.
+
+Always resolve JSON-typed attributes with the `|raw` filter:
+
+- `${verdict_hits|raw}`, `${evidence|raw}` — `raw` is amis' registered pass-through filter, so the backend string reaches the renderer untouched and the renderer `JSON.parse`s it into a tree.
+- Do **not** use the `json` filter: it is `JSON.stringify(value, null, indent)`, which adds a quoting layer to an already-stringified value; the renderer parses that back to the original string and wraps it in `{"string": "..."}` again.
+- `toJson` also yields a tree but returns `null` on invalid JSON, silently hiding malformed data; prefer `raw` so a broken payload stays visible as text.
+
+Apply this to every surface that shows a `json` attribute: detail-page panels and list-cell `popOver` bodies alike. Ship explicit view options rather than a bare `value`, and keep the wrapper the backend produced (`{"hits": [...]}`, `{"evidence": [...]}`) so the page matches the persisted record.
+
+```json
+{
+  "type": "panel",
+  "title": "命中规则明细（verdict.hits）",
+  "body": {
+    "type": "json",
+    "value": "${verdict_hits|raw}",
+    "levelExpand": 2,
+    "mutable": false,
+    "displayDataTypes": false,
+    "enableClipboard": true
+  }
+}
+```
+
+The same body shape goes inside a list column's `popOver`:
+
+```json
+{
+  "name": "verdict_hits",
+  "label": "命中规则明细",
+  "toggled": false,
+  "type": "tpl",
+  "tpl": "<span class=\"text-truncate d-inline-block\" style=\"max-width: 220px\">${verdict_hits}</span>",
+  "popOver": {
+    "trigger": "hover",
+    "body": {
+      "type": "json",
+      "value": "${verdict_hits|raw}",
+      "levelExpand": 2,
+      "mutable": false,
+      "displayDataTypes": false,
+      "enableClipboard": true
+    }
+  }
+}
+```
 
 ### Static HTML directory
 
@@ -454,14 +514,18 @@ Validate the low-code schema shape expected by the current SDK, distinguishing a
 
 ## Build Dashboards
 
+**`05_dashboard/` contains only `config.json`.** Never place page content there — no `low-code/`, no `html-page/`, no page `index.json`. Every page, whether low-code or static HTML, lives under `04_ui/`; the dashboard config only *registers* a dashboard and points at that page. Treat a page-config directory inside `05_dashboard/` as a packaging defect.
+
 `05_dashboard/config.json` is a JSON array compatible with the current `DashboardDto`; use `[]` for plugins without dashboards. Supported types:
 
 | Type | Key fields | Resource location |
 | --- | --- | --- |
 | `HTML_PAGE` | `code`, `html_path` | File under `04_ui/html-page/` |
-| `LOW_CODE_PAGE` | `code`, `config_index` | `05_dashboard/low-code/<config_index>_config/` |
 | `LINK` | `code`, `url` | Controlled external link |
 | `BUILT` | platform built-in | Normally not created by plugins |
+| `LOW_CODE_PAGE` | `code`, `config_index` | **Avoid for plugins** — see below |
+
+**Do not declare a `LOW_CODE_PAGE` plugin dashboard.** The current backend resolves its page config strictly from `05_dashboard/low-code/<config_index>_config/` with no fallback to `04_ui`, so using it forces a duplicate page config into `05_dashboard/` and violates the rule above. Ship low-code pages as `04_ui` bundles and reach them through `08_menu` (`LOW_CODE_APP` / `LOW_CODE_PAGE`) instead. If a plugin genuinely needs a dashboard surface, use `HTML_PAGE` with the HTML file under `04_ui/html-page/`; otherwise leave the array `[]`.
 
 For `HTML_PAGE`, make `html_path` plugin-relative to `04_ui/html-page/` only — multi-level static sites are allowed:
 
@@ -643,9 +707,11 @@ Run validation proportional to the change, organized in layers:
    - Run `mvn clean test` for the extension, including package contract tests; confirm a single thin JAR with classes and no `BOOT-INF`.
    - Confirm controller paths resolve under `/api/v1/plugin/{package}` and MySQL migrations apply on an empty database and skip already-applied versions.
 3. **Ingestion pipeline**
-   - Generate representative data for every definition and exercise source → Kafka → ClickHouse when infrastructure is available; confirm bad field counts/times/types land in the DLQ, not the table.
+   - Generate representative data for every definition and exercise the real path (source → Kafka → ClickHouse, or upstream Kafka → ClickHouse when the source is already Kafka) when infrastructure is available; confirm bad field counts/times/types land in the DLQ, not the table.
 4. **Pages, dashboards, and agents**
    - Open app shell, every list, detail, and IP page; verify links and copy controls.
+   - For every Meta attribute with `column_type: "json"`, confirm the detail panel and the list `popOver` render an expandable JSON tree (not `{"string": "..."}` and not HTML-escaped `&quot;`), and that each such `value` uses the `|raw` filter.
+   - Confirm `05_dashboard/` contains nothing but `config.json`, and that every non-`[]` dashboard entry points at page content living under `04_ui/` (`HTML_PAGE` → `04_ui/html-page/...`, never a `low-code/` page dir under `05_dashboard/`).
    - Compile inline dashboard JavaScript and perform browser visual QA (1920×1080) for material dashboard changes, including loading/empty/error/refresh states.
    - Confirm MCP connects and discovers the expected tools, and each 07_skill allowlist resolves to existing local/MCP tool names with correct budgets.
    - For opted-in UI contracts, run the extension’s strict-class/style contract checks.

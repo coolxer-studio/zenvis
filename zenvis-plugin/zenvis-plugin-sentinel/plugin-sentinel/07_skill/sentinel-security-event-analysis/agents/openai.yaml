@@ -1,0 +1,4 @@
+interface:
+  display_name: "智能体安全事件研判"
+  short_description: "按事件ID、会话号或时间窗只读检索并输出证据化研判结论"
+  default_prompt: "Use $sentinel-security-event-analysis to analyze one Sentinel security event by event_id, session_id, msg_hash, or time window, and return one evidence-backed report."

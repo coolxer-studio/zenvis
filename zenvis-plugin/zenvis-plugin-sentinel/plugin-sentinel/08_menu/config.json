@@ -1,0 +1,12 @@
+[
+  {
+    "name": "智能体安全监测配置",
+    "type": "POLICY_CONFIG",
+    "params": "com.coolxer.plugin.sentinel.app"
+  },
+  {
+    "name": "智能体安全监测",
+    "type": "LOW_CODE_APP",
+    "params": "com.coolxer.plugin.sentinel.app"
+  }
+]

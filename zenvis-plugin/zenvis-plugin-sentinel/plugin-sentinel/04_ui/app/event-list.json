@@ -1,0 +1,252 @@
+{
+  "type": "page",
+  "title": "智能体安全事件",
+  "remark": "Sentinel 智能体安全检测网关安全事件（sentinel.security.event.v1）。点击事件唯一ID可进入详情复盘。",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sentinel_security_event/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "occurred_at",
+        "orderDir": "desc"
+      },
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无安全事件数据",
+      "columns": [
+        {
+          "name": "event_id",
+          "label": "事件唯一ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sentinel.detail-security-event?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${event_id}"
+          }
+        },
+        {
+          "name": "occurred_at",
+          "label": "判定时刻",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "occurred_at"
+          }
+        },
+        {
+          "name": "verdict_severity",
+          "label": "风险等级",
+          "searchable": {
+            "type": "select",
+            "name": "verdict_severity",
+            "options": [
+              { "label": "严重 high", "value": "high" },
+              { "label": "极高 critical", "value": "critical" },
+              { "label": "中等 medium", "value": "medium" },
+              { "label": "轻微 low", "value": "low" }
+            ]
+          }
+        },
+        {
+          "name": "verdict_action",
+          "label": "建议动作",
+          "searchable": {
+            "type": "select",
+            "name": "verdict_action",
+            "options": [
+              { "label": "建议拒答 refuse", "value": "refuse" },
+              { "label": "建议脱敏 mask", "value": "mask" },
+              { "label": "建议代答 answer_on_behalf", "value": "answer_on_behalf" },
+              { "label": "建议升级 escalate", "value": "escalate" },
+              { "label": "放行 allow", "value": "allow" }
+            ]
+          }
+        },
+        {
+          "name": "verdict_category",
+          "label": "命中类别",
+          "searchable": {
+            "type": "select",
+            "name": "verdict_category",
+            "options": [
+              { "label": "直接提示注入", "value": "prompt_injection_direct" },
+              { "label": "越狱", "value": "jailbreak" },
+              { "label": "资源攻击", "value": "resource_attack" },
+              { "label": "敏感数据-密钥凭据", "value": "sensitive_data_secrets" },
+              { "label": "敏感数据-个人信息", "value": "sensitive_data_pii" },
+              { "label": "自定义关键词", "value": "custom_keyword" },
+              { "label": "越界请求", "value": "scope" },
+              { "label": "数据外渗", "value": "exfil_channel" }
+            ]
+          }
+        },
+        {
+          "name": "verdict_decision_point",
+          "label": "判定点",
+          "searchable": {
+            "type": "select",
+            "name": "verdict_decision_point",
+            "options": [
+              { "label": "输入 input", "value": "input" },
+              { "label": "输出 output", "value": "output" },
+              { "label": "流式 stream", "value": "stream" },
+              { "label": "工具 tool", "value": "tool" }
+            ]
+          }
+        },
+        {
+          "name": "session_id",
+          "label": "网关会话号",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "subject",
+          "label": "事件主体",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "rule_ids",
+          "label": "命中规则ID",
+          "searchable": true
+        },
+        {
+          "name": "frag_kind",
+          "label": "命中片段种类",
+          "searchable": {
+            "type": "select",
+            "name": "frag_kind",
+            "options": [
+              { "label": "用户输入 user", "value": "user" },
+              { "label": "模型回复 assistant", "value": "assistant" },
+              { "label": "系统提示词 system", "value": "system" },
+              { "label": "工具调用 tool_call", "value": "tool_call" },
+              { "label": "工具结果 tool_result", "value": "tool_result" },
+              { "label": "推理内容 reasoning", "value": "reasoning" }
+            ]
+          }
+        },
+        {
+          "name": "msg_hash",
+          "label": "命中消息哈希",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "request_wire",
+          "label": "协议线格式",
+          "searchable": {
+            "type": "select",
+            "name": "request_wire",
+            "options": [
+              { "label": "OpenAI", "value": "openai" },
+              { "label": "Anthropic", "value": "anthropic" }
+            ]
+          }
+        },
+        {
+          "name": "request_path",
+          "label": "原始请求路径",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "source_policy_version",
+          "label": "检测策略版本",
+          "searchable": true
+        },
+        {
+          "name": "evidence_count",
+          "label": "证据片段数",
+          "sortable": true,
+          "toggled": false
+        },
+        {
+          "name": "flagged_content",
+          "label": "命中片段正文",
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "<span class=\"text-truncate d-inline-block\" style=\"max-width: 320px\">${flagged_content}</span>",
+          "popOver": {
+            "trigger": "hover",
+            "body": {
+              "type": "container",
+              "body": "${flagged_content}"
+            }
+          }
+        },
+        {
+          "name": "verdict_reason",
+          "label": "判定依据",
+          "toggled": false
+        },
+        {
+          "name": "verdict_hits",
+          "label": "命中规则明细",
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "<span class=\"text-truncate d-inline-block\" style=\"max-width: 220px\">${verdict_hits}</span>",
+          "popOver": {
+            "trigger": "hover",
+            "body": {
+              "type": "json",
+              "value": "${verdict_hits|raw}",
+              "levelExpand": 2,
+              "mutable": false,
+              "displayDataTypes": false,
+              "enableClipboard": true
+            }
+          }
+        },
+        {
+          "name": "evidence",
+          "label": "证据片段",
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "<span class=\"text-truncate d-inline-block\" style=\"max-width: 220px\">${evidence}</span>",
+          "popOver": {
+            "trigger": "hover",
+            "body": {
+              "type": "json",
+              "value": "${evidence|raw}",
+              "levelExpand": 2,
+              "mutable": false,
+              "displayDataTypes": false,
+              "enableClipboard": true
+            }
+          }
+        },
+        {
+          "name": "request_scenario",
+          "label": "请求场景",
+          "toggled": false
+        },
+        {
+          "name": "source_component",
+          "label": "来源组件",
+          "toggled": false
+        },
+        {
+          "name": "schema_version",
+          "label": "信封格式版本",
+          "toggled": false
+        },
+        {
+          "name": "message_type",
+          "label": "消息类型",
+          "toggled": false
+        },
+        {
+          "name": "mode",
+          "label": "判定模式",
+          "toggled": false
+        }
+      ]
+    }
+  ]
+}

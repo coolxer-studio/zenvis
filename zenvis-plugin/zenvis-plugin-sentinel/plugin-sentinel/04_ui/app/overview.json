@@ -1,0 +1,267 @@
+{
+  "type": "page",
+  "title": "智能体安全态势总览",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "本插件接入 Sentinel 智能体安全检测网关导出的安全事件（sentinel.security.event.v1）。镜像档判定不代表请求已被拦截，建议动作仅供参考。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/overview/query",
+        "data": {
+          "entities": [
+            "sentinel_security_event"
+          ],
+          "time_range": {
+            "preset": "TODAY"
+          },
+          "comparison": "NONE"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){out.total=Number(r.all_time_count||0);out.today=Number(r.current_value||0);});return {status:0,msg:'',data:out};"
+      },
+      "body": {
+        "type": "grid",
+        "gap": "md",
+        "columns": [
+          {
+            "md": 6,
+            "body": {
+              "type": "panel",
+              "title": "累计安全事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${total || 0}</div><div>入库以来全部命中事件</div>"
+            }
+          },
+          {
+            "md": 6,
+            "body": {
+              "type": "panel",
+              "title": "今日新增",
+              "body": "<div style='font-size:28px;font-weight:700'>${today || 0}</div><div>按判定时刻统计</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "chart",
+      "height": 380,
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/trend/query",
+        "data": {
+          "entities": [
+            "sentinel_security_event"
+          ],
+          "time_range": {
+            "preset": "LAST_7_DAYS"
+          },
+          "granularity": "HOUR"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+      },
+      "config": {
+        "title": {
+          "text": "近 7 天安全事件趋势（按小时）"
+        },
+        "tooltip": {
+          "trigger": "axis"
+        },
+        "legend": {},
+        "dataset": "${chart_dataset}",
+        "xAxis": {
+          "type": "category"
+        },
+        "yAxis": {
+          "type": "value",
+          "minInterval": 1
+        },
+        "series": "${chart_series}"
+      }
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "sentinel_security_event",
+                    "dimension": "verdict_severity",
+                    "label": "风险等级"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "风险等级分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        },
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "sentinel_security_event",
+                    "dimension": "verdict_category",
+                    "label": "命中类别"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "命中类别分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "sentinel_security_event",
+                    "dimension": "verdict_action",
+                    "label": "建议动作"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "建议动作分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        },
+        {
+          "md": 6,
+          "body": {
+            "type": "chart",
+            "height": 360,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "sentinel_security_event",
+                    "dimension": "verdict_decision_point",
+                    "label": "判定点"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "判定点分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

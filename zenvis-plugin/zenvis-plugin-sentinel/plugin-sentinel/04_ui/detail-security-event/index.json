@@ -1,0 +1,214 @@
+{
+  "type": "page",
+  "title": "智能体安全事件详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/sentinel_security_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在或没有访问权限"
+      },
+      "body": [
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "镜像档判定仅记录命中与建议动作，不实际阻断或改写客户端请求；建议动作（allow/mask/refuse/answer_on_behalf/escalate）为策略建议，不代表请求已被拦截。"
+        },
+        {
+          "type": "property",
+          "title": "判定信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。"
+            },
+            {
+              "label": "平台入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 实际接收时间。"
+            },
+            {
+              "label": "事件唯一ID",
+              "content": "${event_id | default:'-'}",
+              "remark": "信封 event_id，上游幂等去重键。"
+            },
+            {
+              "label": "判定时刻",
+              "content": "${occurred_at | default:'-'}",
+              "remark": "业务判定时间（Asia/Shanghai）。"
+            },
+            {
+              "label": "风险等级",
+              "content": "${verdict_severity | default:'-'}",
+              "remark": "low / medium / high / critical。"
+            },
+            {
+              "label": "建议动作",
+              "content": "${verdict_action | default:'-'}",
+              "remark": "allow / mask / refuse / answer_on_behalf / escalate。"
+            },
+            {
+              "label": "命中类别",
+              "content": "${verdict_category | default:'-'}",
+              "remark": "prompt_injection_direct 等，随策略演进扩充。"
+            },
+            {
+              "label": "判定点",
+              "content": "${verdict_decision_point | default:'-'}",
+              "remark": "input / output / stream / tool。"
+            },
+            {
+              "label": "判定依据",
+              "content": "${verdict_reason | default:'-'}",
+              "remark": "人读判定依据。"
+            },
+            {
+              "label": "命中规则ID",
+              "content": "${rule_ids | default:'-'}",
+              "remark": "由 verdict.hits[].rule_id 抽取，可多条。"
+            },
+            {
+              "label": "命中片段种类",
+              "content": "${frag_kind | default:'-'}",
+              "remark": "user / assistant / system / tool_call / tool_result / reasoning。"
+            },
+            {
+              "label": "命中消息哈希",
+              "content": "${msg_hash | default:'-'}",
+              "remark": "同一原始消息的多个事件共享该值。"
+            },
+            {
+              "label": "证据片段数",
+              "content": "${evidence_count | default:'-'}",
+              "remark": "evidence 数组长度。"
+            },
+            {
+              "label": "判定模式",
+              "content": "${mode | default:'-'}",
+              "remark": "镜像档恒为 mirror。"
+            },
+            {
+              "label": "检测策略版本",
+              "content": "${source_policy_version | default:'-'}",
+              "remark": "source.policy_version。"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "请求与会话",
+          "column": 3,
+          "items": [
+            {
+              "label": "网关会话号",
+              "content": "${session_id | default:'-'}",
+              "remark": "x-bf-session-id。"
+            },
+            {
+              "label": "事件主体",
+              "content": "${subject | default:'-'}",
+              "remark": "vk:<虚拟键> / session:<会话号> / general。"
+            },
+            {
+              "label": "原始请求路径",
+              "content": "${request_path | default:'-'}",
+              "remark": "客户端原始请求路径。"
+            },
+            {
+              "label": "协议线格式",
+              "content": "${request_wire | default:'-'}",
+              "remark": "openai / anthropic。"
+            },
+            {
+              "label": "请求场景",
+              "content": "${request_scenario | default:'-'}",
+              "remark": "镜像信封恒为空。"
+            },
+            {
+              "label": "来源组件",
+              "content": "${source_component | default:'-'}",
+              "remark": "固定 sentinel。"
+            },
+            {
+              "label": "信封格式版本",
+              "content": "${schema_version | default:'-'}",
+              "remark": "当前 1.0。"
+            },
+            {
+              "label": "消息类型",
+              "content": "${message_type | default:'-'}",
+              "remark": "固定 sentinel.security.event.v1。"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "命中片段正文",
+          "body": {
+            "type": "container",
+            "body": {
+              "type": "tpl",
+              "tpl": "<pre style='white-space: pre-wrap; word-break: break-word; margin: 0'>${flagged_content | default:'-'}</pre>"
+            }
+          }
+        },
+        {
+          "type": "panel",
+          "title": "命中规则明细（verdict.hits）",
+          "body": {
+            "type": "json",
+            "value": "${verdict_hits|raw}",
+            "levelExpand": 2,
+            "mutable": false,
+            "displayDataTypes": false,
+            "enableClipboard": true
+          }
+        },
+        {
+          "type": "panel",
+          "title": "证据片段（evidence，含 ±2 上下文邻居）",
+          "body": {
+            "type": "json",
+            "value": "${evidence|raw}",
+            "levelExpand": 2,
+            "mutable": false,
+            "displayDataTypes": false,
+            "enableClipboard": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+.DS_Store
+._*
+.idea/
+*.iml
+target/
+build.log
+*.log
+*.tar
+*.tar.gz
+plugin-*/03_api/*.jar
+!plugin-*/03_api/.gitkeep

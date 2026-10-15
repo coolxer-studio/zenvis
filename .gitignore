@@ -23,12 +23,15 @@ zenvis-service/*
 !zenvis-plugin/zenvis-plugin-nginx/
 !zenvis-plugin/zenvis-plugin-rzweb/
 !zenvis-plugin/zenvis-plugin-wireview/
+!zenvis-plugin/zenvis-plugin-sentinel/
+!zenvis-plugin/zenvis-plugin-qrsend/
 !zenvis-plugin/market-plugins.json
 
 !zenvis-service/zenvis-service-vectum/
 !zenvis-service/zenvis-service-asset/
 !zenvis-service/zenvis-service-operation/
 !zenvis-service/zenvis-service-risk/
+!zenvis-service/zenvis-service-exporters/
 
 # AI智能体
 .trae

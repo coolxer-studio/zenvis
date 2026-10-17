@@ -12,6 +12,7 @@ import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
 import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
 import com.coolxer.service.dih.mcp.BuiltinMcpServiceDefinition;
+import com.coolxer.service.dih.rag.RagKnowledgeBaseService;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.utils.WalkFileUtil;
@@ -25,9 +26,11 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -51,6 +54,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -83,6 +87,13 @@ public class SkillService {
     private final CustomWebConfig customWebConfig;
     private final ObjectMapper objectMapper;
     private final ConcurrentHashMap<String, SkillRecord> skillCache = new ConcurrentHashMap<>();
+
+    /**
+     * 可选注入：仅在 Web 容器中用于把知识库 ID 解析为展示名称；
+     * 单元测试直接 new SkillService(...) 时允许为 null。
+     */
+    @Autowired(required = false)
+    private RagKnowledgeBaseService ragKnowledgeBaseService;
 
     @Value("${app.ai.skill.max-selected-prompt-chars:32000}")
     private int maxSelectedPromptChars = 32000;
@@ -143,7 +154,49 @@ public class SkillService {
         int perPage = Math.max(condition.getPerPage(), 1);
         int from = Math.min((page - 1) * perPage, rows.size());
         int to = Math.min(from + perPage, rows.size());
-        return new PageRowsVo<>(rows.subList(from, to), rows.size());
+        List<SkillVo> pageRows = enrichKnowledgeBaseNames(rows.subList(from, to));
+        return new PageRowsVo<>(pageRows, rows.size());
+    }
+
+    /**
+     * 为当前页 Skill 填充知识库展示名称。返回值可能是原对象（无绑定/名称服务不可用）
+     * 或深拷贝对象，避免把展示字段写入 skillCache 中的共享实例。
+     */
+    private List<SkillVo> enrichKnowledgeBaseNames(List<SkillVo> skills) {
+        if (ragKnowledgeBaseService == null || skills.isEmpty()) {
+            return skills;
+        }
+        List<Integer> allIds = skills.stream()
+                .map(SkillVo::getKnowledgeBaseIds)
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(List::stream)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (allIds.isEmpty()) {
+            return skills;
+        }
+        Map<Integer, String> nameMap;
+        try {
+            nameMap = ragKnowledgeBaseService.getNameMap(allIds);
+        } catch (Exception e) {
+            log.warn("解析 Skill 知识库名称失败，回退为 ID 展示", e);
+            return skills;
+        }
+        List<SkillVo> enriched = new ArrayList<>(skills.size());
+        for (SkillVo skill : skills) {
+            if (CollectionUtils.isEmpty(skill.getKnowledgeBaseIds())) {
+                enriched.add(skill);
+                continue;
+            }
+            SkillVo copy = objectMapper.convertValue(skill, SkillVo.class);
+            copy.setKnowledgeBaseNames(copy.getKnowledgeBaseIds().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(id -> nameMap.getOrDefault(id, "#" + id))
+                    .toList());
+            enriched.add(copy);
+        }
+        return enriched;
     }
 
     /**
@@ -394,6 +447,60 @@ public class SkillService {
                 log.warn("清理技能包临时目录失败: {}", tempDir, e);
             }
         }
+    }
+
+    /**
+     * 导出 Skill 为可再导入的 zip 技能包。
+     *
+     * <p>zip 内统一以 {@code <skillId>/} 为顶层目录，完整保留 skill.json、入口文件
+     * 及其附属资源；条目数与总大小采用与上传一致的限制，保证导出产物可通过
+     * 「上传技能包」直接回导。</p>
+     */
+    public SkillPackage exportPackage(String id) {
+        SkillRecord record = getRecord(id);
+        Path skillDir = record.getSkillDir();
+        if (!Files.exists(skillDir) || !Files.isDirectory(skillDir)) {
+            throw new IllegalArgumentException("Skill 目录不存在: " + id);
+        }
+        String rootName = record.getSkill().getId();
+        List<Path> files;
+        try (Stream<Path> walk = Files.walk(skillDir)) {
+            files = walk.filter(path -> Files.isRegularFile(path) && !Files.isSymbolicLink(path))
+                    .sorted(Comparator.comparing(path -> skillDir.relativize(path).toString()))
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new IllegalStateException("读取 Skill 目录失败: " + id, e);
+        }
+        if (files.size() > MAX_PACKAGE_ENTRIES) {
+            throw new IllegalArgumentException("Skill 文件数量超过技能包限制 " + MAX_PACKAGE_ENTRIES);
+        }
+        long totalBytes = files.stream().mapToLong(path -> {
+            try {
+                return Files.size(path);
+            } catch (IOException e) {
+                throw new IllegalStateException("读取 Skill 文件失败: " + path, e);
+            }
+        }).sum();
+        if (totalBytes > MAX_PACKAGE_BYTES) {
+            throw new IllegalArgumentException("Skill 文件总大小超过技能包限制 20MB");
+        }
+
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream((int) Math.min(totalBytes + 4096L, MAX_PACKAGE_BYTES + 1));
+        try (ZipOutputStream zip = new ZipOutputStream(buffer, StandardCharsets.UTF_8)) {
+            for (Path file : files) {
+                String relative = skillDir.relativize(file).toString().replace("\\", "/");
+                if (StringUtils.isBlank(relative) || relative.startsWith("/") || relative.contains("..")) {
+                    continue;
+                }
+                zip.putNextEntry(new ZipEntry(rootName + "/" + relative));
+                Files.copy(file, zip);
+                zip.closeEntry();
+            }
+            zip.finish();
+        } catch (IOException e) {
+            throw new IllegalStateException("导出 Skill 失败: " + id, e);
+        }
+        return new SkillPackage(rootName + ".zip", buffer.toByteArray());
     }
 
     /**
@@ -1345,6 +1452,12 @@ public class SkillService {
         detail.setPath(skill.getPath());
         detail.setUpdateTime(skill.getUpdateTime());
         return detail;
+    }
+
+    /**
+     * 导出的 Skill 技能包：下载文件名与 zip 字节内容。
+     */
+    public record SkillPackage(String filename, byte[] content) {
     }
 
     @Data

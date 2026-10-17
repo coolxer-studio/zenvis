@@ -22,6 +22,7 @@
             "name": "rag_dataset_list",
             "type": "crud",
             "api": "/zenvis/api/v1/dih/vectorstore/datasets/list",
+            "syncLocation": false,
             "defaultParams": {
               "page": 1,
               "perPage": 10
@@ -371,6 +372,7 @@
             "name": "rag_knowledge_base_list",
             "type": "crud",
             "api": "/zenvis/api/v1/dih/vectorstore/knowledge-bases/list",
+            "syncLocation": false,
             "defaultParams": {
               "page": 1,
               "perPage": 10
@@ -704,6 +706,7 @@
             "name": "rag_document_list",
             "type": "crud",
             "api": "/zenvis/api/v1/dih/vectorstore/documents/list",
+            "syncLocation": false,
             "defaultParams": {
               "page": 1,
               "perPage": 10

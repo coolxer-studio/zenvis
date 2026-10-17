@@ -71,6 +71,12 @@ public class SkillVo implements Serializable {
     private List<Integer> knowledgeBaseIds;
 
     /**
+     * 绑定知识库的名称列表，顺序与 knowledgeBaseIds 对齐，仅用于页面展示。
+     * 已删除的知识库回退显示为 #id。
+     */
+    private List<String> knowledgeBaseNames;
+
+    /**
      * DIH 聊天入口配置。未配置或 chat.enabled=false 时不展示。
      */
     private SkillChatConfigVo chat;

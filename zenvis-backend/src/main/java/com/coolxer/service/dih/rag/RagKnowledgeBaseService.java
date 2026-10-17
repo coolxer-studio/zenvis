@@ -109,6 +109,19 @@ public class RagKnowledgeBaseService {
     }
 
     /**
+     * 按 ID 批量查询知识库名称映射，供 Skill 列表等展示场景使用。
+     */
+    public Map<Integer, String> getNameMap(java.util.Collection<Integer> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return java.util.Collections.emptyMap();
+        }
+        // BaseRepository 的 ID 泛型为 Serializable，需显式转换后调用 findAllById
+        List<java.io.Serializable> serializableIds = new ArrayList<>(ids);
+        return ragKnowledgeBaseRepository.findAllById(serializableIds).stream()
+                .collect(Collectors.toMap(RagKnowledgeBase::getId, RagKnowledgeBase::getName, (a, b) -> a));
+    }
+
+    /**
      * 创建知识库
      *
      * @param dto 传输实体

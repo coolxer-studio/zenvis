@@ -16,6 +16,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +28,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -180,6 +184,30 @@ public class SkillController {
             log.error("上传 Skill 技能包失败", e);
             return ResponseWrap.fail(e);
         }
+    }
+
+    @GetMapping("/{id}/export")
+    @Operation(summary = "导出 Skill 技能包", description = "将 Skill 目录打包为 zip 下载，导出产物可通过上传技能包回导")
+    public ResponseEntity<?> export(@PathVariable("id") String id) {
+        try {
+            SkillService.SkillPackage skillPackage = skillService.exportPackage(id);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", attachmentFilename(skillPackage.filename()))
+                    .contentLength(skillPackage.content().length)
+                    .contentType(MediaType.parseMediaType("application/zip"))
+                    .body(skillPackage.content());
+        } catch (IllegalArgumentException e) {
+            log.warn("导出 Skill 技能包失败, id={}, reason={}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(ResponseWrap.fail(400, e.getMessage()));
+        } catch (Exception e) {
+            log.error("导出 Skill 技能包失败, id={}", id, e);
+            return ResponseEntity.internalServerError().body(ResponseWrap.fail(e));
+        }
+    }
+
+    private String attachmentFilename(String filename) {
+        return "attachment; filename*=UTF-8''" + URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 
     @GetMapping("/knowledge-base-options")

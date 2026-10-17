@@ -480,16 +480,16 @@
             "tpl": "${agent_types|join:', '|default:'全局可用'}"
           },
           {
-            "name": "knowledge_base_ids",
+            "name": "knowledge_base_names",
             "label": "知识库",
             "type": "tpl",
-            "tpl": "${knowledge_base_ids|join:', '|default:'-'}"
+            "tpl": "<% if (data.knowledge_base_names && data.knowledge_base_names.length) { data.knowledge_base_names.forEach(function(item) { %><span class='label label-info m-1'><%- item %></span><% }); } else { %><span>-</span><% } %>"
           },
           {
             "name": "tags",
             "label": "标签",
             "type": "tpl",
-            "tpl": "${tags|join:', '|default:'-'}"
+            "tpl": "<% if (data.tags && data.tags.length) { data.tags.forEach(function(item) { %><span class='label label-default m-1'><%- item %></span><% }); } else { %><span>-</span><% } %>"
           },
           {
             "name": "entry",
@@ -519,7 +519,7 @@
             "placeholder": "-"
           }
         ],
-        "actionsCount": 4,
+        "actionsCount": 5,
         "actions": [
           {
             "type": "button",
@@ -850,6 +850,13 @@
             "confirmText": "确认删除该自定义 Skill？目录将被移除且不可恢复。",
             "api": "delete:/zenvis/api/v1/dih/skills/${id}",
             "reload": "skill_list"
+          },
+          {
+            "type": "button",
+            "label": "导出",
+            "icon": "fa fa-download text-success",
+            "actionType": "download",
+            "api": "/zenvis/api/v1/dih/skills/${id}/export"
           },
           {
             "type": "button",

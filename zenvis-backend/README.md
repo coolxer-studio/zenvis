@@ -353,8 +353,12 @@ zenvis/
 | :-------- | :--------------------------- | :--------------- |
 | AI 聊天     | `ChatController`             | 智能聊天接口，支持自然语言查询  |
 | 聊天会话管理    | `ChatSessionController`      | 会话生命周期管理         |
-| RAG 文档管理 | `VectorStoreQueryController` | 插件文档向量管理和相似度搜索 |
+| RAG 数据集管理 | `RagDatasetController`       | 数据集创建、Markdown 文件上传（存储于 MinIO）、文件查看/删除 |
+| RAG 知识库管理 | `RagKnowledgeBaseController` | 关联一个或多个数据集，异步构建向量至 Redis Stack，支持构建日志流式查看 |
+| RAG 文档管理 | `VectorStoreQueryController` | 向量文档查询、查看和相似度搜索 |
 | 数据可视化Agent | `DataVisualizationAgent`     | retrieval MCP 只读可视化分析 |
+
+RAG 文档管理完整流程：创建数据集并上传 Markdown 文件（MinIO）→ 创建知识库并关联数据集 → 触发异步构建（分块后经 Embedding 模型写入 Redis Stack 向量库，metadata 携带知识库名称/标签/数据集/文件名）→ 在文档列表或相似度搜索中验证检索效果。
 
 ### 检索引擎
 

@@ -136,5 +136,20 @@ public class MysqlFinalTableName {
      */
     public static final String T_SYS_INFO = TABLE_PREFIX + "sys_info";
 
+    /**
+     * RAG数据集表
+     */
+    public static final String T_RAG_DATASET = TABLE_PREFIX + "rag_dataset";
+
+    /**
+     * RAG知识库表
+     */
+    public static final String T_RAG_KNOWLEDGE_BASE = TABLE_PREFIX + "rag_knowledge_base";
+
+    /**
+     * RAG知识库与数据集关联表
+     */
+    public static final String T_RAG_KNOWLEDGE_BASE_DATASET = TABLE_PREFIX + "rag_knowledge_base_dataset";
+
 
 }

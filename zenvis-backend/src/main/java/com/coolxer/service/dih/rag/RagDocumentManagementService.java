@@ -52,6 +52,9 @@ public class RagDocumentManagementService {
     @Value("${spring.ai.vectorstore.redis.index:}")
     private String indexName;
 
+    @Value("${spring.ai.vectorstore.redis.prefix:embedding:}")
+    private String prefix;
+
     public List<RagDocument> listDocuments(String keyword, String source) {
         return loadAllDocuments().stream()
                 .filter(document -> matchSource(document, source))
@@ -127,6 +130,7 @@ public class RagDocumentManagementService {
             return redisVectorStore.similaritySearch(builder.build()).stream()
                     .map(this::fromSpringDocument)
                     .filter(Objects::nonNull)
+                    .map(this::enrichMetadataFromRedis)
                     .toList();
         } catch (Exception e) {
             log.error("Search RAG documents failed, query={}, source={}", query, source, e);
@@ -184,6 +188,37 @@ public class RagDocumentManagementService {
         }
         Map<String, Object> metadata = new LinkedHashMap<>(document.getMetadata());
         return new RagDocument(document.getId(), document.getText(), metadata, stringValue(metadata.get("source")));
+    }
+
+    /**
+     * similaritySearch 返回的 Document 只包含索引 schema 中声明的 metadata 字段，
+     * 从 Redis JSON 读取完整文档补全 metadata（如知识库名称、标签、数据集、文件名）。
+     */
+    private RagDocument enrichMetadataFromRedis(RagDocument document) {
+        if (document == null || jedisPooled == null || !StringUtils.isNotBlank(document.id())) {
+            return document;
+        }
+        try {
+            Object json = jedisPooled.jsonGet(prefix + document.id());
+            if (json == null) {
+                return document;
+            }
+            Map<String, Object> jsonDocument = parseObject(json);
+            if (jsonDocument.isEmpty()) {
+                return document;
+            }
+            RagDocument full = fromRedisJsonDocument(document.id(), jsonDocument);
+            if (full == null) {
+                return document;
+            }
+            // 以完整 JSON 的 metadata 为基础，保留 similaritySearch 返回的额外字段（如 distance）
+            Map<String, Object> mergedMetadata = new LinkedHashMap<>(full.metadata());
+            document.metadata().forEach(mergedMetadata::putIfAbsent);
+            return new RagDocument(document.id(), document.text(), mergedMetadata, document.source());
+        } catch (Exception e) {
+            log.warn("Enrich RAG document metadata failed, id={}", document.id(), e);
+            return document;
+        }
     }
 
     RagDocument fromRedisDocument(redis.clients.jedis.search.Document document) {

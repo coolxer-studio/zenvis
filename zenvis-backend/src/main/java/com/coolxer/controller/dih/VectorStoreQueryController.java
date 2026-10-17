@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 插件文档 RAG 管理接口。
@@ -116,12 +117,23 @@ public class VectorStoreQueryController {
         return new PageRowsVo<>(documents.subList(fromIndex, toIndex), documents.size());
     }
 
-    public record RagDocumentVo(String id, String text, Object metadata, String source) {
+    public record RagDocumentVo(String id, String text, Object metadata, String source,
+                                String knowledgeBaseName, String knowledgeBaseTags, String datasetName,
+                                String fileName) {
         private static RagDocumentVo from(RagDocument document) {
             if (document == null) {
                 return null;
             }
-            return new RagDocumentVo(document.id(), document.text(), document.metadata(), document.source());
+            Map<String, Object> metadata = document.metadata();
+            return new RagDocumentVo(document.id(), document.text(), metadata, document.source(),
+                    stringValue(metadata.get("knowledge_base_name")),
+                    stringValue(metadata.get("knowledge_base_tags")),
+                    stringValue(metadata.get("dataset_name")),
+                    stringValue(metadata.get("file_name")));
+        }
+
+        private static String stringValue(Object value) {
+            return value == null ? "" : String.valueOf(value);
         }
     }
 }

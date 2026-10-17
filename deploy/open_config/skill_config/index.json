@@ -5,6 +5,271 @@
   "toolbar": [
     {
       "type": "button",
+      "label": "新增 Skill",
+      "level": "primary",
+      "icon": "fa fa-plus",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "新增自定义 Skill",
+        "size": "xl",
+        "body": {
+          "type": "form",
+          "api": "post:/zenvis/api/v1/dih/skills/add",
+          "reload": "skill_list",
+          "mode": "horizontal",
+          "horizontal": { "left": 3, "right": 9 },
+          "body": [
+            {
+              "type": "tabs",
+              "tabs": [
+                {
+                  "title": "基本信息",
+                  "body": [
+                    {
+                      "type": "input-text",
+                      "name": "id",
+                      "label": "Skill ID",
+                      "required": true,
+                      "placeholder": "唯一标识，创建后不可修改",
+                      "validations": { "matchRegexp": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$" },
+                      "validationErrors": { "matchRegexp": "字母或数字开头，可含 . _ -，最长 128 位" }
+                    },
+                    { "type": "input-text", "name": "name", "label": "名称", "required": true },
+                    { "type": "textarea", "name": "description", "label": "描述", "minRows": 2, "maxRows": 4 },
+                    { "type": "input-text", "name": "version", "label": "版本", "value": "1.0.0" },
+                    { "type": "input-text", "name": "author", "label": "作者" },
+                    {
+                      "type": "select",
+                      "name": "agent_types",
+                      "label": "智能体类型",
+                      "multiple": true,
+                      "clearable": true,
+                      "joinValues": false,
+                      "extractValue": true,
+                      "options": [
+                        { "label": "数据接入智能体", "value": "agent_data_access" },
+                        { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                        { "label": "报表制作智能体", "value": "agent_report" },
+                        { "label": "通用 Skill 会话", "value": "agent_skill" },
+                        { "label": "普通问答", "value": "ask" }
+                      ],
+                      "description": "不选表示全局可用"
+                    },
+                    {
+                      "type": "input-tag",
+                      "name": "tags",
+                      "label": "标签",
+                      "joinValues": false,
+                      "extractValue": true,
+                      "enableBatchAdd": true,
+                      "placeholder": "输入标签后回车"
+                    },
+                    { "type": "switch", "name": "enabled", "label": "启用状态", "value": true, "onText": "启用", "offText": "停用" }
+                  ]
+                },
+                {
+                  "title": "提示词与资源",
+                  "body": [
+                    {
+                      "type": "textarea",
+                      "name": "content",
+                      "label": "入口内容",
+                      "required": true,
+                      "minRows": 12,
+                      "maxRows": 20,
+                      "placeholder": "# Skill 名称\n\n## 使用场景\n...\n\n## 执行步骤\n...",
+                      "description": "即 SKILL.md 内容，将作为系统提示词注入"
+                    },
+                    {
+                      "type": "select",
+                      "name": "knowledge_base_ids",
+                      "label": "RAG 知识库",
+                      "multiple": true,
+                      "clearable": true,
+                      "searchable": true,
+                      "joinValues": false,
+                      "extractValue": true,
+                      "source": { "method": "get", "url": "/zenvis/api/v1/dih/skills/knowledge-base-options" },
+                      "description": "绑定后该 Skill 会话自动获得 rag_search 工具，仅可检索所选知识库"
+                    },
+                    {
+                      "type": "select",
+                      "name": "prompt_mode",
+                      "label": "提示词模式",
+                      "clearable": true,
+                      "options": [
+                        { "label": "Skill 独立模式 (skill_only)", "value": "skill_only" }
+                      ],
+                      "description": "skill_only 表示以 Skill 内容为主，不叠加业务 Agent 固定流程"
+                    },
+                    {
+                      "type": "combo",
+                      "name": "local_tools",
+                      "label": "内置 MCP 工具",
+                      "multiple": true,
+                      "multiLine": true,
+                      "addButtonText": "添加内置服务",
+                      "items": [
+                        {
+                          "type": "select",
+                          "name": "service",
+                          "label": "服务",
+                          "required": true,
+                          "source": {
+                            "method": "get",
+                            "url": "/zenvis/api/v1/dih/mcp/local-services",
+                            "adaptor": "return Object.assign({}, payload, {data: (payload.data || []).map(function (s) { return {label: s.name + ' (' + s.code + ')', value: s.code}; })});"
+                          },
+                          "placeholder": "选择内置服务"
+                        },
+                        {
+                          "type": "select",
+                          "name": "tools",
+                          "label": "工具",
+                          "required": true,
+                          "multiple": true,
+                          "checkAll": true,
+                          "joinValues": false,
+                          "extractValue": true,
+                          "source": {
+                            "method": "get",
+                            "url": "/zenvis/api/v1/dih/mcp/local-services/${service}/tools",
+                            "sendOn": "this.service != null && this.service != ''",
+                            "adaptor": "return Object.assign({}, payload, {data: (payload.data || []).map(function (t) { return {label: (t.title || t.name) + ' (' + t.name + ')', value: t.name}; })});"
+                          },
+                          "placeholder": "先选择服务",
+                          "description": "仅白名单内工具会暴露给模型"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "combo",
+                      "name": "mcp_tools",
+                      "label": "外部 MCP 工具",
+                      "multiple": true,
+                      "multiLine": true,
+                      "addButtonText": "添加外部服务",
+                      "items": [
+                        {
+                          "type": "select",
+                          "name": "server",
+                          "label": "服务",
+                          "required": true,
+                          "searchable": true,
+                          "source": {
+                            "method": "get",
+                            "url": "/zenvis/api/v1/dih/mcp/servers/list?perPage=200",
+                            "adaptor": "return Object.assign({}, payload, {data: ((payload.data && payload.data.rows) || []).map(function (s) { return {label: s.name + ' (' + s.code + ')', value: s.code}; })});"
+                          },
+                          "placeholder": "选择外部 MCP 服务"
+                        },
+                        {
+                          "type": "select",
+                          "name": "tools",
+                          "label": "工具",
+                          "required": true,
+                          "multiple": true,
+                          "checkAll": true,
+                          "joinValues": false,
+                          "extractValue": true,
+                          "source": {
+                            "method": "get",
+                            "url": "/zenvis/api/v1/dih/mcp/tools?serverCode=${server}",
+                            "sendOn": "this.server != null && this.server != ''",
+                            "adaptor": "return Object.assign({}, payload, {data: (payload.data || []).map(function (t) { return {label: (t.title || t.name) + ' (' + t.name + ')', value: t.name}; })});"
+                          },
+                          "placeholder": "先选择服务"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "fieldSet",
+                      "title": "运行时限制（可选）",
+                      "collapsable": true,
+                      "collapsed": true,
+                      "body": [
+                        { "type": "input-number", "name": "max_tool_calls", "label": "最大工具调用次数", "min": 1 },
+                        { "type": "input-number", "name": "max_repeated_failures", "label": "最大重复失败次数", "min": 1 },
+                        { "type": "input-number", "name": "max_tool_result_chars", "label": "单次工具结果字符上限", "min": 100 },
+                        { "type": "input-number", "name": "max_accumulated_tool_result_chars", "label": "累计工具结果字符上限", "min": 100 }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "title": "聊天入口",
+                  "body": [
+                    {
+                      "type": "switch",
+                      "name": "chat_enabled",
+                      "label": "开放聊天入口",
+                      "value": false,
+                      "onText": "开启",
+                      "offText": "关闭",
+                      "description": "开启后，该 Skill 将出现在 DIH 聊天输入区"
+                    },
+                    { "type": "input-text", "name": "chat_label", "label": "入口名称", "visibleOn": "this.chat_enabled", "placeholder": "默认使用 Skill 名称" },
+                    { "type": "input-text", "name": "chat_icon", "label": "入口图标", "value": "magic-stick", "visibleOn": "this.chat_enabled", "description": "图标名，如 magic-stick / monitor / data-analysis" },
+                    { "type": "input-number", "name": "chat_order", "label": "排序", "value": 1000, "visibleOn": "this.chat_enabled", "description": "数值越小越靠前" },
+                    {
+                      "type": "select",
+                      "name": "chat_agent_type",
+                      "label": "会话 Agent 类型",
+                      "clearable": true,
+                      "visibleOn": "this.chat_enabled",
+                      "options": [
+                        { "label": "通用 Skill 会话", "value": "agent_skill" },
+                        { "label": "数据接入智能体", "value": "agent_data_access" },
+                        { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                        { "label": "报表制作智能体", "value": "agent_report" }
+                      ],
+                      "description": "不选时按智能体类型自动推断"
+                    },
+                    { "type": "textarea", "name": "chat_prologue", "label": "开场白", "minRows": 2, "maxRows": 4, "visibleOn": "this.chat_enabled" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "上传技能包",
+      "level": "info",
+      "icon": "fa fa-upload",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "上传 Skill 技能包",
+        "size": "md",
+        "body": {
+          "type": "form",
+          "api": "post:/zenvis/api/v1/dih/skills/upload",
+          "reload": "skill_list",
+          "mode": "horizontal",
+          "body": [
+            {
+              "type": "input-file",
+              "name": "file",
+              "label": "技能包",
+              "required": true,
+              "asBlob": true,
+              "accept": ".zip",
+              "drag": true,
+              "description": "zip 内需包含 skill.json 与 SKILL.md；同 ID 的自定义 Skill 会被覆盖，内置/插件 Skill 拒绝覆盖"
+            },
+            {
+              "type": "static",
+              "label": "包结构",
+              "tpl": "my-skill/<br/>&nbsp;&nbsp;skill.json（清单，可声明 agentTypes / runtime / knowledgeBaseIds 等）<br/>&nbsp;&nbsp;SKILL.md（提示词入口）"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
       "label": "重载 Skill",
       "level": "info",
       "icon": "fa fa-refresh",
@@ -140,6 +405,22 @@
                 "value": false
               }
             ]
+          },
+          {
+            "label": "来源",
+            "type": "select",
+            "name": "custom",
+            "clearable": true,
+            "options": [
+              {
+                "label": "自定义",
+                "value": true
+              },
+              {
+                "label": "内置/插件",
+                "value": false
+              }
+            ]
           }
         ],
         "actions": [
@@ -172,6 +453,15 @@
             }
           },
           {
+            "name": "custom",
+            "label": "来源",
+            "type": "mapping",
+            "map": {
+              "true": "<span class='label label-info'>自定义</span>",
+              "*": "<span class='label label-default'>内置/插件</span>"
+            }
+          },
+          {
             "name": "version",
             "label": "版本",
             "type": "text",
@@ -188,6 +478,12 @@
             "label": "智能体",
             "type": "tpl",
             "tpl": "${agent_types|join:', '|default:'全局可用'}"
+          },
+          {
+            "name": "knowledge_base_ids",
+            "label": "知识库",
+            "type": "tpl",
+            "tpl": "${knowledge_base_ids|join:', '|default:'-'}"
           },
           {
             "name": "tags",
@@ -223,7 +519,7 @@
             "placeholder": "-"
           }
         ],
-        "actionsCount": 3,
+        "actionsCount": 4,
         "actions": [
           {
             "type": "button",
@@ -255,6 +551,10 @@
                         "content": "${enabled ? '已启用' : '已停用'}"
                       },
                       {
+                        "label": "来源",
+                        "content": "${custom ? '自定义' : '内置/插件'}"
+                      },
+                      {
                         "label": "版本",
                         "content": "${version|default:'-'}"
                       },
@@ -269,6 +569,10 @@
                       {
                         "label": "智能体",
                         "content": "${agent_types|join:', '|default:'全局可用'}"
+                      },
+                      {
+                        "label": "知识库",
+                        "content": "${knowledge_base_ids|join:', '|default:'-'}"
                       },
                       {
                         "label": "标签",
@@ -304,6 +608,248 @@
                 ]
               }
             }
+          },
+          {
+            "type": "button",
+            "label": "编辑",
+            "icon": "fa fa-pencil text-primary",
+            "hiddenOn": "!data.custom",
+            "actionType": "dialog",
+            "dialog": {
+              "title": "编辑自定义 Skill",
+              "size": "xl",
+              "body": {
+                "type": "form",
+                "api": "post:/zenvis/api/v1/dih/skills/${id}/update",
+                "initApi": {
+                  "method": "get",
+                  "url": "/zenvis/api/v1/dih/skills/${id}/view",
+                  "adaptor": "var d = payload.data || {}; var rt = d.runtime || {}; var tools = rt.tools || {}; var limits = rt.limits || {}; var chat = d.chat || {}; var toRows = function (m, keyName) { return Object.keys(m || {}).map(function (k) { var row = {tools: m[k]}; row[keyName] = k; return row; }); }; d.local_tools = toRows(tools.local, 'service'); d.mcp_tools = toRows(tools.mcp, 'server'); d.prompt_mode = rt.prompt_mode; d.max_tool_calls = limits.max_tool_calls; d.max_repeated_failures = limits.max_repeated_failures; d.max_tool_result_chars = limits.max_tool_result_chars; d.max_accumulated_tool_result_chars = limits.max_accumulated_tool_result_chars; d.chat_enabled = chat.enabled === true; d.chat_label = chat.label; d.chat_icon = chat.icon; d.chat_order = chat.order; d.chat_agent_type = chat.agent_type; d.chat_prologue = chat.prologue; return payload;"
+                },
+                "reload": "skill_list",
+                "mode": "horizontal",
+                "horizontal": { "left": 3, "right": 9 },
+                "body": [
+                  {
+                    "type": "tabs",
+                    "tabs": [
+                      {
+                        "title": "基本信息",
+                        "body": [
+                          {
+                            "type": "input-text",
+                            "name": "id",
+                            "label": "Skill ID",
+                            "required": true,
+                            "disabled": true
+                          },
+                          { "type": "input-text", "name": "name", "label": "名称", "required": true },
+                          { "type": "textarea", "name": "description", "label": "描述", "minRows": 2, "maxRows": 4 },
+                          { "type": "input-text", "name": "version", "label": "版本" },
+                          { "type": "input-text", "name": "author", "label": "作者" },
+                          {
+                            "type": "select",
+                            "name": "agent_types",
+                            "label": "智能体类型",
+                            "multiple": true,
+                            "clearable": true,
+                            "joinValues": false,
+                            "extractValue": true,
+                            "options": [
+                              { "label": "数据接入智能体", "value": "agent_data_access" },
+                              { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                              { "label": "报表制作智能体", "value": "agent_report" },
+                              { "label": "通用 Skill 会话", "value": "agent_skill" },
+                              { "label": "普通问答", "value": "ask" }
+                            ],
+                            "description": "不选表示全局可用"
+                          },
+                          {
+                            "type": "input-tag",
+                            "name": "tags",
+                            "label": "标签",
+                            "joinValues": false,
+                            "extractValue": true,
+                            "enableBatchAdd": true,
+                            "placeholder": "输入标签后回车"
+                          },
+                          { "type": "switch", "name": "enabled", "label": "启用状态", "onText": "启用", "offText": "停用" }
+                        ]
+                      },
+                      {
+                        "title": "提示词与资源",
+                        "body": [
+                          {
+                            "type": "textarea",
+                            "name": "content",
+                            "label": "入口内容",
+                            "required": true,
+                            "minRows": 12,
+                            "maxRows": 20,
+                            "description": "即 SKILL.md 内容，将作为系统提示词注入"
+                          },
+                          {
+                            "type": "select",
+                            "name": "knowledge_base_ids",
+                            "label": "RAG 知识库",
+                            "multiple": true,
+                            "clearable": true,
+                            "searchable": true,
+                            "joinValues": false,
+                            "extractValue": true,
+                            "source": { "method": "get", "url": "/zenvis/api/v1/dih/skills/knowledge-base-options" },
+                            "description": "绑定后该 Skill 会话自动获得 rag_search 工具，仅可检索所选知识库"
+                          },
+                          {
+                            "type": "select",
+                            "name": "prompt_mode",
+                            "label": "提示词模式",
+                            "clearable": true,
+                            "options": [
+                              { "label": "Skill 独立模式 (skill_only)", "value": "skill_only" }
+                            ],
+                            "description": "skill_only 表示以 Skill 内容为主，不叠加业务 Agent 固定流程"
+                          },
+                          {
+                            "type": "combo",
+                            "name": "local_tools",
+                            "label": "内置 MCP 工具",
+                            "multiple": true,
+                            "multiLine": true,
+                            "addButtonText": "添加内置服务",
+                            "items": [
+                              {
+                                "type": "select",
+                                "name": "service",
+                                "label": "服务",
+                                "required": true,
+                                "source": {
+                                  "method": "get",
+                                  "url": "/zenvis/api/v1/dih/mcp/local-services",
+                                  "adaptor": "return Object.assign({}, payload, {data: (payload.data || []).map(function (s) { return {label: s.name + ' (' + s.code + ')', value: s.code}; })});"
+                                },
+                                "placeholder": "选择内置服务"
+                              },
+                              {
+                                "type": "select",
+                                "name": "tools",
+                                "label": "工具",
+                                "required": true,
+                                "multiple": true,
+                                "checkAll": true,
+                                "joinValues": false,
+                                "extractValue": true,
+                                "source": {
+                                  "method": "get",
+                                  "url": "/zenvis/api/v1/dih/mcp/local-services/${service}/tools",
+                                  "sendOn": "this.service != null && this.service != ''",
+                                  "adaptor": "return Object.assign({}, payload, {data: (payload.data || []).map(function (t) { return {label: (t.title || t.name) + ' (' + t.name + ')', value: t.name}; })});"
+                                },
+                                "placeholder": "先选择服务",
+                                "description": "仅白名单内工具会暴露给模型"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "combo",
+                            "name": "mcp_tools",
+                            "label": "外部 MCP 工具",
+                            "multiple": true,
+                            "multiLine": true,
+                            "addButtonText": "添加外部服务",
+                            "items": [
+                              {
+                                "type": "select",
+                                "name": "server",
+                                "label": "服务",
+                                "required": true,
+                                "searchable": true,
+                                "source": {
+                                  "method": "get",
+                                  "url": "/zenvis/api/v1/dih/mcp/servers/list?perPage=200",
+                                  "adaptor": "return Object.assign({}, payload, {data: ((payload.data && payload.data.rows) || []).map(function (s) { return {label: s.name + ' (' + s.code + ')', value: s.code}; })});"
+                                },
+                                "placeholder": "选择外部 MCP 服务"
+                              },
+                              {
+                                "type": "select",
+                                "name": "tools",
+                                "label": "工具",
+                                "required": true,
+                                "multiple": true,
+                                "checkAll": true,
+                                "joinValues": false,
+                                "extractValue": true,
+                                "source": {
+                                  "method": "get",
+                                  "url": "/zenvis/api/v1/dih/mcp/tools?serverCode=${server}",
+                                  "sendOn": "this.server != null && this.server != ''",
+                                  "adaptor": "return Object.assign({}, payload, {data: (payload.data || []).map(function (t) { return {label: (t.title || t.name) + ' (' + t.name + ')', value: t.name}; })});"
+                                },
+                                "placeholder": "先选择服务"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "fieldSet",
+                            "title": "运行时限制（可选）",
+                            "collapsable": true,
+                            "collapsed": true,
+                            "body": [
+                              { "type": "input-number", "name": "max_tool_calls", "label": "最大工具调用次数", "min": 1 },
+                              { "type": "input-number", "name": "max_repeated_failures", "label": "最大重复失败次数", "min": 1 },
+                              { "type": "input-number", "name": "max_tool_result_chars", "label": "单次工具结果字符上限", "min": 100 },
+                              { "type": "input-number", "name": "max_accumulated_tool_result_chars", "label": "累计工具结果字符上限", "min": 100 }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "title": "聊天入口",
+                        "body": [
+                          {
+                            "type": "switch",
+                            "name": "chat_enabled",
+                            "label": "开放聊天入口",
+                            "onText": "开启",
+                            "offText": "关闭",
+                            "description": "开启后，该 Skill 将出现在 DIH 聊天输入区"
+                          },
+                          { "type": "input-text", "name": "chat_label", "label": "入口名称", "visibleOn": "this.chat_enabled", "placeholder": "默认使用 Skill 名称" },
+                          { "type": "input-text", "name": "chat_icon", "label": "入口图标", "visibleOn": "this.chat_enabled", "description": "图标名，如 magic-stick / monitor / data-analysis" },
+                          { "type": "input-number", "name": "chat_order", "label": "排序", "visibleOn": "this.chat_enabled", "description": "数值越小越靠前" },
+                          {
+                            "type": "select",
+                            "name": "chat_agent_type",
+                            "label": "会话 Agent 类型",
+                            "clearable": true,
+                            "visibleOn": "this.chat_enabled",
+                            "options": [
+                              { "label": "通用 Skill 会话", "value": "agent_skill" },
+                              { "label": "数据接入智能体", "value": "agent_data_access" },
+                              { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                              { "label": "报表制作智能体", "value": "agent_report" }
+                            ],
+                            "description": "不选时按智能体类型自动推断"
+                          },
+                          { "type": "textarea", "name": "chat_prologue", "label": "开场白", "minRows": 2, "maxRows": 4, "visibleOn": "this.chat_enabled" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "button",
+            "label": "删除",
+            "icon": "fa fa-trash text-danger",
+            "hiddenOn": "!data.custom",
+            "actionType": "ajax",
+            "confirmText": "确认删除该自定义 Skill？目录将被移除且不可恢复。",
+            "api": "delete:/zenvis/api/v1/dih/skills/${id}",
+            "reload": "skill_list"
           },
           {
             "type": "button",

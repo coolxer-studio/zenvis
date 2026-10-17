@@ -297,6 +297,16 @@ public class McpClientServiceImpl implements McpClientService {
     }
 
     @Override
+    public List<McpToolVo> listToolsByCode(String serverCode) {
+        if (StringUtils.isBlank(serverCode)) {
+            return List.of();
+        }
+        return mcpServerConfigRepository.findByCode(serverCode.trim())
+                .map(config -> listTools(config.getId()))
+                .orElse(List.of());
+    }
+
+    @Override
     public Object callTool(McpToolCallDto callDto) {
         return callTool(callDto, null);
     }

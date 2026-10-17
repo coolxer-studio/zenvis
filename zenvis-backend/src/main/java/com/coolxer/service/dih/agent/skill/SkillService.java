@@ -2,6 +2,7 @@ package com.coolxer.service.dih.agent.skill;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.base.vo.PageRowsVo;
+import com.coolxer.model.dih.dto.SkillSaveDto;
 import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillDetailVo;
@@ -28,10 +29,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -46,6 +49,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 本地 Skill 注册表。
@@ -69,6 +76,9 @@ public class SkillService {
     private static final int MAX_PROMPT_CHARS = 8000;
     private static final Pattern SAFE_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$");
     private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
+    private static final long MAX_PACKAGE_BYTES = 20L * 1024 * 1024;
+    private static final int MAX_PACKAGE_ENTRIES = 512;
+    private static final long MAX_PACKAGE_FILE_BYTES = 10L * 1024 * 1024;
 
     private final CustomWebConfig customWebConfig;
     private final ObjectMapper objectMapper;
@@ -124,6 +134,8 @@ public class SkillService {
                 .filter(skill -> matchAgentType(skill, condition.getAgentType()))
                 .filter(skill -> condition.getEnabled() == null
                         || condition.getEnabled().equals(Boolean.TRUE.equals(skill.getEnabled())))
+                .filter(skill -> condition.getCustom() == null
+                        || condition.getCustom().equals(Boolean.TRUE.equals(skill.getCustom())))
                 .sorted(Comparator.comparing(SkillVo::getId))
                 .collect(Collectors.toList());
 
@@ -254,6 +266,427 @@ public class SkillService {
         } catch (IOException e) {
             throw new IllegalStateException("更新 Skill 状态失败: " + id, e);
         }
+    }
+
+    /**
+     * 创建页面自定义 Skill，落盘 skill.json + SKILL.md 后重载注册表。
+     */
+    public SkillVo create(SkillSaveDto dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("请求不能为空");
+        }
+        validateSaveDto(dto, true);
+        String id = dto.getId().trim();
+        if (skillCache.containsKey(id)) {
+            throw new IllegalArgumentException("Skill ID 已存在: " + id);
+        }
+        Path skillDir = safeResolve(getSkillRoot(), id);
+        if (Files.exists(skillDir)) {
+            throw new IllegalStateException("Skill 目录已存在: " + id);
+        }
+        writeSkillFiles(skillDir, buildManifest(dto, id, null), dto.getContent());
+        reload();
+        return getRecord(id).getSkill();
+    }
+
+    /**
+     * 更新页面自定义 Skill。content 为 null 时保留原入口文件内容。
+     */
+    public SkillVo update(String id, SkillSaveDto dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("请求不能为空");
+        }
+        SkillRecord record = getRecord(id);
+        requireCustomSkill(record);
+        String skillId = record.getSkill().getId();
+        dto.setId(skillId);
+        validateSaveDto(dto, false);
+        String fallbackEntry = StringUtils.defaultIfBlank(record.getSkill().getEntry(), DEFAULT_ENTRY_FILE);
+        writeSkillFiles(record.getSkillDir(), buildManifest(dto, skillId, fallbackEntry), dto.getContent());
+        reload();
+        return getRecord(skillId).getSkill();
+    }
+
+    /**
+     * 删除页面自定义 Skill 目录并重载注册表。
+     */
+    public void delete(String id) {
+        SkillRecord record = getRecord(id);
+        requireCustomSkill(record);
+        try {
+            WalkFileUtil.delete(record.getSkillDir());
+        } catch (IOException e) {
+            throw new IllegalStateException("删除 Skill 失败: " + id, e);
+        }
+        reload();
+    }
+
+    /**
+     * 上传 zip 技能包并安装为自定义 Skill。已存在的自定义 Skill 会被覆盖，
+     * 内置/插件 Skill 拒绝覆盖。
+     */
+    public SkillVo uploadPackage(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("请上传技能包文件");
+        }
+        String filename = StringUtils.defaultString(file.getOriginalFilename());
+        if (!filename.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+            throw new IllegalArgumentException("技能包必须是 .zip 文件: " + filename);
+        }
+        if (file.getSize() > MAX_PACKAGE_BYTES) {
+            throw new IllegalArgumentException("技能包超过大小限制 20MB");
+        }
+        Path tempDir;
+        try {
+            tempDir = Files.createTempDirectory("skill-upload-");
+        } catch (IOException e) {
+            throw new IllegalStateException("创建临时目录失败", e);
+        }
+        try {
+            extractZip(file.getInputStream(), tempDir);
+            Path packageRoot = locatePackageRoot(tempDir);
+            Path manifestPath = resolveManifest(packageRoot);
+            Map<String, Object> manifest = Files.exists(manifestPath)
+                    ? objectMapper.readValue(manifestPath.toFile(), new TypeReference<LinkedHashMap<String, Object>>() {
+                    })
+                    : new LinkedHashMap<>();
+            String id = StringUtils.defaultIfBlank(
+                    manifest.get("id") == null ? null : manifest.get("id").toString(),
+                    packageRoot.getFileName().toString()).trim();
+            if (!SAFE_ID_PATTERN.matcher(id).matches()) {
+                throw new IllegalArgumentException("技能包包含非法 Skill ID: " + id);
+            }
+            String entryName = StringUtils.defaultIfBlank(
+                    manifest.get("entry") == null ? null : manifest.get("entry").toString(), DEFAULT_ENTRY_FILE);
+            if (!Files.exists(safeResolve(packageRoot, entryName))) {
+                throw new IllegalArgumentException("技能包缺少入口文件: " + entryName);
+            }
+            SkillRecord existing = skillCache.get(id);
+            if (existing != null) {
+                requireCustomSkill(existing);
+            }
+            Path target = safeResolve(getSkillRoot(), id);
+            if (Files.exists(target) && existing == null) {
+                throw new IllegalStateException("Skill 目录已存在但未被注册，请先手动清理: " + id);
+            }
+            if (Files.exists(target)) {
+                WalkFileUtil.delete(target);
+            }
+            WalkFileUtil.copy(packageRoot, target);
+            Path targetManifest = resolveManifest(target);
+            Map<String, Object> targetMap = Files.exists(targetManifest)
+                    ? objectMapper.readValue(targetManifest.toFile(), new TypeReference<LinkedHashMap<String, Object>>() {
+                    })
+                    : new LinkedHashMap<>();
+            targetMap.put("id", id);
+            targetMap.put("custom", true);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(targetManifest.toFile(), targetMap);
+            reload();
+            return getRecord(id).getSkill();
+        } catch (IOException e) {
+            throw new IllegalStateException("解析技能包失败: " + e.getMessage(), e);
+        } finally {
+            try {
+                if (Files.exists(tempDir)) {
+                    WalkFileUtil.delete(tempDir);
+                }
+            } catch (IOException e) {
+                log.warn("清理技能包临时目录失败: {}", tempDir, e);
+            }
+        }
+    }
+
+    /**
+     * 汇总显式选择 Skill 绑定的 RAG 知识库 ID 并集（仅统计已启用 Skill）。
+     */
+    public List<Integer> resolveKnowledgeBaseIds(List<String> skillIds) {
+        if (skillIds == null || skillIds.isEmpty()) {
+            return List.of();
+        }
+        return skillIds.stream()
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .map(skillCache::get)
+                .filter(java.util.Objects::nonNull)
+                .map(SkillRecord::getSkill)
+                .filter(skill -> Boolean.TRUE.equals(skill.getEnabled()))
+                .flatMap(skill -> (skill.getKnowledgeBaseIds() == null
+                        ? List.<Integer>of() : skill.getKnowledgeBaseIds()).stream())
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private void requireCustomSkill(SkillRecord record) {
+        if (!Boolean.TRUE.equals(record.getSkill().getCustom())) {
+            throw new IllegalArgumentException("仅允许操作页面创建的自定义 Skill: " + record.getSkill().getId());
+        }
+    }
+
+    private void validateSaveDto(SkillSaveDto dto, boolean create) {
+        if (create) {
+            String id = StringUtils.trimToEmpty(dto.getId());
+            if (!SAFE_ID_PATTERN.matcher(id).matches()) {
+                throw new IllegalArgumentException("非法 Skill ID: " + dto.getId());
+            }
+        }
+        if (StringUtils.isBlank(dto.getName())) {
+            throw new IllegalArgumentException("Skill 名称不能为空");
+        }
+        if (create && StringUtils.isBlank(dto.getContent())) {
+            throw new IllegalArgumentException("Skill 入口内容不能为空");
+        }
+        if (StringUtils.isNotBlank(dto.getContent())
+                && dto.getContent().getBytes(StandardCharsets.UTF_8).length > MAX_SKILL_CONTENT_BYTES) {
+            throw new IllegalArgumentException("Skill 入口内容超过大小限制 200KB");
+        }
+        SkillVo probe = new SkillVo();
+        probe.setId(StringUtils.defaultIfBlank(dto.getId(), "probe"));
+        probe.setName(dto.getName());
+        probe.setRuntime(buildRuntimeVo(dto));
+        validateRuntimeTools(probe);
+        if (Boolean.TRUE.equals(dto.getChatEnabled())
+                && StringUtils.isNotBlank(dto.getChatAgentType())
+                && !isSupportedChatAgentType(dto.getChatAgentType().trim())) {
+            throw new IllegalArgumentException("Skill 聊天 Agent 类型不受支持: " + dto.getChatAgentType());
+        }
+    }
+
+    private SkillRuntimeConfigVo buildRuntimeVo(SkillSaveDto dto) {
+        SkillRuntimeToolsVo tools = new SkillRuntimeToolsVo();
+        tools.setLocal(toServiceToolMap(dto.getLocalTools()));
+        tools.setMcp(toServerToolMap(dto.getMcpTools()));
+        SkillRuntimeLimitsVo limits = new SkillRuntimeLimitsVo(
+                positiveOrNull(dto.getMaxToolCalls()),
+                positiveOrNull(dto.getMaxRepeatedFailures()),
+                positiveOrNull(dto.getMaxToolResultChars()),
+                positiveOrNull(dto.getMaxAccumulatedToolResultChars()),
+                null);
+        boolean hasTools = !tools.getLocal().isEmpty() || !tools.getMcp().isEmpty();
+        boolean hasLimits = limits.getMaxToolCalls() != null
+                || limits.getMaxRepeatedFailures() != null
+                || limits.getMaxToolResultChars() != null
+                || limits.getMaxAccumulatedToolResultChars() != null;
+        if (!hasTools && !hasLimits && StringUtils.isBlank(dto.getPromptMode())) {
+            return null;
+        }
+        return new SkillRuntimeConfigVo(
+                StringUtils.trimToNull(dto.getPromptMode()),
+                hasTools ? tools : null,
+                hasLimits ? limits : null);
+    }
+
+    private Map<String, Object> buildManifest(SkillSaveDto dto, String id, String fallbackEntry) {
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("id", id);
+        manifest.put("name", dto.getName().trim());
+        if (StringUtils.isNotBlank(dto.getDescription())) {
+            manifest.put("description", dto.getDescription().trim());
+        }
+        if (StringUtils.isNotBlank(dto.getVersion())) {
+            manifest.put("version", dto.getVersion().trim());
+        }
+        if (StringUtils.isNotBlank(dto.getAuthor())) {
+            manifest.put("author", dto.getAuthor().trim());
+        }
+        List<String> agentTypes = normalizeStringList(dto.getAgentTypes());
+        if (!agentTypes.isEmpty()) {
+            manifest.put("agentTypes", agentTypes);
+        }
+        List<String> tags = normalizeStringList(dto.getTags());
+        if (!tags.isEmpty()) {
+            manifest.put("tags", tags);
+        }
+        manifest.put("enabled", Boolean.TRUE.equals(dto.getEnabled()));
+        manifest.put("custom", true);
+        manifest.put("entry", StringUtils.defaultIfBlank(fallbackEntry, DEFAULT_ENTRY_FILE));
+        List<Integer> kbIds = dto.getKnowledgeBaseIds() == null ? List.of()
+                : dto.getKnowledgeBaseIds().stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        if (!kbIds.isEmpty()) {
+            manifest.put("knowledgeBaseIds", kbIds);
+        }
+        Map<String, Object> chat = buildChatManifest(dto);
+        if (chat != null) {
+            manifest.put("chat", chat);
+        }
+        Map<String, Object> runtime = buildRuntimeManifest(dto);
+        if (runtime != null) {
+            manifest.put("runtime", runtime);
+        }
+        return manifest;
+    }
+
+    private Map<String, Object> buildChatManifest(SkillSaveDto dto) {
+        if (!Boolean.TRUE.equals(dto.getChatEnabled())) {
+            return null;
+        }
+        Map<String, Object> chat = new LinkedHashMap<>();
+        chat.put("enabled", true);
+        if (StringUtils.isNotBlank(dto.getChatLabel())) {
+            chat.put("label", dto.getChatLabel().trim());
+        }
+        if (StringUtils.isNotBlank(dto.getChatIcon())) {
+            chat.put("icon", dto.getChatIcon().trim());
+        }
+        if (dto.getChatOrder() != null) {
+            chat.put("order", dto.getChatOrder());
+        }
+        if (StringUtils.isNotBlank(dto.getChatAgentType())) {
+            chat.put("agentType", dto.getChatAgentType().trim());
+        }
+        if (StringUtils.isNotBlank(dto.getChatPrologue())) {
+            chat.put("prologue", dto.getChatPrologue().trim());
+        }
+        return chat;
+    }
+
+    private Map<String, Object> buildRuntimeManifest(SkillSaveDto dto) {
+        Map<String, Object> runtime = new LinkedHashMap<>();
+        if (StringUtils.isNotBlank(dto.getPromptMode())) {
+            runtime.put("promptMode", dto.getPromptMode().trim());
+        }
+        Map<String, Object> tools = new LinkedHashMap<>();
+        Map<String, List<String>> local = toServiceToolMap(dto.getLocalTools());
+        if (!local.isEmpty()) {
+            tools.put("local", local);
+        }
+        Map<String, List<String>> mcp = toServerToolMap(dto.getMcpTools());
+        if (!mcp.isEmpty()) {
+            tools.put("mcp", mcp);
+        }
+        if (!tools.isEmpty()) {
+            runtime.put("tools", tools);
+        }
+        Map<String, Object> limits = new LinkedHashMap<>();
+        putIfPositive(limits, "maxToolCalls", dto.getMaxToolCalls());
+        putIfPositive(limits, "maxRepeatedFailures", dto.getMaxRepeatedFailures());
+        putIfPositive(limits, "maxToolResultChars", dto.getMaxToolResultChars());
+        putIfPositive(limits, "maxAccumulatedToolResultChars", dto.getMaxAccumulatedToolResultChars());
+        if (!limits.isEmpty()) {
+            runtime.put("limits", limits);
+        }
+        return runtime.isEmpty() ? null : runtime;
+    }
+
+    private Map<String, List<String>> toServiceToolMap(List<SkillSaveDto.ServiceToolsDto> serviceTools) {
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        if (serviceTools == null) {
+            return map;
+        }
+        for (SkillSaveDto.ServiceToolsDto entry : serviceTools) {
+            if (entry == null || StringUtils.isBlank(entry.getService())) {
+                continue;
+            }
+            List<String> tools = normalizeStringList(entry.getTools());
+            if (!tools.isEmpty()) {
+                map.put(entry.getService().trim(), tools);
+            }
+        }
+        return map;
+    }
+
+    private Map<String, List<String>> toServerToolMap(List<SkillSaveDto.ServerToolsDto> serverTools) {
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        if (serverTools == null) {
+            return map;
+        }
+        for (SkillSaveDto.ServerToolsDto entry : serverTools) {
+            if (entry == null || StringUtils.isBlank(entry.getServer())) {
+                continue;
+            }
+            List<String> tools = normalizeStringList(entry.getTools());
+            if (!tools.isEmpty()) {
+                map.put(entry.getServer().trim(), tools);
+            }
+        }
+        return map;
+    }
+
+    private List<String> normalizeStringList(List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    private Integer positiveOrNull(Integer value) {
+        return value != null && value > 0 ? value : null;
+    }
+
+    private void putIfPositive(Map<String, Object> map, String key, Integer value) {
+        if (value != null && value > 0) {
+            map.put(key, value);
+        }
+    }
+
+    private void writeSkillFiles(Path skillDir, Map<String, Object> manifest, String content) {
+        try {
+            Files.createDirectories(skillDir);
+            objectMapper.writerWithDefaultPrettyPrinter()
+                    .writeValue(skillDir.resolve(DEFAULT_MANIFEST_FILE).toFile(), manifest);
+            if (content != null) {
+                String entryName = StringUtils.defaultIfBlank(
+                        manifest.get("entry") == null ? null : manifest.get("entry").toString(), DEFAULT_ENTRY_FILE);
+                Files.writeString(safeResolve(skillDir, entryName), content, StandardCharsets.UTF_8);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("写入 Skill 文件失败: " + manifest.get("id"), e);
+        }
+    }
+
+    private void extractZip(InputStream inputStream, Path targetDir) throws IOException {
+        try (ZipInputStream zip = new ZipInputStream(inputStream)) {
+            ZipEntry entry;
+            int count = 0;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (++count > MAX_PACKAGE_ENTRIES) {
+                    throw new IOException("技能包文件数量超过限制 " + MAX_PACKAGE_ENTRIES);
+                }
+                String name = entry.getName().replace("\\", "/");
+                if (StringUtils.isBlank(name) || name.startsWith("__MACOSX/")) {
+                    continue;
+                }
+                Path target = targetDir.resolve(name).normalize();
+                if (!target.startsWith(targetDir)) {
+                    throw new IOException("技能包包含非法路径: " + name);
+                }
+                if (entry.isDirectory()) {
+                    Files.createDirectories(target);
+                    continue;
+                }
+                Files.createDirectories(target.getParent());
+                Files.copy(zip, target, StandardCopyOption.REPLACE_EXISTING);
+                if (Files.size(target) > MAX_PACKAGE_FILE_BYTES) {
+                    throw new IOException("技能包内文件超过大小限制 10MB: " + name);
+                }
+            }
+        }
+    }
+
+    private Path locatePackageRoot(Path tempDir) throws IOException {
+        if (Files.exists(tempDir.resolve(DEFAULT_MANIFEST_FILE)) || Files.exists(tempDir.resolve("index.json"))) {
+            return tempDir;
+        }
+        try (Stream<Path> paths = Files.list(tempDir)) {
+            List<Path> dirs = paths.filter(Files::isDirectory)
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                    .collect(Collectors.toList());
+            for (Path dir : dirs) {
+                if (Files.exists(dir.resolve(DEFAULT_MANIFEST_FILE)) || Files.exists(dir.resolve("index.json"))) {
+                    return dir;
+                }
+            }
+        }
+        throw new IllegalArgumentException("技能包缺少 skill.json 或 index.json 清单文件");
     }
 
     /**
@@ -904,6 +1337,8 @@ public class SkillService {
         detail.setAgentTypes(skill.getAgentTypes());
         detail.setTags(skill.getTags());
         detail.setEnabled(skill.getEnabled());
+        detail.setCustom(skill.getCustom());
+        detail.setKnowledgeBaseIds(skill.getKnowledgeBaseIds());
         detail.setChat(skill.getChat());
         detail.setRuntime(skill.getRuntime());
         detail.setEntry(skill.getEntry());

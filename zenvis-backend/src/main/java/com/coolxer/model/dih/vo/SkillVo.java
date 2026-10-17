@@ -60,6 +60,17 @@ public class SkillVo implements Serializable {
     private Boolean enabled = false;
 
     /**
+     * 是否为页面创建的自定义 Skill。null 或 false 表示内置/插件 Skill。
+     */
+    private Boolean custom;
+
+    /**
+     * 绑定的 RAG 知识库 ID 列表。绑定后 Skill 会话将注入 rag_search 检索工具。
+     */
+    @JsonAlias("knowledgeBaseIds")
+    private List<Integer> knowledgeBaseIds;
+
+    /**
      * DIH 聊天入口配置。未配置或 chat.enabled=false 时不展示。
      */
     private SkillChatConfigVo chat;

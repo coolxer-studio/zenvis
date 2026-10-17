@@ -3,6 +3,7 @@ package com.coolxer.controller.dih;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.base.vo.SingleValueVo;
+import com.coolxer.model.dih.dto.SkillSaveDto;
 import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.AgentSkillVo;
 import com.coolxer.model.dih.vo.SkillChatEntryVo;
@@ -10,18 +11,23 @@ import com.coolxer.model.dih.vo.SkillDetailVo;
 import com.coolxer.model.dih.vo.SkillVo;
 import com.coolxer.model.dih.vo.SkillOptionVo;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.rag.RagKnowledgeBaseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * AI Skill 管理
@@ -34,6 +40,9 @@ public class SkillController {
 
     @Autowired
     private SkillService skillService;
+
+    @Autowired
+    private RagKnowledgeBaseService ragKnowledgeBaseService;
 
     @GetMapping("/list")
     @Operation(summary = "Skill 列表", description = "分页查询已扫描到的 Skill")
@@ -124,6 +133,62 @@ public class SkillController {
             return ResponseWrap.success(skillService.setEnabled(id, false));
         } catch (Exception e) {
             log.error("停用 Skill 失败, id={}", id, e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping("/add")
+    @Operation(summary = "新增自定义 Skill", description = "页面创建自定义 Skill，落盘 skill.json + SKILL.md")
+    public ResponseWrap<SkillVo> add(@RequestBody SkillSaveDto dto) {
+        try {
+            return ResponseWrap.success(skillService.create(dto));
+        } catch (Exception e) {
+            log.error("新增自定义 Skill 失败", e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping("/{id}/update")
+    @Operation(summary = "更新自定义 Skill", description = "更新页面创建的自定义 Skill，仅允许 custom=true 的 Skill")
+    public ResponseWrap<SkillVo> update(@PathVariable("id") String id, @RequestBody SkillSaveDto dto) {
+        try {
+            return ResponseWrap.success(skillService.update(id, dto));
+        } catch (Exception e) {
+            log.error("更新自定义 Skill 失败, id={}", id, e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "删除自定义 Skill", description = "删除页面创建的自定义 Skill，仅允许 custom=true 的 Skill")
+    public ResponseWrap<?> delete(@PathVariable("id") String id) {
+        try {
+            skillService.delete(id);
+            return ResponseWrap.success("删除成功");
+        } catch (Exception e) {
+            log.error("删除自定义 Skill 失败, id={}", id, e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping("/upload")
+    @Operation(summary = "上传 Skill 技能包", description = "上传 zip 技能包（含 skill.json + SKILL.md），安装为自定义 Skill")
+    public ResponseWrap<SkillVo> upload(@RequestParam("file") MultipartFile file) {
+        try {
+            return ResponseWrap.success(skillService.uploadPackage(file));
+        } catch (Exception e) {
+            log.error("上传 Skill 技能包失败", e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/knowledge-base-options")
+    @Operation(summary = "RAG 知识库选项", description = "查询可绑定到 Skill 的 RAG 知识库选项")
+    public ResponseWrap<List<Map<String, Object>>> knowledgeBaseOptions() {
+        try {
+            return ResponseWrap.success(ragKnowledgeBaseService.listOptions());
+        } catch (Exception e) {
+            log.error("查询 RAG 知识库选项失败", e);
             return ResponseWrap.fail(e);
         }
     }

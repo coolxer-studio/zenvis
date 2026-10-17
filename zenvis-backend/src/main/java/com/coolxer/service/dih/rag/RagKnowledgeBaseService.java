@@ -34,7 +34,9 @@ import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -88,6 +90,22 @@ public class RagKnowledgeBaseService {
                 searchDto.getTag());
         List<RagKnowledgeBaseVo> rows = page.getContent().stream().map(this::toVo).collect(Collectors.toList());
         return new PageRowsVo<>(rows, page.getTotalElements());
+    }
+
+    /**
+     * 查询全部知识库的轻量选项（label/value），供 Skill 绑定等场景使用。
+     * 不校验 vectorstore 管理开关，仅暴露 id 与名称。
+     */
+    public List<Map<String, Object>> listOptions() {
+        return ragKnowledgeBaseRepository.findAll().stream()
+                .sorted(Comparator.comparing(RagKnowledgeBase::getId))
+                .map(kb -> {
+                    Map<String, Object> option = new LinkedHashMap<String, Object>();
+                    option.put("label", kb.getName());
+                    option.put("value", kb.getId());
+                    return option;
+                })
+                .collect(Collectors.toList());
     }
 
     /**

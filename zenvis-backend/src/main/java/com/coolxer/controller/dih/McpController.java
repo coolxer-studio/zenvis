@@ -183,11 +183,15 @@ public class McpController extends BaseController {
 
     @GetMapping("/tools")
     @Operation(summary = "MCP工具列表")
-    public ResponseWrap<List<McpToolVo>> tools(@RequestParam(value = "serverId", required = false) Integer serverId) {
+    public ResponseWrap<List<McpToolVo>> tools(@RequestParam(value = "serverId", required = false) Integer serverId,
+                                               @RequestParam(value = "serverCode", required = false) String serverCode) {
         try {
+            if (serverId == null && serverCode != null && !serverCode.isBlank()) {
+                return ResponseWrap.success(mcpClientService.listToolsByCode(serverCode));
+            }
             return ResponseWrap.success(mcpClientService.listTools(serverId));
         } catch (Exception e) {
-            log.error("查询MCP工具列表失败, serverId={}", serverId, e);
+            log.error("查询MCP工具列表失败, serverId={}, serverCode={}", serverId, serverCode, e);
             return ResponseWrap.fail(e);
         }
     }

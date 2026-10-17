@@ -32,6 +32,11 @@ public interface McpClientService {
 
     List<McpToolVo> listTools(Integer serverId);
 
+    /**
+     * 按服务 code 查询 MCP 工具列表，服务不存在或未连接时返回空列表。
+     */
+    List<McpToolVo> listToolsByCode(String serverCode);
+
     Object callTool(McpToolCallDto callDto);
 
     default Object callTool(McpToolCallDto callDto, User user) {

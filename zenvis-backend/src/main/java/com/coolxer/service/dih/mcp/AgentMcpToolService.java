@@ -78,17 +78,21 @@ public class AgentMcpToolService {
 
     private final SkillService skillService;
 
+    private final SkillRagToolFactory skillRagToolFactory;
+
     @Autowired
     public AgentMcpToolService(McpClientService mcpClientService,
                                Environment environment,
                                @Qualifier("retrievalToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider,
                                McpToolPolicyService policyService,
-                               SkillService skillService) {
+                               SkillService skillService,
+                               SkillRagToolFactory skillRagToolFactory) {
         this.mcpClientService = mcpClientService;
         this.environment = environment;
         this.localToolCallbackProvider = localToolCallbackProvider;
         this.policyService = policyService;
         this.skillService = skillService;
+        this.skillRagToolFactory = skillRagToolFactory;
     }
 
     public AgentMcpToolService(McpClientService mcpClientService,
@@ -100,6 +104,7 @@ public class AgentMcpToolService {
         this.localToolCallbackProvider = localToolCallbackProvider;
         this.policyService = policyService;
         this.skillService = null;
+        this.skillRagToolFactory = null;
     }
 
     public AgentMcpToolService(McpClientService mcpClientService,
@@ -110,6 +115,7 @@ public class AgentMcpToolService {
         this.localToolCallbackProvider = localToolCallbackProvider;
         this.policyService = null;
         this.skillService = null;
+        this.skillRagToolFactory = null;
     }
 
     public McpToolContext resolve(String agentType) {
@@ -151,6 +157,7 @@ public class AgentMcpToolService {
         } else if (!dataVisualizationAgent && !selectedSkillMissingToolBoundary) {
             appendExternalTools(scope, toolCallbacks, addedToolNames, mcpPrompt, null);
         }
+        appendRagTool(toolCallbacks, addedToolNames, mcpPrompt, selectedSkillIds);
 
         if (StringUtils.isBlank(mcpPrompt)) {
             return McpToolContext.empty(runtime);
@@ -282,6 +289,32 @@ public class AgentMcpToolService {
         if (added) {
             prompt.append(externalPrompt).append("\n");
         }
+    }
+
+    /**
+     * 当显式选择的 Skill 绑定了 RAG 知识库时，注入按知识库范围固定的 rag_search 工具。
+     * 该工具为只读检索，不参与审批策略。
+     */
+    private void appendRagTool(List<ToolCallback> toolCallbacks,
+                               Set<String> addedToolNames,
+                               StringBuilder prompt,
+                               List<String> selectedSkillIds) {
+        if (skillRagToolFactory == null || skillService == null) {
+            return;
+        }
+        List<Integer> knowledgeBaseIds = skillService.resolveKnowledgeBaseIds(selectedSkillIds);
+        if (knowledgeBaseIds.isEmpty()) {
+            return;
+        }
+        if (!addedToolNames.add(SkillRagToolFactory.TOOL_NAME)) {
+            return;
+        }
+        toolCallbacks.add(skillRagToolFactory.create(knowledgeBaseIds));
+        prompt.append("### MCP服务：知识库检索 (rag)\n")
+                .append("- ").append(SkillRagToolFactory.TOOL_NAME)
+                .append("（仅可检索 Skill 绑定的知识库 ID: ")
+                .append(knowledgeBaseIds)
+                .append("）\n\n");
     }
 
     private Scope resolveScope(String agentType, SkillRuntimeConfigVo runtime) {

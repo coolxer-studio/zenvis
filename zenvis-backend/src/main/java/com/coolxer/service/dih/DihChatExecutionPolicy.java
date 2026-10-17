@@ -55,7 +55,9 @@ public record DihChatExecutionPolicy(
         SkillChatEntryVo entry = skillService.requireEnabledChatEntry(chatType);
         boolean genericSkill = SkillService.GENERIC_SKILL_AGENT_TYPE.equals(entry.getAgentType());
         SkillRuntimeConfigVo runtime = skillService.resolveRuntimeConfig(List.of(entry.getSkillId()));
-        boolean toolsAllowed = !genericSkill || (runtime != null && runtime.getTools() != null);
+        boolean hasKnowledgeBases = genericSkill
+                && !skillService.resolveKnowledgeBaseIds(List.of(entry.getSkillId())).isEmpty();
+        boolean toolsAllowed = !genericSkill || (runtime != null && runtime.getTools() != null) || hasKnowledgeBases;
         return Optional.of(new DihChatExecutionPolicy(
                 entry.getChatType(),
                 entry.getAgentType(),

@@ -69,6 +69,123 @@
   <script src="js/axios.min.js?v=040f352c"></script>
   <script src="sdk-v6.7.0/sdk.js"></script>
   <script type="text/javascript">
+    // 数据集目录上传：通过 webkitdirectory 选择目录，保留层级上传到 RAG 数据集
+    // 注意：iframe sandbox 无 allow-modals，alert/confirm 会被浏览器静默拦截，必须用 DOM toast
+    (function () {
+      function getApiBaseUrl() {
+        var urlParams = new URLSearchParams(window.location.search);
+        return (urlParams.get('baseUrl') || '').replace(/\/+$/, '');
+      }
+      function buildUploadUrl(datasetId) {
+        var base = getApiBaseUrl();
+        // baseUrl 本身已含 /zenvis 前缀，这里只拼 /api/...（与 amis 配置接口的拼法保持一致）
+        var path = '/api/v1/dih/vectorstore/datasets/' + encodeURIComponent(datasetId) + '/upload';
+        return base + path;
+      }
+      // DOM 实现的 toast 通知（alert/confirm 在 sandbox 中不可用）
+      function showToast(message, type, duration) {
+        var colors = { info: '#1890ff', success: '#52c41a', error: '#f5222d', warning: '#faad14' };
+        var toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:10px 20px;background:' + (colors[type] || colors.info) + ';color:#fff;border-radius:4px;z-index:999999;box-shadow:0 2px 8px rgba(0,0,0,0.2);font-size:14px;max-width:80%;white-space:pre-wrap;line-height:1.5;';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(function () {
+          if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, duration || 4000);
+      }
+      function uploadOne(datasetId, file) {
+        return new Promise(function (resolve, reject) {
+          var relativePath = file.webkitRelativePath || file.name;
+          var formData = new FormData();
+          formData.append('file', file, file.name);
+          if (relativePath) {
+            formData.append('relativePath', relativePath);
+          }
+          var xhr = new XMLHttpRequest();
+          xhr.open('POST', buildUploadUrl(datasetId), true);
+          xhr.withCredentials = true;
+          xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            var json = null;
+            try { json = JSON.parse(xhr.responseText || 'null'); } catch (e) { }
+            if (xhr.status >= 200 && xhr.status < 300 && json && Number(json.status) === 0) {
+              resolve({ path: relativePath });
+            } else {
+              var msg = (json && (json.msg || json.message)) || ('HTTP ' + xhr.status);
+              reject(new Error(relativePath + ': ' + msg));
+            }
+          };
+          xhr.onerror = function () { reject(new Error(relativePath + ': 网络错误')); };
+          xhr.send(formData);
+        });
+      }
+      window.zenvisUploadDatasetDirectory = function (options) {
+        options = options || {};
+        var datasetId = options.datasetId;
+        var datasetName = options.datasetName || '';
+        if (!datasetId) {
+          showToast('缺少数据集ID', 'error');
+          return Promise.resolve({ cancelled: true });
+        }
+        return new Promise(function (resolve) {
+          var input = document.createElement('input');
+          input.type = 'file';
+          input.setAttribute('webkitdirectory', '');
+          input.setAttribute('directory', '');
+          input.multiple = true;
+          // 不用 display:none，避免 sandboxed iframe 中 click() 被浏览器拦截
+          input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none;';
+          document.body.appendChild(input);
+          var cleaned = false;
+          function cleanup() {
+            if (cleaned) return;
+            cleaned = true;
+            if (input.parentNode) input.parentNode.removeChild(input);
+          }
+          input.addEventListener('cancel', function () {
+            cleanup();
+            resolve({ cancelled: true, total: 0, success: 0, fail: 0 });
+          });
+          input.addEventListener('change', async function () {
+            try {
+              var allFiles = Array.prototype.slice.call(input.files || []);
+              var files = allFiles.filter(function (f) { return /\.md$/i.test(f.name || ''); });
+              if (!files.length) {
+                cleanup();
+                showToast('所选目录下没有 markdown (.md) 文件', 'warning');
+                return resolve({ cancelled: true, total: 0, success: 0, fail: 0 });
+              }
+              // 不用 confirm（sandbox 中被拦截），直接开始上传并显示进度
+              showToast('开始上传 ' + files.length + ' 个 .md 文件到「' + (datasetName || datasetId) + '」…', 'info', 2000);
+              var successCount = 0;
+              var failMessages = [];
+              for (var i = 0; i < files.length; i++) {
+                try {
+                  await uploadOne(datasetId, files[i]);
+                  successCount++;
+                } catch (e) {
+                  failMessages.push(e && e.message ? e.message : String(e));
+                }
+              }
+              cleanup();
+              var summary = '上传完成：成功 ' + successCount + ' 个，失败 ' + failMessages.length + ' 个（共 ' + files.length + ' 个）';
+              if (failMessages.length) {
+                summary += '\n失败示例：\n' + failMessages.slice(0, 3).join('\n') + (failMessages.length > 3 ? '\n…' : '');
+              }
+              showToast(summary, failMessages.length ? 'warning' : 'success', 6000);
+              resolve({ total: files.length, success: successCount, fail: failMessages.length });
+            } catch (err) {
+              cleanup();
+              showToast('目录上传失败：' + (err && err.message ? err.message : String(err)), 'error', 6000);
+              resolve({ cancelled: true, total: 0, success: 0, fail: 0 });
+            }
+          });
+          input.click();
+        });
+      };
+    })();
+  </script>
+  <script type="text/javascript">
     // 等待 DOM 和 SDK 加载完成
     window.onload = function () {
       // 获取地址栏的查询字符串部分

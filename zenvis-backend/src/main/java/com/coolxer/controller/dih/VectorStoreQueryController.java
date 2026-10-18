@@ -31,6 +31,9 @@ public class VectorStoreQueryController {
     @Autowired
     private RagDocumentManagementService ragDocumentManagementService;
 
+    @Autowired
+    private com.coolxer.service.dih.rag.RagRetrievalLogService ragRetrievalLogService;
+
     @Value("${app.ai.vectorstore.management.enabled:false}")
     private boolean vectorStoreManagementEnabled;
 
@@ -47,9 +50,10 @@ public class VectorStoreQueryController {
     @GetMapping("/documents/list")
     public ResponseWrap<PageRowsVo<RagDocumentVo>> listDocuments(PageDto pageDto,
                                                                  @RequestParam(value = "keyword", required = false) String keyword,
-                                                                 @RequestParam(value = "source", required = false) String source) {
+                                                                 @RequestParam(value = "source", required = false) String source,
+                                                                 @RequestParam(value = "knowledge_base_id", required = false) String knowledgeBaseId) {
         ensureManagementEnabled();
-        List<RagDocumentVo> documents = ragDocumentManagementService.listDocuments(keyword, source).stream()
+        List<RagDocumentVo> documents = ragDocumentManagementService.listDocuments(keyword, source, knowledgeBaseId).stream()
                 .map(RagDocumentVo::from)
                 .toList();
         return ResponseWrap.success(page(documents, pageDto));
@@ -84,9 +88,10 @@ public class VectorStoreQueryController {
     @PostMapping("/search")
     public ResponseWrap<List<RagDocumentVo>> similaritySearch(@RequestParam("query") String query,
                                                               @RequestParam(defaultValue = "5") int topK,
-                                                              @RequestParam(value = "source", required = false) String source) {
+                                                              @RequestParam(value = "source", required = false) String source,
+                                                              @RequestParam(value = "knowledge_base_id", required = false) String knowledgeBaseId) {
         ensureManagementEnabled();
-        return ResponseWrap.success(ragDocumentManagementService.searchDocuments(query, topK, source).stream()
+        return ResponseWrap.success(ragDocumentManagementService.searchDocuments(query, topK, source, knowledgeBaseId).stream()
                 .map(RagDocumentVo::from)
                 .toList());
     }
@@ -95,12 +100,19 @@ public class VectorStoreQueryController {
     public ResponseWrap<PageRowsVo<RagDocumentVo>> similaritySearchForPage(PageDto pageDto,
                                                                            @RequestParam("query") String query,
                                                                            @RequestParam(defaultValue = "5") int topK,
-                                                                           @RequestParam(value = "source", required = false) String source) {
+                                                                           @RequestParam(value = "source", required = false) String source,
+                                                                           @RequestParam(value = "knowledge_base_id", required = false) String knowledgeBaseId) {
         ensureManagementEnabled();
-        List<RagDocumentVo> documents = ragDocumentManagementService.searchDocuments(query, topK, source).stream()
+        List<RagDocumentVo> documents = ragDocumentManagementService.searchDocuments(query, topK, source, knowledgeBaseId).stream()
                 .map(RagDocumentVo::from)
                 .toList();
         return ResponseWrap.success(page(documents, pageDto));
+    }
+
+    @GetMapping("/retrieval-logs/list")
+    public ResponseWrap<PageRowsVo<com.coolxer.model.dih.vo.RagRetrievalLogVo>> listRetrievalLogs(com.coolxer.model.dih.dto.RagRetrievalLogSearchDto searchDto) {
+        ensureManagementEnabled();
+        return ResponseWrap.success(ragRetrievalLogService.getPageList(searchDto));
     }
 
     private void ensureManagementEnabled() {

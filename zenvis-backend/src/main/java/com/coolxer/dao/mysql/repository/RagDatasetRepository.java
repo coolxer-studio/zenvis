@@ -33,4 +33,16 @@ public interface RagDatasetRepository extends BaseRepository<RagDataset, Integer
                     "(:tag IS NULL OR a.tags like concat('%',:tag,'%')) ")
     Page<RagDataset> findByPage(Pageable pageable, @Param("name") String name, @Param("source") String source,
                                 @Param("tag") String tag);
+
+    /**
+     * 统计同名数据集数量（名称唯一性校验）
+     *
+     * @param name      数据集名称
+     * @param excludeId 排除的数据集ID（更新时排除自身，可为空）
+     * @return 同名数据集数量
+     */
+    @Query(nativeQuery = true,
+            value = "SELECT count(*) FROM " + MysqlFinalTableName.T_RAG_DATASET + " a WHERE a.is_delete = 0 AND " +
+                    "a.name = :name AND (:excludeId IS NULL OR a.id != :excludeId)")
+    long countByName(@Param("name") String name, @Param("excludeId") Integer excludeId);
 }

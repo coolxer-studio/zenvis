@@ -151,5 +151,10 @@ public class MysqlFinalTableName {
      */
     public static final String T_RAG_KNOWLEDGE_BASE_DATASET = TABLE_PREFIX + "rag_knowledge_base_dataset";
 
+    /**
+     * RAG检索审计日志表
+     */
+    public static final String T_RAG_RETRIEVAL_LOG = TABLE_PREFIX + "rag_retrieval_log";
+
 
 }

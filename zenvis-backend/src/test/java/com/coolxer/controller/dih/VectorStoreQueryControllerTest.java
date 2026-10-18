@@ -21,7 +21,7 @@ class VectorStoreQueryControllerTest {
     void listDocumentsRejectsWhenManagementDisabled() {
         VectorStoreQueryController controller = newController(false, new FakeRagDocumentManagementService());
 
-        assertThatThrownBy(() -> controller.listDocuments(new PageDto(), null, null))
+        assertThatThrownBy(() -> controller.listDocuments(new PageDto(), null, null, null))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("RAG文档管理接口未启用");
     }
@@ -34,7 +34,7 @@ class VectorStoreQueryControllerTest {
         pageDto.setPerPage(1);
 
         ResponseWrap<PageRowsVo<VectorStoreQueryController.RagDocumentVo>> response =
-                controller.listDocuments(pageDto, "资产", "com_coolxer_asset");
+                controller.listDocuments(pageDto, "资产", "com_coolxer_asset", null);
 
         assertThat(response.getData().getTotal()).isEqualTo(2);
         assertThat(response.getData().getRows())
@@ -63,7 +63,7 @@ class VectorStoreQueryControllerTest {
         private String deletedId;
 
         @Override
-        public List<RagDocument> listDocuments(String keyword, String source) {
+        public List<RagDocument> listDocuments(String keyword, String source, String knowledgeBaseId) {
             assertThat(keyword).isEqualTo("资产");
             assertThat(source).isEqualTo("com_coolxer_asset");
             return List.of(

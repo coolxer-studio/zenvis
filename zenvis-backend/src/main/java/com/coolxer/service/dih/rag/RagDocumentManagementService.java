@@ -2,6 +2,7 @@ package com.coolxer.service.dih.rag;
 
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.configuration.ai.AiEmbeddingProperties;
+import com.coolxer.dao.mysql.entity.RagRetrievalLog;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
@@ -49,6 +50,9 @@ public class RagDocumentManagementService {
     @Autowired
     private AiEmbeddingProperties embeddingProperties;
 
+    @Autowired
+    private RagRetrievalLogService ragRetrievalLogService;
+
     @Value("${spring.ai.vectorstore.redis.index:}")
     private String indexName;
 
@@ -56,8 +60,13 @@ public class RagDocumentManagementService {
     private String prefix;
 
     public List<RagDocument> listDocuments(String keyword, String source) {
+        return listDocuments(keyword, source, null);
+    }
+
+    public List<RagDocument> listDocuments(String keyword, String source, String knowledgeBaseId) {
         return loadAllDocuments().stream()
                 .filter(document -> matchSource(document, source))
+                .filter(document -> matchKnowledgeBase(document, knowledgeBaseId))
                 .filter(document -> matchKeyword(document, keyword))
                 .toList();
     }
@@ -73,11 +82,77 @@ public class RagDocumentManagementService {
     }
 
     public List<RagDocument> searchDocuments(String query, int topK, String source) {
-        if (!isVectorStoreAvailable("searchDocuments") || !StringUtils.isNotBlank(query)) {
-            return List.of();
-        }
+        return searchDocuments(query, topK, source, null);
+    }
+
+    public List<RagDocument> searchDocuments(String query, int topK, String source, String knowledgeBaseId) {
+        long startedAt = System.nanoTime();
         int boundedTopK = Math.min(Math.max(topK, 1), MAX_TOP_K);
-        return doSearchDocuments(query, boundedTopK, source);
+        String status = RagRetrievalLog.STATUS_OK;
+        String errorMessage = null;
+        List<RagDocument> documents = List.of();
+        try {
+            if (!isVectorStoreAvailable("searchDocuments") || !StringUtils.isNotBlank(query)) {
+                if (!StringUtils.isNotBlank(query)) {
+                    status = RagRetrievalLog.STATUS_EMPTY_QUERY;
+                }
+                return List.of();
+            }
+            documents = doSearchDocuments(query, boundedTopK, source, knowledgeBaseId);
+            if (documents.isEmpty()) {
+                status = RagRetrievalLog.STATUS_NO_MATCH;
+            }
+            return documents;
+        } catch (Exception e) {
+            status = RagRetrievalLog.STATUS_RETRIEVAL_ERROR;
+            errorMessage = e.getMessage();
+            return List.of();
+        } finally {
+            long durationMs = (System.nanoTime() - startedAt) / 1_000_000L;
+            recordManualRetrieval(query, boundedTopK, source, knowledgeBaseId, documents, status, durationMs, errorMessage);
+        }
+    }
+
+    private void recordManualRetrieval(String query, int topK, String source, String knowledgeBaseId,
+                                       List<RagDocument> documents, String status, long durationMs, String errorMessage) {
+        try {
+            Integer kbId = null;
+            if (StringUtils.isNotBlank(knowledgeBaseId)) {
+                try { kbId = Integer.valueOf(knowledgeBaseId); } catch (NumberFormatException ignored) { }
+            }
+            if (kbId == null && documents != null && !documents.isEmpty()) {
+                // 全局检索未指定知识库时，按命中数最多的知识库归属，便于按知识库查看审计记录
+                kbId = RagRetrievalLogService.dominantKnowledgeBaseId(
+                        documents.stream().map(RagDocument::metadata).toList());
+            }
+            List<Object> summaries = documents.stream()
+                    .map(doc -> {
+                        Map<String, Object> md = doc.metadata();
+                        return RagRetrievalLogService.summary(
+                                doc.id(),
+                                doc.source(),
+                                stringValue(md.get("knowledge_base_name")),
+                                stringValue(md.get("dataset_name")),
+                                stringValue(md.get("file_name")),
+                                doc.text());
+                    })
+                    .map(s -> (Object) s)
+                    .toList();
+            RagRetrievalLog entity = new RagRetrievalLog()
+                    .setRequestType(RagRetrievalLog.REQUEST_TYPE_MANUAL)
+                    .setQueryText(query == null ? "" : query)
+                    .setTopK(topK)
+                    .setSource(source)
+                    .setKnowledgeBaseId(kbId)
+                    .setDocumentCount(documents.size())
+                    .setStatus(status)
+                    .setDurationMs(durationMs)
+                    .setResultJson(ragRetrievalLogService.toResultJson(summaries))
+                    .setErrorMessage(errorMessage);
+            ragRetrievalLogService.saveLog(entity);
+        } catch (Exception e) {
+            log.warn("记录管理端检索日志失败", e);
+        }
     }
 
     public boolean deleteDocumentById(String documentId) {
@@ -117,14 +192,26 @@ public class RagDocumentManagementService {
         return loadDocumentsFromVectorSearchFallback();
     }
 
-    protected List<RagDocument> doSearchDocuments(String query, int topK, String source) {
+    protected List<RagDocument> doSearchDocuments(String query, int topK, String source, String knowledgeBaseId) {
         try {
             SearchRequest.Builder builder = SearchRequest.builder()
                     .query(query)
                     .topK(topK);
-            if (StringUtils.isNotBlank(source)) {
+            boolean hasSource = StringUtils.isNotBlank(source);
+            boolean hasKb = StringUtils.isNotBlank(knowledgeBaseId);
+            if (hasSource || hasKb) {
                 FilterExpressionBuilder filterBuilder = new FilterExpressionBuilder();
-                Filter.Expression expression = filterBuilder.eq("source", source).build();
+                Filter.Expression expression;
+                if (hasSource && hasKb) {
+                    expression = filterBuilder.and(
+                            filterBuilder.eq("source", source),
+                            filterBuilder.eq("knowledge_base_id", knowledgeBaseId)
+                    ).build();
+                } else if (hasSource) {
+                    expression = filterBuilder.eq("source", source).build();
+                } else {
+                    expression = filterBuilder.eq("knowledge_base_id", knowledgeBaseId).build();
+                }
                 builder.filterExpression(expression);
             }
             return redisVectorStore.similaritySearch(builder.build()).stream()
@@ -305,6 +392,17 @@ public class RagDocumentManagementService {
 
     private boolean matchSource(RagDocument document, String source) {
         return !StringUtils.isNotBlank(source) || source.equals(document.source());
+    }
+
+    private boolean matchKnowledgeBase(RagDocument document, String knowledgeBaseId) {
+        if (!StringUtils.isNotBlank(knowledgeBaseId)) {
+            return true;
+        }
+        if (document.metadata() == null) {
+            return false;
+        }
+        Object kbId = document.metadata().get("knowledge_base_id");
+        return kbId != null && knowledgeBaseId.equals(String.valueOf(kbId));
     }
 
     private boolean matchKeyword(RagDocument document, String keyword) {

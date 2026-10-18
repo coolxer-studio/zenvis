@@ -1,6 +1,6 @@
 # DIH 与 AI API
 
-本页合并 DIH Chat、会话、报表、Skill、RAG 文档和后台 AI 分析任务接口，共 7 个 Controller、53 个路由。旧 `DihController` 已不存在，原建议、模型和健康接口均由 `ChatController` 实现。
+本页合并 DIH Chat、会话、报表、Skill、RAG 数据集、知识库、RAG 文档、检索审计和后台 AI 分析任务接口，共 9 个 Controller、71 个路由。旧 `DihController` 已不存在，原建议、模型和健康接口均由 `ChatController` 实现。
 
 ## ChatController
 
@@ -137,14 +137,58 @@
 | 方法 | 路径 | 输入 | 返回/用途 |
 | --- | --- | --- | --- |
 | GET | `/api/v1/dih/vectorstore/documents` | query `keyword?`、`source?` | 全部匹配文档 |
-| GET | `/api/v1/dih/vectorstore/documents/list` | 分页、`keyword?`、`source?` | 分页文档 |
+| GET | `/api/v1/dih/vectorstore/documents/list` | 分页、`keyword?`、`source?`、`knowledge_base_id?` | 分页文档，可按知识库过滤 |
 | GET | `/api/v1/dih/vectorstore/document/{documentId}` | 文档 ID | 文档详情 |
 | DELETE | `/api/v1/dih/vectorstore/document/{documentId}` | 文档 ID | 删除单文档 |
 | DELETE | `/api/v1/dih/vectorstore/documents` | query `documentIds` | 批量删除 |
-| POST | `/api/v1/dih/vectorstore/search` | query `query`、`topK=5`、`source?` | 相似度搜索列表 |
-| GET | `/api/v1/dih/vectorstore/search` | 分页、`query`、`topK=5`、`source?` | 相似度搜索分页 |
+| POST | `/api/v1/dih/vectorstore/search` | query `query`、`topK=5`、`source?`、`knowledge_base_id?` | 相似度搜索列表 |
+| GET | `/api/v1/dih/vectorstore/search` | 分页、`query`、`topK=5`、`source?`、`knowledge_base_id?` | 相似度搜索分页 |
+| GET | `/api/v1/dih/vectorstore/retrieval-logs/list` | 分页、`knowledge_base_id?`、`requestType?`、`status?`、`keyword?` | 检索审计记录分页 |
 
-`RagDocumentVo` 包含 `id`、`text`、`metadata`、`source`。管理接口用于运维和排障，插件文档的正常入库由插件生命周期处理。
+`RagDocumentVo` 包含 `id`、`text`、`metadata`、`source`。`knowledge_base_id` 匹配文档 metadata 中的 `knowledge_base_id` 字段（构建知识库时写入），用于查看单个知识库已入库的文档。管理接口用于运维和排障，插件文档的正常入库由插件生命周期处理。
+
+**检索审计**：每次相似度搜索（`MANUAL`）和问答触发的 RAG 检索（`CHAT`）都会写入 `t_rag_retrieval_log` 表，记录请求文本、TopK、来源筛选、命中数、状态（`ok` / `no_match` / `empty_query` / `retrieval_error`）、耗时、错误信息和命中结果摘要 JSON（`result_json`，单条内容截断 500 字符）。日志保存为 best-effort，失败不影响检索主流程。请求未指定 `knowledge_base_id` 时，按命中文档 metadata 中出现次数最多的知识库归属。`retrieval-logs/list` 的 `requestType` 取值为 `MANUAL` / `CHAT`，`keyword` 模糊匹配检索文本。
+
+## RagDatasetController
+
+基础路径：`/api/v1/dih/vectorstore/datasets`
+
+数据集是 Markdown 文件的存储单元，文件保存在 MinIO 的 `rag/datasets/{id}` 目录下。数据库存储名称、来源、标签、描述、目录和文件数。
+
+| 方法 | 路径 | 输入 | 返回/用途 |
+| --- | --- | --- | --- |
+| POST | `/api/v1/dih/vectorstore/datasets/add` | `RagDatasetDto` | 创建数据集 |
+| POST | `/api/v1/dih/vectorstore/datasets/{id}/update` | `RagDatasetDto` | 更新基础信息 |
+| DELETE | `/api/v1/dih/vectorstore/datasets/{id}` | 数据集 ID | 删除数据集及 MinIO 文件；被知识库引用时拒绝 |
+| GET | `/api/v1/dih/vectorstore/datasets/list` | `RagDatasetSearchDto`（`name?`、`source?`、`tag?`、分页） | `PageRowsVo<RagDatasetVo>` |
+| GET | `/api/v1/dih/vectorstore/datasets/options` | 无 | 知识库关联选择的数据集选项 |
+| GET | `/api/v1/dih/vectorstore/datasets/{id}` | 数据集 ID | 数据集详情 |
+| POST | `/api/v1/dih/vectorstore/datasets/{id}/upload` | multipart `file`，query/form `relativePath?` | 上传单个 `.md` 文件 |
+| GET | `/api/v1/dih/vectorstore/datasets/{id}/files` | 数据集 ID | MinIO 文件列表，`name` 为相对数据集根目录的层级路径 |
+| GET | `/api/v1/dih/vectorstore/datasets/{id}/files/content` | query `objectName` | 读取文件内容 |
+| DELETE | `/api/v1/dih/vectorstore/datasets/{id}/files` | query `objectName` | 删除指定文件 |
+
+`upload` 仅接受 `.md` 文件。传入 `relativePath`（如 `guide/intro.md`，对应浏览器 `File.webkitRelativePath`）时按目录层级存储；服务端会清洗路径，去除盘符、开头斜杠和 `..` 越级片段。上传后自动刷新数据集文件数。`files/content` 与 `files` 删除接口都校验 `objectName` 必须属于该数据集目录。
+
+`RagDatasetDto` 字段：`name`（必填）、`source`、`tags`、`description`。`name` 在未删除的数据集范围内唯一，创建或更新为重名时返回「数据集名称已存在」（更新时排除自身）。唯一性为应用层校验，未加数据库唯一索引——表使用逻辑删除（`is_delete`），数据库级唯一约束会导致删除后无法重建同名数据集。
+
+## RagKnowledgeBaseController
+
+基础路径：`/api/v1/dih/vectorstore/knowledge-bases`
+
+知识库关联一个或多个数据集，构建时将数据集中的 Markdown 文件切分、向量化写入 Redis Vector Store，并在文档 metadata 中写入 `knowledge_base_id`、`knowledge_base_name`、`knowledge_base_tags`。所有接口同样受 `app.ai.vectorstore.management.enabled` 控制。
+
+| 方法 | 路径 | 输入 | 返回/用途 |
+| --- | --- | --- | --- |
+| POST | `/api/v1/dih/vectorstore/knowledge-bases/add` | `RagKnowledgeBaseDto` | 创建知识库并关联数据集 |
+| POST | `/api/v1/dih/vectorstore/knowledge-bases/{id}/update` | `RagKnowledgeBaseDto` | 更新基础信息和关联数据集 |
+| DELETE | `/api/v1/dih/vectorstore/knowledge-bases/{id}` | 知识库 ID | 删除知识库并清理 Redis 向量数据 |
+| GET | `/api/v1/dih/vectorstore/knowledge-bases/list` | `RagKnowledgeBaseSearchDto`（分页） | `PageRowsVo<RagKnowledgeBaseVo>` |
+| GET | `/api/v1/dih/vectorstore/knowledge-bases/{id}` | 知识库 ID | 知识库详情 |
+| POST | `/api/v1/dih/vectorstore/knowledge-bases/{id}/build` | 知识库 ID | 异步触发向量化构建 |
+| GET | `/api/v1/dih/vectorstore/knowledge-bases/{id}/logs` | 知识库 ID | 流式构建日志，出现「完成......」或「失败......」时结束 |
+
+`RagKnowledgeBaseDto` 字段：`name`（必填）、`source`、`tags`、`description`、`dataset_ids`（必填，关联数据集 ID 列表）。`name` 在未删除的知识库范围内唯一，创建或更新为重名时返回「知识库名称已存在」（更新时排除自身），与数据集同为应用层校验。`build` 为异步任务，进度通过 `logs` 流式接口获取（最长 30 分钟）。查看知识库已入库文档请使用 `/documents/list?knowledge_base_id={id}`。
 
 ## AnalysisTaskController
 

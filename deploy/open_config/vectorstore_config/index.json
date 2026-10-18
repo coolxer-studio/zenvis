@@ -5,10 +5,291 @@
   "toolbar": [
     {
       "type": "button",
+      "label": "检索记录",
+      "icon": "fa fa-history",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "检索记录",
+        "size": "full",
+        "body": {
+          "name": "rag_retrieval_log_list",
+          "type": "crud",
+          "api": "/zenvis/api/v1/dih/vectorstore/retrieval-logs/list",
+          "syncLocation": false,
+          "defaultParams": {
+            "page": 1,
+            "perPage": 10
+          },
+          "pageField": "page",
+          "perPageField": "perPage",
+          "perPage": 10,
+          "perPageAvailable": [
+            10,
+            20,
+            50,
+            100
+          ],
+          "footerToolbar": [
+            "statistics",
+            "switch-per-page",
+            "pagination"
+          ],
+          "filter": {
+            "title": "筛选",
+            "body": [
+              {
+                "label": "知识库ID",
+                "type": "input-number",
+                "name": "knowledge_base_id",
+                "clearable": true,
+                "placeholder": "按知识库ID筛选"
+              },
+              {
+                "label": "请求文本",
+                "type": "input-text",
+                "name": "keyword",
+                "clearable": true,
+                "placeholder": "按检索文本模糊匹配"
+              },
+              {
+                "label": "请求类型",
+                "type": "select",
+                "name": "requestType",
+                "clearable": true,
+                "options": [
+                  {
+                    "label": "管理端检索",
+                    "value": "MANUAL"
+                  },
+                  {
+                    "label": "问答检索",
+                    "value": "CHAT"
+                  }
+                ]
+              },
+              {
+                "label": "状态",
+                "type": "select",
+                "name": "status",
+                "clearable": true,
+                "options": [
+                  {
+                    "label": "成功",
+                    "value": "ok"
+                  },
+                  {
+                    "label": "无命中",
+                    "value": "no_match"
+                  },
+                  {
+                    "label": "空查询",
+                    "value": "empty_query"
+                  },
+                  {
+                    "label": "Embedding未启用",
+                    "value": "embedding_disabled"
+                  },
+                  {
+                    "label": "检索异常",
+                    "value": "retrieval_error"
+                  }
+                ]
+              }
+            ],
+            "actions": [
+              {
+                "type": "reset",
+                "label": "重置"
+              },
+              {
+                "type": "submit",
+                "level": "primary",
+                "label": "查询"
+              }
+            ]
+          },
+          "columns": [
+            {
+              "name": "create_time",
+              "label": "时间",
+              "type": "datetime",
+              "format": "YYYY-MM-DD HH:mm:ss",
+              "width": 180,
+              "toggled": true
+            },
+            {
+              "name": "request_type",
+              "label": "类型",
+              "type": "tpl",
+              "tpl": "<% if (data.request_type === 'CHAT') { %><span class='label label-primary'>问答</span><% } else { %><span class='label label-success'>管理端</span><% } %>",
+              "width": 90,
+              "toggled": true
+            },
+            {
+              "name": "knowledge_base_id",
+              "label": "知识库ID",
+              "type": "tpl",
+              "tpl": "${knowledge_base_id|default:'-'}",
+              "width": 100,
+              "toggled": true
+            },
+            {
+              "name": "query_text",
+              "label": "检索文本",
+              "type": "tpl",
+              "tpl": "${query_text|truncate:60|default:'-'}",
+              "popOver": {
+                "trigger": "hover",
+                "position": "left-top",
+                "showIcon": false,
+                "body": {
+                  "type": "tpl",
+                  "tpl": "${query_text|default:'-'}"
+                }
+              },
+              "toggled": true
+            },
+            {
+              "name": "top_k",
+              "label": "TopK",
+              "type": "text",
+              "width": 70,
+              "toggled": true
+            },
+            {
+              "name": "document_count",
+              "label": "命中数",
+              "type": "text",
+              "width": 80,
+              "toggled": true
+            },
+            {
+              "name": "status",
+              "label": "状态",
+              "type": "tpl",
+              "tpl": "<% if (data.status === 'ok') { %><span class='label label-success'>成功</span><% } else if (data.status === 'no_match') { %><span class='label label-warning'>无命中</span><% } else if (data.status === 'empty_query') { %><span class='label label-default'>空查询</span><% } else if (data.status === 'embedding_disabled') { %><span class='label label-warning'>Embedding未启用</span><% } else { %><span class='label label-danger'>异常</span><% } %>",
+              "width": 120,
+              "toggled": true
+            },
+            {
+              "name": "duration_ms",
+              "label": "耗时(ms)",
+              "type": "text",
+              "width": 100,
+              "toggled": true
+            },
+            {
+              "name": "error_message",
+              "label": "错误信息",
+              "type": "tpl",
+              "tpl": "${error_message|truncate:30|default:'-'}",
+              "popOver": {
+                "trigger": "hover",
+                "position": "left-top",
+                "showIcon": false,
+                "body": {
+                  "type": "tpl",
+                  "tpl": "${error_message|default:'-'}"
+                }
+              },
+              "toggled": true
+            },
+            {
+              "type": "operation",
+              "label": "操作",
+              "width": 90,
+              "buttons": [
+                {
+                  "type": "button",
+                  "label": "详情",
+                  "icon": "fa fa-eye text-info",
+                  "actionType": "dialog",
+                  "dialog": {
+                    "title": "检索详情",
+                    "size": "xl",
+                    "body": {
+                      "type": "form",
+                      "static": true,
+                      "body": [
+                        {
+                          "type": "property",
+                          "title": "基本信息",
+                          "column": 3,
+                          "items": [
+                            {
+                              "label": "时间",
+                              "content": "${create_time|default:'-'}"
+                            },
+                            {
+                              "label": "请求类型",
+                              "content": "${request_type|default:'-'}"
+                            },
+                            {
+                              "label": "TopK",
+                              "content": "${top_k|default:'-'}"
+                            },
+                            {
+                              "label": "命中数",
+                              "content": "${document_count|default:'-'}"
+                            },
+                            {
+                              "label": "状态",
+                              "content": "${status|default:'-'}"
+                            },
+                            {
+                              "label": "耗时(ms)",
+                              "content": "${duration_ms|default:'-'}"
+                            },
+                            {
+                              "label": "来源筛选",
+                              "content": "${source|default:'-'}"
+                            },
+                            {
+                              "label": "知识库ID",
+                              "content": "${knowledge_base_id|default:'-'}"
+                            },
+                            {
+                              "label": "错误信息",
+                              "content": "${error_message|default:'-'}"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "group",
+                          "body": [
+                            {
+                              "type": "textarea",
+                              "name": "query_text",
+                              "label": "检索文本",
+                              "static": true,
+                              "minRows": 2,
+                              "maxRows": 4
+                            }
+                          ]
+                        },
+                        {
+                          "type": "json",
+                          "name": "result_json",
+                          "label": "命中结果",
+                          "levelEnhance": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "toggled": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "button",
       "label": "刷新",
       "icon": "fa fa-repeat",
       "actionType": "reload",
-      "target": "rag_dataset_list,rag_knowledge_base_list,rag_document_list,rag_search_list"
+      "target": "rag_dataset_list,rag_knowledge_base_list,rag_search_list"
     }
   ],
   "body": [
@@ -30,8 +311,17 @@
             "pageField": "page",
             "perPageField": "perPage",
             "perPage": 10,
-            "perPageAvailable": [10, 20, 50, 100],
-            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+            "perPageAvailable": [
+              10,
+              20,
+              50,
+              100
+            ],
+            "footerToolbar": [
+              "statistics",
+              "switch-per-page",
+              "pagination"
+            ],
             "headerToolbar": [
               {
                 "type": "button",
@@ -64,7 +354,9 @@
                         "name": "tags",
                         "type": "input-tag",
                         "placeholder": "输入标签后回车",
-                        "enableBatchAdd": true, "joinValues": false, "extractValue": true
+                        "enableBatchAdd": true,
+                        "joinValues": false,
+                        "extractValue": true
                       },
                       {
                         "label": "描述",
@@ -191,7 +483,7 @@
               {
                 "type": "operation",
                 "label": "操作",
-                "width": 380,
+                "width": 450,
                 "buttons": [
                   {
                     "type": "button",
@@ -238,6 +530,23 @@
                                   }
                                 ]
                               }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "label": "上传目录",
+                    "icon": "fa fa-folder-open text-warning",
+                    "onEvent": {
+                      "click": {
+                        "actions": [
+                          {
+                            "actionType": "custom",
+                            "args": {
+                              "script": "console.log('[上传目录] clicked');var row={};try{if(typeof context!=='undefined'&&context&&context.id){row=context;}}catch(e){}if(!row.id){try{if(typeof event!=='undefined'&&event&&event.data){row=event.data;}}catch(e){}}if(!row.id){try{if(typeof event!=='undefined'&&event&&event.props&&event.props.data){row=event.props.data;}}catch(e){}}console.log('[上传目录] row:',row);if(!row.id){console.error('[上传目录] 无法获取数据集信息');}else if(typeof window.zenvisUploadDatasetDirectory!=='function'){console.error('[上传目录] 上传函数未加载');}else{window.zenvisUploadDatasetDirectory({datasetId:row.id,datasetName:row.name}).then(function(result){console.log('[上传目录] result:',result);if(result&&!result.cancelled&&result.success>0){try{if(typeof doAction==='function'){doAction({actionType:'reload',componentName:'rag_dataset_list'});}}catch(e){console.error('reload失败',e);}}}).catch(function(err){console.error('[上传目录] 失败:',err);});}"
                             }
                           }
                         ]
@@ -338,7 +647,9 @@
                             "label": "标签",
                             "name": "tags",
                             "type": "input-tag",
-                            "enableBatchAdd": true, "joinValues": false, "extractValue": true
+                            "enableBatchAdd": true,
+                            "joinValues": false,
+                            "extractValue": true
                           },
                           {
                             "label": "描述",
@@ -380,8 +691,17 @@
             "pageField": "page",
             "perPageField": "perPage",
             "perPage": 10,
-            "perPageAvailable": [10, 20, 50, 100],
-            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+            "perPageAvailable": [
+              10,
+              20,
+              50,
+              100
+            ],
+            "footerToolbar": [
+              "statistics",
+              "switch-per-page",
+              "pagination"
+            ],
             "headerToolbar": [
               {
                 "type": "button",
@@ -414,7 +734,9 @@
                         "name": "tags",
                         "type": "input-tag",
                         "placeholder": "输入标签后回车",
-                        "enableBatchAdd": true, "joinValues": false, "extractValue": true
+                        "enableBatchAdd": true,
+                        "joinValues": false,
+                        "extractValue": true
                       },
                       {
                         "label": "关联数据集",
@@ -556,8 +878,214 @@
               {
                 "type": "operation",
                 "label": "操作",
-                "width": 380,
+                "width": 480,
                 "buttons": [
+                  {
+                    "type": "button",
+                    "label": "文档",
+                    "icon": "fa fa-file-text-o text-info",
+                    "actionType": "dialog",
+                    "dialog": {
+                      "title": "知识库文档 - ${name}",
+                      "size": "full",
+                      "body": {
+                        "name": "kb_document_list",
+                        "type": "crud",
+                        "api": "/zenvis/api/v1/dih/vectorstore/documents/list?knowledge_base_id=${id}",
+                        "syncLocation": false,
+                        "defaultParams": {
+                          "page": 1,
+                          "perPage": 10
+                        },
+                        "pageField": "page",
+                        "perPageField": "perPage",
+                        "perPage": 10,
+                        "perPageAvailable": [
+                          10,
+                          20,
+                          50,
+                          100
+                        ],
+                        "footerToolbar": [
+                          "statistics",
+                          "switch-per-page",
+                          "pagination"
+                        ],
+                        "filter": {
+                          "title": "搜索",
+                          "body": [
+                            {
+                              "label": "关键词",
+                              "type": "input-text",
+                              "name": "keyword",
+                              "clearable": true,
+                              "placeholder": "匹配文档 ID、内容、来源或元数据"
+                            },
+                            {
+                              "label": "来源",
+                              "type": "input-text",
+                              "name": "source",
+                              "clearable": true,
+                              "placeholder": "插件包名中的 . 会替换为 _"
+                            }
+                          ],
+                          "actions": [
+                            {
+                              "type": "reset",
+                              "label": "重置"
+                            },
+                            {
+                              "type": "submit",
+                              "level": "primary",
+                              "label": "查询"
+                            }
+                          ]
+                        },
+                        "columns": [
+                          {
+                            "name": "id",
+                            "label": "文档 ID",
+                            "type": "tpl",
+                            "tpl": "${id|truncate:32}",
+                            "popOver": {
+                              "trigger": "hover",
+                              "position": "left-top",
+                              "showIcon": false,
+                              "body": {
+                                "type": "tpl",
+                                "tpl": "${id}"
+                              }
+                            },
+                            "toggled": true
+                          },
+                          {
+                            "name": "source",
+                            "label": "来源",
+                            "type": "text",
+                            "placeholder": "-",
+                            "width": 180,
+                            "toggled": true
+                          },
+                          {
+                            "name": "dataset_name",
+                            "label": "数据集",
+                            "type": "text",
+                            "placeholder": "-",
+                            "toggled": true
+                          },
+                          {
+                            "name": "file_name",
+                            "label": "文件名",
+                            "type": "text",
+                            "placeholder": "-",
+                            "toggled": true
+                          },
+                          {
+                            "name": "text",
+                            "label": "内容",
+                            "type": "tpl",
+                            "tpl": "${text|truncate:80|default:'-'}",
+                            "popOver": {
+                              "trigger": "hover",
+                              "position": "left-top",
+                              "showIcon": false,
+                              "body": {
+                                "type": "code",
+                                "language": "markdown",
+                                "value": "${text|default:''}"
+                              }
+                            },
+                            "toggled": true
+                          },
+                          {
+                            "type": "operation",
+                            "label": "操作",
+                            "width": 200,
+                            "buttons": [
+                              {
+                                "type": "button",
+                                "label": "查看",
+                                "icon": "fa fa-eye text-info",
+                                "actionType": "dialog",
+                                "dialog": {
+                                  "title": "RAG 文档",
+                                  "size": "xl",
+                                  "body": {
+                                    "type": "service",
+                                    "api": "/zenvis/api/v1/dih/vectorstore/document/${id}",
+                                    "body": [
+                                      {
+                                        "type": "property",
+                                        "title": "基础信息",
+                                        "column": 2,
+                                        "items": [
+                                          {
+                                            "label": "文档 ID",
+                                            "content": "${id}"
+                                          },
+                                          {
+                                            "label": "来源",
+                                            "content": "${source|default:'-'}"
+                                          },
+                                          {
+                                            "label": "知识库",
+                                            "content": "${knowledge_base_name|default:'-'}"
+                                          },
+                                          {
+                                            "label": "知识库标签",
+                                            "content": "${knowledge_base_tags|default:'-'}"
+                                          },
+                                          {
+                                            "label": "数据集",
+                                            "content": "${dataset_name|default:'-'}"
+                                          },
+                                          {
+                                            "label": "文件名",
+                                            "content": "${file_name|default:'-'}"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "tabs",
+                                        "tabsMode": "simple",
+                                        "tabs": [
+                                          {
+                                            "title": "内容",
+                                            "body": {
+                                              "type": "code",
+                                              "language": "markdown",
+                                              "value": "${text|default:''}"
+                                            }
+                                          },
+                                          {
+                                            "title": "元数据",
+                                            "body": {
+                                              "type": "json",
+                                              "source": "${metadata}"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "type": "button",
+                                "label": "删除",
+                                "icon": "fa fa-times text-danger",
+                                "actionType": "ajax",
+                                "confirmText": "确认删除该 RAG 文档？",
+                                "api": "delete:/zenvis/api/v1/dih/vectorstore/document/${id}",
+                                "reload": "kb_document_list"
+                              }
+                            ],
+                            "toggled": true
+                          }
+                        ]
+                      }
+                    }
+                  },
                   {
                     "type": "button",
                     "label": "构建",
@@ -582,7 +1110,7 @@
                         {
                           "type": "button",
                           "actionType": "reload",
-                          "target": "rag_knowledge_base_list,rag_document_list",
+                          "target": "rag_knowledge_base_list",
                           "label": "完成",
                           "hiddenOn": "!data.hide_confirm",
                           "primary": true,
@@ -661,7 +1189,9 @@
                             "label": "标签",
                             "name": "tags",
                             "type": "input-tag",
-                            "enableBatchAdd": true, "joinValues": false, "extractValue": true
+                            "enableBatchAdd": true,
+                            "joinValues": false,
+                            "extractValue": true
                           },
                           {
                             "label": "关联数据集",
@@ -701,210 +1231,6 @@
           }
         },
         {
-          "title": "文档列表",
-          "body": {
-            "name": "rag_document_list",
-            "type": "crud",
-            "api": "/zenvis/api/v1/dih/vectorstore/documents/list",
-            "syncLocation": false,
-            "defaultParams": {
-              "page": 1,
-              "perPage": 10
-            },
-            "pageField": "page",
-            "perPageField": "perPage",
-            "perPage": 10,
-            "perPageAvailable": [10, 20, 50, 100],
-            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
-            "filter": {
-              "title": "搜索",
-              "body": [
-                {
-                  "label": "关键词",
-                  "type": "input-text",
-                  "name": "keyword",
-                  "clearable": true,
-                  "placeholder": "匹配文档 ID、内容、来源或元数据"
-                },
-                {
-                  "label": "来源",
-                  "type": "input-text",
-                  "name": "source",
-                  "clearable": true,
-                  "placeholder": "插件包名中的 . 会替换为 _"
-                }
-              ],
-              "actions": [
-                {
-                  "type": "reset",
-                  "label": "重置"
-                },
-                {
-                  "type": "submit",
-                  "level": "primary",
-                  "label": "查询"
-                }
-              ]
-            },
-            "columns": [
-              {
-                "name": "id",
-                "label": "文档 ID",
-                "type": "tpl",
-                "tpl": "${id|truncate:32}",
-                "popOver": {
-                  "trigger": "hover",
-                  "position": "left-top",
-                  "showIcon": false,
-                  "body": {
-                    "type": "tpl",
-                    "tpl": "${id}"
-                  }
-                },
-                "toggled": true
-              },
-              {
-                "name": "source",
-                "label": "来源",
-                "type": "text",
-                "placeholder": "-",
-                "width": 180,
-                "toggled": true
-              },
-              {
-                "name": "knowledge_base_name",
-                "label": "知识库",
-                "type": "text",
-                "placeholder": "-",
-                "toggled": true
-              },
-              {
-                "name": "knowledge_base_tags",
-                "label": "知识库标签",
-                "type": "tpl",
-                "tpl": "<% if (data.knowledge_base_tags) { data.knowledge_base_tags.split(',').forEach(function(item) { var t = item.trim(); if (t) { %> <span class='label label-info m-1'><%- t %></span> <% }});} else { %> - <% } %>",
-                "toggled": true
-              },
-              {
-                "name": "dataset_name",
-                "label": "数据集",
-                "type": "text",
-                "placeholder": "-",
-                "toggled": true
-              },
-              {
-                "name": "file_name",
-                "label": "文件名",
-                "type": "text",
-                "placeholder": "-",
-                "toggled": true
-              },
-              {
-                "name": "text",
-                "label": "内容",
-                "type": "tpl",
-                "tpl": "${text|truncate:80|default:'-'}",
-                "popOver": {
-                  "trigger": "hover",
-                  "position": "left-top",
-                  "showIcon": false,
-                  "body": {
-                    "type": "code",
-                    "language": "markdown",
-                    "value": "${text|default:''}"
-                  }
-                },
-                "toggled": true
-              },
-              {
-                "type": "operation",
-                "label": "操作",
-                "width": 200,
-                "buttons": [
-                  {
-                    "type": "button",
-                    "label": "查看",
-                    "icon": "fa fa-eye text-info",
-                    "actionType": "dialog",
-                    "dialog": {
-                      "title": "RAG 文档",
-                      "size": "xl",
-                      "body": {
-                        "type": "service",
-                        "api": "/zenvis/api/v1/dih/vectorstore/document/${id}",
-                        "body": [
-                          {
-                            "type": "property",
-                            "title": "基础信息",
-                            "column": 2,
-                            "items": [
-                              {
-                                "label": "文档 ID",
-                                "content": "${id}"
-                              },
-                              {
-                                "label": "来源",
-                                "content": "${source|default:'-'}"
-                              },
-                              {
-                                "label": "知识库",
-                                "content": "${knowledge_base_name|default:'-'}"
-                              },
-                              {
-                                "label": "知识库标签",
-                                "content": "${knowledge_base_tags|default:'-'}"
-                              },
-                              {
-                                "label": "数据集",
-                                "content": "${dataset_name|default:'-'}"
-                              },
-                              {
-                                "label": "文件名",
-                                "content": "${file_name|default:'-'}"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "tabs",
-                            "tabsMode": "simple",
-                            "tabs": [
-                              {
-                                "title": "内容",
-                                "body": {
-                                  "type": "code",
-                                  "language": "markdown",
-                                  "value": "${text|default:''}"
-                                }
-                              },
-                              {
-                                "title": "元数据",
-                                "body": {
-                                  "type": "json",
-                                  "source": "${metadata}"
-                                }
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    }
-                  },
-                  {
-                    "type": "button",
-                    "label": "删除",
-                    "icon": "fa fa-times text-danger",
-                    "actionType": "ajax",
-                    "confirmText": "确认删除该 RAG 文档？",
-                    "api": "delete:/zenvis/api/v1/dih/vectorstore/document/${id}",
-                    "reload": "rag_document_list,rag_search_list"
-                  }
-                ],
-                "toggled": true
-              }
-            ]
-          }
-        },
-        {
           "title": "相似度搜索",
           "body": {
             "name": "rag_search_list",
@@ -920,8 +1246,17 @@
             "pageField": "page",
             "perPageField": "perPage",
             "perPage": 10,
-            "perPageAvailable": [10, 20, 50, 100],
-            "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+            "perPageAvailable": [
+              10,
+              20,
+              50,
+              100
+            ],
+            "footerToolbar": [
+              "statistics",
+              "switch-per-page",
+              "pagination"
+            ],
             "filter": {
               "title": "搜索",
               "body": [

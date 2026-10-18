@@ -129,7 +129,7 @@ public class RagKnowledgeBaseService {
      */
     @Transactional(rollbackFor = Exception.class)
     public RagKnowledgeBase create(RagKnowledgeBaseDto dto) {
-        validateDto(dto);
+        validateDto(dto, null);
         RagKnowledgeBase knowledgeBase = new RagKnowledgeBase()
                 .setName(dto.getName())
                 .setSource(dto.getSource())
@@ -156,7 +156,7 @@ public class RagKnowledgeBaseService {
         if (RagKnowledgeBaseStatus.BUILDING == knowledgeBase.getStatus()) {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "知识库正在构建中，请稍后再修改");
         }
-        validateDto(dto);
+        validateDto(dto, id);
         knowledgeBase.setName(dto.getName())
                 .setSource(dto.getSource())
                 .setTags(writeTags(dto.getTags()))
@@ -391,9 +391,12 @@ public class RagKnowledgeBaseService {
         ragKnowledgeBaseDatasetRepository.saveAll(relations);
     }
 
-    private void validateDto(RagKnowledgeBaseDto dto) {
+    private void validateDto(RagKnowledgeBaseDto dto, Integer excludeId) {
         if (dto == null || StringUtils.isBlank(dto.getName())) {
             throw new ApiException(ResultCodeEnum.FIELD_IS_EMPTY.getCode(), "知识库名称不能为空");
+        }
+        if (ragKnowledgeBaseRepository.countByName(dto.getName().trim(), excludeId) > 0) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "知识库名称已存在：" + dto.getName().trim());
         }
     }
 

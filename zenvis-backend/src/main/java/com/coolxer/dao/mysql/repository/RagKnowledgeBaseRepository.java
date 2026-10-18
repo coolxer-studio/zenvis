@@ -33,4 +33,16 @@ public interface RagKnowledgeBaseRepository extends BaseRepository<RagKnowledgeB
                     "(:tag IS NULL OR a.tags like concat('%',:tag,'%')) ")
     Page<RagKnowledgeBase> findByPage(Pageable pageable, @Param("name") String name, @Param("source") String source,
                                       @Param("tag") String tag);
+
+    /**
+     * 统计同名知识库数量（名称唯一性校验）
+     *
+     * @param name      知识库名称
+     * @param excludeId 排除的知识库ID（更新时排除自身，可为空）
+     * @return 同名知识库数量
+     */
+    @Query(nativeQuery = true,
+            value = "SELECT count(*) FROM " + MysqlFinalTableName.T_RAG_KNOWLEDGE_BASE + " a WHERE a.is_delete = 0 AND " +
+                    "a.name = :name AND (:excludeId IS NULL OR a.id != :excludeId)")
+    long countByName(@Param("name") String name, @Param("excludeId") Integer excludeId);
 }

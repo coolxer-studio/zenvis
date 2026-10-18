@@ -129,7 +129,7 @@ class RagDocumentManagementServiceTest {
         }
 
         @Override
-        protected List<RagDocument> doSearchDocuments(String query, int topK, String source) {
+        protected List<RagDocument> doSearchDocuments(String query, int topK, String source, String knowledgeBaseId) {
             this.capturedQuery = query;
             this.capturedTopK = topK;
             this.capturedSource = source;

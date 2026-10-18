@@ -94,10 +94,12 @@ public class RagDatasetController {
     }
 
     @PostMapping("/{id}/upload")
-    @Operation(summary = "上传数据集文件", description = "上传markdown文件到数据集MinIO目录")
-    public ResponseWrap<?> upload(@PathVariable("id") Integer id, @RequestParam("file") MultipartFile file) {
+    @Operation(summary = "上传数据集文件", description = "上传markdown文件到数据集MinIO目录；relativePath 用于目录上传时保留层级")
+    public ResponseWrap<?> upload(@PathVariable("id") Integer id,
+                                  @RequestParam("file") MultipartFile file,
+                                  @RequestParam(value = "relativePath", required = false) String relativePath) {
         try {
-            return ResponseWrap.success(ragDatasetService.uploadFile(id, file));
+            return ResponseWrap.success(ragDatasetService.uploadFile(id, file, relativePath));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }

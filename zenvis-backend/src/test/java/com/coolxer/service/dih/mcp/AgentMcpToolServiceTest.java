@@ -124,7 +124,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("menu_update", "更新菜单")
                 ),
                 null,
-                skillService
+                skillService,
+                null
         );
 
         McpToolContext context = service.resolve(
@@ -180,7 +181,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("dashboard_create", "创建看板")
                 ),
                 null,
-                skillService
+                skillService,
+                null
         );
 
         McpToolContext context = service.resolve(
@@ -271,7 +273,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("entity_update", "更新实体")
                 ),
                 null,
-                skillService
+                skillService,
+                null
         );
 
         McpToolContext context = service.resolve(
@@ -338,7 +341,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("menu_create", "创建菜单")
                 ),
                 null,
-                skillService
+                skillService,
+                null
         );
 
         McpToolContext context = service.resolve(
@@ -383,7 +387,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
-                skillService
+                skillService,
+                null
         );
 
         McpToolContext context = service.resolve(
@@ -421,7 +426,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
-                skillService
+                skillService,
+                null
         );
 
         McpToolContext context = service.resolve(
@@ -515,6 +521,11 @@ class AgentMcpToolServiceTest {
 
         @Override
         public List<McpToolVo> listTools(Integer serverId) {
+            return List.of();
+        }
+
+        @Override
+        public List<McpToolVo> listToolsByCode(String serverCode) {
             return List.of();
         }
 

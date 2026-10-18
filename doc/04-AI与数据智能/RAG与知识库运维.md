@@ -67,11 +67,27 @@ app.ai.vectorstore.management.enabled=true
 
 管理接口支持：
 
-- 文档列表和分页；
-- 按 ID 查看；
-- 按来源或关键词筛选；
-- 单个或批量删除；
-- 相似度搜索验证。
+- 数据集管理：创建/更新/删除数据集，上传单文件或目录（保留 MinIO 层级），查看文件列表与内容；
+- 知识库管理：创建/更新/删除知识库，关联数据集，异步构建并流式查看日志；
+- 文档列表和分页，按 ID 查看，按来源、关键词或 `knowledge_base_id` 筛选；
+- 单个或批量删除向量文档；
+- 相似度搜索验证；
+- 检索审计日志查询（`GET /retrieval-logs/list`）。
+
+知识库构建时会在文档 metadata 中写入 `knowledge_base_id`，因此运维上可以通过 `/documents/list?knowledge_base_id={id}` 精确查看某个知识库已入库的文档，而不需要混用全部向量文档。删除知识库会同步清理 Redis 中的向量数据，但不会删除数据集在 MinIO 中的原始文件。
+
+数据集和知识库的名称唯一性在应用层校验（仅统计 `is_delete=0` 的记录），未加数据库唯一索引：两张表均为逻辑删除，数据库级唯一约束会导致删除后无法重建同名记录。若需排查历史重名数据，可直接查询 `t_rag_dataset` / `t_rag_knowledge_base` 按名称分组统计。
+
+## 检索审计
+
+每次检索（管理端相似度搜索 `MANUAL`、知识问答触发的 RAG 检索 `CHAT`）都会写入 `t_rag_retrieval_log` 表（`ddl-auto=update` 自动建表），字段包括请求类型、检索文本、TopK、来源筛选、`knowledge_base_id`、命中数、状态、耗时、命中结果摘要 JSON 和错误信息。
+
+运维要点：
+
+- 日志保存为 best-effort：写库失败仅打 `保存RAG检索日志失败` 警告，不影响检索主流程；若审计无数据，先检查该表是否建表成功。
+- 请求未指定知识库时，`knowledge_base_id` 取命中文档 metadata 中出现次数最多的知识库 ID；无命中或旧文档缺少元数据时归属为空。
+- `result_json` 中每条命中的正文截断 500 字符，防止大字段膨胀。
+- 排障搜索无结果时，先查审计记录的状态：`no_match` 指向索引数据问题，`retrieval_error` 指向 embedding/Redis 异常，`empty_query` 为空查询。
 
 完整路径和字段见[DIH 与 AI API](/08-API参考/RestfulAPI/DIH与AI.md#vectorstorequerycontroller)。
 

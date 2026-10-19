@@ -1,0 +1,12 @@
+[
+  {
+    "name": "基础设施指标采集入Kafka",
+    "description": "Vector 每 30 秒并行抓取 MySQL、Redis、Redis-Stack、Kafka、ClickHouse 与 MinIO 的 Prometheus 指标端点，按有界白名单筛选关注指标，规范化后写入 Kafka 主题 infra-metrics-raw；时间或数值异常的指标进入 infra-metrics-dead-letter。",
+    "config": "infra-prometheus-to-kafka.yaml"
+  },
+  {
+    "name": "基础设施指标Kafka入库ClickHouse",
+    "description": "独立消费 infra-metrics-raw，校验 JSON 样本与字段枚举后写入 ClickHouse 表 infra_metric_sample，保留 30 天；校验失败记录进入 infra-metrics-dead-letter。",
+    "config": "infra-kafka-to-clickhouse.yaml"
+  }
+]

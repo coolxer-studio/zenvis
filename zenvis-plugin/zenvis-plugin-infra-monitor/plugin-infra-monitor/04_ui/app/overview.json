@@ -1,0 +1,142 @@
+{
+  "type": "page",
+  "title": "基础设施监控总览",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "本页展示 MySQL、Redis、Redis-Stack、Kafka、ClickHouse 与 MinIO 最近一批已入库指标。推送任务负责采集 Prometheus 端点并写入 ClickHouse 表 infra_metric_sample；本页只读取入库数据做聚合，不直接访问任何 Exporter 或指标端点。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/plugin/com.coolxer.plugin.infra.monitor/endpoints",
+        "adaptor": "var raw=payload||{};var data=raw.data&&typeof raw.data==='object'?raw.data:raw;var summary=data.summary||{};var endpoints=Array.isArray(data.endpoints)?data.endpoints.map(function(item){return Object.assign({},item,{state_label:item.state==='healthy'?'正常':item.state==='degraded'?'降级':'异常',mode_label:item.mode==='native'?'原生端点':'官方 Exporter',data_age_label:item.data_age_ms==null?'—':item.data_age_ms+' ms'});}):[];return {status:0,msg:'',data:{summary:summary,endpoints:endpoints,generated_at:data.generated_at||''}};"
+      },
+      "body": [
+        {
+          "type": "grid",
+          "gap": "md",
+          "columns": [
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "端点总数",
+                "body": "<div style='font-size:28px;font-weight:700'>${summary.total || 0}</div><div>六个基础设施指标端点</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "正常组件",
+                "body": "<div style='font-size:28px;font-weight:700;color:#16a34a'>${summary.healthy || 0}</div><div>返回验证指标且数值有效</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "降级组件",
+                "body": "<div style='font-size:28px;font-weight:700;color:#d97706'>${summary.degraded || 0}</div><div>HTTP 成功但验证指标缺失或为 0</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "异常组件",
+                "body": "<div style='font-size:28px;font-weight:700;color:#dc2626'>${summary.down || 0}</div><div>连接失败、超时或非 2xx</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "平均抓取耗时",
+                "body": "<div style='font-size:28px;font-weight:700'>${summary.avg_data_age_ms || 0} ms</div><div>六个组件最近入库样本的平均延迟</div>"
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "关注指标样本",
+                "body": "<div style='font-size:28px;font-weight:700'>${summary.metric_count || 0}</div><div>最新入库批次中的指标序列数量</div>"
+              }
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "组件状态",
+          "className": "m-t-md",
+          "body": {
+            "type": "table",
+            "source": "${endpoints}",
+            "placeholder": "暂无端点数据",
+            "affixHeader": true,
+            "columns": [
+              {
+                "name": "name",
+                "label": "端点",
+                "type": "tpl",
+                "tpl": "<b>${name}</b><div style='color:#64748b;font-size:12px'>${category} · ${mode_label}</div>",
+                "minWidth": 220
+              },
+              {
+                "name": "state_label",
+                "label": "状态",
+                "type": "tpl",
+                "tpl": "<span class='label ${state === 'healthy' ? 'label-success' : state === 'degraded' ? 'label-warning' : 'label-danger'}'>${state_label}</span>",
+                "width": 100
+              },
+              {
+                "name": "data_age_ms",
+                "label": "数据延迟(ms)",
+                "width": 120
+              },
+              {
+                "name": "verification_metric",
+                "label": "验证指标",
+                "type": "tpl",
+                "tpl": "${verification_metric || '-'}${verification_value == null ? '' : ' = ' + verification_value}",
+                "minWidth": 220
+              },
+              {
+                "name": "metric_count",
+                "label": "样本数",
+                "width": 90
+              },
+              {
+                "name": "last_observed_at",
+                "label": "最近样本",
+                "type": "datetime",
+                "width": 180
+              },
+              {
+                "name": "error",
+                "label": "错误",
+                "type": "tpl",
+                "tpl": "${error || '-'}",
+                "minWidth": 240
+              }
+            ]
+          }
+        },
+        {
+          "type": "button",
+          "label": "打开基础设施监控大屏",
+          "level": "primary",
+          "actionType": "url",
+          "url": "/zenvis/html-page/com.coolxer.plugin.infra.monitor/infra-endpoints.html",
+          "blank": true,
+          "className": "m-t-md"
+        }
+      ]
+    }
+  ]
+}

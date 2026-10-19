@@ -1,0 +1,222 @@
+---
+# 基础设施指标入库：Kafka → ClickHouse
+#
+# 消费 infra-metrics-raw 主题中的 JSON 样本，按 Meta 实体
+# infra_metric_sample 的字段顺序校验并写入 ClickHouse 表
+# infra_metric_sample。Kafka 为至少一次投递语义，重放时会产生
+# 重复样本，可用 sample_id 去重。
+#
+# 校验策略：
+#   - 消息必须是合法 JSON 对象；
+#   - sample_id 必须是 64 位 SHA-256 指纹；
+#   - observed_at 必须是 yyyy-MM-dd HH:mm:ss.SSS；
+#   - service 必须是插件支持的六个服务之一；
+#   - metric_value 必须是数值；
+#   - metric_kind 必须是 counter 或 gauge；
+#   - source_type 必须是 exporter 或 native；
+#   - labels 必须是 {\"tags\": {...}} 结构的 JSON 对象。
+# 任一校验失败进入 infra-metrics-dead-letter，不写 ClickHouse。
+
+sources:
+  infra_metrics_kafka:
+    type: "kafka"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    group_id: "${INFRA_METRICS_GROUP_ID:-infra-metric-sample-clickhouse-v1}"
+    topics:
+      - "${INFRA_METRICS_TOPIC:-infra-metrics-raw}"
+    auto_offset_reset: "earliest"
+    decoding:
+      codec: "bytes"
+
+transforms:
+  normalize_infra_metric_sample:
+    type: "remap"
+    inputs: ["infra_metrics_kafka"]
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw = string!(.message)
+      parsed, parse_err = parse_json(raw)
+      assert_eq!(parse_err, null, message: "infra_metric_sample Kafka 消息必须是合法 JSON")
+      assert!(is_object(parsed), message: "infra_metric_sample Kafka 消息根节点必须是 JSON 对象")
+      sample = object!(parsed)
+
+      sample_id = strip_whitespace(to_string(sample.sample_id) ?? "")
+      assert!(length(sample_id) == 64, message: "infra_metric_sample sample_id 必须是 64 位 SHA-256 指纹")
+
+      raw_observed_at = to_string(sample.observed_at) ?? ""
+      observed_ts, observed_err = parse_timestamp(raw_observed_at, format: "%Y-%m-%d %H:%M:%S%.3f")
+      assert_eq!(observed_err, null, message: "infra_metric_sample observed_at 必须是 yyyy-MM-dd HH:mm:ss.SSS")
+      observed_at = format_timestamp!(observed_ts, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+
+      service = strip_whitespace(to_string(sample.service) ?? "")
+      assert!(includes(["mysql", "redis", "redis-stack", "kafka", "clickhouse", "minio"], service), message: "infra_metric_sample service 不在支持的服务枚举内")
+      service_name = strip_whitespace(to_string(sample.service_name) ?? "")
+      assert!(service_name != "", message: "infra_metric_sample service_name 不能为空")
+
+      metric_name = strip_whitespace(to_string(sample.metric_name) ?? "")
+      assert!(metric_name != "", message: "infra_metric_sample metric_name 不能为空")
+
+      metric_value, metric_value_err = to_float(sample.metric_value)
+      assert_eq!(metric_value_err, null, message: "infra_metric_sample metric_value 必须是数值")
+
+      metric_kind = to_string(sample.metric_kind) ?? ""
+      assert!(includes(["counter", "gauge"], metric_kind), message: "infra_metric_sample metric_kind 必须是 counter 或 gauge")
+
+      source_type = to_string(sample.source_type) ?? ""
+      assert!(includes(["exporter", "native"], source_type), message: "infra_metric_sample source_type 必须是 exporter 或 native")
+
+      endpoint = strip_whitespace(to_string(sample.endpoint) ?? "")
+      assert!(endpoint != "", message: "infra_metric_sample endpoint 不能为空")
+      instance = strip_whitespace(to_string(sample.instance) ?? "")
+      assert!(instance != "", message: "infra_metric_sample instance 不能为空")
+
+      labels, labels_err = object(sample.labels)
+      assert_eq!(labels_err, null, message: "infra_metric_sample labels 必须是 JSON 对象")
+      assert!(is_object(labels.tags), message: "infra_metric_sample labels.tags 必须是 JSON 对象")
+
+      . = {
+        "sample_id": sample_id,
+        "observed_at": observed_at,
+        "service": service,
+        "service_name": service_name,
+        "metric_name": metric_name,
+        "metric_value": metric_value,
+        "metric_kind": metric_kind,
+        "source_type": source_type,
+        "endpoint": endpoint,
+        "instance": instance,
+        "labels": labels
+      }
+
+sinks:
+  infra_metric_sample_clickhouse:
+    type: "clickhouse"
+    inputs: ["normalize_infra_metric_sample"]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "infra_metric_sample"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+  # Vectum 为每个推送任务启动独立 Vector 进程并共用 /var/lib/vector。
+  # 磁盘缓冲目录按 sink 名称生成，因此不同任务中的 sink 名称必须唯一。
+  infra_metrics_archive_dead_letter:
+    type: "kafka"
+    inputs: ["normalize_infra_metric_sample.dropped"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${INFRA_METRICS_DLQ_TOPIC:-infra-metrics-dead-letter}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: true
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+tests:
+  - name: "合法 Kafka 样本应映射为 ClickHouse 字段集"
+    inputs:
+      - insert_at: "normalize_infra_metric_sample"
+        type: "log"
+        log_fields:
+          message: '{"sample_id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","observed_at":"2026-10-19 17:40:49.487","service":"mysql","service_name":"MySQL","metric_name":"mysql_up","metric_value":1.0,"metric_kind":"gauge","source_type":"exporter","endpoint":"http://zenvis-service-exporters:9104/metrics","instance":"mysql-service:3306","labels":{"tags":{"endpoint":"http://zenvis-service-exporters:9104/metrics","instance":"mysql-service:3306"}}}'
+    outputs:
+      - extract_from: "normalize_infra_metric_sample"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.sample_id, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+              assert_eq!(.observed_at, "2026-10-19 17:40:49.487")
+              assert_eq!(.service, "mysql")
+              assert_eq!(.metric_name, "mysql_up")
+              assert_eq!(.metric_value, 1.0)
+              assert_eq!(.metric_kind, "gauge")
+              assert_eq!(.labels.tags.instance, "mysql-service:3306")
+              true
+
+  - name: "非法 JSON 应进入死信"
+    inputs:
+      - insert_at: "normalize_infra_metric_sample"
+        type: "log"
+        log_fields:
+          message: "not a json"
+    outputs:
+      - extract_from: "normalize_infra_metric_sample.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              assert!(exists(.metadata.dropped.reason))
+              true
+
+  - name: "不受支持的 service 应进入死信"
+    inputs:
+      - insert_at: "normalize_infra_metric_sample"
+        type: "log"
+        log_fields:
+          message: '{"sample_id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","observed_at":"2026-10-19 17:40:49.487","service":"postgresql","service_name":"PostgreSQL","metric_name":"pg_up","metric_value":1,"metric_kind":"gauge","source_type":"exporter","endpoint":"http://x/metrics","instance":"x:1","labels":{"tags":{}}}'
+    outputs:
+      - extract_from: "normalize_infra_metric_sample.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "非数值 metric_value 应进入死信"
+    inputs:
+      - insert_at: "normalize_infra_metric_sample"
+        type: "log"
+        log_fields:
+          message: '{"sample_id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","observed_at":"2026-10-19 17:40:49.487","service":"mysql","service_name":"MySQL","metric_name":"mysql_up","metric_value":"not-a-number","metric_kind":"gauge","source_type":"exporter","endpoint":"http://x/metrics","instance":"x:1","labels":{"tags":{}}}'
+    outputs:
+      - extract_from: "normalize_infra_metric_sample.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "非法 observed_at 应进入死信"
+    inputs:
+      - insert_at: "normalize_infra_metric_sample"
+        type: "log"
+        log_fields:
+          message: '{"sample_id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","observed_at":"2026/10/19 17:40:49","service":"mysql","service_name":"MySQL","metric_name":"mysql_up","metric_value":1,"metric_kind":"gauge","source_type":"exporter","endpoint":"http://x/metrics","instance":"x:1","labels":{"tags":{}}}'
+    outputs:
+      - extract_from: "normalize_infra_metric_sample.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true

@@ -1,0 +1,269 @@
+---
+# 基础设施指标采集：Prometheus 端点 → Kafka
+#
+# 本任务使用 Vector 内置 prometheus_scrape 源，同时抓取：
+#   - zenvis-service-exporters 中的 MySQL / Redis / Redis-Stack / Kafka Exporter
+#   - ClickHouse 原生 Prometheus 端点（9363）
+#   - MinIO 原生集群指标端点（public）
+#
+# 只保留插件页面使用的有界指标集合，避免把 Exporter 全部内部指标写入 Kafka。
+# 每条记录在 Kafka 中是一条 JSON 样本，包含 sample_id、observed_at、service、
+# metric_name、metric_value、metric_kind、source_type、endpoint、instance、labels。
+# 变换失败或时间/数值非法的记录进入 infra-metrics-dead-letter，不进入正常主题。
+
+sources:
+  infra_prometheus:
+    type: "prometheus_scrape"
+    endpoints:
+      - "${ZENVIS_MYSQL_EXPORTER_URL:-http://zenvis-service-exporters:9104/metrics}"
+      - "${ZENVIS_REDIS_EXPORTER_URL:-http://zenvis-service-exporters:9121/metrics}"
+      - "${ZENVIS_REDIS_STACK_EXPORTER_URL:-http://zenvis-service-exporters:9121/scrape?target=redis://redis-stack-service:6379}"
+      - "${ZENVIS_KAFKA_EXPORTER_URL:-http://zenvis-service-exporters:9308/metrics}"
+      - "${ZENVIS_CLICKHOUSE_METRICS_URL:-http://clickhouse-service:9363/metrics}"
+      - "${ZENVIS_MINIO_METRICS_URL:-http://minio-service:9000/minio/v2/metrics/cluster}"
+    scrape_interval_secs: 30
+    scrape_timeout_secs: 10
+    instance_tag: "instance"
+    endpoint_tag: "endpoint"
+
+transforms:
+  infra_metric_to_log:
+    type: "metric_to_log"
+    inputs: ["infra_prometheus"]
+
+  infra_metric_filter:
+    type: "filter"
+    inputs: ["infra_metric_to_log"]
+    condition: |-
+      includes([
+        "mysql_up",
+        "mysql_global_status_uptime",
+        "mysql_global_status_threads_connected",
+        "mysql_global_status_queries",
+        "mysql_global_status_bytes_received",
+        "mysql_global_status_bytes_sent",
+        "redis_up",
+        "redis_uptime_in_seconds",
+        "redis_connected_clients",
+        "redis_memory_used_bytes",
+        "redis_commands_processed_total",
+        "redis_keyspace_hits_total",
+        "redis_keyspace_misses_total",
+        "kafka_brokers",
+        "kafka_topic_partition_current_offset",
+        "kafka_consumergroup_lag_sum",
+        "kafka_consumergroup_lag",
+        "ClickHouseProfileEvents_Query",
+        "ClickHouseProfileEvents_SelectQuery",
+        "ClickHouseProfileEvents_InsertQuery",
+        "ClickHouseProfileEvents_InsertedRows",
+        "ClickHouseProfileEvents_FailedQuery",
+        "minio_cluster_health_status",
+        "minio_cluster_usage_total_bytes",
+        "minio_cluster_usage_object_total",
+        "minio_cluster_capacity_usable_free_bytes",
+        "minio_cluster_bucket_total",
+        "minio_cluster_nodes_online_total",
+        "minio_cluster_drive_offline_total"
+      ], to_string(.name) ?? "")
+
+  normalize_infra_metric:
+    type: "remap"
+    inputs: ["infra_metric_filter"]
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      endpoint = string!(.tags.endpoint)
+      instance = string!(.tags.instance)
+      metric_name = string!(.name)
+
+      observed_at = ""
+      if is_timestamp(.timestamp) {
+        observed_at = format_timestamp!(.timestamp, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+      } else {
+        raw_timestamp = to_string(.timestamp) ?? ""
+        observed_ts, timestamp_err = parse_timestamp(raw_timestamp, format: "%+")
+        assert_eq!(timestamp_err, null, message: "infra_metric_sample observed_at 必须是 RFC3339 时间")
+        observed_at = format_timestamp!(observed_ts, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+      }
+
+      assert!(exists(.counter) || exists(.gauge), message: "infra_metric_sample 缺少 counter 或 gauge 数值")
+      metric_kind = ""
+      metric_value = 0.0
+      if exists(.counter) {
+        metric_kind = "counter"
+        metric_value = float!(.counter.value)
+      } else {
+        metric_kind = "gauge"
+        metric_value = float!(.gauge.value)
+      }
+
+      service = ""
+      service_name = ""
+      source_type = ""
+      if contains(endpoint, "/scrape") {
+        service = "redis-stack"
+        service_name = "Redis-Stack"
+        source_type = "exporter"
+      } else if contains(endpoint, "zenvis-service-exporters:9104") {
+        service = "mysql"
+        service_name = "MySQL"
+        source_type = "exporter"
+      } else if contains(endpoint, "zenvis-service-exporters:9121") {
+        service = "redis"
+        service_name = "Redis"
+        source_type = "exporter"
+      } else if contains(endpoint, "zenvis-service-exporters:9308") {
+        service = "kafka"
+        service_name = "Kafka"
+        source_type = "exporter"
+      } else if contains(endpoint, "clickhouse-service:9363") {
+        service = "clickhouse"
+        service_name = "ClickHouse"
+        source_type = "native"
+      } else if contains(endpoint, "minio-service:9000") {
+        service = "minio"
+        service_name = "MinIO"
+        source_type = "native"
+      } else {
+        abort "infra_metric_sample 无法从 endpoint 识别服务"
+      }
+
+      labels = {"tags": object!(.tags)}
+      fingerprint_source = join!([metric_name, endpoint, instance, observed_at, encode_json(labels)], "|")
+      sample_id = sha2(fingerprint_source, variant: "SHA-256")
+
+      . = {
+        "sample_id": sample_id,
+        "observed_at": observed_at,
+        "service": service,
+        "service_name": service_name,
+        "metric_name": metric_name,
+        "metric_value": metric_value,
+        "metric_kind": metric_kind,
+        "source_type": source_type,
+        "endpoint": endpoint,
+        "instance": instance,
+        "labels": labels
+      }
+
+sinks:
+  infra_metrics_kafka:
+    type: "kafka"
+    inputs: ["normalize_infra_metric"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${INFRA_METRICS_TOPIC:-infra-metrics-raw}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: true
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+  # Vectum 为每个推送任务启动独立 Vector 进程并共用 /var/lib/vector。
+  # 磁盘缓冲目录按 sink 名称生成，因此不同任务中的 sink 名称必须唯一。
+  infra_metrics_ingest_dead_letter:
+    type: "kafka"
+    inputs: ["normalize_infra_metric.dropped"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${INFRA_METRICS_DLQ_TOPIC:-infra-metrics-dead-letter}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: true
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+tests:
+  - name: "MySQL gauge 指标应规范化为 Kafka 样本"
+    inputs:
+      - insert_at: "normalize_infra_metric"
+        type: "log"
+        log_fields:
+          gauge:
+            value: 1.0
+          kind: "absolute"
+          name: "mysql_up"
+          tags:
+            endpoint: "http://zenvis-service-exporters:9104/metrics"
+            instance: "mysql-service:3306"
+          timestamp: "2026-10-19T09:40:49.487255885Z"
+    outputs:
+      - extract_from: "normalize_infra_metric"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.service, "mysql")
+              assert_eq!(.service_name, "MySQL")
+              assert_eq!(.source_type, "exporter")
+              assert_eq!(.metric_name, "mysql_up")
+              assert_eq!(.metric_value, 1.0)
+              assert_eq!(.metric_kind, "gauge")
+              assert_eq!(.observed_at, "2026-10-19 17:40:49.487")
+              assert_eq!(.labels.tags.instance, "mysql-service:3306")
+              assert!(length!(.sample_id) == 64)
+              true
+
+  - name: "Redis counter 指标应保留累计值与标签"
+    inputs:
+      - insert_at: "normalize_infra_metric"
+        type: "log"
+        log_fields:
+          counter:
+            value: 42.0
+          kind: "absolute"
+          name: "redis_commands_processed_total"
+          tags:
+            endpoint: "http://zenvis-service-exporters:9121/scrape?target=redis%3A%2F%2Fredis-stack-service%3A6379"
+            instance: "redis-stack-service:6379"
+          timestamp: "2026-10-19T09:40:49.000Z"
+    outputs:
+      - extract_from: "normalize_infra_metric"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.service, "redis-stack")
+              assert_eq!(.metric_kind, "counter")
+              assert_eq!(.metric_value, 42.0)
+              assert_eq!(.labels.tags.endpoint, "http://zenvis-service-exporters:9121/scrape?target=redis%3A%2F%2Fredis-stack-service%3A6379")
+              true
+
+  - name: "缺少 counter/gauge 的指标应进入死信"
+    inputs:
+      - insert_at: "normalize_infra_metric"
+        type: "log"
+        log_fields:
+          kind: "absolute"
+          name: "mysql_up"
+          tags:
+            endpoint: "http://zenvis-service-exporters:9104/metrics"
+            instance: "mysql-service:3306"
+          timestamp: "2026-10-19T09:40:49Z"
+    outputs:
+      - extract_from: "normalize_infra_metric.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              assert!(exists(.metadata.dropped.reason))
+              true

@@ -1,0 +1,144 @@
+{
+  "type": "page",
+  "title": "基础设施指标样本",
+  "remark": "展示 Kafka 解析入库后的 Prometheus 指标样本。按抓取时刻倒序，可按服务、指标名、类型和时间筛选。",
+  "body": [
+    {
+      "name": "infra_metric_sample_list",
+      "type": "crud",
+      "primaryField": "zenvis_id",
+      "api": "/zenvis/api/v1/entity/infra_metric_sample/list",
+      "defaultParams": {
+        "page": 1,
+        "perPage": 20,
+        "orderBy": "observed_at",
+        "orderDir": "desc"
+      },
+      "pageField": "page",
+      "perPageField": "perPage",
+      "perPage": 20,
+      "perPageAvailable": [20, 50, 100, 200],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+      "autoGenerateFilter": true,
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无指标样本，请确认 infra-metrics-raw 与入库推送任务已启动",
+      "columns": [
+        {
+          "name": "observed_at",
+          "label": "抓取时刻",
+          "type": "datetime",
+          "sortable": true,
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "observed_at"
+          },
+          "width": 180
+        },
+        {
+          "name": "service",
+          "label": "服务",
+          "searchable": {
+            "type": "select",
+            "name": "service",
+            "options": [
+              {"label": "MySQL", "value": "mysql"},
+              {"label": "Redis", "value": "redis"},
+              {"label": "Redis-Stack", "value": "redis-stack"},
+              {"label": "Kafka", "value": "kafka"},
+              {"label": "ClickHouse", "value": "clickhouse"},
+              {"label": "MinIO", "value": "minio"}
+            ]
+          },
+          "width": 120
+        },
+        {
+          "name": "metric_name",
+          "label": "指标名称",
+          "searchable": true,
+          "copyable": true,
+          "minWidth": 260
+        },
+        {
+          "name": "metric_value",
+          "label": "指标值",
+          "sortable": true,
+          "width": 130
+        },
+        {
+          "name": "metric_kind",
+          "label": "类型",
+          "searchable": {
+            "type": "select",
+            "name": "metric_kind",
+            "options": [
+              {"label": "计数器 counter", "value": "counter"},
+              {"label": "仪表 gauge", "value": "gauge"}
+            ]
+          },
+          "width": 110
+        },
+        {
+          "name": "source_type",
+          "label": "采集来源",
+          "searchable": {
+            "type": "select",
+            "name": "source_type",
+            "options": [
+              {"label": "官方 Exporter", "value": "exporter"},
+              {"label": "原生端点", "value": "native"}
+            ]
+          },
+          "width": 120
+        },
+        {
+          "name": "instance",
+          "label": "抓取实例",
+          "copyable": true,
+          "toggled": false,
+          "minWidth": 200
+        },
+        {
+          "name": "endpoint",
+          "label": "抓取端点",
+          "type": "tpl",
+          "tpl": "${endpoint | truncate:80}",
+          "popOver": {
+            "body": {
+              "type": "tpl",
+              "tpl": "${endpoint}"
+            }
+          },
+          "copyable": true,
+          "toggled": false,
+          "minWidth": 260
+        },
+        {
+          "name": "sample_id",
+          "label": "样本指纹",
+          "type": "tpl",
+          "tpl": "${sample_id | truncate:20}",
+          "copyable": true,
+          "toggled": false,
+          "minWidth": 180
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "width": 100,
+          "buttons": [
+            {
+              "type": "button",
+              "label": "详情",
+              "level": "info",
+              "actionType": "url",
+              "url": "/#/service/low-code-page/com.coolxer.plugin.infra.monitor.detail-metric?record_id=${zenvis_id|url_encode}",
+              "blank": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

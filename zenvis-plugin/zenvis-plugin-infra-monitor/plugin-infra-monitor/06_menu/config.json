@@ -1,0 +1,7 @@
+[
+  {
+    "name": "基础设施指标监控",
+    "type": "LOW_CODE_APP",
+    "params": "com.coolxer.plugin.infra.monitor.app"
+  }
+]

@@ -8,14 +8,15 @@ ZenVis 插件把数据模型、接入任务、动态 API、低代码页面、看
 外部数据或业务规范
         │
         ▼
-插件包（index.json + 00_doc … 08_menu）
+插件包（index.json + 00_doc … 09_skill）
         │
         ├── Meta ───────────────→ ClickHouse / Retrieval
         ├── Push Task ──────────→ Vectum / Kafka / ClickHouse
         ├── Dynamic API ────────→ Spring Bean / REST
         ├── UI / Dashboard ─────→ 低代码容器 / HTML 页面
+        ├── Menu ───────────────→ 权限入口
         ├── MCP / Skill ────────→ DIH / Agent 工具调用
-        └── Menu / Document ────→ 权限入口 / RAG
+        └── Document ───────────→ RAG
 ```
 
 插件适合承载具有明确业务边界、需要独立发布或可能由社区维护的能力。平台级通用运行机制仍应在 ZenVis 核心工程中维护。
@@ -58,7 +59,7 @@ ZenVis 插件把数据模型、接入任务、动态 API、低代码页面、看
 | `zenvis-plugin` | 统一维护平台、社区与企业插件、公共插件 API 模型和构建脚本 |
 | `zenvis-plugin/zenvis-plugin-*` | 场景或产品子仓库；保留独立 Git、版本和发布节奏 |
 | `agent-skills/create-zenvis-plugin` | 研发侧创建、校验和打包插件的工作流 |
-| 插件的 `07_skill` | 安装到平台并供 DIH 使用的运行时 Skill |
+| 插件的 `09_skill` | 安装到平台并供 DIH 使用的运行时 Skill |
 
 研发 Skill 与运行时 Skill 不是同一种资源：前者帮助开发插件，后者随插件安装并进入平台 Skill 注册表。
 

@@ -1,7 +1,7 @@
 {
   "name": "Nginx日志监控",
   "package_name": "com.coolxer.plugin.nginx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "收集 Nginx 访问日志（access_log）和错误日志（error_log），提供日志检索、详情查看、IP 命中调查。",
   "author": "CoolXer",
   "icon": "icon.png"

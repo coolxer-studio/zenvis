@@ -8,7 +8,7 @@
 
 - **插件名称**: Nginx日志监控
 - **包名**: `com.coolxer.plugin.nginx`
-- **版本**: 1.0.0
+- **版本**: 1.0.1
 - **作者**: CoolXer
 - **描述**: 收集 Nginx 访问日志（access_log）和错误日志（error_log），提供日志检索、详情查看、IP 命中调查。
 
@@ -26,6 +26,8 @@
 | 属性 | 类型 | 含义 | 默认展示 |
 | --- | --- | --- | --- |
 | `remote_addr` | String | 客户端 IP 地址 | ✔ |
+| `server_addr` | String | 服务端接收地址（含 IP 命中链接） | ✔ |
+| `request_line` | String | 完整请求行（含详情页链接） | ✔ |
 | `time_local` | DateTime | 请求时间（本地时间） | ✔ |
 | `method` | String | HTTP 请求方法 | ✔ |
 | `uri` | String | 请求 URI（含查询参数） | ✔ |
@@ -37,22 +39,20 @@
 | `request_time` | Float64 | 请求处理总耗时（秒） | ✔ |
 | `upstream_addr` | String | 上游服务器地址 | ✖ |
 | `upstream_response_time` | Float64 | 上游响应耗时（秒） | ✖ |
-| `request_line` | String | 完整请求行 | ✖ |
-| `server_addr` | String | 服务端接收地址 | ✖ |
 | `server_name` | String | 匹配的虚拟主机名 | ✖ |
 
 ### nginx_error_log 属性
 
 | 属性 | 类型 | 含义 | 默认展示 |
 | --- | --- | --- | --- |
-| `log_time` | DateTime | 错误日志记录时间 | ✔ |
+| `client_addr` | String | 触发错误的客户端 IP（含 IP 命中链接） | ✔ |
+| `server_addr` | String | 服务器接收地址（含 IP 命中链接） | ✔ |
+| `message` | String | 错误消息正文（含详情页链接） | ✔ |
 | `level` | String | 日志级别（debug/info/notice/warn/error/crit/alert/emerg） | ✔ |
-| `pid` | UInt32 | Nginx worker 进程 PID | ✔ |
+| `log_time` | DateTime | 错误日志记录时间 | ✔ |
+| `pid` | UInt32 | Nginx worker 进程 PID | ✖ |
 | `tid` | UInt64 | Nginx worker 线程 ID | ✖ |
-| `connection_id` | UInt64 | 连接序号（用于关联同一连接的多个事件） | ✔ |
-| `client_addr` | String | 触发错误的客户端 IP | ✔ |
-| `server_addr` | String | 服务器接收地址 | ✖ |
-| `message` | String | 错误消息正文 | ✔ |
+| `connection_id` | UInt64 | 连接序号（用于关联同一连接的多个事件） | ✖ |
 
 ## 数据推送服务
 
@@ -79,20 +79,24 @@
 
 ## 可视化配置
 
-插件提供以下可视化入口：
+插件以低代码应用形式提供统一入口，`04_ui/site.json` 组织应用导航，应用配置索引为 `com.coolxer.plugin.nginx`。
 
-- **Nginx日志监控概览**（插件首页，LOW_CODE_PAGE）：访问/错误日志总量与今日新增 KPI、近 7 天日志趋势图、HTTP 状态码分布、错误日志级别分布
-- **访问日志详情页**：按平台记录 ID 查看完整访问日志属性，通过 `request_line` 属性链接进入
-- **错误日志详情页**：按平台记录 ID 查看完整错误日志属性，通过 `message` 属性链接进入
-- **IP 命中调查页**：输入 IP 或从 `remote_addr` / `client_addr` 属性链接进入，OR 匹配 access_log 的 `remote_addr` / `server_addr` / `upstream_addr` 和 error_log 的 `client_addr` / `server_addr`，按实体返回命中记录数（每条记录最多计数一次）
+| 页面 | 配置文件 | 说明 |
+| --- | --- | --- |
+| 监控概览 | `04_ui/index.json` | 应用首页，展示访问/错误日志总量与今日新增 KPI、近 7 天日志趋势图、HTTP 状态码分布、错误日志级别分布 |
+| 访问日志 | `04_ui/access-log.json` | 按请求时间倒序的分页列表，支持排序、字段筛选、详情跳转和 IP 命中调查 |
+| 错误日志 | `04_ui/error-log.json` | 按日志时间倒序的分页列表，支持排序、字段筛选、详情跳转和 IP 命中调查 |
+| IP 命中调查 | `04_ui/ip-statistics/index.json` | 输入 IP 或从列表 IP 链接进入，OR 匹配 access_log 的 `remote_addr` / `server_addr` / `upstream_addr` 和 error_log 的 `client_addr` / `server_addr`，按实体返回命中记录数（每条记录最多计数一次）；配置索引 `com.coolxer.plugin.nginx.ip-statistics` |
+| 访问日志详情 | `04_ui/detail-access-log/index.json` | 按平台记录 ID 查看完整访问日志属性；配置索引 `com.coolxer.plugin.nginx.detail-access-log` |
+| 错误日志详情 | `04_ui/detail-error-log/index.json` | 按平台记录 ID 查看完整错误日志属性；配置索引 `com.coolxer.plugin.nginx.detail-error-log` |
 
-详情页与 IP 命中调查页不在菜单中，均通过日志列表的属性链接（`link_template`）跳转进入。
+访问日志、错误日志、IP 命中调查和两类详情页均包含在应用导航或列表跳转中；详情按钮与 IP 链接在新窗口打开。
 
 ## 菜单项
 
 | 菜单 | 类型 | 路由 |
 | --- | --- | --- |
-| Nginx日志监控 | LOW_CODE_PAGE | `com.coolxer.plugin.nginx` |
+| Nginx日志监控 | LOW_CODE_APP | `com.coolxer.plugin.nginx` |
 
 ## 使用说明
 

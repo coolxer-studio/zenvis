@@ -14,7 +14,7 @@ Sentinel 是安全检测模块，检测命中统一称「安全事件」。其 `
 | 包名 | `com.coolxer.plugin.sentinel` |
 | 版本 | 1.0.0 |
 | 作者 | CoolXer |
-| 能力目录 | 00_doc / 01_meta / 02_push-task / 03_api(空) / 04_ui / 05_dashboard / 06_mcp(空) / 07_skill / 08_menu |
+| 能力目录 | 00_doc / 01_meta / 02_push-task / 03_api(空) / 04_ui / 05_dashboard / 06_menu / 07_mcp(空) / 08_rag(占位) / 09_skill |
 
 ## 适用场景与边界
 
@@ -78,7 +78,7 @@ ai-agent-security-result（上游主题，原始报文留存于此）
 
 ## 安装与升级
 
-1. 安装顺序由平台统一执行：解压 → Meta/建表 → 推送任务 → MySQL 迁移（本插件无）→ API（本插件无）→ UI → Dashboard → MCP → RAG → Skill → 菜单。
+1. 安装顺序由平台统一执行：解压 → Meta/建表 → 推送任务 → MySQL 迁移（本插件无）→ API（本插件无）→ UI → Dashboard → 菜单 → MCP → RAG → Skill。
 2. 在推送任务页面**手动启用**「Sentinel安全事件解析入库」。
 3. 菜单安装为一级菜单，**不自动授权**，需在角色权限中分配。
 4. 升级限制：包名不可变、版本递增；已有 Entity / Attribute / 表 / 列 / 类型 / 排序键 / 分区键不可删改；推送任务名、Dashboard Code、Skill ID、UI 配置索引保持稳定。本插件 `03_api` 无迁移，无 MySQL 数据。
@@ -108,7 +108,7 @@ ai-agent-security-result（上游主题，原始报文留存于此）
 | `sentinel-security-event-analysis` | 智能体安全研判 | 只读 `retrieval`：`retrieval_list_entity`、`retrieval_list_attribute`、`retrieval_search` |
 | `sentinel-security-posture-analysis` | 智能体安全态势 | 只读 `retrieval`：`retrieval_list_entity`、`retrieval_list_attribute`、`entity_overview`、`entity_summary`、`entity_trend`、`entity_distribution` |
 
-无外部 MCP 连接（`06_mcp/config.json` 为 `[]`）。工具可用性还取决于全局 MCP 开关、Agent Scope 与工具审批策略。
+无外部 MCP 连接（`07_mcp/config.json` 为 `[]`）。工具可用性还取决于全局 MCP 开关、Agent Scope 与工具审批策略。
 
 ## 构建
 

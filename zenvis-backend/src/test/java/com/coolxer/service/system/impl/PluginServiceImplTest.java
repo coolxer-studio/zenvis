@@ -150,7 +150,7 @@ class PluginServiceImplTest {
     }
 
     @Test
-    void uploadFileAcceptsDashboardAndMcpConfigFolders() throws Exception {
+    void uploadFileAcceptsRenumberedCapabilityFolders() throws Exception {
         PluginServiceImpl service = newService();
         byte[] packageBytes = tarGz(Map.of(
                 "index.json", """
@@ -164,12 +164,64 @@ class PluginServiceImplTest {
                         }
                         """,
                 "05_dashboard/config.json", "[]",
-                "06_mcp/config.json", "[]"
+                "06_menu/config.json", "[]",
+                "07_mcp/config.json", "[]",
+                "08_rag/.gitkeep", "",
+                "09_skill/.gitkeep", ""
         ));
 
-        String pluginPath = service.uploadFile(packageFile("dashboard-mcp.tar.gz", packageBytes)).getPluginPath();
+        String pluginPath = service.uploadFile(packageFile("renumbered-capabilities.tar.gz", packageBytes)).getPluginPath();
 
         assertThat(Path.of(pluginPath).toAbsolutePath().normalize()).startsWith(pluginRoot.toAbsolutePath().normalize());
+    }
+
+    @Test
+    void pluginPackToolResolvesRenumberedCapabilityDirectories() throws Exception {
+        Path pluginDir = pluginRoot.resolve("pack-tool");
+        Files.createDirectories(pluginDir.resolve("06_menu"));
+        Files.createDirectories(pluginDir.resolve("07_mcp"));
+        Files.createDirectories(pluginDir.resolve("08_rag"));
+        Files.createDirectories(pluginDir.resolve("09_skill"));
+        Files.writeString(pluginDir.resolve("06_menu/config.json"), "[{\"name\":\"Demo\"}]");
+        Files.writeString(pluginDir.resolve("07_mcp/config.json"), "[]");
+        Files.writeString(pluginDir.resolve("08_rag/.gitkeep"), "");
+        Files.writeString(pluginDir.resolve("09_skill/.gitkeep"), "");
+
+        Object packTool = newPluginPackTool(pluginDir);
+
+        assertThat((String) ReflectionTestUtils.invokeMethod(packTool, "readMenuConfigFile", new Object[0]))
+                .isEqualTo("[{\"name\":\"Demo\"}]");
+        assertThat((String) ReflectionTestUtils.invokeMethod(packTool, "readMcpConfigFile", new Object[0]))
+                .isEqualTo("[]");
+        assertThat(ReflectionTestUtils.<Path>invokeMethod(packTool, "getSkillPath"))
+                .isEqualTo(pluginDir.resolve("09_skill").toAbsolutePath().normalize());
+    }
+
+    @Test
+    void pluginPackToolCreatesRagPlaceholderWithoutLegacyDirectories() throws Exception {
+        Path pluginDir = pluginRoot.resolve("pack-tool-mkdir");
+        Files.createDirectories(pluginDir);
+        Object packTool = newPluginPackTool(pluginDir);
+
+        ReflectionTestUtils.invokeMethod(packTool, "mkdir");
+
+        assertThat(pluginDir.resolve("06_menu")).isDirectory();
+        assertThat(pluginDir.resolve("07_mcp")).isDirectory();
+        assertThat(pluginDir.resolve("08_rag")).isDirectory();
+        assertThat(pluginDir.resolve("09_skill")).isDirectory();
+        assertThat(pluginDir.resolve("08_menu")).doesNotExist();
+        assertThat(pluginDir.resolve("06_mcp")).doesNotExist();
+        assertThat(pluginDir.resolve("07_skill")).doesNotExist();
+    }
+
+    private Object newPluginPackTool(Path pluginDir) throws Exception {
+        Class<?> packToolClass = Class.forName(PluginServiceImpl.class.getName() + "$PluginPackTool");
+        var constructor = packToolClass.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        Object packTool = constructor.newInstance();
+        ReflectionTestUtils.invokeMethod(packTool, "buildFromDirectory", pluginDir);
+        ReflectionTestUtils.invokeMethod(packTool, "init");
+        return packTool;
     }
 
     @Test

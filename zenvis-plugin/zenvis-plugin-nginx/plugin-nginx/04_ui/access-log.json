@@ -1,0 +1,141 @@
+{
+  "type": "page",
+  "title": "Nginx 访问日志",
+  "remark": "按请求时间倒序展示，支持分页、排序、字段筛选和详情跳转。",
+  "body": [
+    {
+      "name": "nginx_access_log_list",
+      "type": "crud",
+      "primaryField": "zenvis_id",
+      "api": "/zenvis/api/v1/entity/nginx_access_log/list",
+      "defaultParams": {
+        "page": 1,
+        "perPage": 10,
+        "orderBy": "time_local",
+        "orderDir": "desc"
+      },
+      "pageField": "page",
+      "perPageField": "perPage",
+      "perPage": 10,
+      "perPageAvailable": [10, 20, 50, 100],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+      "autoGenerateFilter": true,
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无访问日志",
+      "columns": [
+        {
+          "name": "time_local",
+          "label": "请求时间",
+          "type": "datetime",
+          "sortable": true,
+          "width": 170
+        },
+        {
+          "name": "remote_addr",
+          "label": "客户端 IP",
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.nginx.ip-statistics?ip=${remote_addr|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${remote_addr | default:'-'}"
+          },
+          "copyable": true,
+          "width": 140
+        },
+        {
+          "name": "method",
+          "label": "方法",
+          "width": 80
+        },
+        {
+          "name": "uri",
+          "label": "请求 URI",
+          "type": "tpl",
+          "tpl": "${uri | truncate:80}",
+          "popOver": {
+            "body": {
+              "type": "tpl",
+              "tpl": "${uri}"
+            }
+          },
+          "minWidth": 240
+        },
+        {
+          "name": "status",
+          "label": "状态码",
+          "type": "tpl",
+          "tpl": "<span class='label ${status >= 500 ? 'label-danger' : status >= 400 ? 'label-warning' : status >= 300 ? 'label-info' : 'label-success'}'>${status}</span>",
+          "sortable": true,
+          "width": 100
+        },
+        {
+          "name": "request_time",
+          "label": "耗时(秒)",
+          "type": "text",
+          "sortable": true,
+          "width": 110
+        },
+        {
+          "name": "upstream_addr",
+          "label": "上游地址",
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "server_addr",
+          "label": "服务端地址",
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.nginx.ip-statistics?ip=${server_addr|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${server_addr | default:'-'}"
+          },
+          "copyable": true,
+          "toggled": false
+        },
+        {
+          "name": "http_user_agent",
+          "label": "User-Agent",
+          "type": "tpl",
+          "tpl": "${http_user_agent | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "tpl",
+              "tpl": "${http_user_agent}"
+            }
+          },
+          "toggled": false
+        },
+        {
+          "name": "request_line",
+          "label": "完整请求行",
+          "toggled": false
+        },
+        {
+          "name": "server_name",
+          "label": "虚拟主机名",
+          "toggled": false
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "fixed": "right",
+          "width": 100,
+          "buttons": [
+            {
+              "type": "button",
+              "label": "详情",
+              "level": "info",
+              "actionType": "url",
+              "url": "/#/service/low-code-page/com.coolxer.plugin.nginx.detail-access-log?record_id=${zenvis_id|url_encode}",
+              "blank": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

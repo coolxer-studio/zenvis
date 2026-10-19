@@ -41,7 +41,7 @@ Server Topic ──▶ Server v1 严格校验
 | 推送任务 | `synap-kafka-to-clickhouse.yaml` |
 | 详情页面 | `com.coolxer.plugin.synap.detail-message` |
 | 参数聚合页面 | `com.coolxer.plugin.synap.parameter-analytics` |
-| 插件菜单 | 不提供，`08_menu/config.json` 为 `[]` |
+| 插件菜单 | 不提供，`06_menu/config.json` 为 `[]` |
 | 数据看板 | 不提供 |
 
 平台自动注入 `zenvis_id` 和 `zenvis_insert_time`；插件不会解析、转换或写入这两个保留字段。
@@ -116,7 +116,8 @@ plugin-synap/
 ├── 04_ui/
 │   ├── detail-message/
 │   └── parameter-analytics/
-├── 06_mcp/config.json
-├── 07_skill/
-└── 08_menu/config.json
+├── 06_menu/config.json
+├── 07_mcp/config.json
+├── 08_rag/.gitkeep
+└── 09_skill/.gitkeep
 ```

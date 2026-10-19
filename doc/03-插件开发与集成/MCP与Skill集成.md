@@ -1,10 +1,10 @@
 # MCP 与 Skill 集成
 
-插件通过 `06_mcp` 声明外部 MCP Server，通过 `07_skill` 安装 DIH 运行时 Skill。两者可以组合，但职责和权限边界不同。
+插件通过 `07_mcp` 声明外部 MCP Server，通过 `09_skill` 安装 DIH 运行时 Skill。`08_rag` 当前仅为目录占位，不改变 `00_doc` 的 RAG 加载链路。
 
 ## 能力区别
 
-| 能力 | `06_mcp` | `07_skill` |
+| 能力 | `07_mcp` | `09_skill` |
 | --- | --- | --- |
 | 描述对象 | 外部 MCP Server 连接 | 提示词、业务知识和运行时工具范围 |
 | 主要文件 | `config.json` | `skill.json`、`SKILL.md` |
@@ -12,9 +12,9 @@
 | 工具发现 | 连接后动态发现 | 只引用允许的工具名 |
 | 权限 | Agent Scope、审批策略、服务状态 | Skill Allowlist 与运行预算 |
 
-`agent-skills/create-zenvis-plugin` 是研发工作流，不会被 `07_skill` 安装；插件内 Skill 才会进入平台运行时注册表。
+`agent-skills/create-zenvis-plugin` 是研发工作流，不会被 `09_skill` 安装；插件内 Skill 才会进入平台运行时注册表。
 
-## 06_mcp/config.json
+## 07_mcp/config.json
 
 ```json
 [
@@ -83,12 +83,12 @@ MCP `code` 是资源身份：
 
 数据可视化 Agent 只允许受控的只读检索工具，不追加任意外部 MCP。详细策略见 [MCP Tool 权限审批与运行约束](/08-API参考/MCPtool/权限审批与运行约束.md)。
 
-## 07_skill 目录
+## 09_skill 目录
 
 一个插件可以包含一个或多个 Skill：
 
 ```text
-07_skill/
+09_skill/
 └── example-investigation/
     ├── skill.json
     ├── SKILL.md
@@ -96,9 +96,13 @@ MCP `code` 是资源身份：
         └── openai.yaml
 ```
 
-`07_skill` 本身也可以直接是一套 Skill，但多 Skill 插件推荐每个一级子目录一套。目录需要有 `SKILL.md` 或 manifest 指定的入口文件。
+`09_skill` 本身也可以直接是一套 Skill，但多 Skill 插件推荐每个一级子目录一套。目录需要有 `SKILL.md` 或 manifest 指定的入口文件。
 
 安装后，平台把 Skill 复制到该插件包名对应的隔离目录并重新加载注册表。卸载插件会移除这部分运行时 Skill。
+
+## `08_rag` 占位
+
+`08_rag/` 是后续插件级 RAG 配置的保留位置。当前安装器和导出器只创建空目录及 `.gitkeep`，不读取其中的配置；插件文档仍从 `00_doc` 加载到 RAG。
 
 ## skill.json
 

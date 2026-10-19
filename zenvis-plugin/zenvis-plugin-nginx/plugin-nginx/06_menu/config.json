@@ -1,7 +1,7 @@
 [
   {
     "name": "Nginx日志监控",
-    "type": "LOW_CODE_PAGE",
+    "type": "LOW_CODE_APP",
     "params": "com.coolxer.plugin.nginx"
   }
 ]

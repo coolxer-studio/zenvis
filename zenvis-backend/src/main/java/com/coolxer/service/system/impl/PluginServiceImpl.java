@@ -83,9 +83,10 @@ import java.util.stream.Stream;
 public class PluginServiceImpl implements PluginService {
 
     private static final String PLUGIN_DASHBOARD_DIR_NAME = "05_dashboard";
-    private static final String PLUGIN_MCP_DIR_NAME = "06_mcp";
-    private static final String PLUGIN_SKILL_DIR_NAME = "07_skill";
-    private static final String PLUGIN_MENU_DIR_NAME = "08_menu";
+    private static final String PLUGIN_MENU_DIR_NAME = "06_menu";
+    private static final String PLUGIN_MCP_DIR_NAME = "07_mcp";
+    private static final String PLUGIN_RAG_DIR_NAME = "08_rag";
+    private static final String PLUGIN_SKILL_DIR_NAME = "09_skill";
     private static final String DASHBOARD_LOW_CODE_DIR_NAME = "low-code";
     private static final String UI_HTML_PAGE_DIR_NAME = "html-page";
     private static final String PLUGIN_UPGRADE_DIR_NAME = "upgrade";
@@ -1255,16 +1256,16 @@ public class PluginServiceImpl implements PluginService {
             writeLog(id, "6 更新数据看板......");
             reconcilePluginDashboards(id, plugin.getPackageName(), activePack);
 
-            writeLog(id, "7 更新MCP服务配置......");
+            writeLog(id, "7 原位更新菜单并保留角色授权......");
+            reconcilePluginMenus(plugin.getPackageName(), activePack);
+
+            writeLog(id, "8 更新MCP服务配置......");
             List<String> disconnectedMcpCodes = reconcilePluginMcpServers(
                     id, plugin.getPackageName(), snapshot, activePack);
             addMcpConnectionWarning(warnings, disconnectedMcpCodes);
 
-            writeLog(id, "8 更新插件Skill和RAG......");
+            writeLog(id, "9 更新插件RAG和Skill......");
             updatePluginSkillAndRag(id, plugin.getPackageName(), snapshot, activePack, warnings);
-
-            writeLog(id, "9 原位更新菜单并保留角色授权......");
-            reconcilePluginMenus(plugin.getPackageName(), activePack);
 
             writeLog(id, "10 更新推送任务并恢复启停状态......");
             Set<Integer> obsoleteTaskIds = reconcilePluginPushTasks(plugin.getPackageName(), snapshot, activePack);
@@ -1970,12 +1971,16 @@ public class PluginServiceImpl implements PluginService {
             compensationStack.add("删除数据看板", () -> cleanupPluginDashboards(packageName));
             createPluginDashboards(id, packageName, pluginPackTool);
 
-            writeLog(id, "8 存储MCP服务配置......");
+            writeLog(id, "8 存储菜单信息......");
+            compensationStack.add("删除菜单按钮", () -> deletePluginMenus(packageName));
+            createPluginMenus(packageName, pluginPackTool);
+
+            writeLog(id, "9 存储MCP服务配置......");
             compensationStack.add("删除MCP服务配置", () -> cleanupPluginMcpServers(packageName));
             List<String> disconnectedMcpCodes = createPluginMcpServers(id, packageName, pluginPackTool);
             addMcpConnectionWarning(warnings, disconnectedMcpCodes);
 
-            writeLog(id, "9 文档加载到RAG......");
+            writeLog(id, "10 文档加载到RAG......");
             boolean ragLoaded = isPluginRagAvailable(id, packageName, "安装")
                     && runPluginRagAction(
                             id,
@@ -1988,7 +1993,7 @@ public class PluginServiceImpl implements PluginService {
                 warnings.add("Embedding/RAG服务不可用，已跳过RAG加载");
             }
 
-            writeLog(id, "10 加载插件Skill......");
+            writeLog(id, "11 加载插件Skill......");
             compensationStack.add("卸载插件Skill", () -> skillService.uninstallPluginSkills(packageName));
             try {
                 skillService.installPluginSkills(packageName, pluginPackTool.getSkillPath());
@@ -1997,10 +2002,6 @@ public class PluginServiceImpl implements PluginService {
                 warnings.add("Skill加载失败");
                 writeLog(id, "加载插件Skill失败，跳过");
             }
-
-            writeLog(id, "11 存储菜单信息......");
-            compensationStack.add("删除菜单按钮", () -> deletePluginMenus(packageName));
-            createPluginMenus(packageName, pluginPackTool);
 
             String message = warnings.isEmpty() ? "安装完成" : "安装完成（" + String.join("，", warnings) + "）";
             finishOperation(id, PluginStatusType.INSTALLED, message, null);
@@ -3080,6 +3081,7 @@ public class PluginServiceImpl implements PluginService {
         private Path dashboardLowCodePath;
         private Path uiHtmlPagePath;
         private Path mcpPath;
+        private Path ragPath;
 
         public PluginPackTool buildPacker(String workspaceDir, String packageName) {
             this.pluginFilePath = Paths.get(workspaceDir).resolve("temp/" + DateUtil.getCurrentDateTime().replace(" ", "/") + "/" + packageName);
@@ -3112,6 +3114,7 @@ public class PluginServiceImpl implements PluginService {
             this.dashboardLowCodePath = dashboardPath.resolve(DASHBOARD_LOW_CODE_DIR_NAME);
             this.uiHtmlPagePath = uiPath.resolve(UI_HTML_PAGE_DIR_NAME);
             this.mcpPath = pluginFilePath.resolve(PLUGIN_MCP_DIR_NAME);
+            this.ragPath = pluginFilePath.resolve(PLUGIN_RAG_DIR_NAME);
             return this;
         }
 
@@ -3128,6 +3131,7 @@ public class PluginServiceImpl implements PluginService {
                 WalkFileUtil.mkdir(dashboardPath);
                 WalkFileUtil.mkdir(dashboardLowCodePath);
                 WalkFileUtil.mkdir(mcpPath);
+                WalkFileUtil.mkdir(ragPath);
                 WalkFileUtil.mkdir(skillPath);
                 WalkFileUtil.mkdir(menuPath);
             } catch (IOException e) {

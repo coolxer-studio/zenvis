@@ -4,13 +4,15 @@
 
 本插件用于收集和展示 Nginx 的访问日志（access_log）和错误日志（error_log），提供日志检索、详情查看、IP 命中调查功能。
 
+插件目录使用平台编号：`06_menu`、`07_mcp`、`08_rag`。当前 `08_rag/` 仅含 `.gitkeep`，安装器不读取其配置，文档 RAG 仍来自 `00_doc/`。
+
 ## 插件信息
 
 | 项目 | 值 |
 |------|-----|
 | 插件名称 | Nginx日志监控 |
 | 包名 | `com.coolxer.plugin.nginx` |
-| 版本 | 1.0.0 |
+| 版本 | 1.0.1 |
 | 作者 | CoolXer |
 
 ## 数据模型
@@ -27,6 +29,8 @@
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | `remote_addr` | String | 客户端 IP（含 IP 命中链接） |
+| `server_addr` | String | 服务端地址（含 IP 命中链接） |
+| `request_line` | String | 完整请求行（含详情页链接） |
 | `time_local` | DateTime | 请求时间 |
 | `method` | String | HTTP 请求方法 |
 | `uri` | String | 请求 URI |
@@ -38,22 +42,20 @@
 | `request_time` | Float64 | 请求耗时（秒） |
 | `upstream_addr` | String | 上游地址 |
 | `upstream_response_time` | Float64 | 上游耗时（秒） |
-| `request_line` | String | 完整请求行（含详情页链接） |
-| `server_addr` | String | 服务端地址 |
 | `server_name` | String | 虚拟主机名 |
 
 ### nginx_error_log 属性
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `log_time` | DateTime | 日志时间（含详情页链接） |
+| `client_addr` | String | 客户端 IP（含 IP 命中链接） |
+| `server_addr` | String | 服务端地址（含 IP 命中链接） |
+| `message` | String | 错误消息（含详情页链接） |
 | `level` | String | 日志级别 |
+| `log_time` | DateTime | 日志时间 |
 | `pid` | UInt32 | 进程 PID |
 | `tid` | UInt64 | 线程 ID |
 | `connection_id` | UInt64 | 连接 ID |
-| `client_addr` | String | 客户端 IP（含 IP 命中链接） |
-| `server_addr` | String | 服务端地址 |
-| `message` | String | 错误消息 |
 
 ## 推送任务架构
 
@@ -101,20 +103,24 @@ Nginx error_log  (syslog tag=nginx_error)  ──→ UDP 514 Vector syslog sourc
 
 ## UI 页面
 
-| 页面 | 路径 | 说明 |
-|------|------|------|
-| 概览首页 | `04_ui/index.json` | 插件首页（LOW_CODE_PAGE），含访问/错误日志总量与今日新增 KPI、近 7 天趋势图、HTTP 状态码分布、错误级别分布 |
-| 访问日志详情 | `04_ui/detail-access-log/` | 按 record_id 查看访问日志完整属性 |
-| 错误日志详情 | `04_ui/detail-error-log/` | 按 record_id 查看错误日志完整属性 |
-| IP 命中调查 | `04_ui/ip-statistics/` | 输入或携带 IP 检索命中记录数，OR 匹配各实体的多个 IP 字段 |
+插件以低代码应用形式提供统一入口，`04_ui/site.json` 组织应用导航，应用配置索引为 `com.coolxer.plugin.nginx`。
 
-详情页与 IP 命中调查页不在菜单中，通过日志列表的属性链接（`link_template`）跳转进入。
+| 页面 | 配置文件 | 说明 |
+|------|----------|------|
+| 监控概览 | `04_ui/index.json` | 应用首页，含访问/错误日志总量与今日新增 KPI、近 7 天趋势图、HTTP 状态码分布、错误级别分布 |
+| 访问日志 | `04_ui/access-log.json` | 访问日志分页列表，支持排序、筛选、详情跳转和 IP 命中调查 |
+| 错误日志 | `04_ui/error-log.json` | 错误日志分页列表，支持排序、筛选、详情跳转和 IP 命中调查 |
+| IP 命中调查 | `04_ui/ip-statistics/index.json` | 输入或携带 IP 检索命中记录数，OR 匹配各实体的多个 IP 字段（配置索引 `com.coolxer.plugin.nginx.ip-statistics`） |
+| 访问日志详情 | `04_ui/detail-access-log/index.json` | 按 record_id 查看访问日志完整属性（配置索引 `com.coolxer.plugin.nginx.detail-access-log`） |
+| 错误日志详情 | `04_ui/detail-error-log/index.json` | 按 record_id 查看错误日志完整属性（配置索引 `com.coolxer.plugin.nginx.detail-error-log`） |
+
+访问日志、错误日志、IP 命中调查和两类详情页均包含在应用导航或列表跳转中；详情按钮与 IP 链接在新窗口打开。
 
 ## 菜单
 
 | 菜单项 | 类型 | 路由参数 |
 |--------|------|----------|
-| Nginx日志监控 | LOW_CODE_PAGE | `com.coolxer.plugin.nginx` |
+| Nginx日志监控 | LOW_CODE_APP | `com.coolxer.plugin.nginx` |
 
 ## 部署步骤
 
@@ -128,4 +134,5 @@ Nginx error_log  (syslog tag=nginx_error)  ──→ UDP 514 Vector syslog sourc
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.0.1 | 2026-10-19 | 将低代码页面升级为低代码应用，新增访问日志、错误日志分页列表页，并纳入应用导航 |
 | 1.0.0 | 2026-10-10 | 初始版本，支持 access_log 和 error_log 采集、检索、详情、IP 调查 |

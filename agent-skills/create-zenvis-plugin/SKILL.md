@@ -1,6 +1,6 @@
 ---
 name: create-zenvis-plugin
-description: Create, update, review, validate, and package Zenvis plugins from vendor data dictionaries or integration specifications. Use when an agent needs to build or modify a project under zenvis-plugin, define one-to-one entities and Meta attributes, create Vector YAML ingestion services, build a 03_api thin dynamic-API JAR with versioned MySQL migrations, register MCP connections, ship 07_skill runtime skills, add low-code applications, record-detail or IP statistics pages, configure static HTML or low-code dashboards and menus, update plugin documentation and marketplace registration, or verify a Zenvis plugin archive against the current backend and frontend contracts.
+description: Create, update, review, validate, and package Zenvis plugins from vendor data dictionaries or integration specifications. Use when an agent needs to build or modify a project under zenvis-plugin, define one-to-one entities and Meta attributes, create Vector YAML ingestion services, build a 03_api thin dynamic-API JAR with versioned MySQL migrations, register MCP connections, ship 09_skill runtime skills, add low-code applications, record-detail or IP statistics pages, configure static HTML or low-code dashboards and menus, update plugin documentation and marketplace registration, or verify a Zenvis plugin archive against the current backend and frontend contracts.
 ---
 
 # Create Zenvis Plugin
@@ -17,7 +17,7 @@ Build Zenvis plugins from source specifications while keeping entity models, Vec
    - `数据接入与推送任务.md` — push tasks, Vector, DLQ
    - `动态API与数据迁移.md` — thin JAR, class loading, MySQL migrations
    - `UI看板与菜单.md` — low-code layout, dashboards, menus
-   - `MCP与Skill集成.md` — 06_mcp connections and 07_skill manifests
+   - `MCP与Skill集成.md` — 07_mcp connections and 09_skill manifests
    - `生命周期与发布验证.md` — install/upgrade/uninstall and archive validation
    When a contract detail matters, also inspect the current code: `DashboardDto`, `PluginServiceImpl`, `MenuDto`, push-task DTOs, retrieval Meta models such as `DataEntity`/`DataAttribute`, and frontend dashboard, low-code, table, copy, and URL handling.
 4. Read the complete input data dictionary and any cited supplements. Preserve its section order and field order.
@@ -28,14 +28,14 @@ If a requested configuration conflicts with the checked-out platform contract, r
 
 ## Choose the Plugin Archetype and Plan
 
-Decide the archetype before creating directories; capability directories are optional and installers process them in numeric order:
+Decide the archetype before implementing content. Every plugin keeps the full numbered `00`–`09` directory skeleton; installers process those directories in numeric order and treat an absent capability directory as empty. Keep otherwise empty source directories with `.gitkeep`:
 
-| Archetype | Typical directories | Reference plugin |
+| Archetype | Primary content | Reference plugin |
 | --- | --- | --- |
-| Full data pipeline | all of 00–08, often plus 03_api/06_mcp/07_skill | `zenvis-plugin-btw`, `zenvis-plugin-onesoc` |
+| Full data pipeline | all of 00–09, often plus 03_api/07_mcp/09_skill | `zenvis-plugin-btw`, `zenvis-plugin-onesoc` |
 | Lightweight data ingestion | 00/01/02/04/08, empty 05/06 arrays | `zenvis-plugin-nginx` |
-| Integration-only (no data of its own) | 00_doc, 03_api, 04_ui/app, 08_menu | `zenvis-plugin-lubinsun` |
-| Static HTML tool | 00_doc, 04_ui/html-page, 08_menu (`HTML_PAGE`) | `zenvis-plugin-rzweb` |
+| Integration-only (no data of its own) | 00_doc, 03_api, 04_ui/app, 06_menu | `zenvis-plugin-lubinsun` |
+| Static HTML tool | 00_doc, 04_ui/html-page, 06_menu (`HTML_PAGE`) | `zenvis-plugin-rzweb` |
 | Legacy sample | TOML push task, flat 04_ui layout | `zenvis-plugin-user-event` (maintenance only) |
 
 Create a contract matrix before implementation:
@@ -54,7 +54,7 @@ Apply these rules:
 
 Treat these as resource identities that must stay stable across upgrades (they preserve runtime state, role grants, and dashboard/MCP records): `package_name`; entity `name`; table/column names; dashboard `code`; MCP `code`; menu match key (`type + params`, else `type + route + name`); push task `name`; skill `id`; UI config indexes. Display labels and descriptions may iterate; identities may not.
 
-Use this standard layout, including only the directories the archetype needs:
+Use this standard layout for every plugin. Keep all ten numbered directories even when a capability is unused, and add `.gitkeep` to directories that would otherwise be empty:
 
 ```text
 plugin-name/
@@ -64,25 +64,33 @@ plugin-name/
 ├── 00_doc/
 │   └── README.md                # required: documentation entry point
 ├── 01_meta/
+│   └── .gitkeep                # when the plugin defines no Meta
 ├── 02_push-task/
-│   └── config.json
+│   └── config.json             # [] when there are no push tasks; otherwise config + YAML/TOML
 ├── 03_api/
+│   ├── .gitkeep                # when the plugin ships no JAR
 │   ├── <artifact>-<version>.jar # at most one thin JAR
 │   └── migrations/mysql/        # V00x__*.sql, append-only
 ├── 04_ui/
+│   ├── .gitkeep                # when the plugin ships no low-code or HTML UI
 │   ├── app/                     # multi-config bundle: site.json + pages
 │   ├── detail-<meaning>/        # one record-detail config per entity
 │   ├── ip-statistics/
 │   └── html-page/               # reserved: static HTML, no low-code validation
 ├── 05_dashboard/
-│   └── config.json              # dashboard registration only; never page content
-├── 06_mcp/
+│   └── config.json              # [] when there is no dashboard; never page content
+├── 06_menu/
+│   └── config.json              # [] when there is no menu entry
+├── 07_mcp/
 │   └── config.json              # [] when the plugin registers no MCP server
-├── 07_skill/
-│   └── <skill-id>/              # skill.json + SKILL.md per skill
-└── 08_menu/
-    └── config.json
+├── 08_rag/                      # reserved placeholder; no runtime config yet
+│   └── .gitkeep
+└── 09_skill/
+    ├── .gitkeep                # when the plugin ships no runtime skill
+    └── <skill-id>/              # skill.json + SKILL.md per skill
 ```
+
+The complete skeleton is a strong source-organization recommendation, not a package contract. Platform code, the installer, archive validation, and build scripts must not reject a plugin merely because a recommended directory or `.gitkeep` is absent. Keep hard validation limited to actual install dependencies and to files that exist: for example, a referenced dashboard page must exist and `03_api` may contain at most one JAR. Loaders must ignore `.gitkeep` as a runtime resource.
 
 ## index.json
 
@@ -316,7 +324,7 @@ Project rules:
 
 ### Exposing MCP from the extension JAR
 
-When the extension provides agent tools, expose SSE in-process with the MCP SDK: define constants `PLUGIN_API_PREFIX = "/api/v1/plugin/{package_name}"`, `MCP_SSE_ENDPOINT = prefix + "/mcp/sse"`, `MCP_MESSAGE_ENDPOINT = prefix + "/mcp/message"`, build a `WebMvcSseServerTransportProvider` and `McpServer.sync(...)`, register tools with explicit JSON Schemas and `ToolAnnotations` (read-only vs write), and delegate both endpoints to the transport router. Register the loopback connection through `06_mcp/config.json` (see Register MCP Connections). Write tools default to `ASK` approval — document this and never design a skill that assumes auto-approval.
+When the extension provides agent tools, expose SSE in-process with the MCP SDK: define constants `PLUGIN_API_PREFIX = "/api/v1/plugin/{package_name}"`, `MCP_SSE_ENDPOINT = prefix + "/mcp/sse"`, `MCP_MESSAGE_ENDPOINT = prefix + "/mcp/message"`, build a `WebMvcSseServerTransportProvider` and `McpServer.sync(...)`, register tools with explicit JSON Schemas and `ToolAnnotations` (read-only vs write), and delegate both endpoints to the transport router. Register the loopback connection through `07_mcp/config.json` (see Register MCP Connections). Write tools default to `ASK` approval — document this and never design a skill that assumes auto-approval.
 
 ### MySQL migrations
 
@@ -489,20 +497,22 @@ When `index.json.ui_contract` is declared (current version: schema `1`, renderer
 
 ## Configure Menus
 
-`08_menu/config.json` is an array of first-level menu entries. Menus are created last during install and are **not** granted to any role automatically; role assignment is a post-install step.
+`06_menu/config.json` is an array of first-level menu entries for non-dashboard navigation. Menus are created after dashboards and before MCP, RAG, and runtime skills during install, and are **not** granted to any role automatically; role assignment is a post-install step.
 
 | Type | `params` | Matching UI entry |
 | --- | --- | --- |
 | `LOW_CODE_APP` | App config index, e.g. `com.example.plugin.app` | Requires `04_ui/app/site.json` with `data.pages` |
 | `LOW_CODE_PAGE` | Page config index (package for root file, `<package>.<subdir>` for bundles) | Standalone `index.json` only |
-| `HTML_PAGE` | Full deployment path `/zenvis/html-page/<package>/<relative-path>` | File under `04_ui/html-page/` |
+| `HTML_PAGE` | Full deployment path `/zenvis/html-page/<package>/<relative-path>` | Standalone static page or tool under `04_ui/html-page/`; never a dashboard already registered in `05_dashboard/` |
 | `EXTERNAL_APP` | Controlled external `http(s)` address | External site |
 | `POLICY_CONFIG` | Policy/config index (for example a device-policy key or `<package>`) | Installs a policy configuration entry |
 | `BUILT_APP` | Configured platform route | Built-in platform page, normally not for plugins |
 
 Observed patterns: data apps ship a pair of `POLICY_CONFIG` + `LOW_CODE_APP` entries with the same app index; plugins with an opted-in UI contract may add `"ui_profile": "STANDARD"`; pure tool plugins (RzWeb) ship a single `HTML_PAGE` entry and no dashboard.
 
-The `08_menu` type and the `04_ui` layout must match, otherwise the frontend iframe crashes at render time:
+Dashboards are registered exclusively through `05_dashboard/config.json`. The platform already exposes registered dashboards through its built-in **大屏看板** navigation, so **do not add a dashboard page to `06_menu`**, regardless of whether it is `HTML_PAGE`, `LOW_CODE_PAGE`, or another type. `06_menu` `HTML_PAGE` entries are reserved for standalone static tools that are not registered as dashboards.
+
+The `06_menu` type and the `04_ui` layout must match, otherwise the frontend iframe crashes at render time:
 
 - `LOW_CODE_APP` renders through `/amis/app.html`, which fetches `file_name=site.json`. When that file is missing the backend returns an error payload without `data`, amis throws `Cannot read properties of undefined (reading 'pages')`, and the page stays broken.
 - `LOW_CODE_PAGE` renders through `/amis/page.html`, which fetches `file_name=index.json` directly; no `site.json` is needed.
@@ -525,7 +535,7 @@ Validate the low-code schema shape expected by the current SDK, distinguishing a
 | `BUILT` | platform built-in | Normally not created by plugins |
 | `LOW_CODE_PAGE` | `code`, `config_index` | **Avoid for plugins** — see below |
 
-**Do not declare a `LOW_CODE_PAGE` plugin dashboard.** The current backend resolves its page config strictly from `05_dashboard/low-code/<config_index>_config/` with no fallback to `04_ui`, so using it forces a duplicate page config into `05_dashboard/` and violates the rule above. Ship low-code pages as `04_ui` bundles and reach them through `08_menu` (`LOW_CODE_APP` / `LOW_CODE_PAGE`) instead. If a plugin genuinely needs a dashboard surface, use `HTML_PAGE` with the HTML file under `04_ui/html-page/`; otherwise leave the array `[]`.
+**Do not declare a `LOW_CODE_PAGE` plugin dashboard.** The current backend resolves its page config strictly from `05_dashboard/low-code/<config_index>_config/` with no fallback to `04_ui`, so using it forces a duplicate page config into `05_dashboard/` and violates the rule above. Ship low-code pages as `04_ui` bundles and reach them through `06_menu` (`LOW_CODE_APP` / `LOW_CODE_PAGE`) instead. If a plugin genuinely needs a dashboard surface, use `HTML_PAGE` with the HTML file under `04_ui/html-page/`; otherwise leave the array `[]`.
 
 For `HTML_PAGE`, make `html_path` plugin-relative to `04_ui/html-page/` only — multi-level static sites are allowed:
 
@@ -543,7 +553,8 @@ For `HTML_PAGE`, make `html_path` plugin-relative to `04_ui/html-page/` only —
 - Place that file at `04_ui/html-page/security-overview.html`. Do not put `/html-page/`, `/zenvis/html-page/`, the package name, or a deployment URL in `html_path`.
 - Do not use the legacy `05_dashboard/html-page/` location for new work; the installer only keeps it for backward compatibility.
 - The installer copies the entire `04_ui/html-page/` directory regardless of dashboard entries; `html_path` only registers the dashboard record and normalizes the stored path.
-- For pure static-HTML tool plugins, leave the dashboard config as `[]` and point an `08_menu` `HTML_PAGE` entry directly at `/zenvis/html-page/<package_name>/<relative-path>`.
+- For pure static-HTML tool plugins, leave the dashboard config as `[]` and point an `06_menu` `HTML_PAGE` entry directly at `/zenvis/html-page/<package_name>/<relative-path>`.
+- For a page registered in `05_dashboard`, do not add an `06_menu` entry. Dashboard visibility comes from the platform's built-in **大屏看板** navigation, not from the plugin menu.
 - Dashboard `code` must be globally unique, package-namespaced, and stable on upgrade; an upgrade cannot delete the current default dashboard.
 
 For the HTML page:
@@ -559,7 +570,7 @@ For the HTML page:
 
 ## Register MCP Connections
 
-`06_mcp/config.json` is an array of MCP server connection descriptors; use `[]` when the plugin registers none.
+`07_mcp/config.json` is an array of MCP server connection descriptors; use `[]` when the plugin registers none.
 
 ```json
 [
@@ -583,12 +594,12 @@ For the HTML page:
 - On upgrade, administrator-modified values are preserved; fields still equal to old defaults adopt new defaults. Deleting a code removes that plugin-sourced connection.
 - Registration never bypasses permissions: tool visibility requires the global MCP switch, agent scope, the skill’s server/tool allowlist, and the tool’s `ALLOW`/`ASK`/`DENY` policy. Do not duplicate external tool schemas in docs beyond what stays stable.
 
-## Ship Runtime Skills (07_skill)
+## Ship Runtime Skills (09_skill)
 
 A plugin may install one or more DIH runtime skills, each in its own subdirectory:
 
 ```text
-07_skill/
+09_skill/
 └── example-investigation/
     ├── skill.json
     ├── SKILL.md
@@ -596,7 +607,7 @@ A plugin may install one or more DIH runtime skills, each in its own subdirector
         └── openai.yaml
 ```
 
-This research-side skill (`agent-skills/create-zenvis-plugin`) is never installed via `07_skill`; do not confuse the two.
+This research-side skill (`agent-skills/create-zenvis-plugin`) is never installed via `09_skill`; do not confuse the two.
 
 ### skill.json
 
@@ -700,7 +711,9 @@ Run validation proportional to the change, organized in layers:
    - Parse YAML/TOML and run `vector validate` (including embedded `tests:`) using the production Vector version or container when available. Every remap VRL block must compile.
    - Confirm entity count equals the structured-definition count.
    - Confirm entity names, tables, Kafka topics, transforms, sinks, UI pages, dashboard entries, MCP codes, skill IDs, and menu params are aligned and collision-free.
-   - Confirm every `08_menu` entry matches its `04_ui` entry file (`LOW_CODE_APP` → `site.json` shell; `LOW_CODE_PAGE` → standalone `index.json`; `HTML_PAGE` → `/zenvis/html-page/<package>/...`).
+   - Confirm every `06_menu` entry matches its `04_ui` entry file (`LOW_CODE_APP` → `site.json` shell; `LOW_CODE_PAGE` → standalone `index.json`; `HTML_PAGE` → `/zenvis/html-page/<package>/...`).
+   - Confirm no `06_menu` entry duplicates a dashboard registered in `05_dashboard`; registered dashboards appear through the platform's built-in **大屏看板** entry and must not be re-exposed as menu items.
+   - Confirm the source tree and archive retain all ten numbered directories (`00_doc` through `09_skill`), using `.gitkeep` or an empty array config for unused capabilities. Treat this as a review expectation only: never reject a package or fail a validator solely because a recommended directory is absent.
    - Compare every transform output field with the corresponding Meta attributes; report missing and extra fields; confirm every `.dropped` stream has a DLQ sink.
    - Run the complete “Validate Meta as a contract” checklist: first-attribute detail links, IP links, `link_condition` references, copy flags, TTL columns, and reserved-field exclusion.
 2. **API and migrations**
@@ -713,7 +726,7 @@ Run validation proportional to the change, organized in layers:
    - For every Meta attribute with `column_type: "json"`, confirm the detail panel and the list `popOver` render an expandable JSON tree (not `{"string": "..."}` and not HTML-escaped `&quot;`), and that each such `value` uses the `|raw` filter.
    - Confirm `05_dashboard/` contains nothing but `config.json`, and that every non-`[]` dashboard entry points at page content living under `04_ui/` (`HTML_PAGE` → `04_ui/html-page/...`, never a `low-code/` page dir under `05_dashboard/`).
    - Compile inline dashboard JavaScript and perform browser visual QA (1920×1080) for material dashboard changes, including loading/empty/error/refresh states.
-   - Confirm MCP connects and discovers the expected tools, and each 07_skill allowlist resolves to existing local/MCP tool names with correct budgets.
+   - Confirm MCP connects and discovers the expected tools, and each 09_skill allowlist resolves to existing local/MCP tool names with correct budgets.
    - For opted-in UI contracts, run the extension’s strict-class/style contract checks.
 5. **Archive and release**
    - Remove packaging noise such as `.DS_Store`; build with the repository’s build script.
@@ -735,7 +748,7 @@ Report:
 
 - plugin path, package name, and archive path;
 - plugin version and the full version-linkage result;
-- archetype and the capability directories actually shipped;
+- archetype and source directory completeness (all `00`–`09`, with placeholders for unused capabilities);
 - entity and table counts;
 - push-task architecture, DLQ topics, and Vector validation/test outcomes;
 - dynamic API: JAR, endpoints, MCP tools, and MySQL migrations;

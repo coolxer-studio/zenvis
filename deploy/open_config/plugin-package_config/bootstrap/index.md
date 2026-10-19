@@ -1,6 +1,6 @@
 # Bootstrap 预置插件目录
 
-本目录用于 ZenVis 首次部署时预置插件包。首次启动时，zenvis-backend 会扫描本目录下的 `*.tar.gz` 插件包，自动创建插件记录并按标准安装流程执行安装（Meta/ClickHouse 建表、数据推送任务、MySQL 迁移、API、UI、看板、MCP、RAG、Skill、菜单）。
+本目录用于 ZenVis 首次部署时预置插件包。首次启动时，zenvis-backend 会扫描本目录下的 `*.tar.gz` 插件包，自动创建插件记录并按标准安装流程执行安装（Meta/ClickHouse 建表、数据推送任务、MySQL 迁移、API、UI、看板、菜单、MCP、RAG、Skill）。
 
 ## 使用方式
 

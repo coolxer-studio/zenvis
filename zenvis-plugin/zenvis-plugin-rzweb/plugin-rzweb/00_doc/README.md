@@ -56,11 +56,14 @@ plugin-rzweb/
 │       └── rzweb/              # RzWeb 静态资源（index.html + assets + WASM）
 ├── 05_dashboard/
 │   └── config.json             # 空数组（无看板）
-├── 06_mcp/
+├── 06_menu/
+│   └── config.json             # HTML_PAGE 菜单注册
+├── 07_mcp/
 │   └── config.json             # 空数组（无 MCP）
-├── 07_skill/                   # 无 AI Skill
-└── 08_menu/
-    └── config.json             # HTML_PAGE 菜单注册
+├── 08_rag/                     # 预留占位
+│   └── .gitkeep
+└── 09_skill/                   # 无 AI Skill
+    └── .gitkeep
 ```
 
 ## 运行限制

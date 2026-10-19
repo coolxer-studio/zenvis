@@ -97,9 +97,10 @@ plugin-xxx/
 │   └── html-page/
 ├── 05_dashboard/
 │   └── config.json
-├── 06_mcp/
-├── 07_skill/
-└── 08_menu/
+├── 06_menu/
+├── 07_mcp/
+├── 08_rag/
+└── 09_skill/
 ```
 
 | 位置 | 责任 |
@@ -112,9 +113,10 @@ plugin-xxx/
 | `api-src` | 动态 API Java 源码和测试，不进入归档 |
 | `04_ui` | 低代码应用、独立页面和详情页，保留目录 `html-page` 存放静态 HTML 看板 |
 | `05_dashboard` | 看板配置和低代码看板 |
-| `06_mcp` | 插件 MCP 服务配置 |
-| `07_skill` | 平台运行时 Skill |
-| `08_menu` | 安装生命周期最后导入的菜单 |
+| `06_menu` | 插件菜单配置，在 Dashboard 之后导入 |
+| `07_mcp` | 插件 MCP 服务配置 |
+| `08_rag` | 预留目录，当前仅使用空占位 |
+| `09_skill` | 平台运行时 Skill |
 
 空能力使用合法空配置或目录占位，不要发明安装器不认识的目录或字段。
 
@@ -289,8 +291,8 @@ bash build.sh plugin-btw
 - 新增数据模型：扩展 `01_meta`，同步 Vector 输出、页面字段、查询链接和数据字典。
 - 新增接入任务：扩展 `02_push-task`，明确输入、转换、DLQ、目标表、凭据和重放边界。
 - 新增动态 API：在 `api-src` 增加 Maven 模块并纳入根 reactor，归档 `03_api` 仍只保留一个薄 Jar。
-- 新增页面或看板：使用 `04_ui`、`05_dashboard` 和 `08_menu` 对齐配置索引、路由和菜单。
-- 新增 MCP 或运行时 Skill：使用 `06_mcp`、`07_skill`，保持工具白名单、审批策略和插件卸载边界。
+- 新增页面或看板：使用 `04_ui`、`05_dashboard` 和 `06_menu` 对齐配置索引、路由和菜单。
+- 新增 MCP 或运行时 Skill：使用 `07_mcp`、`09_skill`，保持工具白名单、审批策略和插件卸载边界。
 
 ## 常见问题
 

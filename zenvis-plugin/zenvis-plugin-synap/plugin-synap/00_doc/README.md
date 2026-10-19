@@ -288,7 +288,7 @@ DLQ Sink 开启：
 - 使用 amis JSON 组件的 `source` 绑定保留嵌套对象，避免显示为 `[object Object]`；
 - 不修改 ClickHouse 中的 `fact`、`agendas`、`punishes` 或 `raw_message` 原值。
 
-`1.1.0` 新增 26 个传输/风险结构化字段以及 Host AuditData、WeChat 新 Fact 的契约和测试；后端 additive schema 升级会为已有表补列。`08_menu/config.json` 固定为空数组，安装时仅注册 `parameter-analytics` 参数聚合页和详情页，不注册消息管理应用、插件菜单或探针看板。
+`1.1.0` 新增 26 个传输/风险结构化字段以及 Host AuditData、WeChat 新 Fact 的契约和测试；后端 additive schema 升级会为已有表补列。`06_menu/config.json` 固定为空数组，安装时仅注册 `parameter-analytics` 参数聚合页和详情页，不注册消息管理应用、插件菜单或探针看板。
 
 ## 环境覆盖
 

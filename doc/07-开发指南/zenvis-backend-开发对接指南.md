@@ -249,7 +249,7 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 
 ### 插件生命周期
 
-插件安装器负责按目录导入 Meta、推送任务、动态 API、UI、看板、MCP、Skill 和菜单。平台通用契约见[插件开发与集成](/03-插件开发与集成/README.md)。
+插件安装器负责按目录导入 Meta、推送任务、动态 API、UI、看板、菜单、MCP、RAG 占位和 Skill。平台通用契约见[插件开发与集成](/03-插件开发与集成/README.md)。
 
 修改插件能力时重点检查：
 

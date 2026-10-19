@@ -41,8 +41,10 @@ QRSend 是一个**纯前端静态工具插件**，不包含数据采集、Meta �
 | `02_push-task/` | 无推送任务 |
 | `03_api/` | 无动态 API / 无 MySQL 迁移 |
 | `05_dashboard/` | 无看板配置（空数组） |
-| `06_mcp/` | 无 MCP 连接（空数组） |
-| `07_skill/` | 无运行时 Skill |
+| `06_menu/` | HTML_PAGE 菜单注册 |
+| `07_mcp/` | 无 MCP 连接（空数组） |
+| `08_rag/` | 预留占位（仅 `.gitkeep`） |
+| `09_skill/` | 无运行时 Skill |
 
 ## 协议与数据流（背景知识）
 
@@ -93,7 +95,7 @@ manifest (paths, sizes, BLAKE3) ─▶ meta segment ───┴─ RaptorQ ─�
 
 ## 看板
 
-无看板配置（`05_dashboard/config.json` 为空数组）。本工具通过 `08_menu` 的 `HTML_PAGE` 菜单直接进入，不注册 Dashboard 记录。
+无看板配置（`05_dashboard/config.json` 为空数组）。本工具通过 `06_menu` 的 `HTML_PAGE` 菜单直接进入，不注册 Dashboard 记录。
 
 ## 菜单
 
@@ -129,11 +131,14 @@ plugin-qrsend/
 │           └── icon.svg / icon-192.png / icon-512.png
 ├── 05_dashboard/
 │   └── config.json             # 空数组（无看板）
-├── 06_mcp/
+├── 06_menu/
+│   └── config.json             # HTML_PAGE 菜单注册
+├── 07_mcp/
 │   └── config.json             # 空数组（无 MCP）
-├── 07_skill/                   # 无 AI Skill（仅 .gitkeep）
-└── 08_menu/
-    └── config.json             # HTML_PAGE 菜单注册
+├── 08_rag/                     # 预留占位
+│   └── .gitkeep
+└── 09_skill/                   # 无 AI Skill（仅 .gitkeep）
+    └── .gitkeep
 ```
 
 ## 运行限制

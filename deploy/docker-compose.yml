@@ -134,8 +134,10 @@ services:
       - "${ZENVIS_INFRA_BIND_ADDRESS}:8123:8123"
       - "${ZENVIS_INFRA_BIND_ADDRESS}:9000:9000"
       - "${ZENVIS_INFRA_BIND_ADDRESS}:9009:9009"
+      - "${ZENVIS_INFRA_BIND_ADDRESS}:9363:9363"
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      - ./config/clickhouse/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
       - ./data/clickhouse/logs:/var/log/clickhouse-server
       - ./data/clickhouse/data:/var/lib/clickhouse
     healthcheck:
@@ -158,6 +160,7 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_PROMETHEUS_AUTH_TYPE: ${MINIO_PROMETHEUS_AUTH_TYPE:-public}
     ports:
       - "${ZENVIS_INFRA_BIND_ADDRESS}:19000:9000"
       - "${ZENVIS_INFRA_BIND_ADDRESS}:19001:9001"

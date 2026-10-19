@@ -26,8 +26,10 @@
 | `02_push-task/` | 无推送任务（仅 `.gitkeep`） |
 | `03_api/` | 无动态 API（仅 `.gitkeep`） |
 | `05_dashboard/` | 无看板配置（空数组） |
-| `06_mcp/` | 无 MCP 配置（空数组） |
-| `07_skill/` | 无 AI Skill（仅 `.gitkeep`） |
+| `06_menu/` | HTML_PAGE 菜单注册 |
+| `07_mcp/` | 无 MCP 配置（空数组） |
+| `08_rag/` | 预留占位（仅 `.gitkeep`） |
+| `09_skill/` | 无 AI Skill（仅 `.gitkeep`） |
 
 ## UI 页面
 

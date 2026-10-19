@@ -25,6 +25,7 @@ zenvis-service/*
 !zenvis-plugin/zenvis-plugin-wireview/
 !zenvis-plugin/zenvis-plugin-sentinel/
 !zenvis-plugin/zenvis-plugin-qrsend/
+!zenvis-plugin/zenvis-plugin-infra-monitor/
 !zenvis-plugin/market-plugins.json
 
 !zenvis-service/zenvis-service-vectum/

@@ -9,7 +9,7 @@
 | 类型 | 位置 | 使用者 | 生命周期 |
 | --- | --- | --- | --- |
 | 研发侧 Skill | `agent-skills/<skill>/` | Codex、插件开发人员 | 随研发仓库维护和安装 |
-| 平台运行时 Skill | `deploy/open_config/skill_config/` 或插件 `07_skill/` | ZenVis DIH 与业务 Agent | 由平台配置或插件安装器加载 |
+| 平台运行时 Skill | `deploy/open_config/skill_config/` 或插件 `09_skill/` | ZenVis DIH 与业务 Agent | 由平台配置或插件安装器加载 |
 
 ## 技术栈与目录职责
 
@@ -90,7 +90,7 @@ description: Create, update, review, validate, and package Zenvis plugins...
 - `03_api` 的单一薄 Jar 与版本化 MySQL 迁移；
 - `04_ui` 的低代码应用、独立页面和详情页；
 - `05_dashboard` 的配置和静态 HTML；
-- `06_mcp`、`07_skill`、`08_menu`；
+- `07_mcp`、`09_skill`、`06_menu`；
 - README、数据字典、契约矩阵和发布说明。
 
 如果其中一个环节的标识、字段或路径变化，技能必须要求同步核对其他环节。
@@ -151,13 +151,13 @@ interface:
 
 - 新增研发侧 Skill：在 `agent-skills/<skill-name>/` 增加 `SKILL.md`，需要客户端展示时同时提供 `agents/openai.yaml`。
 - 扩展现有 Skill：优先增加可复用的契约检查、路由规则和验证步骤，不把某个客户插件的固定字段写成平台通用规则。
-- 新增平台运行时 Skill：放入插件 `07_skill/` 或 `deploy/open_config/skill_config/`，由后端运行时契约管理，不放入本目录冒充运行时配置。
+- 新增平台运行时 Skill：放入插件 `09_skill/` 或 `deploy/open_config/skill_config/`，由后端运行时契约管理，不放入本目录冒充运行时配置。
 
 ## 常见问题
 
 ### 研发 Skill 为什么没有出现在 ZenVis Skill 管理页
 
-`agent-skills` 是研发工具源目录，不是平台 `skill_config`。需要在平台运行的 Skill 应放入开放配置或插件 `07_skill/`，并遵循后端 Skill 配置契约。
+`agent-skills` 是研发工具源目录，不是平台 `skill_config`。需要在平台运行的 Skill 应放入开放配置或插件 `09_skill/`，并遵循后端 Skill 配置契约。
 
 ### 示例插件与代码不一致时听谁的
 

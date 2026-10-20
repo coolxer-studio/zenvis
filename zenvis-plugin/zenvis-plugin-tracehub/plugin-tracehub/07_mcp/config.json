@@ -1,0 +1,13 @@
+[
+  {
+    "code": "tracehub",
+    "name": "TraceHub 溯源资源查询",
+    "description": "查询 TraceHub 内置的只读 IOC 快照和 IP 地理位置资源，提供单条与批量查询工具。",
+    "base_url": "http://127.0.0.1:8010",
+    "sse_endpoint": "/sse",
+    "headers": "{\"Authorization\":\"Bearer replace-with-at-least-16-characters\"}",
+    "enabled": true,
+    "request_timeout_seconds": 30,
+    "connect_timeout_seconds": 10
+  }
+]

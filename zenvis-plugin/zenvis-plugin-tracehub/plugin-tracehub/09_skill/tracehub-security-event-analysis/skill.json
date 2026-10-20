@@ -1,0 +1,68 @@
+{
+  "id": "tracehub-security-event-analysis",
+  "name": "TraceHub 安全事件研判",
+  "description": "从安全事件中提取真实 IOC 与 IP，调用 TraceHub 只读 MCP 工具核验威胁情报和地理位置，输出证据化研判结论、限制说明与调查建议。",
+  "version": "1.0.0",
+  "author": "CoolXer",
+  "source": "com.coolxer.plugin.tracehub",
+  "editable": true,
+  "agentTypes": [
+    "agent_skill"
+  ],
+  "tags": [
+    "tracehub",
+    "security-event",
+    "ioc",
+    "threat-intelligence",
+    "ip-location",
+    "mcp",
+    "rag",
+    "investigation"
+  ],
+  "knowledgeBaseCodes": [
+    "tracehub-kb"
+  ],
+  "chat": {
+    "enabled": true,
+    "label": "TraceHub 安全事件研判",
+    "icon": "data-analysis",
+    "order": 110,
+    "agentType": "agent_skill",
+    "prologue": "我是 TraceHub 安全事件研判助手。我会使用平台自动注入的 TraceHub 研判知识库参考资料，提取事件中的 IOC 和 IP，调用只读 MCP 工具核验威胁情报与地理位置，并明确区分命中、未命中、未覆盖和资源不可用。",
+    "promptSuggestions": [
+      {
+        "label": "研判安全事件",
+        "prompt": "请研判以下安全事件，提取其中真实存在的 IOC 和 IP，调用 TraceHub 工具逐项核验，并输出证据表、关联分析、研判结论和调查建议：\n"
+      },
+      {
+        "label": "核验哈希与域名",
+        "prompt": "请核验以下文件哈希和域名是否命中 TraceHub 当前 IOC 快照，并说明命中记录、情报新鲜度和限制：\n"
+      },
+      {
+        "label": "分析可疑 IP",
+        "prompt": "请对以下 IP 同时执行威胁情报和地理位置查询，区分命中、未命中、未覆盖和资源不可用，并给出只读调查建议：\n"
+      }
+    ]
+  },
+  "runtime": {
+    "promptMode": "skill_only",
+    "tools": {
+      "mcp": {
+        "tracehub": [
+          "ioc_lookup",
+          "ioc_lookups",
+          "ip_location_lookup",
+          "ip_location_lookups"
+        ]
+      }
+    },
+    "limits": {
+      "maxToolCalls": 8,
+      "maxRepeatedFailures": 2,
+      "maxToolResultChars": 20000,
+      "maxAccumulatedToolResultChars": 48000
+    }
+  },
+  "enabled": true,
+  "entry": "SKILL.md"
+}

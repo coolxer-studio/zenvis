@@ -35,7 +35,8 @@ import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.core.ClickhouseSchemeService;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.McpClientService;
-import com.coolxer.service.dih.rag.VectorStoreInitializerService;
+import com.coolxer.service.dih.rag.PluginRagService;
+import com.coolxer.service.dih.rag.PluginRagService.PluginRagPlan;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PluginMigrationService;
@@ -136,7 +137,7 @@ public class PluginServiceImpl implements PluginService {
     private PluginMigrationService pluginMigrationService;
 
     @Autowired
-    private VectorStoreInitializerService vectorStoreInitializerService;
+    private PluginRagService pluginRagService;
 
     @Autowired
     private SkillService skillService;
@@ -451,7 +452,9 @@ public class PluginServiceImpl implements PluginService {
                     return menuVo;
                 }).toList();
                 pluginPackTool.writeMenuConfig(JacksonUtil.toJson(menuVoList));
-                // 2-9 压缩目录
+                // 2-9 导出插件托管RAG资源
+                pluginRagService.exportManagedResources(plugin.getPackageName(), pluginPackTool.getRagPath());
+                // 2-10 压缩目录
                 pluginTarGzPath = pluginPackTool.compressDirToTarGz();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -791,7 +794,9 @@ public class PluginServiceImpl implements PluginService {
         validateAdditiveMetaChange(currentPluginMeta, candidatePluginMeta);
         validateCandidateMetaAgainstGlobal(plugin.getPackageName(), candidateMetaFiles, candidatePluginMeta);
         pluginMigrationService.validateMysql(plugin.getPackageName(), candidatePack.listMysqlMigrationFiles());
-        return new UpgradeCandidate(descriptor, candidatePack, candidatePluginMeta);
+        PluginRagPlan ragPlan = pluginRagService.prepare(plugin.getPackageName(), candidateRoot,
+                candidatePack.readRagConfigFile());
+        return new UpgradeCandidate(descriptor, candidatePack, candidatePluginMeta, ragPlan);
     }
 
     private void validateUpgradeIdentity(Plugin plugin, PluginVo descriptor) {
@@ -1264,11 +1269,15 @@ public class PluginServiceImpl implements PluginService {
                     id, plugin.getPackageName(), snapshot, activePack);
             addMcpConnectionWarning(warnings, disconnectedMcpCodes);
 
-            writeLog(id, "9 更新插件RAG和Skill......");
-            updatePluginSkillAndRag(id, plugin.getPackageName(), snapshot, activePack, warnings);
+            writeLog(id, "9 更新插件Skill......");
+            updatePluginSkill(plugin.getPackageName(), snapshot, activePack, warnings);
 
             writeLog(id, "10 更新推送任务并恢复启停状态......");
             Set<Integer> obsoleteTaskIds = reconcilePluginPushTasks(plugin.getPackageName(), snapshot, activePack);
+
+            writeLog(id, "11 同步插件RAG资源......");
+            pluginRagService.synchronize(plugin.getPackageName(), candidate.ragPlan(),
+                    installedPluginRoot(plugin), warnings);
 
             String oldPluginPath = snapshot.plugin().pluginPath();
             PluginVo descriptor = candidate.descriptor();
@@ -1566,19 +1575,11 @@ public class PluginServiceImpl implements PluginService {
         return newDefault;
     }
 
-    private void updatePluginSkillAndRag(Long id,
-                                         String packageName,
-                                         UpgradeSnapshot snapshot,
-                                         PluginPackTool activePack,
-                                         List<String> warnings) {
+    private void updatePluginSkill(String packageName,
+                                   UpgradeSnapshot snapshot,
+                                   PluginPackTool activePack,
+                                   List<String> warnings) {
         Path oldInstalled = snapshotRoot(packageName, snapshot).resolve("installed");
-        updatePluginRag(
-                id,
-                packageName,
-                oldInstalled.resolve("00_doc"),
-                activePack.getDocPath(),
-                warnings);
-
         try {
             skillService.installPluginSkills(packageName, activePack.getSkillPath());
         } catch (Exception e) {
@@ -1587,82 +1588,6 @@ public class PluginServiceImpl implements PluginService {
             Path snapshotSkill = snapshotRoot(packageName, snapshot).resolve("skill");
             Path oldSkill = Files.isDirectory(snapshotSkill) ? snapshotSkill : oldInstalled.resolve(PLUGIN_SKILL_DIR_NAME);
             skillService.installPluginSkills(packageName, oldSkill);
-        }
-    }
-
-    private void updatePluginRag(Long id,
-                                 String packageName,
-                                 Path oldDocPath,
-                                 Path newDocPath,
-                                 List<String> warnings) {
-        if (!isPluginRagAvailable(id, packageName, "升级")) {
-            warnings.add("Embedding/RAG服务不可用，已跳过RAG更新");
-            return;
-        }
-        String ragSource = packageName.replaceAll("\\.", "_");
-        boolean oldRagUnloaded = runPluginRagAction(
-                id,
-                packageName,
-                "卸载旧RAG文档",
-                "升级",
-                () -> vectorStoreInitializerService.unloadDocFromRag(ragSource));
-        if (!oldRagUnloaded) {
-            warnings.add("Embedding/RAG服务不可用，已跳过RAG更新");
-            return;
-        }
-
-        boolean newRagLoaded = runPluginRagAction(
-                id,
-                packageName,
-                "加载新RAG文档",
-                "升级",
-                () -> vectorStoreInitializerService.loadDocToRag(ragSource, newDocPath));
-        if (newRagLoaded) {
-            return;
-        }
-
-        warnings.add("Embedding/RAG服务不可用，已跳过RAG更新");
-        boolean oldRagRestored = runPluginRagAction(
-                id,
-                packageName,
-                "恢复旧RAG文档",
-                "升级",
-                () -> vectorStoreInitializerService.loadDocToRag(ragSource, oldDocPath));
-        if (!oldRagRestored) {
-            writeLog(id, "旧RAG文档恢复失败，请在Embedding/RAG服务恢复后人工重建索引");
-        }
-    }
-
-    private boolean isPluginRagAvailable(Long id, String packageName, String operation) {
-        boolean available;
-        try {
-            available = vectorStoreInitializerService.isRagAvailable();
-        } catch (Exception e) {
-            log.warn("插件{}前检查Embedding/RAG服务失败，跳过RAG并继续: package={}",
-                    operation, packageName, e);
-            available = false;
-        }
-        if (!available) {
-            log.warn("插件{}时Embedding/RAG服务不可用，已跳过RAG并继续: package={}",
-                    operation, packageName);
-            writeLog(id, "Embedding/RAG服务不可用，跳过RAG，继续" + operation);
-        }
-        return available;
-    }
-
-    private boolean runPluginRagAction(Long id,
-                                       String packageName,
-                                       String action,
-                                       String operation,
-                                       Runnable ragAction) {
-        try {
-            ragAction.run();
-            return true;
-        } catch (Exception e) {
-            log.warn("插件{}期间{}失败，Embedding/RAG服务不可用或处理异常，已跳过RAG并继续: package={}",
-                    operation, action, packageName, e);
-            writeLog(id, action + "失败（Embedding/RAG服务不可用或处理异常），跳过RAG，继续" + operation);
-            return false;
         }
     }
 
@@ -1778,7 +1703,7 @@ public class PluginServiceImpl implements PluginService {
         restoreMcpServers(packageName, snapshot.mcpServers());
         restorePushTasks(packageName, snapshot.pushTasks());
 
-        writeLog(plugin.getId().longValue(), "恢复旧Skill和RAG......");
+        writeLog(plugin.getId().longValue(), "恢复旧Skill......");
         Path snapshotSkill = snapshotRoot.resolve("skill");
         Path oldSkill = Files.isDirectory(snapshotSkill) ? snapshotSkill : installedRoot.resolve(PLUGIN_SKILL_DIR_NAME);
         try {
@@ -1787,17 +1712,15 @@ public class PluginServiceImpl implements PluginService {
             log.warn("恢复旧Skill失败: package={}", packageName, skillError);
             writeLog(plugin.getId().longValue(), "恢复旧Skill失败，请人工检查");
         }
-        if (isPluginRagAvailable(plugin.getId().longValue(), packageName, "恢复升级")) {
-            runPluginRagAction(
-                    plugin.getId().longValue(),
-                    packageName,
-                    "恢复旧RAG文档",
-                    "恢复升级",
-                    () -> {
-                        vectorStoreInitializerService.unloadDocFromRag(packageName.replaceAll("\\.", "_"));
-                        vectorStoreInitializerService.loadDocToRag(
-                                packageName.replaceAll("\\.", "_"), installedRoot.resolve("00_doc"));
-                    });
+        try {
+            PluginPackTool restoredPack = new PluginPackTool().buildFromDirectory(installedRoot).init();
+            PluginRagPlan restoredRagPlan = pluginRagService.prepare(packageName, installedRoot,
+                    restoredPack.readRagConfigFile());
+            pluginRagService.synchronize(packageName, restoredRagPlan, installedRoot, new ArrayList<>());
+        } catch (Exception ragError) {
+            log.error("恢复旧RAG资源失败: package={}", packageName, ragError);
+            writeLog(plugin.getId().longValue(), "恢复旧RAG资源失败，请人工检查");
+            throw new IllegalStateException("恢复旧RAG资源失败", ragError);
         }
 
         loadPluginApiJars(packageName, new PluginPackTool().buildFromDirectory(installedRoot).init());
@@ -1937,6 +1860,10 @@ public class PluginServiceImpl implements PluginService {
             TarGzUtil.decompressTarGz(pluginTarGzPath, pluginDir);
             compensationStack.add("删除解压目录", () -> deleteIfExists(pluginDir));
 
+            writeLog(id, "1.1 检查插件RAG配置......");
+            PluginRagPlan ragPlan = pluginRagService.prepare(packageName, pluginDir,
+                    pluginPackTool.readRagConfigFile());
+
             writeLog(id, "2 拷贝meta并加载......");
             List<String> pluginTableNames = readMetaTableNames(pluginPackTool.listMetaFiles());
             List<Path> copiedMetaPaths = copyPluginMetaFiles(packageName, pluginPackTool.listMetaFiles());
@@ -1980,18 +1907,10 @@ public class PluginServiceImpl implements PluginService {
             List<String> disconnectedMcpCodes = createPluginMcpServers(id, packageName, pluginPackTool);
             addMcpConnectionWarning(warnings, disconnectedMcpCodes);
 
-            writeLog(id, "10 文档加载到RAG......");
-            boolean ragLoaded = isPluginRagAvailable(id, packageName, "安装")
-                    && runPluginRagAction(
-                            id,
-                            packageName,
-                            "加载RAG文档",
-                            "安装",
-                            () -> vectorStoreInitializerService.loadDocToRag(
-                                    packageName.replaceAll("\\.", "_"), pluginPackTool.getDocPath()));
-            if (!ragLoaded) {
-                warnings.add("Embedding/RAG服务不可用，已跳过RAG加载");
-            }
+            writeLog(id, "10 同步插件RAG资源......");
+            compensationStack.add("删除插件RAG资源",
+                    () -> pluginRagService.cleanupManagedResources(packageName, new ArrayList<>()));
+            pluginRagService.synchronize(packageName, ragPlan, pluginDir, warnings);
 
             writeLog(id, "11 加载插件Skill......");
             compensationStack.add("卸载插件Skill", () -> skillService.uninstallPluginSkills(packageName));
@@ -2370,15 +2289,14 @@ public class PluginServiceImpl implements PluginService {
         deleteIfExists(installedPluginRoot(plugin));
 
         if (includeRagSkill) {
-            writeLog(id, "卸载RAG中的文档......");
-            if (isPluginRagAvailable(id, packageName, "卸载")) {
-                runPluginRagAction(
-                        id,
-                        packageName,
-                        "卸载RAG文档",
-                        "卸载",
-                        () -> vectorStoreInitializerService.unloadDocFromRag(
-                                packageName.replaceAll("\\.", "_")));
+            writeLog(id, "卸载插件RAG资源......");
+            try {
+                List<String> ragWarnings = new ArrayList<>();
+                pluginRagService.cleanupManagedResources(packageName, ragWarnings);
+                ragWarnings.forEach(warning -> writeLog(id, warning));
+            } catch (Exception e) {
+                log.error("卸载插件RAG资源失败: package={}", packageName, e);
+                writeLog(id, "卸载插件RAG资源失败，跳过");
             }
 
             writeLog(id, "卸载插件Skill......");
@@ -3038,7 +2956,8 @@ public class PluginServiceImpl implements PluginService {
 
     private record UpgradeCandidate(PluginVo descriptor,
                                     PluginPackTool pluginPackTool,
-                                    MetaData pluginMeta) {
+                                    MetaData pluginMeta,
+                                    PluginRagPlan ragPlan) {
     }
 
     private record PluginState(String name,
@@ -3333,6 +3252,21 @@ public class PluginServiceImpl implements PluginService {
 
         public String readMcpConfigFile() {
             return readOptionalConfigFile(mcpPath.resolve("config.json"));
+        }
+
+        public String readRagConfigFile() {
+            Path configPath = ragPath.resolve("config.json");
+            try {
+                if (!Files.exists(configPath)) {
+                    return null;
+                }
+                if (!Files.isRegularFile(configPath)) {
+                    throw new IllegalArgumentException("08_rag/config.json 必须是普通文件");
+                }
+                return Files.readString(configPath);
+            } catch (IOException e) {
+                throw new IllegalStateException("读取 08_rag/config.json 失败: " + e.getMessage(), e);
+            }
         }
 
         private String readOptionalConfigFile(Path path) {

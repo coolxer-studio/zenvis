@@ -8,11 +8,11 @@
 DIH 前端
   → ChatController
   → DihChatApplicationService
-      ├── 普通问答 → AIChatService → RAG → OpenAI 兼容模型
-      ├── 深度思考 → 推理模型与 reasoning 消息
+      ├── 普通问答 → AIChatService → 全库 RAG → OpenAI 兼容模型
+      ├── 深度思考 → 推理模型 + 全库 RAG + reasoning 消息
       ├── 数据接入 → DataAccessAgent → Workflow Orchestrator
       ├── 数据可视化 → DataVisualizationAgent → 受控 MCP Tool
-      ├── 专项 Skill → PromptDrivenAgentRuntime
+      ├── 专项 Skill → PromptDrivenAgentRuntime → 绑定范围 RAG
       └── 报表制作 → ReportAgent → Report Document / Export
                               │
                               ▼
@@ -48,17 +48,17 @@ DIH 是应用编排层，不是单一模型代理。它先确定会话分支，�
 
 ## 普通问答与 RAG
 
-普通问答可以使用公共 RAG，但不加载业务 Skill 和 MCP Tool：
+普通问答和深度思考在所有未删除知识库中自动执行 RAG，但不加载业务 Skill 和 MCP Tool：
 
 ```text
 用户问题
   → 附件与历史上下文
-  → Redis Vector Store 相似度召回
+  → 未删除知识库 source 过滤 + Redis Vector Store 相似度召回
   → Prompt + RAG Context
   → 模型流式回答
 ```
 
-Redis Stack 中至少区分公共文档和 Agent 结构化索引。文档以来源标识，插件卸载只清理对应来源。
+知识库向量文档使用 `source=kb_<knowledge_base_id>` 标识。普通问答把所有未删除知识库 ID 转为该标签的 `in` 过滤条件；业务会话只使用所选 Skill 绑定知识库的 ID。范围过滤复用现有 Redis 索引字段，不新增向量字段或数据库迁移。
 
 向量能力可通过配置关闭。关闭后普通聊天仍可使用模型，但依赖 RAG 的管理和召回能力不可用。
 
@@ -71,6 +71,9 @@ Redis Stack 中至少区分公共文档和 Agent 结构化索引。文档以来�
 - 本地工具 allowlist。
 - 外部 MCP Server 与工具 allowlist。
 - 可选的单轮资源上限覆盖。
+- 可选的 RAG 知识库绑定；绑定后平台每轮自动注入该范围内的参考资料。
+
+业务 Agent / Skill 的 RAG 范围取所选启用 Skill 绑定知识库的并集。没有绑定知识库时不执行检索，也不回退到全库。RAG 上下文直接并入系统提示词，不注册为 MCP 工具，因此不占用工具名额、工具调用预算或审批流程。
 
 运行时工具集合取以下范围的交集：
 

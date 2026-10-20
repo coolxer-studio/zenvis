@@ -58,6 +58,7 @@ public class PromptDrivenAgentRuntime {
                              McpToolContext mcpToolContext) {
         try {
             String systemPrompt = buildSystemPrompt(agentType, skillIds, systemPromptTemplate, mcpToolContext);
+            List<Integer> knowledgeBaseIds = skillService.resolveKnowledgeBaseIds(skillIds);
             return chatService.agentChat(
                     chatId,
                     model,
@@ -65,6 +66,7 @@ public class PromptDrivenAgentRuntime {
                     prompt,
                     attachments,
                     user,
+                    knowledgeBaseIds,
                     mcpToolContext
             );
         } catch (IllegalArgumentException e) {

@@ -52,7 +52,7 @@ Apply these rules:
 - Record compatibility aliases, such as a historical directory code, without changing the canonical entity/table identity.
 - Use stable, namespaced identifiers and avoid collisions with existing plugins.
 
-Treat these as resource identities that must stay stable across upgrades (they preserve runtime state, role grants, and dashboard/MCP records): `package_name`; entity `name`; table/column names; dashboard `code`; MCP `code`; menu match key (`type + params`, else `type + route + name`); push task `name`; skill `id`; UI config indexes. Display labels and descriptions may iterate; identities may not.
+Treat these as resource identities that must stay stable across upgrades (they preserve runtime state, role grants, dashboard/MCP/RAG records): `package_name`; entity `name`; table/column names; dashboard `code`; MCP `code`; RAG dataset/knowledge-base `code`; menu match key (`type + params`, else `type + route + name`); push task `name`; skill `id`; UI config indexes. Display labels and descriptions may iterate; identities may not.
 
 Use this standard layout for every plugin. Keep all ten numbered directories even when a capability is unused, and add `.gitkeep` to directories that would otherwise be empty:
 
@@ -83,8 +83,9 @@ plugin-name/
 │   └── config.json              # [] when there is no menu entry
 ├── 07_mcp/
 │   └── config.json              # [] when the plugin registers no MCP server
-├── 08_rag/                      # reserved placeholder; no runtime config yet
-│   └── .gitkeep
+├── 08_rag/                      # plugin-managed datasets and knowledge bases
+│   ├── config.json              # empty declaration when the plugin has no RAG resources
+│   └── datasets/<code>/         # Markdown files, recursive subdirectories retained
 └── 09_skill/
     ├── .gitkeep                # when the plugin ships no runtime skill
     └── <skill-id>/              # skill.json + SKILL.md per skill
@@ -618,8 +619,11 @@ This research-side skill (`agent-skills/create-zenvis-plugin`) is never installe
   "description": "在受控工具范围内分析示例事件并输出证据化结论",
   "version": "1.0.0",
   "author": "Example Team",
+  "source": "com.example.plugin",
+  "editable": true,
   "agentTypes": ["agent_skill"],
   "tags": ["example", "investigation"],
+  "knowledgeBaseCodes": ["example-kb"],
   "chat": {
     "enabled": true,
     "label": "示例研判",
@@ -653,11 +657,50 @@ Rules:
 - `chat.enabled=true` plus `label/icon/order/agentType/prologue/promptSuggestions` creates the DIH entry; `enabled` alone does not.
 - `runtime.tools.local` maps a built-in service code (for example `retrieval`) to original tool names; `"*"` alone selects all tools of one service. `runtime.tools.mcp` maps MCP server code to that server’s current tool names. Legacy array forms, unknown services/tools, and mixing `"*"` with explicit names fail skill loading.
 - With no `runtime.tools` declared the platform is fail-closed: the model gets no tools. Availability still depends on global switch, agent scope, server health, discovered tool names, and approval policy. Multiple selected skills union allowlists and take the strictest numeric limits. Positive integers only; `maxAccumulatedToolResultTokens` is also supported.
+- Installed plugin skills always use the plugin `package_name` as `source` and `custom=false`; the platform overrides any manifest value. `editable` defaults to `true`, so administrators may temporarily edit the installed copy. Upgrade/reinstall restores the package declaration; deletion belongs to plugin uninstall.
+- When the skill needs plugin-owned documentation, declare stable `knowledgeBaseCodes` from the same package’s `08_rag/config.json` instead of hardcoding numeric `knowledgeBaseIds`. Resolution automatically injects scoped RAG context on every turn; it is not an MCP tool and consumes no tool budget. An explicit management-page save switches to `knowledgeBaseIds` and removes the code declaration. Document RAG degradation and never treat retrieved prose as live MCP facts.
 - Keep `version` aligned with `index.json`; enforce it with the extension’s package contract test when one exists.
 
 ### SKILL.md content
 
 The prompt entry must define: goal and trigger scenarios; accepted inputs, required context, and rejection conditions; fixed steps and optional branches; the exact allowlist and per-tool usage conditions; evidence/output format and completion criteria; approval requirements for risky actions; and behavior for no-data, tool failure, invisible optional MCP, and budget exhaustion. Never claim allowlist-external tools and never coach bypassing approvals. When the skill emits structured cards or JSON, state the exact fenced format, required fields, and rules against fabricating IDs, times, or tool results.
+
+## Configure Plugin RAG (08_rag)
+
+Use `08_rag/config.json` when the plugin should own searchable datasets and knowledge bases. The installer parses it during preflight and synchronously reconciles resources during install/upgrade:
+
+```json
+{
+  "datasets": [
+    {
+      "code": "example-docs",
+      "name": "示例插件文档",
+      "source": "com.example.plugin",
+      "tags": ["plugin"],
+      "description": "插件字段与运维说明",
+      "path": "08_rag/datasets/example-docs"
+    }
+  ],
+  "knowledge_bases": [
+    {
+      "code": "example-kb",
+      "name": "示例插件知识库",
+      "source": "com.example.plugin",
+      "tags": ["plugin"],
+      "description": "示例插件知识库",
+      "dataset_codes": ["example-docs"]
+    }
+  ]
+}
+```
+
+- Use snake_case and object-form `datasets` / `knowledge_bases`. `code` and `name` are required and unique within the same resource type; `source` defaults to `package_name`, and `tags` defaults to `[]`.
+- Dataset `path` is plugin-relative and must be `00_doc` or under `00_doc/` / `08_rag/`. Recursively import `.md` files, retain subdirectories, and reject absolute paths, traversal, symlinks, empty directories, non-regular files, and non-Markdown files.
+- Every knowledge-base `dataset_codes` entry must reference a dataset declared in the same file. Missing config, `{}`, or empty declaration arrays mean the plugin owns no RAG resources.
+- Keep dataset and knowledge-base codes stable across upgrades. Names must not collide with resources owned by another plugin/code. Administrator edits to managed fields and files are overwritten by the next plugin upgrade.
+- Unchanged `BUILT` knowledge bases are skipped by build fingerprint; definition or Markdown content changes trigger a synchronous rebuild. Embedding/Redis or build failures only warn: keep the resources and leave the knowledge base `UNBUILD` or `BUILD_FAILED` for manual rebuild.
+- Do not rely on automatic `00_doc` ingestion. `00_doc` remains package documentation; declare it as a dataset path only when its Markdown should be indexed.
+- To connect a runtime skill to plugin RAG, add `knowledgeBaseCodes` containing only codes declared by this package. Put semantic guidance, field meanings, and safety boundaries in Markdown; keep live records, statuses, and query results behind MCP tools. The platform injects matching context automatically each turn; `SKILL.md` must not instruct the model to call a RAG tool. Define fallback behavior when RAG context is unavailable, unbuilt, or absent.
 
 ## Create the Plugin Icon
 
@@ -679,11 +722,11 @@ Every plugin must ship an `icon.png` referenced by `index.json` (`"icon": "icon.
 
 - **`00_doc/README.md` is required.** It introduces the plugin, lists the directory’s documents, and summarizes the data model (entity/table/topic mapping), push-task architecture including DLQ/replay/retention, UI pages, dashboards, menus, MCP/skills, environment variables and credential injection, install/upgrade ordering, and uninstall impact. Use the same language as the plugin's user-facing labels.
 - Root `README.md` targets installers/operators: scope and unsupported scenarios; data source → entity/table/topic/page/menu mapping; env vars, timezone, encoding, network dependencies; DLQ/replay/retention; install order, upgrade limits, validation results, and known issues. Keep it describing the shipped package.
-- `00_doc/` is ingested by RAG when available: put complete data dictionaries, protocols, error codes, compatibility notes, and operational runbooks there. Never place passwords, tokens, customer addresses, PCAPs, archives, raw logs, or large binaries in it.
+- `00_doc/` is no longer ingested automatically. Put complete data dictionaries, protocols, error codes, compatibility notes, and operational runbooks there, then reference the directory from `08_rag/config.json` only when it should enter a plugin knowledge base. Never place passwords, tokens, customer addresses, PCAPs, archives, raw logs, or large binaries in indexed directories.
 - Follow proven companion-doc patterns when useful: a contract-matrix and operations doc (`契约矩阵与运维.md`), ClickHouse DDL reference (`数据库建表.md`), type mapping notes, dashboard configuration notes, and test-data generation scripts with manifest output.
 - Copy or reference the authoritative source specification in `00_doc/` when permitted; update it when the user adds a new definition.
 - Maintain a changelog: either `CHANGELOG.md` or an “升级说明” README section, stating whether each release changes Meta, tables, migrations, tasks, or only UI/docs.
-- Keep README claims synchronized with actual Meta, Vector, UI, dashboard, MCP, skill, and menu files.
+- Keep README claims synchronized with actual Meta, Vector, UI, dashboard, MCP, RAG, skill, and menu files.
 - Bump the plugin version for material distributable changes unless the user explicitly limits the request to a single file. Version linkage must be exact across `index.json`, the extension POM and built JAR name, every shipped `skill.json`, and the archive name.
 - Do not modify version, documentation, platform code, or archives when the user explicitly says to change only one configuration file.
 
@@ -732,7 +775,8 @@ Run validation proportional to the change, organized in layers:
    - Remove packaging noise such as `.DS_Store`; build with the repository’s build script.
    - Inspect the archive itself (`tar -tzf <archive>.tar.gz`), not only the source tree:
      - `index.json` at the archive root with correct package/version;
-     - latest Meta, push tasks, UI, dashboard, MCP, skill, and menu configs;
+     - latest Meta, push tasks, UI, dashboard, MCP, RAG, skill, and menu configs;
+     - valid non-empty `08_rag/config.json` when RAG is declared, with existing Markdown paths and resolvable dataset references; otherwise an empty declaration;
      - `00_doc/README.md`, `icon.png` (100×100, matching `index.json`);
      - at most one thin JAR plus complete migrations;
      - static HTML and documentation present;
@@ -754,6 +798,7 @@ Report:
 - dynamic API: JAR, endpoints, MCP tools, and MySQL migrations;
 - UI, record-detail, IP investigation, dashboard, menu, and role-assignment notes;
 - MCP connection codes and runtime skills (IDs, tool scopes, budgets);
+- RAG dataset/knowledge-base codes, document paths, build status, and whether unchanged-content rebuild was skipped;
 - documentation, changelog, and marketplace registration status;
 - validation commands and outcomes;
 - unresolved compatibility, upgrade, or deployment risks (including that uninstall drops Meta-owned ClickHouse tables but never rolls back MySQL).

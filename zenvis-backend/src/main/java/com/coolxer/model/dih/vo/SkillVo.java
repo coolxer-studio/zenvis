@@ -44,6 +44,17 @@ public class SkillVo implements Serializable {
     private String author;
 
     /**
+     * 来源。插件安装的 Skill 使用插件包名，页面创建的 Skill 使用 custom，
+     * 开放配置内置 Skill 使用 builtin。
+     */
+    private String source;
+
+    /**
+     * 是否允许在管理端编辑。插件 Skill 可编辑，内置 Skill 默认只读。
+     */
+    private Boolean editable;
+
+    /**
      * 适用智能体类型。为空时表示全局可用。
      */
     @JsonAlias("agentTypes")
@@ -65,10 +76,17 @@ public class SkillVo implements Serializable {
     private Boolean custom;
 
     /**
-     * 绑定的 RAG 知识库 ID 列表。绑定后 Skill 会话将注入 rag_search 检索工具。
+     * 绑定的 RAG 知识库 ID 列表。绑定后平台会在每轮会话中自动注入该范围内的检索上下文。
      */
     @JsonAlias("knowledgeBaseIds")
     private List<Integer> knowledgeBaseIds;
+
+    /**
+     * 插件内知识库编码列表。加载时按插件包名和编码解析为 knowledgeBaseIds，
+     * 使插件无需在打包时知道数据库自增 ID。
+     */
+    @JsonAlias("knowledgeBaseCodes")
+    private List<String> knowledgeBaseCodes;
 
     /**
      * 绑定知识库的名称列表，顺序与 knowledgeBaseIds 对齐，仅用于页面展示。

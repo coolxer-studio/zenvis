@@ -58,4 +58,16 @@ public class RagDataset extends BaseEntity {
      */
     @Column(name = "file_count")
     private Integer fileCount = 0;
+
+    /**
+     * 托管该数据集的插件包名
+     */
+    @Column(name = "plugin_package")
+    private String pluginPackage;
+
+    /**
+     * 插件内稳定的数据集编码
+     */
+    @Column(name = "plugin_code")
+    private String pluginCode;
 }

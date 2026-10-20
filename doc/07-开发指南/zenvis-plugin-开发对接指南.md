@@ -100,6 +100,8 @@ plugin-xxx/
 ├── 06_menu/
 ├── 07_mcp/
 ├── 08_rag/
+│   ├── config.json
+│   └── datasets/<code>/
 └── 09_skill/
 ```
 
@@ -115,7 +117,7 @@ plugin-xxx/
 | `05_dashboard` | 看板配置和低代码看板 |
 | `06_menu` | 插件菜单配置，在 Dashboard 之后导入 |
 | `07_mcp` | 插件 MCP 服务配置 |
-| `08_rag` | 预留目录，当前仅使用空占位 |
+| `08_rag` | 插件托管 RAG 数据集、知识库声明和 Markdown 文档 |
 | `09_skill` | 平台运行时 Skill |
 
 空能力使用合法空配置或目录占位，不要发明安装器不认识的目录或字段。
@@ -229,6 +231,14 @@ V002__add_status_index.sql
 
 发布内容发生实质变化时提高 `index.json` 版本。README 声明必须与当前文件和归档一致。
 
+### 7. 插件 RAG
+
+需要插件托管知识库时，在 `08_rag/config.json` 使用 snake_case 声明 `datasets` 和 `knowledge_bases`。`code`、`name` 在同一类资源内唯一；数据集 `path` 只能指向插件内 `00_doc` 或 `08_rag` 目录，递归导入 `.md` 并保留子目录。知识库的 `dataset_codes` 必须引用本次声明的数据集。
+
+推荐把专属文档放在 `08_rag/datasets/<code>/`，复用既有说明时直接指向 `00_doc/<dir>`。`00_doc` 不再自动进入向量索引；没有 `08_rag` 配置的插件安装后不会产生插件 RAG 资源。完整 Schema 和校验规则见[插件包规范](/03-插件开发与集成/插件包规范.md#文档与插件-rag)。
+
+运行时 Skill 如需检索这些文档，在 `09_skill/*/skill.json` 中声明 `knowledgeBaseCodes`，不要写入数据库自增 ID。平台会按插件包名解析知识库，并在每轮会话中自动注入该范围的 RAG 参考资料；插件 Skill 的来源固定为包名，允许管理端临时编辑，升级时以包内声明覆盖。
+
 ## 构建与测试
 
 ### API 测试
@@ -280,10 +290,10 @@ bash build.sh plugin-btw
 
 1. 归档根目录直接包含 `index.json`，没有多余顶层目录。
 2. 包名、版本、README、图标正确。
-3. Meta、推送任务、UI、看板、MCP、Skill 和菜单为最新内容。
+3. Meta、推送任务、UI、看板、MCP、RAG、Skill 和菜单为最新内容。
 4. `api-src`、`.DS_Store`、日志、旧归档和构建缓存未进入包。
 5. `03_api` 最多一个薄 Jar，迁移完整。
-6. JSON/YAML 可解析，Vector 配置由目标版本校验。
+6. JSON/YAML 可解析，Vector 配置由目标版本校验；`08_rag` 编码、名称、路径、Markdown 文件和数据集引用合法。
 7. Entity、表、topic、转换、页面和看板标识一致。
 
 ## 扩展点
@@ -293,6 +303,7 @@ bash build.sh plugin-btw
 - 新增动态 API：在 `api-src` 增加 Maven 模块并纳入根 reactor，归档 `03_api` 仍只保留一个薄 Jar。
 - 新增页面或看板：使用 `04_ui`、`05_dashboard` 和 `06_menu` 对齐配置索引、路由和菜单。
 - 新增 MCP 或运行时 Skill：使用 `07_mcp`、`09_skill`，保持工具白名单、审批策略和插件卸载边界。
+- 新增插件知识库：使用 `08_rag` 声明数据集和知识库，保持 Code 稳定，并验证安装构建、未变化跳过、内容变化重建和卸载清理。
 
 ## 常见问题
 
@@ -308,6 +319,10 @@ bash build.sh plugin-btw
 
 检查 Jar 数量、Jar 结构、包名、Controller/Service 扫描、公共依赖版本和后端动态扩展日志。
 
+### 安装后没有插件知识库
+
+检查 `08_rag/config.json` 是否为空、数据集目录是否至少包含一个 `.md`、路径是否在 `00_doc`/`08_rag` 内，以及知识库引用是否指向本次声明的数据集。没有配置是合法的无插件 RAG 状态。
+
 ### 升级提示迁移校验和变化
 
 说明已执行的迁移文件被修改。恢复原文件，并新增更高版本迁移。
@@ -321,6 +336,7 @@ bash build.sh plugin-btw
 - 数据字典、契约矩阵、Meta、Vector、UI 和文档一致；
 - 所有 JSON/YAML 可解析，动态 API 测试通过；
 - 无重复 ID、Entity、表、topic、配置索引和菜单 code；
+- RAG Dataset/KB Code 稳定且无冲突，知识库能够在安装时同步构建；
 - 异常记录进入 DLQ，正常记录不会写入错误实体；
 - 版本、迁移和归档内容正确；
 - 在实际父仓库或 `zenvis-plugin-*` 子工作树检查状态，不覆盖其他工作树的未提交修改。

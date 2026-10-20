@@ -99,4 +99,22 @@ public class RagKnowledgeBase extends BaseEntity {
      */
     @Column(name = "operation_ended_at")
     private Date operationEndedAt;
+
+    /**
+     * 托管该知识库的插件包名
+     */
+    @Column(name = "plugin_package")
+    private String pluginPackage;
+
+    /**
+     * 插件内稳定的知识库编码
+     */
+    @Column(name = "plugin_code")
+    private String pluginCode;
+
+    /**
+     * 最近一次成功构建对应的输入指纹
+     */
+    @Column(name = "build_fingerprint")
+    private String buildFingerprint;
 }

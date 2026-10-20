@@ -6,9 +6,10 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 
 ## DIH 执行边界
 
-- 普通问答 `ask` 不加载 Skill，不解析或调用 MCP/本地工具，只使用会话记忆和可选 RAG。
-- `ask + deep_think=true` 与普通问答使用同一 RAG 文档范围，并保留原生模型 reasoning 流。
-- 业务 Agent 不使用文档 RAG；它们只加载显式绑定且已启用的 Skill，并使用 `AgentMcpToolService` 允许范围内的工具。
+- 普通问答 `ask` 不加载 Skill，不解析或调用 MCP/本地工具，并在所有未删除知识库中自动执行 RAG。
+- `ask + deep_think=true` 与普通问答使用同一全库 RAG 范围，并保留原生模型 reasoning 流。
+- 业务 Agent / Skill 只加载显式绑定且已启用的 Skill，并在 Skill 绑定知识库的并集内自动执行 RAG；未绑定知识库时不检索，也不回退全库。
+- RAG 参考资料由平台在每轮请求自动注入，不占用 MCP 工具名额、工具调用预算或审批流程。
 - Agent 请求携带 `deep_think=true` 时按 `false` 执行。
 
 ## 核心 Agent
@@ -50,7 +51,7 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 
 ## RAG 与向量能力
 
-RAG 相关能力位于 `com.coolxer.service.dih.rag`，只服务于普通问答和深度问答。插件安装后会把 `00_doc` 文档加载到 RAG，可通过 `VectorStoreQueryController` 管理这些插件文档。业务 Agent 不读取该公共文档索引，而是通过显式 Skill 和允许范围内的 MCP 工具执行工作流。
+RAG 相关能力位于 `com.coolxer.service.dih.rag`，服务于普通问答、深度问答和业务 Agent / Skill。插件通过 `08_rag/config.json` 声明托管数据集和知识库；安装、升级、卸载和导出由 `PluginRagService` 处理，`00_doc` 不再自动加载到 RAG。可通过 `VectorStoreQueryController` 管理这些插件资源。普通问答检索全部未删除知识库，业务会话只检索所选 Skill 绑定的知识库。
 
 ## 开发注意事项
 

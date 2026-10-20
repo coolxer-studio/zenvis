@@ -20,6 +20,18 @@ public interface MinioService {
     String uploadFile(MultipartFile file, String bucketName, String path);
 
     /**
+     * 将文件流上传为指定对象，用于插件资源在包内文档与 MinIO 之间同步
+     *
+     * @param objectName   完整对象名称
+     * @param inputStream  文件输入流，由调用方负责关闭
+     * @param size         文件大小
+     * @param contentType  内容类型
+     * @param bucketName   存储桶名称，为空则使用默认配置
+     * @return 文件对象名称
+     */
+    String uploadStream(String objectName, InputStream inputStream, long size, String contentType, String bucketName);
+
+    /**
      * 从 MinIO 下载文件
      *
      * @param objectName 文件对象名称

@@ -1,19 +1,22 @@
 package com.coolxer.service.dih.rag;
 
 import com.coolxer.configuration.ai.AiEmbeddingProperties;
+import com.coolxer.dao.mysql.repository.RagKnowledgeBaseRepository;
 import com.coolxer.dao.mysql.entity.RagRetrievalLog;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 为 DIH 普通问答构建只读 RAG 参考上下文。
+ * 为 DIH 问答和业务会话构建只读 RAG 参考上下文。
  */
 @Slf4j
 @Service
@@ -31,16 +34,47 @@ public class RagContextService {
 
     private final AiEmbeddingProperties embeddingProperties;
 
+    private final RagKnowledgeBaseRepository ragKnowledgeBaseRepository;
+
     @Autowired
     private RagRetrievalLogService ragRetrievalLogService;
 
     public RagContextService(VectorStoreDelegate vectorStoreDelegate,
-                             AiEmbeddingProperties embeddingProperties) {
+                             AiEmbeddingProperties embeddingProperties,
+                             RagKnowledgeBaseRepository ragKnowledgeBaseRepository) {
         this.vectorStoreDelegate = vectorStoreDelegate;
         this.embeddingProperties = embeddingProperties;
+        this.ragKnowledgeBaseRepository = ragKnowledgeBaseRepository;
     }
 
+    /**
+     * 普通问答和深度问答：在全部未删除知识库中检索。
+     */
     public RagContext retrieve(String query, String mode) {
+        List<Integer> knowledgeBaseIds;
+        try {
+            knowledgeBaseIds = ragKnowledgeBaseRepository.findActiveIds();
+        } catch (Exception e) {
+            long durationMs = 0L;
+            log.warn("DIH RAG knowledge base lookup failed: mode={}, reason=knowledge_base_lookup_error",
+                    mode, e);
+            recordChatRetrieval(query, durationMs, List.of(), "retrieval_error", e.getMessage());
+            return new RagContext("", true, false, 0, durationMs, "retrieval_error");
+        }
+        return retrieve(query, mode, knowledgeBaseIds, "no_knowledge_base");
+    }
+
+    /**
+     * 业务 Agent / Skill：只在显式绑定的知识库范围内检索；空范围不查询向量库。
+     */
+    public RagContext retrieve(String query, String mode, List<Integer> knowledgeBaseIds) {
+        return retrieve(query, mode, knowledgeBaseIds, "no_bound_knowledge_base");
+    }
+
+    private RagContext retrieve(String query,
+                                String mode,
+                                List<Integer> knowledgeBaseIds,
+                                String emptyScopeReason) {
         long startedAt = System.nanoTime();
         if (!StringUtils.hasText(query)) {
             return finish(mode, startedAt, true, List.of(), "empty_query", query);
@@ -48,11 +82,25 @@ public class RagContextService {
         if (!embeddingProperties.isEnabled()) {
             return finish(mode, startedAt, true, List.of(), "embedding_disabled", query);
         }
+        List<Integer> scopedKnowledgeBaseIds = knowledgeBaseIds == null
+                ? List.of()
+                : new LinkedHashSet<>(knowledgeBaseIds).stream()
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (scopedKnowledgeBaseIds.isEmpty()) {
+            return finish(mode, startedAt, true, List.of(), emptyScopeReason, query);
+        }
         try {
+            List<Object> knowledgeBaseSources = scopedKnowledgeBaseIds.stream()
+                    .map(id -> (Object) ("kb_" + id))
+                    .toList();
             List<Document> documents = vectorStoreDelegate.getVectorStore("redis")
                     .similaritySearch(SearchRequest.builder()
                             .query(query)
                             .topK(TOP_K)
+                            .filterExpression(new FilterExpressionBuilder()
+                                    .in("source", knowledgeBaseSources)
+                                    .build())
                             .build());
             List<Document> usableDocuments = documents == null
                     ? List.of()

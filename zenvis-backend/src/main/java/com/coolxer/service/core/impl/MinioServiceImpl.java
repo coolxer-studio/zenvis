@@ -86,6 +86,34 @@ public class MinioServiceImpl implements MinioService {
     }
 
     @Override
+    public String uploadStream(String objectName, InputStream inputStream, long size,
+                               String contentType, String bucketName) {
+        if (StringUtils.isBlank(objectName)) {
+            throw new ApiException(ResultCodeEnum.FILE_NAME_INVALID.getCode(), "文件对象名称不能为空");
+        }
+        if (StringUtils.isBlank(bucketName)) {
+            bucketName = minioProperties.getBucketName();
+        }
+        if (!bucketExists(bucketName)) {
+            createBucket(bucketName);
+        }
+        try {
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(objectName)
+                    .stream(inputStream, size, -1)
+                    .contentType(contentType)
+                    .build());
+            log.info("File stream uploaded successfully: bucket={}, object={}, size={}",
+                    bucketName, objectName, size);
+            return objectName;
+        } catch (Exception e) {
+            log.error("Failed to upload file stream to MinIO: {}", e.getMessage(), e);
+            throw new ApiException(ResultCodeEnum.FILE_WRITE_FAIL.getCode(), "文件上传失败：" + e.getMessage());
+        }
+    }
+
+    @Override
     public InputStream downloadFile(String objectName, String bucketName) {
         if (StringUtils.isBlank(objectName)) {
             throw new ApiException(ResultCodeEnum.FILE_NAME_INVALID.getCode(), "文件对象名称不能为空");

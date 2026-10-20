@@ -109,6 +109,32 @@ public class RagKnowledgeBaseService {
     }
 
     /**
+     * 按插件包名和插件内知识库编码解析托管知识库 ID。
+     *
+     * @param pluginPackage 插件包名
+     * @param pluginCodes   08_rag 中声明的知识库编码
+     * @return 排序后的知识库 ID；参数为空或没有匹配项时返回空列表
+     */
+    public List<Integer> resolveManagedKnowledgeBaseIds(String pluginPackage, List<String> pluginCodes) {
+        if (StringUtils.isBlank(pluginPackage) || CollectionUtils.isEmpty(pluginCodes)) {
+            return List.of();
+        }
+        List<String> normalizedCodes = pluginCodes.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (normalizedCodes.isEmpty()) {
+            return List.of();
+        }
+        return ragKnowledgeBaseRepository.findAllManaged(pluginPackage).stream()
+                .filter(kb -> normalizedCodes.contains(kb.getPluginCode()))
+                .sorted(Comparator.comparing(RagKnowledgeBase::getId))
+                .map(RagKnowledgeBase::getId)
+                .toList();
+    }
+
+    /**
      * 按 ID 批量查询知识库名称映射，供 Skill 列表等展示场景使用。
      */
     public Map<Integer, String> getNameMap(java.util.Collection<Integer> ids) {
@@ -160,7 +186,13 @@ public class RagKnowledgeBaseService {
         knowledgeBase.setName(dto.getName())
                 .setSource(dto.getSource())
                 .setTags(writeTags(dto.getTags()))
-                .setDescription(dto.getDescription());
+                .setDescription(dto.getDescription())
+                .setBuildFingerprint(null);
+        if (RagKnowledgeBaseStatus.BUILT == knowledgeBase.getStatus()
+                || RagKnowledgeBaseStatus.BUILD_FAILED == knowledgeBase.getStatus()) {
+            knowledgeBase.setStatus(RagKnowledgeBaseStatus.UNBUILD);
+            knowledgeBase.setDocumentCount(0);
+        }
         List<Integer> oldDatasetIds = ragKnowledgeBaseDatasetRepository.findByKnowledgeBaseId(id).stream()
                 .map(RagKnowledgeBaseDataset::getDatasetId)
                 .sorted()
@@ -224,6 +256,7 @@ public class RagKnowledgeBaseService {
         }
         resetLogs(id);
         knowledgeBase.setStatus(RagKnowledgeBaseStatus.BUILDING);
+        knowledgeBase.setBuildFingerprint(null);
         knowledgeBase.setOperationMessage("构建中");
         knowledgeBase.setOperationError(null);
         knowledgeBase.setOperationStartedAt(new Date());
@@ -233,6 +266,35 @@ public class RagKnowledgeBaseService {
         thread.setDaemon(true);
         thread.setName("rag-knowledge-base-build-" + id);
         thread.start();
+    }
+
+    /**
+     * 同步构建知识库，供插件安装和升级在完成前等待索引就绪。
+     *
+     * @param id 知识库id
+     * @return 构建结束后的状态
+     */
+    public RagKnowledgeBaseStatus buildNow(Integer id) {
+        RagKnowledgeBase knowledgeBase = getKnowledgeBaseOrThrow(id);
+        if (RagKnowledgeBaseStatus.BUILDING == knowledgeBase.getStatus()) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "知识库正在构建中，请勿重复操作");
+        }
+        List<RagKnowledgeBaseDataset> relations = ragKnowledgeBaseDatasetRepository.findByKnowledgeBaseId(id);
+        if (CollectionUtils.isEmpty(relations)) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "知识库未关联数据集，无法构建");
+        }
+        if (!vectorStoreInitializerService.isRagAvailable()) {
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "Embedding/RAG 服务不可用，请稍后再试");
+        }
+        resetLogs(id);
+        knowledgeBase.setStatus(RagKnowledgeBaseStatus.BUILDING);
+        knowledgeBase.setBuildFingerprint(null);
+        knowledgeBase.setOperationMessage("构建中");
+        knowledgeBase.setOperationError(null);
+        knowledgeBase.setOperationStartedAt(new Date());
+        knowledgeBase.setOperationEndedAt(null);
+        ragKnowledgeBaseRepository.save(knowledgeBase);
+        return doBuild(id);
     }
 
     /**
@@ -251,7 +313,7 @@ public class RagKnowledgeBaseService {
         }
     }
 
-    private void doBuild(Integer id) {
+    private RagKnowledgeBaseStatus doBuild(Integer id) {
         RagKnowledgeBase knowledgeBase = null;
         try {
             knowledgeBase = getKnowledgeBaseOrThrow(id);
@@ -282,6 +344,7 @@ public class RagKnowledgeBaseService {
             knowledgeBase.setOperationEndedAt(new Date());
             ragKnowledgeBaseRepository.save(knowledgeBase);
             writeLog(id, "完成......");
+            return RagKnowledgeBaseStatus.BUILT;
         } catch (Exception e) {
             log.error("知识库构建失败: id={}", id, e);
             if (knowledgeBase != null) {
@@ -292,6 +355,7 @@ public class RagKnowledgeBaseService {
                 ragKnowledgeBaseRepository.save(knowledgeBase);
             }
             writeLog(id, "失败......" + e.getMessage());
+            return RagKnowledgeBaseStatus.BUILD_FAILED;
         }
     }
 

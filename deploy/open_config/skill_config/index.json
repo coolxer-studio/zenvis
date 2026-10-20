@@ -90,7 +90,7 @@
                       "joinValues": false,
                       "extractValue": true,
                       "source": { "method": "get", "url": "/zenvis/api/v1/dih/skills/knowledge-base-options" },
-                      "description": "绑定后该 Skill 会话自动获得 rag_search 工具，仅可检索所选知识库"
+                      "description": "绑定后平台会在每轮会话中自动注入所选知识库的 RAG 参考资料，不占用 MCP 工具预算"
                     },
                     {
                       "type": "select",
@@ -408,19 +408,11 @@
           },
           {
             "label": "来源",
-            "type": "select",
-            "name": "custom",
+            "type": "input-text",
+            "name": "source",
             "clearable": true,
-            "options": [
-              {
-                "label": "自定义",
-                "value": true
-              },
-              {
-                "label": "内置/插件",
-                "value": false
-              }
-            ]
+            "placeholder": "插件包名、custom 或 builtin",
+            "size": "lg"
           }
         ],
         "actions": [
@@ -453,13 +445,10 @@
             }
           },
           {
-            "name": "custom",
+            "name": "source",
             "label": "来源",
-            "type": "mapping",
-            "map": {
-              "true": "<span class='label label-info'>自定义</span>",
-              "*": "<span class='label label-default'>内置/插件</span>"
-            }
+            "type": "tpl",
+            "tpl": "<span class='label label-info'><%- data.source || 'builtin' %></span>"
           },
           {
             "name": "version",
@@ -552,7 +541,7 @@
                       },
                       {
                         "label": "来源",
-                        "content": "${custom ? '自定义' : '内置/插件'}"
+                        "content": "${source|default:'builtin'}"
                       },
                       {
                         "label": "版本",
@@ -572,7 +561,7 @@
                       },
                       {
                         "label": "知识库",
-                        "content": "${knowledge_base_ids|join:', '|default:'-'}"
+                        "content": "${knowledge_base_names|join:', '|default:'-'}"
                       },
                       {
                         "label": "标签",
@@ -613,10 +602,10 @@
             "type": "button",
             "label": "编辑",
             "icon": "fa fa-pencil text-primary",
-            "hiddenOn": "!data.custom",
+            "hiddenOn": "!data.editable",
             "actionType": "dialog",
             "dialog": {
-              "title": "编辑自定义 Skill",
+              "title": "编辑 Skill",
               "size": "xl",
               "body": {
                 "type": "form",
@@ -698,7 +687,7 @@
                             "joinValues": false,
                             "extractValue": true,
                             "source": { "method": "get", "url": "/zenvis/api/v1/dih/skills/knowledge-base-options" },
-                            "description": "绑定后该 Skill 会话自动获得 rag_search 工具，仅可检索所选知识库"
+                            "description": "绑定后平台会在每轮会话中自动注入所选知识库的 RAG 参考资料，不占用 MCP 工具预算"
                           },
                           {
                             "type": "select",

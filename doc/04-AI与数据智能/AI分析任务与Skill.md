@@ -163,7 +163,12 @@ skill_config/
 - 是否提供聊天入口、显示名称、图标和顺序；
 - `runtime.tools.local` 内置服务 code 到本服务工具 allowlist 的映射；
 - `runtime.tools.mcp` 外部 MCP Server 与原始工具名 allowlist；
-- 可选 `runtime.limits`。
+- 可选 `runtime.limits`；
+- 插件 Skill 的 `source`、`editable` 和 `knowledgeBaseCodes` 托管声明。
+
+插件安装的 Skill 由平台自动把 `source` 填充为插件包名，`custom=false`，`editable` 缺省为 `true`。管理员可以临时编辑提示词、MCP 工具范围和知识库绑定，但插件升级或重装时会以包内 `skill.json`、`SKILL.md` 为准。
+
+插件 Skill 如需使用自己的 RAG 文档，在 manifest 中声明 `knowledgeBaseCodes`，不要硬编码数据库自增的 `knowledgeBaseIds`。加载时平台按插件包名和知识库编码解析 ID，并在每轮会话中自动注入只检索这些知识库的参考资料。知识库未构建或 RAG 不可用时，Skill 应显式降级，不能编造检索结果；未绑定知识库时不执行检索。
 
 `SKILL.md` 保存实际工作规范、业务边界、步骤和输出要求。任务只保存 Skill ID，执行前读取最新启用状态与内容。
 
@@ -206,6 +211,7 @@ skill_config/
 - Skill 未声明 `runtime.tools` 时按 fail-closed 处理，不自动获得全部工具。
 - 显式空列表表示不给该 Skill 对应工具。
 - 外部 MCP allowlist 的 key 使用 Server `code`，工具使用外部原始名称。
+- 知识库 RAG 上下文由平台每轮自动注入，不是 MCP 工具，也不占用工具调用预算；其可检索范围固定为 Skill 绑定知识库的并集。
 - 全局 `DENY` 不能被 Skill、会话授权或任务授权覆盖。
 
 修改工具范围后，可以通过 `/api/v1/dih/mcp/agent/prompt` 查看目标 Agent 的实际工具提示词。

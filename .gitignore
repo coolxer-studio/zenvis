@@ -24,6 +24,7 @@ zenvis-service/*
 !zenvis-plugin/zenvis-plugin-rzweb/
 !zenvis-plugin/zenvis-plugin-wireview/
 !zenvis-plugin/zenvis-plugin-sentinel/
+!zenvis-plugin/zenvis-plugin-tracehub/
 !zenvis-plugin/zenvis-plugin-qrsend/
 !zenvis-plugin/zenvis-plugin-infra-monitor/
 !zenvis-plugin/market-plugins.json

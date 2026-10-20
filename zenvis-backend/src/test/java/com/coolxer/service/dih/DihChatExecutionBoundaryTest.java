@@ -215,7 +215,7 @@ class DihChatExecutionBoundaryTest {
     }
 
     @Test
-    void genericDynamicSkillUsesNoMcpOrRag() {
+    void genericDynamicSkillWithoutToolRuntimeUsesNoMcpButStillPassesScopedRag() {
         Fixture fixture = fixture();
         String chatType = "skill:generic";
         when(fixture.skillService.requireEnabledChatEntry(chatType))
@@ -232,8 +232,10 @@ class DihChatExecutionBoundaryTest {
                 SkillService.GENERIC_SKILL_AGENT_TYPE,
                 List.of("generic")
         )).thenReturn("通用技能完整提示词");
+        when(fixture.skillService.resolveKnowledgeBaseIds(List.of("generic")))
+                .thenReturn(List.of(21));
         when(fixture.chatService.agentChat(
-                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
         )).thenReturn(Flux.just("通用技能回答"));
 
         List<String> response = fixture.service.chat(chatDto(chatType, false), null).collectList().block();
@@ -247,6 +249,7 @@ class DihChatExecutionBoundaryTest {
                 eq("问题"),
                 eq(List.of()),
                 isNull(),
+                eq(List.of(21)),
                 any(McpToolContext.class)
         );
         verify(fixture.chatService, never()).qaChat(
@@ -279,6 +282,8 @@ class DihChatExecutionBoundaryTest {
                 SkillService.GENERIC_SKILL_AGENT_TYPE,
                 List.of("jmr-analysis")
         )).thenReturn("JMR 专项提示词");
+        when(fixture.skillService.resolveKnowledgeBaseIds(List.of("jmr-analysis")))
+                .thenReturn(List.of(22));
         McpToolContext toolContext = new McpToolContext(
                 mock(ToolCallbackProvider.class),
                 "仅允许 retrieval_search",
@@ -289,7 +294,7 @@ class DihChatExecutionBoundaryTest {
                 List.of("jmr-analysis")
         )).thenReturn(toolContext);
         when(fixture.chatService.agentChat(
-                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
         )).thenReturn(Flux.just("专项回答"));
 
         List<String> response = fixture.service.chat(chatDto(chatType, false), null).collectList().block();
@@ -308,6 +313,7 @@ class DihChatExecutionBoundaryTest {
                 eq("问题"),
                 eq(List.of()),
                 isNull(),
+                eq(List.of(22)),
                 any(McpToolContext.class)
         );
     }

@@ -1,12 +1,15 @@
 package com.coolxer.service.dih.rag;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.enums.RagKnowledgeBaseStatus;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.RagDataset;
+import com.coolxer.dao.mysql.entity.RagKnowledgeBase;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBaseDataset;
 import com.coolxer.dao.mysql.repository.RagDatasetRepository;
 import com.coolxer.dao.mysql.repository.RagKnowledgeBaseDatasetRepository;
+import com.coolxer.dao.mysql.repository.RagKnowledgeBaseRepository;
 import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.RagDatasetDto;
 import com.coolxer.model.dih.dto.RagDatasetSearchDto;
@@ -47,6 +50,9 @@ public class RagDatasetService {
 
     @Autowired
     private RagKnowledgeBaseDatasetRepository ragKnowledgeBaseDatasetRepository;
+
+    @Autowired
+    private RagKnowledgeBaseRepository ragKnowledgeBaseRepository;
 
     @Autowired
     private MinioService minioService;
@@ -112,7 +118,9 @@ public class RagDatasetService {
                 .setSource(dto.getSource())
                 .setTags(writeTags(dto.getTags()))
                 .setDescription(dto.getDescription());
-        return ragDatasetRepository.save(dataset);
+        RagDataset saved = ragDatasetRepository.save(dataset);
+        invalidateKnowledgeBaseFingerprints(saved.getId());
+        return saved;
     }
 
     /**
@@ -176,6 +184,7 @@ public class RagDatasetService {
         String fileName = objectName.substring(objectName.lastIndexOf('/') + 1);
         refreshFileCount(dataset);
         ragDatasetRepository.save(dataset);
+        invalidateKnowledgeBaseFingerprints(dataset.getId());
         return Map.of("value", objectName, "filename", fileName);
     }
 
@@ -238,7 +247,9 @@ public class RagDatasetService {
         }
         minioService.deleteFile(objectName, null);
         refreshFileCount(dataset);
-        return ragDatasetRepository.save(dataset);
+        RagDataset saved = ragDatasetRepository.save(dataset);
+        invalidateKnowledgeBaseFingerprints(saved.getId());
+        return saved;
     }
 
     private RagDataset getDatasetOrThrow(Integer id) {
@@ -279,6 +290,23 @@ public class RagDatasetService {
             dataset.setFileCount(objectNames.size());
         } catch (Exception e) {
             log.warn("刷新数据集文件数量失败: id={}", dataset.getId(), e);
+        }
+    }
+
+    private void invalidateKnowledgeBaseFingerprints(Integer datasetId) {
+        for (RagKnowledgeBaseDataset relation : ragKnowledgeBaseDatasetRepository.findByDatasetId(datasetId)) {
+            RagKnowledgeBase knowledgeBase = ragKnowledgeBaseRepository.findById(relation.getKnowledgeBaseId())
+                    .orElse(null);
+            if (knowledgeBase == null || StringUtils.isBlank(knowledgeBase.getPluginPackage())) {
+                continue;
+            }
+            knowledgeBase.setBuildFingerprint(null);
+            if (knowledgeBase.getStatus() == RagKnowledgeBaseStatus.BUILT
+                    || knowledgeBase.getStatus() == RagKnowledgeBaseStatus.BUILD_FAILED) {
+                knowledgeBase.setStatus(RagKnowledgeBaseStatus.UNBUILD)
+                        .setDocumentCount(0);
+            }
+            ragKnowledgeBaseRepository.save(knowledgeBase);
         }
     }
 

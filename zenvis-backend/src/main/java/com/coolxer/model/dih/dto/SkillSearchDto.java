@@ -30,4 +30,9 @@ public class SkillSearchDto extends PageDto {
      * 是否自定义 Skill。true 只看页面创建的自定义 Skill，false 只看内置/插件 Skill
      */
     private Boolean custom;
+
+    /**
+     * 来源，支持按插件包名、custom 或 builtin 模糊筛选。
+     */
+    private String source;
 }

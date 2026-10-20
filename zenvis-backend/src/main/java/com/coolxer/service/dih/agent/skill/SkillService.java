@@ -147,6 +147,7 @@ public class SkillService {
                         || condition.getEnabled().equals(Boolean.TRUE.equals(skill.getEnabled())))
                 .filter(skill -> condition.getCustom() == null
                         || condition.getCustom().equals(Boolean.TRUE.equals(skill.getCustom())))
+                .filter(skill -> matchSource(skill, condition.getSource()))
                 .sorted(Comparator.comparing(SkillVo::getId))
                 .collect(Collectors.toList());
 
@@ -295,6 +296,10 @@ public class SkillService {
         } catch (IOException e) {
             throw new IllegalStateException("读取 Skill 内容失败: " + id, e);
         }
+        List<SkillVo> enriched = enrichKnowledgeBaseNames(List.<SkillVo>of(detail));
+        if (!enriched.isEmpty()) {
+            detail.setKnowledgeBaseNames(enriched.get(0).getKnowledgeBaseNames());
+        }
         return detail;
     }
 
@@ -337,25 +342,36 @@ public class SkillService {
         if (Files.exists(skillDir)) {
             throw new IllegalStateException("Skill 目录已存在: " + id);
         }
-        writeSkillFiles(skillDir, buildManifest(dto, id, null), dto.getContent());
+        writeSkillFiles(skillDir, buildManifest(dto, id, null, Map.of(), true, "custom"),
+                dto.getContent());
         reload();
         return getRecord(id).getSkill();
     }
 
     /**
-     * 更新页面自定义 Skill。content 为 null 时保留原入口文件内容。
+     * 更新可编辑 Skill。content 为 null 时保留原入口文件内容。
      */
     public SkillVo update(String id, SkillSaveDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("请求不能为空");
         }
         SkillRecord record = getRecord(id);
-        requireCustomSkill(record);
+        requireEditableSkill(record);
         String skillId = record.getSkill().getId();
         dto.setId(skillId);
         validateSaveDto(dto, false);
         String fallbackEntry = StringUtils.defaultIfBlank(record.getSkill().getEntry(), DEFAULT_ENTRY_FILE);
-        writeSkillFiles(record.getSkillDir(), buildManifest(dto, skillId, fallbackEntry), dto.getContent());
+        Map<String, Object> existingManifest;
+        try {
+            existingManifest = readManifestAsMap(record);
+        } catch (IOException e) {
+            throw new IllegalStateException("读取 Skill 配置失败: " + id, e);
+        }
+        boolean custom = Boolean.TRUE.equals(record.getSkill().getCustom());
+        String source = StringUtils.defaultIfBlank(record.getSkill().getSource(), custom ? "custom" : "builtin");
+        writeSkillFiles(record.getSkillDir(),
+                buildManifest(dto, skillId, fallbackEntry, existingManifest, custom, source),
+                dto.getContent());
         reload();
         return getRecord(skillId).getSkill();
     }
@@ -433,6 +449,8 @@ public class SkillService {
                     : new LinkedHashMap<>();
             targetMap.put("id", id);
             targetMap.put("custom", true);
+            targetMap.put("editable", true);
+            targetMap.put("source", "custom");
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(targetManifest.toFile(), targetMap);
             reload();
             return getRecord(id).getSkill();
@@ -531,6 +549,12 @@ public class SkillService {
         }
     }
 
+    private void requireEditableSkill(SkillRecord record) {
+        if (!Boolean.TRUE.equals(record.getSkill().getEditable())) {
+            throw new IllegalArgumentException("该 Skill 不允许编辑: " + record.getSkill().getId());
+        }
+    }
+
     private void validateSaveDto(SkillSaveDto dto, boolean create) {
         if (create) {
             String id = StringUtils.trimToEmpty(dto.getId());
@@ -584,46 +608,72 @@ public class SkillService {
                 hasLimits ? limits : null);
     }
 
-    private Map<String, Object> buildManifest(SkillSaveDto dto, String id, String fallbackEntry) {
-        Map<String, Object> manifest = new LinkedHashMap<>();
+    private Map<String, Object> buildManifest(SkillSaveDto dto,
+                                              String id,
+                                              String fallbackEntry,
+                                              Map<String, Object> existingManifest,
+                                              boolean custom,
+                                              String source) {
+        Map<String, Object> manifest = existingManifest == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(existingManifest);
         manifest.put("id", id);
         manifest.put("name", dto.getName().trim());
         if (StringUtils.isNotBlank(dto.getDescription())) {
             manifest.put("description", dto.getDescription().trim());
+        } else {
+            manifest.remove("description");
         }
         if (StringUtils.isNotBlank(dto.getVersion())) {
             manifest.put("version", dto.getVersion().trim());
+        } else {
+            manifest.remove("version");
         }
         if (StringUtils.isNotBlank(dto.getAuthor())) {
             manifest.put("author", dto.getAuthor().trim());
+        } else {
+            manifest.remove("author");
         }
         List<String> agentTypes = normalizeStringList(dto.getAgentTypes());
         if (!agentTypes.isEmpty()) {
             manifest.put("agentTypes", agentTypes);
+        } else {
+            manifest.remove("agentTypes");
         }
         List<String> tags = normalizeStringList(dto.getTags());
         if (!tags.isEmpty()) {
             manifest.put("tags", tags);
+        } else {
+            manifest.remove("tags");
         }
         manifest.put("enabled", Boolean.TRUE.equals(dto.getEnabled()));
-        manifest.put("custom", true);
+        manifest.put("custom", custom);
+        manifest.put("editable", true);
+        manifest.put("source", source);
         manifest.put("entry", StringUtils.defaultIfBlank(fallbackEntry, DEFAULT_ENTRY_FILE));
-        List<Integer> kbIds = dto.getKnowledgeBaseIds() == null ? List.of()
-                : dto.getKnowledgeBaseIds().stream()
-                .filter(java.util.Objects::nonNull)
-                .distinct()
-                .sorted()
-                .toList();
-        if (!kbIds.isEmpty()) {
-            manifest.put("knowledgeBaseIds", kbIds);
+        if (dto.getKnowledgeBaseIds() != null) {
+            List<Integer> kbIds = dto.getKnowledgeBaseIds().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .sorted()
+                    .toList();
+            if (!kbIds.isEmpty()) {
+                manifest.put("knowledgeBaseIds", kbIds);
+            } else {
+                manifest.remove("knowledgeBaseIds");
+            }
+            manifest.remove("knowledgeBaseCodes");
         }
         Map<String, Object> chat = buildChatManifest(dto);
         if (chat != null) {
             manifest.put("chat", chat);
+        } else {
+            manifest.remove("chat");
         }
         Map<String, Object> runtime = buildRuntimeManifest(dto);
         if (runtime != null) {
             manifest.put("runtime", runtime);
+        } else {
+            manifest.remove("runtime");
         }
         return manifest;
     }
@@ -1152,7 +1202,8 @@ public class SkillService {
         try {
             Path manifestPath = resolveManifest(skillDir);
             SkillVo skill = readSkillManifest(manifestPath);
-            boolean pluginSkill = isPluginSkillDir(skillDir, root);
+            String pluginPackage = resolvePluginPackage(skillDir, root);
+            boolean pluginSkill = pluginPackage != null;
             if (StringUtils.isBlank(skill.getId())) {
                 skill.setId(skillDir.getFileName().toString());
             }
@@ -1163,6 +1214,24 @@ public class SkillService {
             if (StringUtils.isBlank(skill.getName())) {
                 skill.setName(skill.getId());
             }
+            if (pluginSkill) {
+                skill.setCustom(false);
+                skill.setSource(pluginPackage);
+                if (skill.getEditable() == null) {
+                    skill.setEditable(true);
+                }
+            } else if (Boolean.TRUE.equals(skill.getCustom())) {
+                skill.setSource("custom");
+                if (skill.getEditable() == null) {
+                    skill.setEditable(true);
+                }
+            } else {
+                skill.setSource(StringUtils.defaultIfBlank(skill.getSource(), "builtin"));
+                if (skill.getEditable() == null) {
+                    skill.setEditable(false);
+                }
+            }
+            resolvePluginKnowledgeBaseIds(skill, pluginPackage);
             if (skill.getAgentTypes() == null) {
                 skill.setAgentTypes(new ArrayList<>());
             }
@@ -1304,11 +1373,47 @@ public class SkillService {
         return BuiltinAgentSkillRegistry.isBuiltinAgentType(agentType);
     }
 
-    private boolean isPluginSkillDir(Path skillDir, Path root) {
-        Path relativePath = root.toAbsolutePath().normalize()
-                .relativize(skillDir.toAbsolutePath().normalize());
-        return relativePath.getNameCount() > 0
-                && PLUGIN_SKILL_ROOT_DIR.equals(relativePath.getName(0).toString());
+    private String resolvePluginPackage(Path skillDir, Path root) {
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path normalizedSkillDir = skillDir.toAbsolutePath().normalize();
+        if (!normalizedSkillDir.startsWith(normalizedRoot)) {
+            return null;
+        }
+        Path relativePath = normalizedRoot.relativize(normalizedSkillDir);
+        if (relativePath.getNameCount() != 3
+                || !PLUGIN_SKILL_ROOT_DIR.equals(relativePath.getName(0).toString())) {
+            return null;
+        }
+        String packageName = relativePath.getName(1).toString();
+        if (!SAFE_PACKAGE_PATTERN.matcher(packageName).matches()) {
+            log.warn("忽略非法插件 Skill 包名: {}", packageName);
+            return null;
+        }
+        return packageName;
+    }
+
+    private void resolvePluginKnowledgeBaseIds(SkillVo skill, String pluginPackage) {
+        List<String> codes = skill.getKnowledgeBaseCodes();
+        if (StringUtils.isBlank(pluginPackage) || CollectionUtils.isEmpty(codes)) {
+            return;
+        }
+        if (ragKnowledgeBaseService == null) {
+            log.warn("无法解析插件 Skill 知识库编码，RAG 服务未就绪: skillId={}, package={}",
+                    skill.getId(), pluginPackage);
+            return;
+        }
+        try {
+            List<Integer> knowledgeBaseIds = ragKnowledgeBaseService
+                    .resolveManagedKnowledgeBaseIds(pluginPackage, codes);
+            skill.setKnowledgeBaseIds(knowledgeBaseIds);
+            if (knowledgeBaseIds.isEmpty()) {
+                log.warn("插件 Skill 未解析到托管知识库: skillId={}, package={}, codes={}",
+                        skill.getId(), pluginPackage, codes);
+            }
+        } catch (Exception e) {
+            log.warn("解析插件 Skill 知识库编码失败: skillId={}, package={}, codes={}",
+                    skill.getId(), pluginPackage, codes, e);
+        }
     }
 
     private SkillVo readSkillManifest(Path manifestPath) throws IOException {
@@ -1413,6 +1518,13 @@ public class SkillService {
         return skill.getAgentTypes().contains(agentType);
     }
 
+    private boolean matchSource(SkillVo skill, String source) {
+        if (StringUtils.isBlank(source)) {
+            return true;
+        }
+        return StringUtils.containsIgnoreCase(skill.getSource(), source.trim());
+    }
+
     private List<SkillVo> getAll() {
         return skillCache.values().stream()
                 .map(SkillRecord::getSkill)
@@ -1441,11 +1553,14 @@ public class SkillService {
         detail.setDescription(skill.getDescription());
         detail.setVersion(skill.getVersion());
         detail.setAuthor(skill.getAuthor());
+        detail.setSource(skill.getSource());
+        detail.setEditable(skill.getEditable());
         detail.setAgentTypes(skill.getAgentTypes());
         detail.setTags(skill.getTags());
         detail.setEnabled(skill.getEnabled());
         detail.setCustom(skill.getCustom());
         detail.setKnowledgeBaseIds(skill.getKnowledgeBaseIds());
+        detail.setKnowledgeBaseCodes(skill.getKnowledgeBaseCodes());
         detail.setChat(skill.getChat());
         detail.setRuntime(skill.getRuntime());
         detail.setEntry(skill.getEntry());

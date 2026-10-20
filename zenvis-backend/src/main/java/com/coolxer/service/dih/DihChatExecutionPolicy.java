@@ -15,7 +15,6 @@ public record DihChatExecutionPolicy(
         String chatType,
         String agentType,
         Mode mode,
-        boolean ragAllowed,
         boolean toolsAllowed,
         boolean deepThinkAllowed,
         List<String> skillIds
@@ -29,7 +28,6 @@ public record DihChatExecutionPolicy(
                     TYPE_ASK,
                     TYPE_ASK,
                     Mode.QA,
-                    true,
                     false,
                     true,
                     List.of()
@@ -40,7 +38,6 @@ public record DihChatExecutionPolicy(
                         agent.agentType(),
                         agent.agentType(),
                         Mode.AGENT,
-                        false,
                         true,
                         false,
                         List.of(agent.skillId())
@@ -55,14 +52,11 @@ public record DihChatExecutionPolicy(
         SkillChatEntryVo entry = skillService.requireEnabledChatEntry(chatType);
         boolean genericSkill = SkillService.GENERIC_SKILL_AGENT_TYPE.equals(entry.getAgentType());
         SkillRuntimeConfigVo runtime = skillService.resolveRuntimeConfig(List.of(entry.getSkillId()));
-        boolean hasKnowledgeBases = genericSkill
-                && !skillService.resolveKnowledgeBaseIds(List.of(entry.getSkillId())).isEmpty();
-        boolean toolsAllowed = !genericSkill || (runtime != null && runtime.getTools() != null) || hasKnowledgeBases;
+        boolean toolsAllowed = !genericSkill || (runtime != null && runtime.getTools() != null);
         return Optional.of(new DihChatExecutionPolicy(
                 entry.getChatType(),
                 entry.getAgentType(),
                 Mode.AGENT,
-                false,
                 toolsAllowed,
                 false,
                 List.of(entry.getSkillId())

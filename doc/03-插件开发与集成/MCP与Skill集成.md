@@ -1,16 +1,16 @@
 # MCP 与 Skill 集成
 
-插件通过 `07_mcp` 声明外部 MCP Server，通过 `09_skill` 安装 DIH 运行时 Skill。`08_rag` 当前仅为目录占位，不改变 `00_doc` 的 RAG 加载链路。
+插件通过 `07_mcp` 声明外部 MCP Server，通过 `08_rag` 托管数据集和知识库，通过 `09_skill` 安装 DIH 运行时 Skill。三者都由插件生命周期管理，但用途不同。
 
 ## 能力区别
 
-| 能力 | `07_mcp` | `09_skill` |
-| --- | --- | --- |
-| 描述对象 | 外部 MCP Server 连接 | 提示词、业务知识和运行时工具范围 |
-| 主要文件 | `config.json` | `skill.json`、`SKILL.md` |
-| 执行代码 | 由外部 MCP Server 提供 | 通常不直接执行代码 |
-| 工具发现 | 连接后动态发现 | 只引用允许的工具名 |
-| 权限 | Agent Scope、审批策略、服务状态 | Skill Allowlist 与运行预算 |
+| 能力 | `07_mcp` | `08_rag` | `09_skill` |
+| --- | --- | --- | --- |
+| 描述对象 | 外部 MCP Server 连接 | 数据集、知识库和 Markdown 文档 | 提示词、业务知识和运行时工具范围 |
+| 主要文件 | `config.json` | `config.json`、`datasets/<code>/*.md` | `skill.json`、`SKILL.md` |
+| 执行代码 | 由外部 MCP Server 提供 | 否，由平台构建索引 | 通常不直接执行代码 |
+| 工具发现 | 连接后动态发现 | 不暴露为工具，每轮自动注入范围上下文 | 只引用允许的工具名 |
+| 权限 | Agent Scope、审批策略、服务状态 | Skill 绑定知识库与向量服务状态 | Skill Allowlist 与运行预算 |
 
 `agent-skills/create-zenvis-plugin` 是研发工作流，不会被 `09_skill` 安装；插件内 Skill 才会进入平台运行时注册表。
 
@@ -100,9 +100,15 @@ MCP `code` 是资源身份：
 
 安装后，平台把 Skill 复制到该插件包名对应的隔离目录并重新加载注册表。卸载插件会移除这部分运行时 Skill。
 
-## `08_rag` 占位
+插件目录下的 Skill 会由平台强制标记为 `custom=false`、`source=<插件包名>`。`editable` 缺省为 `true`，允许管理员在管理页临时修改；插件升级或重装会以包内 `skill.json` 和 `SKILL.md` 覆盖这些修改，删除仍应通过卸载插件完成。
 
-`08_rag/` 是后续插件级 RAG 配置的保留位置。当前安装器和导出器只创建空目录及 `.gitkeep`，不读取其中的配置；插件文档仍从 `00_doc` 加载到 RAG。
+## `08_rag` 与运行时 Skill
+
+`08_rag/config.json` 声明插件托管的数据集和知识库。安装、升级和卸载会同步更新这些资源；知识库关联的 Markdown 文件来自包内 `00_doc` 或 `08_rag` 目录。`00_doc` 本身不再自动进入公共向量索引。
+
+`09_skill` 仍然负责提示词、业务上下文和工具 allowlist。插件 Skill 通过 `knowledgeBaseCodes` 引用同一插件 `08_rag` 中声明的知识库编码；加载时平台按插件包名解析当前环境的数值 ID，并在每轮会话中自动注入该范围内的 RAG 参考资料。这样打包时无需知道数据库自增 ID。
+
+`08_rag` 只保证数据集、知识库和向量索引存在，不会自动扩大 Skill 的其他工具权限。自动注入的知识库文本不能替代 MCP 的实时事实查询，也不会作为 MCP 工具占用调用预算。Skill 未绑定知识库时不检索，不回退到全库。完整配置格式和生命周期规则见[插件包规范](/03-插件开发与集成/插件包规范.md#文档与插件-rag)。
 
 ## skill.json
 
@@ -113,8 +119,11 @@ MCP `code` 是资源身份：
   "description": "使用受控检索工具分析示例事件",
   "version": "1.0.0",
   "author": "Example Team",
+  "source": "com.example.plugin",
+  "editable": true,
   "agentTypes": ["agent_skill"],
   "tags": ["example", "investigation"],
+  "knowledgeBaseCodes": ["example-kb"],
   "chat": {
     "enabled": true,
     "label": "示例研判",
@@ -158,13 +167,18 @@ MCP `code` 是资源身份：
 | `id` | 全局 Skill ID；字母或数字开头，可包含点、下划线、连字符，最长 128 个字符 |
 | `name`、`description` | 用户可理解的名称和边界 |
 | `version`、`author`、`tags` | 版本和检索信息 |
+| `source` | 插件 Skill 由平台填充为插件包名，无需依赖包内值；自定义 Skill 为 `custom`，内置 Skill 为 `builtin` |
+| `editable` | 是否允许管理端编辑；插件 Skill 缺省为 `true`，内置 Skill 缺省为 `false` |
 | `agentTypes` | 适用 Agent 类型 |
 | `enabled` | 是否进入启用 Skill 范围 |
 | `entry` | 提示词入口，默认 `SKILL.md` |
 | `chat` | DIH 聊天入口 |
 | `runtime` | 提示词模式、工具白名单和调用预算 |
+| `knowledgeBaseCodes` | 插件内知识库编码列表；按插件包名解析为知识库 ID，并在每轮会话中自动注入该范围的 RAG 参考资料 |
 
 插件 Skill 没有声明 `agentTypes` 时，当前平台会兼容为 `ask`；新建需要工具的 Skill 应显式声明支持的 Agent 类型，避免继承不明确行为。
+
+管理端显式保存知识库绑定时，会改为保存数值 `knowledgeBaseIds` 并移除 `knowledgeBaseCodes`。下次插件升级或重装仍以包内声明为准。
 
 ## DIH 聊天入口
 

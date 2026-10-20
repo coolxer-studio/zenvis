@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 /**
  * RAG知识库
  */
@@ -45,4 +47,40 @@ public interface RagKnowledgeBaseRepository extends BaseRepository<RagKnowledgeB
             value = "SELECT count(*) FROM " + MysqlFinalTableName.T_RAG_KNOWLEDGE_BASE + " a WHERE a.is_delete = 0 AND " +
                     "a.name = :name AND (:excludeId IS NULL OR a.id != :excludeId)")
     long countByName(@Param("name") String name, @Param("excludeId") Integer excludeId);
+
+    /**
+     * 查询未删除的同名知识库
+     *
+     * @param name 知识库名称
+     * @return 知识库列表
+     */
+    @Query("SELECT a FROM RagKnowledgeBase a WHERE a.isDelete = 0 AND a.name = :name")
+    List<RagKnowledgeBase> findActiveByName(@Param("name") String name);
+
+    /**
+     * 查询插件托管的知识库
+     *
+     * @param pluginPackage 插件包名
+     * @param pluginCode    插件内编码
+     * @return 知识库列表
+     */
+    @Query("SELECT a FROM RagKnowledgeBase a WHERE a.isDelete = 0 AND a.pluginPackage = :pluginPackage AND a.pluginCode = :pluginCode")
+    List<RagKnowledgeBase> findManaged(@Param("pluginPackage") String pluginPackage, @Param("pluginCode") String pluginCode);
+
+    /**
+     * 查询插件托管的全部知识库
+     *
+     * @param pluginPackage 插件包名
+     * @return 知识库列表
+     */
+    @Query("SELECT a FROM RagKnowledgeBase a WHERE a.isDelete = 0 AND a.pluginPackage = :pluginPackage")
+    List<RagKnowledgeBase> findAllManaged(@Param("pluginPackage") String pluginPackage);
+
+    /**
+     * 查询全部未删除知识库 ID，供普通问答进行全库 RAG 检索。
+     *
+     * @return 按 ID 排序的知识库 ID
+     */
+    @Query("SELECT a.id FROM RagKnowledgeBase a WHERE a.isDelete = 0 ORDER BY a.id")
+    List<Integer> findActiveIds();
 }

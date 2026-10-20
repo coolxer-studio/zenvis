@@ -243,13 +243,13 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 - 业务 Agent 通过 `PromptDrivenAgentRuntime` 执行，通过 `AgentMcpToolService` 获取工具白名单。
 - 数据可视化 Agent 只使用只读 retrieval MCP 工具，不生成或执行任意 SQL。
 - 写工具必须保留审批、审计、参数校验和风险策略。
-- RAG 只服务普通问答和深度问答；业务 Agent 使用显式绑定的 Skill。
+- 普通问答和深度问答在全部未删除知识库中自动执行 RAG；业务 Agent / Skill 在所选启用 Skill 绑定知识库的并集内自动执行 RAG，未绑定时不检索也不回退全库。
 
 修改流式协议时必须保持文本、审批、完成、错误和富消息事件兼容，并同步前端类型和渲染逻辑。
 
 ### 插件生命周期
 
-插件安装器负责按目录导入 Meta、推送任务、动态 API、UI、看板、菜单、MCP、RAG 占位和 Skill。平台通用契约见[插件开发与集成](/03-插件开发与集成/README.md)。
+插件安装器负责按目录导入 Meta、推送任务、动态 API、UI、看板、菜单、MCP、`08_rag` 托管数据集/知识库和 Skill。`PluginRagService` 负责 RAG 配置预检、声明式对账、同步构建和导出；`00_doc` 不再自动加载到向量索引。平台通用契约见[插件开发与集成](/03-插件开发与集成/README.md)。
 
 修改插件能力时重点检查：
 
@@ -258,6 +258,7 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 - 动态 Jar 的注册、重载和类加载隔离；
 - MySQL 迁移版本和 SHA-256；
 - 配置索引、静态文件路径和卸载清理；
+- `08_rag` 托管身份、名称冲突、旧目录切换、构建指纹和失败状态；
 - 旧插件兼容与测试归档。
 
 ## 扩展点

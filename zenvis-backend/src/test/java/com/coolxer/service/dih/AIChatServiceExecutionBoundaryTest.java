@@ -7,6 +7,7 @@ import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.rag.RagContextService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -54,9 +55,20 @@ class AIChatServiceExecutionBoundaryTest {
     }
 
     @Test
-    void agentChatNeverRetrievesRag() {
+    void agentChatInjectsOnlyBoundKnowledgeBaseRagIntoSystemPrompt() {
         RagContextService ragContextService = mock(RagContextService.class);
-        AIChatService service = service(ragContextService);
+        when(ragContextService.retrieve("执行任务", "agent", List.of(7, 8)))
+                .thenReturn(new RagContextService.RagContext(
+                        "【知识库参考资料】\n绑定范围资料",
+                        true,
+                        true,
+                        1,
+                        2,
+                        "ok"
+                ));
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.empty());
+        AIChatService service = service(ragContextService, chatModel);
 
         service.agentChat(
                 "chat-1",
@@ -65,10 +77,42 @@ class AIChatServiceExecutionBoundaryTest {
                 "执行任务",
                 List.of(),
                 null,
+                List.of(7, 8),
                 McpToolContext.empty()
-        );
+        ).collectList().block();
 
-        verify(ragContextService, never()).retrieve(any(), any());
+        verify(ragContextService).retrieve("执行任务", "agent", List.of(7, 8));
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getSystemMessage().getText())
+                .isEqualTo("Agent系统提示\n\n【知识库参考资料】\n绑定范围资料");
+    }
+
+    @Test
+    void agentChatWithoutBoundKnowledgeBaseDoesNotInjectRagContext() {
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.retrieve("执行任务", "agent", List.of()))
+                .thenReturn(new RagContextService.RagContext(
+                        "", true, false, 0, 0, "no_bound_knowledge_base"));
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.empty());
+        AIChatService service = service(ragContextService, chatModel);
+
+        service.agentChat(
+                "chat-1",
+                "model-1",
+                "Agent系统提示",
+                "执行任务",
+                List.of(),
+                null,
+                List.of(),
+                McpToolContext.empty()
+        ).collectList().block();
+
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getSystemMessage().getText())
+                .isEqualTo("Agent系统提示");
     }
 
     @Test
@@ -160,12 +204,13 @@ class AIChatServiceExecutionBoundaryTest {
         ));
         ChatAttachmentService attachmentService =
                 new ChatAttachmentService(new CustomWebConfig());
+        RagContextService ragContextService = mock(RagContextService.class);
         AIChatService service = new AIChatService(
                 memoryRepository,
                 chatModel,
                 new PromptTemplate("普通问答系统提示"),
                 new PromptTemplate("深度思考系统提示"),
-                mock(RagContextService.class),
+                ragContextService,
                 attachmentService,
                 "",
                 "",
@@ -179,6 +224,9 @@ class AIChatServiceExecutionBoundaryTest {
         String expandedPrompt =
                 "分析附件\n\n---\n以下是用户本轮消息上传的附件内容，请结合这些附件回答。"
                         + "\nRAW_ATTACHMENT_BODY";
+        when(ragContextService.retrieve(expandedPrompt, "agent", List.of()))
+                .thenReturn(new RagContextService.RagContext(
+                        "", true, false, 0, 0, "no_bound_knowledge_base"));
 
         service.agentChat(
                 "chat-attachment",
@@ -187,6 +235,7 @@ class AIChatServiceExecutionBoundaryTest {
                 expandedPrompt,
                 List.of(attachment),
                 null,
+                List.of(),
                 McpToolContext.empty()
         ).collectList().block();
 
@@ -197,9 +246,13 @@ class AIChatServiceExecutionBoundaryTest {
     }
 
     private AIChatService service(RagContextService ragContextService) {
-        ChatMemoryRepository memoryRepository = mock(ChatMemoryRepository.class);
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.<ChatResponse>empty());
+        return service(ragContextService, chatModel);
+    }
+
+    private AIChatService service(RagContextService ragContextService, ChatModel chatModel) {
+        ChatMemoryRepository memoryRepository = mock(ChatMemoryRepository.class);
         ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
         when(attachmentService.hasImageAttachment(any())).thenReturn(false);
         return new AIChatService(

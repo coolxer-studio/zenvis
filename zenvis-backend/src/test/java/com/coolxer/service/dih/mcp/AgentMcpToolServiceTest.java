@@ -94,6 +94,36 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
+    void knowledgeBaseBindingNeverInjectsLocalRagTool() {
+        SkillService skillService = mock(SkillService.class);
+        when(skillService.resolveRuntimeConfig(List.of("kb-skill")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        new SkillRuntimeToolsVo(
+                                localTools(List.of("retrieval_search")), Map.of()),
+                        null));
+        when(skillService.resolveKnowledgeBaseIds(List.of("kb-skill")))
+                .thenReturn(List.of(9));
+        AgentMcpToolService service = new AgentMcpToolService(
+                new EmptyMcpClientService(),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(new FakeToolCallback("retrieval_search", "检索")),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve("agent_skill", List.of("kb-skill"));
+
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly("retrieval_search")
+                .doesNotContain("rag_search");
+        assertThat(context.systemPrompt())
+                .contains("retrieval_search")
+                .doesNotContain("rag_search", "知识库检索 (rag)");
+    }
+
+    @Test
     void resolveDataVisualizationAgentUsesRetrievalAndControlledWriteTools() {
         SkillService skillService = mock(SkillService.class);
         List<String> allowedTools = List.of(
@@ -124,8 +154,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("menu_update", "更新菜单")
                 ),
                 null,
-                skillService,
-                null
+                skillService
         );
 
         McpToolContext context = service.resolve(
@@ -181,8 +210,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("dashboard_create", "创建看板")
                 ),
                 null,
-                skillService,
-                null
+                skillService
         );
 
         McpToolContext context = service.resolve(
@@ -273,8 +301,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("entity_update", "更新实体")
                 ),
                 null,
-                skillService,
-                null
+                skillService
         );
 
         McpToolContext context = service.resolve(
@@ -341,8 +368,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("menu_create", "创建菜单")
                 ),
                 null,
-                skillService,
-                null
+                skillService
         );
 
         McpToolContext context = service.resolve(
@@ -387,8 +413,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
-                skillService,
-                null
+                skillService
         );
 
         McpToolContext context = service.resolve(
@@ -426,8 +451,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
-                skillService,
-                null
+                skillService
         );
 
         McpToolContext context = service.resolve(

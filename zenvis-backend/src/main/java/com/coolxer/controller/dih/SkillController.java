@@ -153,7 +153,7 @@ public class SkillController {
     }
 
     @PostMapping("/{id}/update")
-    @Operation(summary = "更新自定义 Skill", description = "更新页面创建的自定义 Skill，仅允许 custom=true 的 Skill")
+    @Operation(summary = "更新可编辑 Skill", description = "更新可编辑的 Skill；插件 Skill 仅临时覆盖，后续插件升级以包内声明为准")
     public ResponseWrap<SkillVo> update(@PathVariable("id") String id, @RequestBody SkillSaveDto dto) {
         try {
             return ResponseWrap.success(skillService.update(id, dto));

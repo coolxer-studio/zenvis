@@ -30,8 +30,10 @@ class PromptDrivenAgentRuntimeTest {
         SkillService skillService = mock(SkillService.class);
         when(skillService.buildAgentSkillPrompt("agent_report", List.of("report-agent")))
                 .thenReturn("报表 Skill");
+        when(skillService.resolveKnowledgeBaseIds(List.of("report-agent")))
+                .thenReturn(List.of(11));
         when(chatService.agentChat(
-                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
         )).thenReturn(Flux.just("完成"));
         PromptDrivenAgentRuntime runtime = new PromptDrivenAgentRuntime(chatService, skillService);
 
@@ -56,6 +58,7 @@ class PromptDrivenAgentRuntimeTest {
                 eq("分析问题"),
                 eq(List.of()),
                 isNull(),
+                eq(List.of(11)),
                 eq(McpToolContext.empty())
         );
     }
@@ -92,8 +95,10 @@ class PromptDrivenAgentRuntimeTest {
         when(skillService.buildAgentSkillPrompt(
                 "agent_skill", List.of("jmr-continuous-threat-analysis")))
                 .thenReturn("JMR 0001–0004 专项流程");
+        when(skillService.resolveKnowledgeBaseIds(List.of("jmr-continuous-threat-analysis")))
+                .thenReturn(List.of(12));
         when(chatService.agentChat(
-                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
         )).thenReturn(Flux.just("完成"));
         PromptDrivenAgentRuntime runtime = new PromptDrivenAgentRuntime(chatService, skillService);
         SkillRuntimeConfigVo runtimeConfig = new SkillRuntimeConfigVo();
@@ -121,6 +126,7 @@ class PromptDrivenAgentRuntimeTest {
                 eq("分析事件"),
                 eq(List.of()),
                 isNull(),
+                eq(List.of(12)),
                 eq(toolContext)
         );
         assertThat(promptCaptor.getValue())

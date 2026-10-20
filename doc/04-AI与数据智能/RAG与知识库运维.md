@@ -4,21 +4,26 @@
 
 ## 当前作用域
 
-公共 RAG 只服务普通问答和深度思考：
+公共 RAG 服务普通问答、深度思考和业务 Agent / Skill：
 
 ```text
 用户问题
   → embedding
-  → Redis Vector Store 相似度召回
+  → 按知识库范围过滤后的 Redis Vector Store 相似度召回
   → topK 6 文档
   → 作为不可执行参考资料加入系统 Prompt
   → 模型回答
 ```
 
+- 普通问答和深度思考检索全部未删除知识库。
+- 业务 Agent / Skill 只检索当前所选启用 Skill 绑定知识库的并集；未绑定知识库时不执行向量检索，也不回退到全库。
+- RAG 参考资料每轮自动注入，不作为 MCP 工具暴露，不占用工具调用预算或审批流程。
 - RAG 文档被明确标记为参考资料，不是系统指令。
 - 普通问答不会因为文档内容获得 MCP 工具。
-- 数据接入、数据可视化、报表和专项 Skill 使用显式工作规范与工具，不读取公共 RAG。
-- embedding 未启用、Redis 故障或没有匹配文档时，普通问答继续以无 RAG 模式执行。
+- 业务会话不会因为 RAG 绑定获得 MCP 工具之外的权限；实时事实仍必须来自受控 MCP 工具。
+- embedding 未启用、Redis 故障、知识库未构建或没有匹配文档时，当前轮继续以无 RAG 模式执行并记录原因。
+
+全库检索先通过 `RagKnowledgeBaseRepository.findActiveIds()` 取得全部未删除知识库 ID，再把 ID 转为 `kb_<knowledge_base_id>` 并作为 Redis `source` 标签过滤条件。业务会话直接使用所选 Skill 绑定知识库的并集，不再查询全库 ID。范围过滤复用现有 `source` 标签，不新增向量字段或数据库迁移。
 
 ## 配置
 
@@ -52,20 +57,41 @@ app.ai.vectorstore.management.enabled=true
 
 代码默认在未配置时关闭管理接口；当前生产配置基线显式开启。面向非管理员用户时应结合登录、角色和网络边界限制访问。
 
-## 文档来源与生命周期
+## 插件 RAG 来源与生命周期
 
-插件安装后，`00_doc` 中平台支持的文档可以进入公共向量索引。每个向量文档保存来源信息，用于检索展示和插件资源清理。
+插件 RAG 完全由 `08_rag/config.json` 接管。安装器不再把 `00_doc` 自动加载到公共向量索引；没有 `08_rag` 声明的插件可以正常安装，但不会创建插件托管的数据集或知识库。数据集路径可以指向 `00_doc` 下的目录，也可以指向 `08_rag/datasets/<code>/`。
+
+托管资源使用以下身份：
+
+| 资源 | 托管身份 | 说明 |
+| --- | --- | --- |
+| 数据集 | `plugin_package + plugin_code` | 名称、来源、标签、描述、目录和文件随插件声明更新 |
+| 知识库 | `plugin_package + plugin_code` | 名称、来源、标签、描述和数据集关联随插件声明更新 |
+| 知识库构建 | `build_fingerprint` | 记录最近一次成功构建的输入摘要 |
+
+生命周期行为：
+
+- 安装和升级在操作完成前同步应用数据集、知识库和关联关系，并同步构建需要更新的知识库。
+- 知识库为 `BUILT` 且指纹一致时跳过重建。指纹包含知识库名称、标签、数据集身份与名称、相对文件路径与内容摘要、Embedding 模型和 Redis 索引标识。
+- 升级执行完全声明式对账：新增或更新声明资源，删除不再声明的托管资源；管理员对托管名称、标签、描述、关联关系和文件的修改会被覆盖。
+- 管理员通过现有 RAG 接口修改托管数据集或知识库、上传/删除文件或手工触发构建时，关联构建指纹会失效；需要重建的托管知识库会回到 `UNBUILD`。
+- 托管数据集仍被非托管知识库引用时，升级会被拒绝，避免破坏外部关联。
+- 升级和卸载会尽力清理旧版 `00_doc` 插件来源向量；安装不再执行 `00_doc` 向量加载。
+- 卸载只删除该 `plugin_package` 托管的知识库、关系、数据集、MinIO 文件和对应向量，不影响其他 RAG 资源。
+- 插件导出从数据库和 MinIO 重建 `08_rag/config.json` 与 `08_rag/datasets/<code>/`，不会把 `00_doc` 复制为知识库源。
+
+配置、路径、文件、数据库或名称冲突错误会中止插件操作并回滚。Embedding/Redis 不可用或向量构建失败只产生告警，数据集和知识库仍会保留：服务不可用时知识库为 `UNBUILD`，构建执行失败时为 `BUILD_FAILED`。修复后可在管理页面手工重建。
 
 运维原则：
 
-- 文档正文以插件包中的原始文件为来源；
-- 向量文档保存 `source`，不要混用不同插件或客户来源；
-- 插件升级后应核对新增、更新和删除文档；
-- 插件卸载只清理该插件来源的向量文档；
+- 文档正文以插件包中的原始 Markdown 为来源；
+- 向量文档保存 `source` 与知识库、数据集 metadata，不要混用不同插件或客户来源；
+- 插件升级后应核对知识库状态、构建指纹、文档数量和来源；
+- 管理端对托管资源的临时调整可用于排障，但下一次插件升级会覆盖；
 - 删除向量文档不会删除插件包中的原始文件；
 - 重新安装或重新入库前确认是否会产生重复来源。
 
-管理接口支持：
+现有管理接口保持可编辑，支持：
 
 - 数据集管理：创建/更新/删除数据集，上传单文件或目录（保留 MinIO 层级），查看文件列表与内容；
 - 知识库管理：创建/更新/删除知识库，关联数据集，异步构建并流式查看日志；
@@ -74,35 +100,38 @@ app.ai.vectorstore.management.enabled=true
 - 相似度搜索验证；
 - 检索审计日志查询（`GET /retrieval-logs/list`）。
 
-知识库构建时会在文档 metadata 中写入 `knowledge_base_id`，因此运维上可以通过 `/documents/list?knowledge_base_id={id}` 精确查看某个知识库已入库的文档，而不需要混用全部向量文档。删除知识库会同步清理 Redis 中的向量数据，但不会删除数据集在 MinIO 中的原始文件。
+知识库构建时会在文档 metadata 中写入 `knowledge_base_id`，因此运维上可以通过 `/documents/list?knowledge_base_id={id}` 精确查看某个知识库已入库的文档，而不需要混用全部向量文档。删除知识库会同步清理 Redis 中的向量数据，但不会删除数据集在 MinIO 中的原始文件。插件卸载会先删除本插件托管知识库，再清理没有外部引用的托管数据集。
 
 数据集和知识库的名称唯一性在应用层校验（仅统计 `is_delete=0` 的记录），未加数据库唯一索引：两张表均为逻辑删除，数据库级唯一约束会导致删除后无法重建同名记录。若需排查历史重名数据，可直接查询 `t_rag_dataset` / `t_rag_knowledge_base` 按名称分组统计。
 
 ## 检索审计
 
-每次检索（管理端相似度搜索 `MANUAL`、知识问答触发的 RAG 检索 `CHAT`）都会写入 `t_rag_retrieval_log` 表（`ddl-auto=update` 自动建表），字段包括请求类型、检索文本、TopK、来源筛选、`knowledge_base_id`、命中数、状态、耗时、命中结果摘要 JSON 和错误信息。
+每次检索（管理端相似度搜索 `MANUAL`、问答或业务 Skill 触发的自动 RAG 检索 `CHAT`）都会写入 `t_rag_retrieval_log` 表（`ddl-auto=update` 自动建表），字段包括请求类型、检索文本、TopK、来源筛选、`knowledge_base_id`、命中数、状态、耗时、命中结果摘要 JSON 和错误信息。
 
 运维要点：
 
 - 日志保存为 best-effort：写库失败仅打 `保存RAG检索日志失败` 警告，不影响检索主流程；若审计无数据，先检查该表是否建表成功。
 - 请求未指定知识库时，`knowledge_base_id` 取命中文档 metadata 中出现次数最多的知识库 ID；无命中或旧文档缺少元数据时归属为空。
 - `result_json` 中每条命中的正文截断 500 字符，防止大字段膨胀。
-- 排障搜索无结果时，先查审计记录的状态：`no_match` 指向索引数据问题，`retrieval_error` 指向 embedding/Redis 异常，`empty_query` 为空查询。
+- 排障搜索无结果时，先查审计记录的状态：`no_match` 指向索引数据问题，`retrieval_error` 指向 embedding/Redis 异常，`empty_query` 为空查询；`no_knowledge_base` 与 `no_bound_knowledge_base` 表示该轮没有向量查询范围。
 
 完整路径和字段见[DIH 与 AI API](/08-API参考/RestfulAPI/DIH与AI.md#vectorstorequerycontroller)。
 
 ## 召回行为
 
-`RagContextService` 当前固定请求 topK 6：
+`RagContextService` 当前固定请求 topK 6，并对 `source` 执行 `in` 过滤：
 
 - 空问题不召回；
 - embedding 关闭时记录 `embedding_disabled`；
+- 普通问答没有未删除知识库时记录 `no_knowledge_base`，不查询向量库；
+- 业务会话没有绑定知识库时记录 `no_bound_knowledge_base`，不查询向量库，也不回退全库；
+- 知识库 ID 查询失败时记录 `retrieval_error`，日志标记 `knowledge_base_lookup_error`；
 - 没有结果时记录 `no_match`；
 - embedding 或 Redis 异常时记录 `retrieval_error`；
 - 只有非空文档才进入 Prompt；
 - 每条资料携带 `source`，便于核对来源。
 
-RAG 日志会记录是否请求、是否实际使用、文档数、耗时和降级原因。不要仅根据最终回答判断知识库是否生效。
+RAG 日志和 LLM 请求日志会记录是否请求、是否实际使用、文档数、耗时和降级原因。原生流式模型路径与 Spring AI 路径都会写入 `rag_requested`、`rag_used` 和 `rag_document_count`。不要仅根据最终回答判断知识库是否生效。
 
 ## 索引与 embedding 一致性
 
@@ -159,7 +188,8 @@ FT.SEARCH index_dih_rag_vector "*" LIMIT 0 10
 2. 对一个明确出现在文档中的问题执行相似度搜索。
 3. 确认返回文档、来源和内容正确。
 4. 再执行普通问答，检查 RAG 日志中的 `rag_used=true` 和文档数。
-5. 禁用 embedding 或模拟 Redis 故障，确认普通问答 fail-open。
+5. 选择一个绑定该知识库的 Skill 会话，确认只召回绑定范围并检查 `rag_used=true`；再选择一个未绑定知识库的 Skill，确认日志为 `no_bound_knowledge_base` 且没有向量查询。
+6. 禁用 embedding 或模拟 Redis 故障，确认问答和业务会话 fail-open。
 
 ## 删除与重建安全
 
@@ -179,7 +209,7 @@ FT.SEARCH index_dih_rag_vector "*" LIMIT 0 10
 
 ## 常见问题
 
-### 普通问答没有使用 RAG
+### 普通问答或业务会话没有使用 RAG
 
 依次检查：
 
@@ -188,7 +218,9 @@ FT.SEARCH index_dih_rag_vector "*" LIMIT 0 10
 3. Redis Stack 连接；
 4. 索引是否存在；
 5. 文档是否按正确来源入库；
-6. 日志原因是 `no_match` 还是 `retrieval_error`。
+6. 普通问答是否至少有一个未删除知识库；
+7. 业务会话所选 Skill 是否绑定知识库，且绑定知识库已构建；
+8. 日志原因是 `no_knowledge_base`、`no_bound_knowledge_base`、`no_match` 还是 `retrieval_error`。
 
 ### 更换模型后出现维度错误
 
@@ -196,7 +228,11 @@ FT.SEARCH index_dih_rag_vector "*" LIMIT 0 10
 
 ### 插件文档已经更新，回答仍引用旧内容
 
-检查插件升级是否重新处理文档、旧来源是否清理、向量文档正文和 metadata 是否更新，以及问答实际命中的 source。
+检查插件升级日志中的 RAG 同步和构建结果、知识库 `build_fingerprint` 是否更新、数据集 MinIO 目录是否切换到新操作目录，以及向量文档正文和 metadata 是否更新。若知识库状态为 `UNBUILD` 或 `BUILD_FAILED`，修复服务后手工重建。
+
+### 插件没有任何知识库
+
+确认 `08_rag/config.json` 存在且声明非空，数据集路径位于 `00_doc` 或 `08_rag`，目录中至少有一个 `.md` 文件，知识库 `dataset_codes` 引用了本次声明的数据集。没有 `08_rag` 配置是合法的无插件 RAG 状态。
 
 ### 删除文档后插件文件仍存在
 
@@ -204,7 +240,7 @@ FT.SEARCH index_dih_rag_vector "*" LIMIT 0 10
 
 ### Redis 故障但问答仍返回内容
 
-这是 fail-open 行为。回答此时没有使用公共 RAG，应根据日志、引用来源和文档数判断结果可信度。
+这是 fail-open 行为。回答此时没有获得 RAG 参考资料，应根据日志中的检索原因、引用来源和文档数判断结果可信度。
 
 ### 相似度搜索结果与预期不符
 
@@ -215,7 +251,9 @@ FT.SEARCH index_dih_rag_vector "*" LIMIT 0 10
 - embedding 开关与模型服务能力一致；
 - Redis Stack 和普通 Session Redis 的职责、地址没有混淆；
 - 索引名、前缀、维度和 embedding 模型一致；
-- 插件文档可按来源查询和清理；
+- 插件数据集和知识库可按 `plugin_package` 与 `plugin_code` 查询和清理；
+- 未变化知识库可通过构建指纹跳过重建，定义或文件变化后可重新构建；
+- Embedding/Redis 故障不会回滚插件操作，但会保留明确的 `UNBUILD` 或 `BUILD_FAILED` 状态；
 - 代表性相似度搜索返回正确来源；
 - 普通问答日志能区分 `ok`、`no_match`、`embedding_disabled` 和 `retrieval_error`；
 - embedding 或 Redis 故障时普通问答可以 fail-open；

@@ -55,14 +55,8 @@ import java.util.stream.Stream;
 /**
  * VectorStoreInitializer
  * <p>
- * 使用示例：
- * writeLog(id, "文档加载到RAG......");
- * try {
- * vectorStoreInitializerService.loadDocToRag(plugin.getPackageName().replaceAll("\\.", "_"), pluginPackTool.getDocPath());
- * } catch (Exception e) {
- * log.error("加载到RAG失败......", e);
- * writeLog(id, "加载到RAG失败......，跳过");
- * }
+ * 插件文档不再由 {@code 00_doc} 自动加载。PluginRagService 会按 {@code 08_rag/config.json}
+ * 同步数据集，并通过 RagKnowledgeBaseService 构建知识库；本服务负责向量存储可用性检查和旧版向量清理。
  */
 
 @Service

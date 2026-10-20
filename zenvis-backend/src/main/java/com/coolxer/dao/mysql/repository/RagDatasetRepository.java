@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 /**
  * RAG数据集
  */
@@ -45,4 +47,32 @@ public interface RagDatasetRepository extends BaseRepository<RagDataset, Integer
             value = "SELECT count(*) FROM " + MysqlFinalTableName.T_RAG_DATASET + " a WHERE a.is_delete = 0 AND " +
                     "a.name = :name AND (:excludeId IS NULL OR a.id != :excludeId)")
     long countByName(@Param("name") String name, @Param("excludeId") Integer excludeId);
+
+    /**
+     * 查询未删除的同名数据集
+     *
+     * @param name 数据集名称
+     * @return 数据集列表
+     */
+    @Query("SELECT a FROM RagDataset a WHERE a.isDelete = 0 AND a.name = :name")
+    List<RagDataset> findActiveByName(@Param("name") String name);
+
+    /**
+     * 查询插件托管的数据集
+     *
+     * @param pluginPackage 插件包名
+     * @param pluginCode    插件内编码
+     * @return 数据集列表
+     */
+    @Query("SELECT a FROM RagDataset a WHERE a.isDelete = 0 AND a.pluginPackage = :pluginPackage AND a.pluginCode = :pluginCode")
+    List<RagDataset> findManaged(@Param("pluginPackage") String pluginPackage, @Param("pluginCode") String pluginCode);
+
+    /**
+     * 查询插件托管的全部数据集
+     *
+     * @param pluginPackage 插件包名
+     * @return 数据集列表
+     */
+    @Query("SELECT a FROM RagDataset a WHERE a.isDelete = 0 AND a.pluginPackage = :pluginPackage")
+    List<RagDataset> findAllManaged(@Param("pluginPackage") String pluginPackage);
 }

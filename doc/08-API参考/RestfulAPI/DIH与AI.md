@@ -1,6 +1,6 @@
 # DIH 与 AI API
 
-本页合并 DIH Chat、会话、报表、Skill、RAG 数据集、知识库、RAG 文档、检索审计和后台 AI 分析任务接口，共 9 个 Controller、71 个路由。旧 `DihController` 已不存在，原建议、模型和健康接口均由 `ChatController` 实现。
+本页合并 DIH Chat、会话、报表、Skill、RAG 数据集、知识库、RAG 文档、检索审计和后台 AI 分析任务接口，共 10 个 Controller、83 个路由。旧 `DihController` 已不存在，原建议、模型和健康接口均由 `ChatController` 实现。
 
 ## ChatController
 
@@ -121,12 +121,20 @@
 | GET | `/api/v1/dih/skills/chat-entries` | query `enabled?` | 输入区可展示的聊天入口 |
 | GET | `/api/v1/dih/skills/options` | query `enabled=true` | AI 分析任务可选的已启用 Skill |
 | GET | `/api/v1/dih/skills/{id}/view` | Skill ID | 元数据和入口文件内容 |
+| POST | `/api/v1/dih/skills/add` | `SkillSaveDto` | 创建页面自定义 Skill |
+| POST | `/api/v1/dih/skills/{id}/update` | `SkillSaveDto` | 更新可编辑 Skill；插件 Skill 仅临时覆盖 |
+| DELETE | `/api/v1/dih/skills/{id}` | Skill ID | 删除页面创建的自定义 Skill |
+| POST | `/api/v1/dih/skills/upload` | multipart `file` | 上传 zip 技能包并安装为自定义 Skill |
+| GET | `/api/v1/dih/skills/{id}/export` | Skill ID | 导出 Skill 目录为 zip |
 | POST | `/api/v1/dih/skills/reload` | 无 | 重新扫描 `app.paths.skills` |
 | POST | `/api/v1/dih/skills/{id}/enable` | Skill ID | 启用并写回 `skill.json` |
 | POST | `/api/v1/dih/skills/{id}/disable` | Skill ID | 停用并写回 `skill.json` |
+| GET | `/api/v1/dih/skills/knowledge-base-options` | 无 | 可绑定到 Skill 的 RAG 知识库选项 |
 | GET | `/api/v1/dih/skills/agent/{agentType}/prompt` | Agent 类型 | 当前加载的 Skill 提示词片段 |
 
-`/options` 只允许 `enabled=true`，AI 分析任务不能选择未启用 Skill。任务只保存 Skill ID，真正执行时读取最新 Skill 内容和工具边界。TypeScript 示例见[概览与接入](概览与接入.md#typescript)。
+`SkillSearchDto` 支持按 `keyword`、`agentType`、`enabled`、`custom` 和 `source` 筛选；`source` 可匹配插件包名、`custom` 或 `builtin`。`/options` 只允许 `enabled=true`，AI 分析任务不能选择未启用 Skill。任务只保存 Skill ID，真正执行时读取最新 Skill 内容和工具边界。
+
+`SkillSaveDto` 的 `knowledgeBaseIds` 用于绑定一个或多个 RAG 知识库。绑定后平台在每轮 Skill 会话中检索这些知识库的并集并自动注入系统提示词，不把它注册为 MCP 工具。未绑定知识库时不检索，也不回退全库。页面更新插件 Skill 时会写入数值 ID 并移除包内 `knowledgeBaseCodes`；下一次插件升级或重装会以包内声明重新覆盖。`source` 和 `editable` 由平台根据来源维护：插件包名标识安装归属，页面自定义 Skill 使用 `custom`，内置 Skill 使用 `builtin`。TypeScript 示例见[概览与接入](概览与接入.md#typescript)。
 
 ## VectorStoreQueryController
 
@@ -147,7 +155,7 @@
 
 `RagDocumentVo` 包含 `id`、`text`、`metadata`、`source`。`knowledge_base_id` 匹配文档 metadata 中的 `knowledge_base_id` 字段（构建知识库时写入），用于查看单个知识库已入库的文档。管理接口用于运维和排障，插件文档的正常入库由插件生命周期处理。
 
-**检索审计**：每次相似度搜索（`MANUAL`）和问答触发的 RAG 检索（`CHAT`）都会写入 `t_rag_retrieval_log` 表，记录请求文本、TopK、来源筛选、命中数、状态（`ok` / `no_match` / `empty_query` / `retrieval_error`）、耗时、错误信息和命中结果摘要 JSON（`result_json`，单条内容截断 500 字符）。日志保存为 best-effort，失败不影响检索主流程。请求未指定 `knowledge_base_id` 时，按命中文档 metadata 中出现次数最多的知识库归属。`retrieval-logs/list` 的 `requestType` 取值为 `MANUAL` / `CHAT`，`keyword` 模糊匹配检索文本。
+**检索审计**：每次相似度搜索（`MANUAL`）和问答或业务 Skill 触发的自动 RAG 检索（`CHAT`）都会写入 `t_rag_retrieval_log` 表，记录请求文本、TopK、来源筛选、命中数、状态（`ok` / `no_match` / `no_knowledge_base` / `no_bound_knowledge_base` / `empty_query` / `retrieval_error`）、耗时、错误信息和命中结果摘要 JSON（`result_json`，单条内容截断 500 字符）。`no_knowledge_base` 表示普通问答没有未删除知识库，`no_bound_knowledge_base` 表示业务 Skill 没有绑定知识库；两者都不会发起向量查询。日志保存为 best-effort，失败不影响检索主流程。请求未指定 `knowledge_base_id` 时，按命中文档 metadata 中出现次数最多的知识库归属。`retrieval-logs/list` 的 `requestType` 取值为 `MANUAL` / `CHAT`，`keyword` 模糊匹配检索文本。
 
 ## RagDatasetController
 

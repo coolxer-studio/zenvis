@@ -17,11 +17,10 @@ import static org.mockito.Mockito.when;
 class DihChatExecutionPolicyTest {
 
     @Test
-    void askAllowsRagAndDeepThinkingButNoToolsOrSkills() {
+    void askAllowsDeepThinkingButNoToolsOrSkills() {
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve("ask").orElseThrow();
 
         assertThat(policy.mode()).isEqualTo(DihChatExecutionPolicy.Mode.QA);
-        assertThat(policy.ragAllowed()).isTrue();
         assertThat(policy.toolsAllowed()).isFalse();
         assertThat(policy.deepThinkAllowed()).isTrue();
         assertThat(policy.effectiveDeepThink(true)).isTrue();
@@ -29,14 +28,13 @@ class DihChatExecutionPolicyTest {
     }
 
     @Test
-    void builtinAgentAllowsExplicitSkillAndToolsButNoRagOrDeepThinking() {
+    void builtinAgentAllowsExplicitSkillAndToolsButNoDeepThinking() {
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve(
                 BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
         ).orElseThrow();
 
         assertThat(policy.mode()).isEqualTo(DihChatExecutionPolicy.Mode.AGENT);
         assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
-        assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.toolsAllowed()).isTrue();
         assertThat(policy.deepThinkAllowed()).isFalse();
         assertThat(policy.effectiveDeepThink(true)).isFalse();
@@ -72,12 +70,11 @@ class DihChatExecutionPolicyTest {
         assertThat(policy.isDynamicSkill()).isTrue();
         assertThat(policy.agentType()).isEqualTo(SkillService.GENERIC_SKILL_AGENT_TYPE);
         assertThat(policy.toolsAllowed()).isTrue();
-        assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.skillIds()).containsExactly("jmr-analysis");
     }
 
     @Test
-    void genericDynamicSkillHasNoToolsOrRag() {
+    void knowledgeBaseBindingDoesNotEnableToolsForGenericSkill() {
         SkillService skillService = mock(SkillService.class);
         when(skillService.requireEnabledChatEntry("skill:generic"))
                 .thenReturn(new SkillChatEntryVo(
@@ -89,6 +86,8 @@ class DihChatExecutionPolicyTest {
                         "magic-stick",
                         1000
                 ));
+        when(skillService.resolveKnowledgeBaseIds(List.of("generic")))
+                .thenReturn(List.of(7));
 
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve(
                 "skill:generic",
@@ -97,7 +96,6 @@ class DihChatExecutionPolicyTest {
 
         assertThat(policy.agentType()).isEqualTo(SkillService.GENERIC_SKILL_AGENT_TYPE);
         assertThat(policy.toolsAllowed()).isFalse();
-        assertThat(policy.ragAllowed()).isFalse();
         assertThat(policy.skillIds()).containsExactly("generic");
     }
 

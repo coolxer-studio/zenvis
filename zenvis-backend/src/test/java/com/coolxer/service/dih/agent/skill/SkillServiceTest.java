@@ -2,8 +2,10 @@ package com.coolxer.service.dih.agent.skill;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.JacksonConfig;
+import com.coolxer.model.dih.dto.SkillSaveDto;
 import com.coolxer.model.dih.dto.SkillSearchDto;
 import com.coolxer.model.dih.vo.SkillVo;
+import com.coolxer.service.dih.rag.RagKnowledgeBaseService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -11,14 +13,111 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SkillServiceTest {
 
     @TempDir
     Path skillRoot;
+
+    @Test
+    void pluginSkillUsesPackageSourceAndResolvesKnowledgeBaseCodes() throws Exception {
+        writeSkill(
+                skillRoot.resolve("plugins").resolve("com.acme.demo").resolve("tracehub-analysis"),
+                """
+                        {
+                          "id": "tracehub-analysis",
+                          "name": "TraceHub 研判",
+                          "source": "spoofed-source",
+                          "knowledgeBaseCodes": ["tracehub-kb"],
+                          "enabled": true,
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "插件研判提示词"
+        );
+        RagKnowledgeBaseService ragService = mock(RagKnowledgeBaseService.class);
+        when(ragService.resolveManagedKnowledgeBaseIds("com.acme.demo", List.of("tracehub-kb")))
+                .thenReturn(List.of(7));
+        when(ragService.getNameMap(any())).thenReturn(Map.of(7, "TraceHub 知识库"));
+
+        SkillService service = newSkillService();
+        ReflectionTestUtils.setField(service, "ragKnowledgeBaseService", ragService);
+        service.reload();
+
+        SkillVo skill = service.detail("tracehub-analysis");
+        assertThat(skill.getSource()).isEqualTo("com.acme.demo");
+        assertThat(skill.getEditable()).isTrue();
+        assertThat(skill.getCustom()).isFalse();
+        assertThat(skill.getKnowledgeBaseCodes()).containsExactly("tracehub-kb");
+        assertThat(skill.getKnowledgeBaseIds()).containsExactly(7);
+        assertThat(skill.getKnowledgeBaseNames()).containsExactly("TraceHub 知识库");
+
+        SkillSearchDto search = new SkillSearchDto();
+        search.setSource("acme.demo");
+        assertThat(service.getPageList(search).getRows())
+                .extracting(SkillVo::getId)
+                .containsExactly("tracehub-analysis");
+    }
+
+    @Test
+    void editingPluginSkillKeepsPackageIdentityAndExplicitKnowledgeBaseBinding() throws Exception {
+        Path skillDir = skillRoot.resolve("plugins").resolve("com.acme.demo").resolve("tracehub-analysis");
+        writeSkill(
+                skillDir,
+                """
+                        {
+                          "id": "tracehub-analysis",
+                          "name": "TraceHub 研判",
+                          "knowledgeBaseCodes": ["tracehub-kb"],
+                          "enabled": true,
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "插件研判提示词"
+        );
+        RagKnowledgeBaseService ragService = mock(RagKnowledgeBaseService.class);
+        when(ragService.resolveManagedKnowledgeBaseIds("com.acme.demo", List.of("tracehub-kb")))
+                .thenReturn(List.of(7));
+
+        SkillService service = newSkillService();
+        ReflectionTestUtils.setField(service, "ragKnowledgeBaseService", ragService);
+        service.reload();
+
+        SkillSaveDto dto = new SkillSaveDto();
+        dto.setName("管理员修改后的研判");
+        dto.setDescription("临时修改");
+        dto.setEnabled(true);
+        dto.setKnowledgeBaseIds(List.of(42));
+        dto.setPromptMode("skill_only");
+        SkillSaveDto.ServerToolsDto mcpTools = new SkillSaveDto.ServerToolsDto();
+        mcpTools.setServer("tracehub");
+        mcpTools.setTools(List.of("ioc_lookup", "ip_location_lookup"));
+        dto.setMcpTools(List.of(mcpTools));
+        service.update("tracehub-analysis", dto);
+
+        SkillVo updated = service.detail("tracehub-analysis");
+        assertThat(updated.getName()).isEqualTo("管理员修改后的研判");
+        assertThat(updated.getSource()).isEqualTo("com.acme.demo");
+        assertThat(updated.getEditable()).isTrue();
+        assertThat(updated.getCustom()).isFalse();
+        assertThat(updated.getKnowledgeBaseIds()).containsExactly(42);
+        assertThat(updated.getRuntime().getPromptMode()).isEqualTo("skill_only");
+        assertThat(updated.getRuntime().getTools().getMcp().get("tracehub"))
+                .containsExactly("ioc_lookup", "ip_location_lookup");
+
+        String manifest = Files.readString(skillDir.resolve("skill.json"));
+        assertThat(manifest)
+                .doesNotContain("knowledgeBaseCodes")
+                .contains("\"source\" : \"com.acme.demo\"")
+                .contains("\"knowledgeBaseIds\" : [ 42 ]");
+    }
 
     @Test
     void pluginSkillWithoutAgentTypesDefaultsToAskOnly() throws Exception {
@@ -420,16 +519,24 @@ class SkillServiceTest {
 
     @Test
     void installedPluginDataAnalysisSkillIsVisibleAsDynamicChatEntry() throws Exception {
-        Path repoSkill = Path.of(
-                "../deploy/open_config/skill_config/plugins/com.coolxer.plugin.jmr/"
-                        + "jmr-continuous-threat-analysis"
-        );
         writeSkill(
                 skillRoot.resolve("plugins")
                         .resolve("com.coolxer.plugin.jmr")
                         .resolve("jmr-continuous-threat-analysis"),
-                Files.readString(repoSkill.resolve("skill.json")),
-                Files.readString(repoSkill.resolve("SKILL.md"))
+                """
+                        {
+                          "id": "jmr-continuous-threat-analysis",
+                          "name": "僵木蠕研判",
+                          "enabled": true,
+                          "agentTypes": ["agent_skill"],
+                          "chat": {
+                            "enabled": true,
+                            "label": "僵木蠕研判"
+                          },
+                          "entry": "SKILL.md"
+                        }
+                        """,
+                "僵木蠕研判提示词"
         );
 
         SkillService service = newSkillService();

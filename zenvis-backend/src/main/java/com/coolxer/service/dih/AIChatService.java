@@ -270,7 +270,8 @@ public class AIChatService {
                     systemPrompt,
                     deepThinking
                             ? "AIChatService.qaChat.deepThink.native"
-                            : "AIChatService.qaChat.native"
+                            : "AIChatService.qaChat.native",
+                    ragContext
             ), chatId, preparedInput.prompt(), attachments);
         }
 
@@ -313,7 +314,7 @@ public class AIChatService {
     }
 
     /**
-     * 智能体入口：允许显式 Skill 和受控 MCP 工具，禁止 RAG。
+     * 智能体入口：允许显式 Skill 和受控 MCP 工具，并在 Skill 绑定的知识库范围内自动注入 RAG。
      */
     public Flux<String> agentChat(String chatId,
                                   String model,
@@ -321,6 +322,18 @@ public class AIChatService {
                                   String prompt,
                                   List<ChatAttachment> attachments,
                                   User user,
+                                  McpToolContext mcpToolContext) {
+        return agentChat(chatId, model, systemPrompt, prompt, attachments, user,
+                List.of(), mcpToolContext);
+    }
+
+    public Flux<String> agentChat(String chatId,
+                                  String model,
+                                  String systemPrompt,
+                                  String prompt,
+                                  List<ChatAttachment> attachments,
+                                  User user,
+                                  List<Integer> knowledgeBaseIds,
                                   McpToolContext mcpToolContext) {
         if (!StringUtils.hasText(systemPrompt)) {
             return Flux.error(new AgentCapabilityUnavailableException("智能体系统提示词不能为空。"));
@@ -331,9 +344,11 @@ public class AIChatService {
         McpToolContext resolvedMcpToolContext = mcpToolContext == null
                 ? McpToolContext.empty()
                 : mcpToolContext;
+        RagContext ragContext = ragContextService.retrieve(prompt, "agent", knowledgeBaseIds);
+        String effectiveSystemPrompt = appendSystemPrompt(systemPrompt, ragContext.systemPrompt());
         PreparedChatInput preparedInput = prepareChatInput(
                 chatId,
-                systemPrompt,
+                effectiveSystemPrompt,
                 prompt,
                 resolvedMcpToolContext.hasTools()
                         ? resolvedMcpToolContext.toolCallbackProvider()
@@ -352,8 +367,9 @@ public class AIChatService {
                     attachments,
                     user,
                     false,
-                    systemPrompt,
-                    "AIChatService.agentChat.native"
+                    effectiveSystemPrompt,
+                    "AIChatService.agentChat.native",
+                    ragContext
             ), chatId, preparedInput.prompt(), attachments);
         }
 
@@ -362,12 +378,13 @@ public class AIChatService {
         long startedAtNanos = System.nanoTime();
         LlmLogHelper.logRequest(log, requestId, scene,
                 buildChatLogRequest(chatId, model, preparedInput.prompt(), attachments, false,
-                        false, false, 0, systemPrompt,
+                        ragContext.requested(), ragContext.used(), ragContext.documentCount(),
+                        effectiveSystemPrompt,
                         resolvedMcpToolContext.hasTools()));
 
         var promptSpec = systemPromptChatClient.prompt()
                 .options(buildRuntimeOptions(model, resolvedMcpToolContext.hasTools()))
-                .system(systemPrompt)
+                .system(effectiveSystemPrompt)
                 .user(preparedInput.prompt())
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
@@ -447,6 +464,21 @@ public class AIChatService {
             String systemPromptOverride,
             String scene
     ) {
+        return nativeOpenAiChat(chatId, model, prompt, attachments, user, deepThinking,
+                systemPromptOverride, scene, null);
+    }
+
+    private Flux<String> nativeOpenAiChat(
+            String chatId,
+            String model,
+            String prompt,
+            List<ChatAttachment> attachments,
+            User user,
+            boolean deepThinking,
+            String systemPromptOverride,
+            String scene,
+            RagContext ragContext
+    ) {
         AtomicReference<String> finalAnswer = new AtomicReference<>("");
         AtomicReference<String> fullResponse = new AtomicReference<>("");
         String requestId = LlmLogHelper.newRequestId();
@@ -459,7 +491,7 @@ public class AIChatService {
                         Map<String, Object> nativeRequest =
                                 buildNativeChatRequest(chatId, model, prompt, attachments, user, deepThinking, systemPromptOverride);
                         LlmLogHelper.logRequest(log, requestId, scene,
-                                buildNativeHttpLogRequest(chatCompletionsUrl, nativeRequest));
+                                buildNativeHttpLogRequest(chatCompletionsUrl, nativeRequest, ragContext));
                         String requestBody = JacksonConfig.OBJECT_MAPPER.writeValueAsString(nativeRequest);
                         HttpRequest request = HttpRequest.newBuilder()
                                 .uri(URI.create(chatCompletionsUrl))
@@ -572,10 +604,17 @@ public class AIChatService {
         return messages;
     }
 
-    private Map<String, Object> buildNativeHttpLogRequest(String url, Map<String, Object> body) {
+    private Map<String, Object> buildNativeHttpLogRequest(String url,
+                                                          Map<String, Object> body,
+                                                          RagContext ragContext) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("url", url);
         request.put("body", body);
+        if (ragContext != null) {
+            request.put("rag_requested", ragContext.requested());
+            request.put("rag_used", ragContext.used());
+            request.put("rag_document_count", ragContext.documentCount());
+        }
         return request;
     }
 

@@ -155,7 +155,7 @@ curl http://localhost:8080/api/v1/plugin/com.coolxer.plugin.user.event/user/list
 本插件按 ZenVis 首个正式版本插件包结构组织：
 
 ```text
-00_doc/          文档与 RAG 资料
+00_doc/          随包文档（不再自动进入 RAG）
 01_meta/         检索元数据与 ClickHouse 表结构
 02_push-task/    数推任务配置
 03_api/          API Jar，可为空
@@ -163,6 +163,6 @@ curl http://localhost:8080/api/v1/plugin/com.coolxer.plugin.user.event/user/list
 05_dashboard/    数据看板配置
 06_menu/         菜单配置，在 Dashboard 之后写入
 07_mcp/          MCP 服务配置，当前 config.json 为空数组
-08_rag/          预留能力目录，当前仅含 .gitkeep
+08_rag/          插件 RAG 数据集与知识库配置，当前未声明
 09_skill/        Skill 目录，当前为空能力占位
 ```

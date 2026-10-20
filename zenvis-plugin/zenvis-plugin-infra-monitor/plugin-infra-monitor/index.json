@@ -1,7 +1,7 @@
 {
   "name": "基础设施端点监测",
   "package_name": "com.coolxer.plugin.infra.monitor",
-  "version": "1.2.1",
+  "version": "1.0.0",
   "description": "通过两个推送任务将 MySQL、Redis、Redis-Stack、Kafka、ClickHouse 与 MinIO 的 Prometheus 指标经 Kafka 归档到 ClickHouse；展示 API 只聚合已入库数据，提供运行状态、数据延迟、关键指标和抓取配置，并提供低代码应用与 HTML 大屏。",
   "author": "CoolXer",
   "icon": "icon.png"

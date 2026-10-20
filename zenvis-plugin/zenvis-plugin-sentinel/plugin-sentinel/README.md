@@ -14,7 +14,7 @@ Sentinel 是安全检测模块，检测命中统一称「安全事件」。其 `
 | 包名 | `com.coolxer.plugin.sentinel` |
 | 版本 | 1.0.0 |
 | 作者 | CoolXer |
-| 能力目录 | 00_doc / 01_meta / 02_push-task / 03_api(空) / 04_ui / 05_dashboard / 06_menu / 07_mcp(空) / 08_rag(占位) / 09_skill |
+| 能力目录 | 00_doc / 01_meta / 02_push-task / 03_api(空) / 04_ui / 05_dashboard / 06_menu / 07_mcp(空) / 08_rag(未声明) / 09_skill |
 
 ## 适用场景与边界
 

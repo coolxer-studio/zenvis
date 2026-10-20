@@ -8,7 +8,7 @@
 | --- | --- |
 | 插件名称 | 基础设施端点监测 |
 | 包名 | `com.coolxer.plugin.infra.monitor` |
-| 版本 | `1.2.1` |
+| 版本 | `1.0.0` |
 | 数据实体 | 1（`infra_metric_sample`） |
 | ClickHouse 表 | 1（`infra_metric_sample`，保留 30 天） |
 | 推送任务 | 2（Prometheus → Kafka，Kafka → ClickHouse） |

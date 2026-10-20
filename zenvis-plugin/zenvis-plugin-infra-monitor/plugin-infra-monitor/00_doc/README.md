@@ -21,7 +21,7 @@
 | HTML 大屏 | `04_ui/html-page/infra-endpoints.html` |
 | 看板注册 | `05_dashboard/config.json` 注册 HTML 大屏，不进入 `06_menu` |
 | MCP | 未注册，`07_mcp/config.json` 为空数组 |
-| RAG | 预留目录，`08_rag/.gitkeep` |
+| RAG | 未声明插件托管资源，`08_rag/.gitkeep` |
 | 运行时技能 | 未配置，`09_skill/.gitkeep` |
 
 ## 数据流

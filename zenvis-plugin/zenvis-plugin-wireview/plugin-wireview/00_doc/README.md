@@ -27,7 +27,7 @@ Wireview 是一个**纯前端静态工具插件**，不包含数据采集、Meta
 | `05_dashboard/` | 无看板配置（空数组） |
 | `06_menu/` | HTML_PAGE 菜单注册 |
 | `07_mcp/` | 无 MCP 连接（空数组） |
-| `08_rag/` | 预留占位（仅 `.gitkeep`） |
+| `08_rag/` | 未声明插件 RAG（仅 `.gitkeep`） |
 | `09_skill/` | 无运行时 Skill |
 
 ## 推送任务架构
@@ -90,7 +90,7 @@ plugin-wireview/
 │   └── config.json             # HTML_PAGE 菜单注册
 ├── 07_mcp/
 │   └── config.json             # 空数组（无 MCP）
-├── 08_rag/                     # 预留占位
+├── 08_rag/                     # 未声明插件 RAG
 │   └── .gitkeep
 └── 09_skill/                   # 无 AI Skill（仅 .gitkeep）
     └── .gitkeep

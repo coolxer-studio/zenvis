@@ -60,7 +60,7 @@ plugin-rzweb/
 │   └── config.json             # HTML_PAGE 菜单注册
 ├── 07_mcp/
 │   └── config.json             # 空数组（无 MCP）
-├── 08_rag/                     # 预留占位
+├── 08_rag/                     # 未声明插件 RAG
 │   └── .gitkeep
 └── 09_skill/                   # 无 AI Skill
     └── .gitkeep

@@ -13,7 +13,7 @@
 
     <groupId>com.coolxer.plugin</groupId>
     <artifactId>extend-infra-monitor</artifactId>
-    <version>1.2.1</version>
+    <version>1.0.0</version>
     <name>extend-infra-monitor</name>
     <description>Zenvis infrastructure Prometheus endpoint monitor dynamic API extension</description>
 

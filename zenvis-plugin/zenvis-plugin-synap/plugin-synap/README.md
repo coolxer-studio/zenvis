@@ -118,6 +118,6 @@ plugin-synap/
 │   └── parameter-analytics/
 ├── 06_menu/config.json
 ├── 07_mcp/config.json
-├── 08_rag/.gitkeep
+├── 08_rag/.gitkeep             # 未声明插件 RAG
 └── 09_skill/.gitkeep
 ```

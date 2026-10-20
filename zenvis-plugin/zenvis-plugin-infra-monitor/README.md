@@ -11,7 +11,7 @@
 | `build.conf` | 插件目录和 Maven 模块声明 |
 | `build.sh` | 测试、构建、JAR 校验和归档脚本 |
 
-插件交付目录始终保留 `00_doc` 到 `09_skill` 的完整骨架。未启用的能力使用空目录占位：`07_mcp/config.json` 为空数组，`08_rag/.gitkeep`、`09_skill/.gitkeep` 保持目录存在；这些占位仅用于源码组织，平台安装不应因缺少建议目录而拒绝插件。
+插件交付目录始终保留 `00_doc` 到 `09_skill` 的完整骨架。未启用的能力使用空目录占位：`07_mcp/config.json` 为空数组，`08_rag/.gitkeep`、`09_skill/.gitkeep` 保持目录存在；`08_rag` 没有 `config.json` 表示不托管插件 RAG 资源。这些占位仅用于源码组织，平台安装不应因缺少建议目录而拒绝插件。
 
 ## 构建
 
@@ -21,7 +21,7 @@
 
 产物：
 
-- `plugin-infra-monitor/03_api/extend-infra-monitor-1.2.1.jar`
+- `plugin-infra-monitor/03_api/extend-infra-monitor-1.0.0.jar`
 - `com-coolxer-plugin-infra-monitor.tar.gz`
 
 脚本会检查 `index.json` 与 `pom.xml` 版本一致，执行 `mvn clean package`，拒绝包含 `BOOT-INF` 的胖 JAR，并检查归档根目录存在 `index.json`。

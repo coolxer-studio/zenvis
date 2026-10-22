@@ -1,0 +1,104 @@
+{
+  "type": "page",
+  "title": "访问事件详情",
+  "subTitle": "通过 ZenVis 平台记录 ID 查询单个实验事件",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "返回访问事件列表",
+      "icon": "fa-solid fa-arrow-left",
+      "actionType": "url",
+      "url": "/#/service/low-code-app/com.coolxer.plugin.lab.app?page=%2Faccess-events",
+      "blank": true
+    },
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前访问事件。"
+    },
+    {
+      "type": "service",
+      "name": "lab-access-event-detail",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/lab_access_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在、尚未入库或当前账号没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "访问事件",
+          "column": 3,
+          "items": [
+            {"label": "事件 ID", "content": "${event_id || '-'}", "remark": "业务侧唯一标识，可复制后用于日志关联。"},
+            {"label": "发生时间", "content": "${occurred_at || '-'}", "remark": "合成业务时间（Asia/Shanghai）。"},
+            {"label": "访问主体", "content": "${actor || '-'}", "remark": "用户或服务身份。"},
+            {"label": "动作", "content": "${action || '-'}", "remark": "login / read / write / execute / share。"},
+            {"label": "结果", "content": "${result || '-'}", "remark": "success / denied / failed。"},
+            {"label": "风险级别", "content": "${severity || '-'}", "remark": "info / low / medium / high。"},
+            {"label": "资源路径", "content": "${resource || '-'}", "remark": "被访问的接口、页面或对象路径。"},
+            {"label": "链路 ID", "content": "${trace_id || '-'}", "remark": "用于关联接入与查询的示例追踪标识。"},
+            {"label": "标签", "content": "${tags || '-'}", "remark": "Array(String) 字段的页面展示。"}
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "IP 调查入口",
+          "body": {
+            "type": "tpl",
+            "tpl": "<div style=\"display:flex;gap:28px;flex-wrap:wrap\"><div><strong>源 IP：</strong><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip=${source_ip|url_encode}\">${source_ip || '-'}</a></div><div><strong>目的 IP：</strong><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip=${destination_ip|url_encode}\">${destination_ip || '-'}</a></div><div style=\"color:#64748b\">同一记录在 IP 调查中最多计数一次。</div></div>"
+          }
+        },
+        {
+          "type": "tabs",
+          "tabs": [
+            {
+              "title": "请求详情 JSON",
+              "body": {
+                "type": "json",
+                "value": "${detail|raw}",
+                "levelExpand": 3,
+                "mutable": false,
+                "displayDataTypes": false,
+                "enableClipboard": true
+              }
+            },
+            {
+              "title": "平台元数据",
+              "body": {
+                "type": "property",
+                "column": 2,
+                "items": [
+                  {"label": "平台记录 ID", "content": "${zenvis_id || '-'}", "remark": "详情链接和平台记录身份。"},
+                  {"label": "平台入库时间", "content": "${zenvis_insert_time || '-'}", "remark": "ClickHouse 自动维护。"}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

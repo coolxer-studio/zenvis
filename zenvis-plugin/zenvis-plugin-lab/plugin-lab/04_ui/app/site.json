@@ -1,0 +1,41 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/overview"
+      },
+      {
+        "children": [
+          {
+            "label": "能力总览",
+            "url": "/overview",
+            "icon": "fa-solid fa-flask-vial",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.lab.app/get?file_name=overview.json"
+          },
+          {
+            "label": "访问事件",
+            "url": "/access-events",
+            "icon": "fa-solid fa-right-to-bracket",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.lab.app/get?file_name=access-event-list.json"
+          },
+          {
+            "label": "风险线索",
+            "url": "/risk-signals",
+            "icon": "fa-solid fa-triangle-exclamation",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.lab.app/get?file_name=risk-signal-list.json"
+          },
+          {
+            "label": "实验室笔记",
+            "url": "/notes",
+            "icon": "fa-solid fa-note-sticky",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.lab.app/get?file_name=notes.json"
+          }
+        ]
+      }
+    ]
+  }
+}

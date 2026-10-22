@@ -1,0 +1,360 @@
+{
+  "entity": [
+    {
+      "id": 9401,
+      "name": "lab_access_event",
+      "label": "实验室访问事件",
+      "description": "用于演示字段检索、详情链接、IP 调查和多实体聚合的合成访问事件",
+      "table_name": "lab_access_event",
+      "data_source": "clickhouse",
+      "sort_column": "occurred_at",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": ["occurred_at", "event_id"],
+        "partition_by": "toYYYYMM(zenvis_insert_time)"
+      }
+    },
+    {
+      "id": 9402,
+      "name": "lab_risk_signal",
+      "label": "实验室风险线索",
+      "description": "用于演示状态筛选、数值字段、JSON 详情和跨实体 IP 关联的合成风险线索",
+      "table_name": "lab_risk_signal",
+      "data_source": "clickhouse",
+      "sort_column": "detected_at",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": ["detected_at", "signal_id"],
+        "partition_by": "toYYYYMM(zenvis_insert_time)"
+      }
+    }
+  ],
+  "attribute": [
+    {
+      "id": 940101,
+      "entity": "lab_access_event",
+      "name": "event_id",
+      "label": "事件ID",
+      "description": "访问事件的业务唯一标识",
+      "column_name": "event_id",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "copyable": true,
+      "required": true,
+      "display_selected": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.lab.detail-access-event?record_id={zenvis_id}"
+    },
+    {
+      "id": 940102,
+      "entity": "lab_access_event",
+      "name": "occurred_at",
+      "label": "发生时间",
+      "description": "访问行为发生时间（Asia/Shanghai）",
+      "column_name": "occurred_at",
+      "column_type": "DateTime64(3)",
+      "display_type": "date",
+      "operators": ["greatthan", "greatequalthan", "lessthan", "lessequalthan", "between"],
+      "required": true,
+      "display_selected": true
+    },
+    {
+      "id": 940103,
+      "entity": "lab_access_event",
+      "name": "actor",
+      "label": "访问主体",
+      "description": "执行访问的合成用户或服务身份",
+      "column_name": "actor",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "auto_complete": true,
+      "display_selected": true
+    },
+    {
+      "id": 940104,
+      "entity": "lab_access_event",
+      "name": "action",
+      "label": "动作",
+      "description": "访问动作类型；由字典映射约束取值",
+      "column_name": "action",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "must_candidate": true,
+      "mapping": {
+        "登录": "login",
+        "读取": "read",
+        "写入": "write",
+        "执行": "execute",
+        "共享": "share"
+      },
+      "display_selected": true
+    },
+    {
+      "id": 940105,
+      "entity": "lab_access_event",
+      "name": "result",
+      "label": "结果",
+      "description": "访问结果；由字典映射约束取值",
+      "column_name": "result",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "must_candidate": true,
+      "mapping": {
+        "成功": "success",
+        "拒绝": "denied",
+        "失败": "failed"
+      },
+      "display_selected": true
+    },
+    {
+      "id": 940106,
+      "entity": "lab_access_event",
+      "name": "severity",
+      "label": "风险级别",
+      "description": "事件风险级别；仅用于示例展示",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "must_candidate": true,
+      "mapping": {
+        "提示": "info",
+        "低": "low",
+        "中": "medium",
+        "高": "high"
+      },
+      "display_selected": true
+    },
+    {
+      "id": 940107,
+      "entity": "lab_access_event",
+      "name": "source_ip",
+      "label": "源IP",
+      "description": "发起访问的合成源地址",
+      "column_name": "source_ip",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "copyable": true,
+      "display_selected": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip={source_ip}"
+    },
+    {
+      "id": 940108,
+      "entity": "lab_access_event",
+      "name": "destination_ip",
+      "label": "目的IP",
+      "description": "被访问服务的合成目的地址",
+      "column_name": "destination_ip",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "copyable": true,
+      "display_selected": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip={destination_ip}"
+    },
+    {
+      "id": 940109,
+      "entity": "lab_access_event",
+      "name": "resource",
+      "label": "资源路径",
+      "description": "被访问的接口、页面或对象路径",
+      "column_name": "resource",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "copyable": true,
+      "display_selected": true
+    },
+    {
+      "id": 940110,
+      "entity": "lab_access_event",
+      "name": "trace_id",
+      "label": "链路ID",
+      "description": "跨越接入、存储和页面查询的示例追踪标识",
+      "column_name": "trace_id",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "copyable": true,
+      "display_selected": false
+    },
+    {
+      "id": 940111,
+      "entity": "lab_access_event",
+      "name": "tags",
+      "label": "标签",
+      "description": "用于演示数组字段筛选与标签展示",
+      "column_name": "tags",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "display_selected": true
+    },
+    {
+      "id": 940112,
+      "entity": "lab_access_event",
+      "name": "detail",
+      "label": "请求详情",
+      "description": "合成请求上下文，用于演示 JSON 字段展示",
+      "column_name": "detail",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [],
+      "display_selected": false
+    },
+    {
+      "id": 940201,
+      "entity": "lab_risk_signal",
+      "name": "signal_id",
+      "label": "线索ID",
+      "description": "风险线索的业务唯一标识",
+      "column_name": "signal_id",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "copyable": true,
+      "required": true,
+      "display_selected": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.lab.detail-risk-signal?record_id={zenvis_id}"
+    },
+    {
+      "id": 940202,
+      "entity": "lab_risk_signal",
+      "name": "detected_at",
+      "label": "发现时间",
+      "description": "风险线索首次被规则识别的合成时间（Asia/Shanghai）",
+      "column_name": "detected_at",
+      "column_type": "DateTime64(3)",
+      "display_type": "date",
+      "operators": ["greatthan", "greatequalthan", "lessthan", "lessequalthan", "between"],
+      "required": true,
+      "display_selected": true
+    },
+    {
+      "id": 940203,
+      "entity": "lab_risk_signal",
+      "name": "rule_code",
+      "label": "规则编码",
+      "description": "生成风险线索的示例规则编码",
+      "column_name": "rule_code",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "copyable": true,
+      "display_selected": true
+    },
+    {
+      "id": 940204,
+      "entity": "lab_risk_signal",
+      "name": "severity",
+      "label": "风险级别",
+      "description": "风险线索级别；由字典映射约束取值",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "must_candidate": true,
+      "mapping": {
+        "低": "low",
+        "中": "medium",
+        "高": "high",
+        "严重": "critical"
+      },
+      "display_selected": true
+    },
+    {
+      "id": 940205,
+      "entity": "lab_risk_signal",
+      "name": "status",
+      "label": "处置状态",
+      "description": "风险线索当前状态；由字典映射约束取值",
+      "column_name": "status",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "must_candidate": true,
+      "mapping": {
+        "待处理": "open",
+        "调查中": "investigating",
+        "已解决": "resolved",
+        "已接受": "accepted"
+      },
+      "display_selected": true
+    },
+    {
+      "id": 940206,
+      "entity": "lab_risk_signal",
+      "name": "risk_score",
+      "label": "风险分",
+      "description": "0 到 100 的示例风险评分",
+      "column_name": "risk_score",
+      "column_type": "Float64",
+      "operators": ["equal", "notequal", "greatthan", "greatequalthan", "lessthan", "lessequalthan", "between"],
+      "display_selected": true
+    },
+    {
+      "id": 940207,
+      "entity": "lab_risk_signal",
+      "name": "source_ip",
+      "label": "源IP",
+      "description": "线索关联的合成源地址",
+      "column_name": "source_ip",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "copyable": true,
+      "display_selected": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip={source_ip}"
+    },
+    {
+      "id": 940208,
+      "entity": "lab_risk_signal",
+      "name": "destination_ip",
+      "label": "目的IP",
+      "description": "线索关联的合成目的地址",
+      "column_name": "destination_ip",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in"],
+      "copyable": true,
+      "display_selected": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip={destination_ip}"
+    },
+    {
+      "id": 940209,
+      "entity": "lab_risk_signal",
+      "name": "summary",
+      "label": "线索摘要",
+      "description": "面向列表和详情页的简短说明",
+      "column_name": "summary",
+      "column_type": "String",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "display_selected": true
+    },
+    {
+      "id": 940210,
+      "entity": "lab_risk_signal",
+      "name": "tags",
+      "label": "标签",
+      "description": "用于演示数组字段筛选与标签展示",
+      "column_name": "tags",
+      "column_type": "Array(String)",
+      "display_type": "array",
+      "operators": ["equal", "notequal", "in", "isnull", "isnotnull"],
+      "display_selected": true
+    },
+    {
+      "id": 940211,
+      "entity": "lab_risk_signal",
+      "name": "detail",
+      "label": "线索详情",
+      "description": "合成规则证据，用于演示 JSON 字段展示",
+      "column_name": "detail",
+      "column_type": "json",
+      "display_type": "json",
+      "operators": [],
+      "display_selected": false
+    }
+  ],
+  "operator": [
+    { "id": 1, "name": "equal", "label": "等于" },
+    { "id": 2, "name": "notequal", "label": "不等于" },
+    { "id": 3, "name": "greatthan", "label": "大于" },
+    { "id": 4, "name": "lessthan", "label": "小于" },
+    { "id": 5, "name": "greatequalthan", "label": "大于等于" },
+    { "id": 6, "name": "lessequalthan", "label": "小于等于" },
+    { "id": 7, "name": "between", "label": "介于" },
+    { "id": 8, "name": "in", "label": "包含任一" },
+    { "id": 9, "name": "isnull", "label": "为空" },
+    { "id": 10, "name": "isnotnull", "label": "不为空" }
+  ]
+}

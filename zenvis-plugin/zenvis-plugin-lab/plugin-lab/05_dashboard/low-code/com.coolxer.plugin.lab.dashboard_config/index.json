@@ -1,0 +1,195 @@
+{
+  "type": "page",
+  "title": "插件能力实验室 · 数据观察台",
+  "style": {"background": "#06101f", "minHeight": "100vh"},
+  "body": [
+    {
+      "type": "wrapper",
+      "style": {
+        "padding": "18px",
+        "color": "#dff7ff",
+        "background": "radial-gradient(circle at 50% -20%, rgba(19,136,184,.28), transparent 42%), linear-gradient(145deg, #06101f 0%, #08182b 60%, #050b16 100%)"
+      },
+      "body": [
+        {
+          "type": "tpl",
+          "tpl": "<div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:14px\"><div><div style=\"font-size:11px;letter-spacing:.18em;color:#3ce6c1\">ZENVIS PLUGIN LAB / OBSERVATORY</div><h1 style=\"margin:5px 0 0;font-size:25px;letter-spacing:.08em;color:#eefcff\">数据观察台</h1></div><div style=\"color:#8fb4c8;font-size:12px\">真实聚合 API · 60 秒手动刷新由浏览器控制</div></div>"
+        },
+        {
+          "type": "service",
+          "name": "lab-dashboard-overview",
+          "api": {
+            "method": "post",
+            "url": "/zenvis/api/v1/entity/overview/query",
+            "data": {
+              "entities": ["lab_access_event", "lab_risk_signal"],
+              "time_range": {"preset": "TODAY"},
+              "comparison": "NONE"
+            },
+            "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={access_total:0,access_today:0,risk_total:0,risk_today:0};rows.forEach(function(r){if(r.entity==='lab_access_event'){out.access_total=Number(r.all_time_count||0);out.access_today=Number(r.current_value||0);}if(r.entity==='lab_risk_signal'){out.risk_total=Number(r.all_time_count||0);out.risk_today=Number(r.current_value||0);}});return {status:0,msg:'',data:out};"
+          },
+          "body": {
+            "type": "grid",
+            "gap": "md",
+            "columns": [
+              {"md": 3, "body": {"type": "tpl", "tpl": "<div style=\"padding:16px;border:1px solid rgba(60,230,193,.22);border-radius:10px;background:linear-gradient(155deg,#0d2a42,#09192b)\"><div style=\"color:#8fb4c8;font-size:12px\">累计访问事件</div><div style=\"font-size:34px;font-weight:800;color:#3ce6c1\">${access_total || 0}</div><div style=\"color:#6f94a6;font-size:11px\">lab_access_event</div></div>"}},
+              {"md": 3, "body": {"type": "tpl", "tpl": "<div style=\"padding:16px;border:1px solid rgba(84,214,255,.22);border-radius:10px;background:linear-gradient(155deg,#0d2a42,#09192b)\"><div style=\"color:#8fb4c8;font-size:12px\">今日访问事件</div><div style=\"font-size:34px;font-weight:800;color:#54d6ff\">${access_today || 0}</div><div style=\"color:#6f94a6;font-size:11px\">TODAY</div></div>"}},
+              {"md": 3, "body": {"type": "tpl", "tpl": "<div style=\"padding:16px;border:1px solid rgba(255,198,109,.22);border-radius:10px;background:linear-gradient(155deg,#0d2a42,#09192b)\"><div style=\"color:#8fb4c8;font-size:12px\">累计风险线索</div><div style=\"font-size:34px;font-weight:800;color:#ffc66d\">${risk_total || 0}</div><div style=\"color:#6f94a6;font-size:11px\">lab_risk_signal</div></div>"}},
+              {"md": 3, "body": {"type": "tpl", "tpl": "<div style=\"padding:16px;border:1px solid rgba(255,198,109,.22);border-radius:10px;background:linear-gradient(155deg,#0d2a42,#09192b)\"><div style=\"color:#8fb4c8;font-size:12px\">今日风险线索</div><div style=\"font-size:34px;font-weight:800;color:#ffb45d\">${risk_today || 0}</div><div style=\"color:#6f94a6;font-size:11px\">TODAY</div></div>"}}
+            ]
+          }
+        },
+        {
+          "type": "grid",
+          "gap": "md",
+          "columns": [
+            {
+              "md": 8,
+              "body": {
+                "type": "panel",
+                "title": "近 24 小时趋势",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(84,214,255,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "chart",
+                  "height": 340,
+                  "style": {"background": "transparent"},
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/trend/query",
+                    "data": {"series": [{"entity": "lab_access_event", "label": "访问事件", "metric": {"operation": "COUNT"}, "time_field": "occurred_at"}, {"entity": "lab_risk_signal", "label": "风险线索", "metric": {"operation": "COUNT"}, "time_field": "detected_at"}], "time_range": {"preset": "LAST_24_HOURS"}, "granularity": "HOUR"},
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
+                  "config": {
+                    "backgroundColor": "transparent",
+                    "tooltip": {"trigger": "axis"},
+                    "legend": {"textStyle": {"color": "#9fc4d6"}},
+                    "dataset": "${chart_dataset}",
+                    "xAxis": {"type": "category", "axisLabel": {"color": "#8fb4c8"}, "axisLine": {"lineStyle": {"color": "#31556b"}}},
+                    "yAxis": {"type": "value", "minInterval": 1, "axisLabel": {"color": "#8fb4c8"}, "splitLine": {"lineStyle": {"color": "rgba(84,214,255,.12)"}}},
+                    "series": "${chart_series}"
+                  }
+                }
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "处置状态分布",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(60,230,193,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "chart",
+                  "height": 340,
+                  "style": {"background": "transparent"},
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/distribution/query",
+                    "data": {"mappings": [{"entity": "lab_risk_signal", "dimension": "status", "label": "处置状态"}], "time_range": {"preset": "ALL_TIME"}, "limit": 10},
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
+                  "config": {
+                    "backgroundColor": "transparent",
+                    "tooltip": {"trigger": "axis"},
+                    "legend": {"textStyle": {"color": "#9fc4d6"}},
+                    "dataset": "${chart_dataset}",
+                    "xAxis": {"type": "value", "axisLabel": {"color": "#8fb4c8"}, "splitLine": {"lineStyle": {"color": "rgba(84,214,255,.12)"}}},
+                    "yAxis": {"type": "category", "axisLabel": {"color": "#8fb4c8"}, "axisLine": {"lineStyle": {"color": "#31556b"}}},
+                    "series": "${chart_series}"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "gap": "md",
+          "columns": [
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "最新访问事件",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(84,214,255,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "service",
+                  "api": {
+                    "method": "get",
+                    "url": "/zenvis/api/v1/entity/lab_access_event/list?page=1&perPage=6&orderBy=occurred_at&orderDir=desc",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},rows=Array.isArray(d.rows)?d.rows:[];return {status:0,msg:'',data:{rows:rows}};"
+                  },
+                  "body": {
+                    "type": "table",
+                    "source": "${rows}",
+                    "placeholder": "暂无访问事件",
+                    "columns": [
+                      {"name": "occurred_at", "label": "时间", "width": 165},
+                      {"name": "actor", "label": "主体", "width": 100},
+                      {"name": "result", "label": "结果", "width": 85},
+                      {"name": "resource", "label": "资源"}
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "最新风险线索",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(255,198,109,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "service",
+                  "api": {
+                    "method": "get",
+                    "url": "/zenvis/api/v1/entity/lab_risk_signal/list?page=1&perPage=6&orderBy=detected_at&orderDir=desc",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},rows=Array.isArray(d.rows)?d.rows:[];return {status:0,msg:'',data:{rows:rows}};"
+                  },
+                  "body": {
+                    "type": "table",
+                    "source": "${rows}",
+                    "placeholder": "暂无风险线索",
+                    "columns": [
+                      {"name": "detected_at", "label": "时间", "width": 165},
+                      {"name": "rule_code", "label": "规则", "width": 135},
+                      {"name": "severity", "label": "级别", "width": 85},
+                      {"name": "status", "label": "状态"}
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "笔记与 Agent 能力",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(60,230,193,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": [
+                  {
+                    "type": "service",
+                    "name": "lab-dashboard-note-stats",
+                    "api": {
+                      "method": "get",
+                      "url": "/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes/stats",
+                      "adaptor": "var d=payload&&payload.data?payload.data:{},s=d.by_status||{};return {status:0,msg:'',data:{total:Number(d.total||0),draft:Number(s.draft||0),published:Number(s.published||0),archived:Number(s.archived||0)}};"
+                    },
+                    "messages": {"fetchFailed": "笔记统计不可用，请检查 MySQL"},
+                    "body": {
+                      "type": "tpl",
+                      "tpl": "<div style=\"display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px\"><div style=\"padding:12px;border-radius:8px;background:rgba(60,230,193,.08)\"><div style=\"color:#8fb4c8;font-size:11px\">全部笔记</div><div style=\"font-size:26px;font-weight:700;color:#3ce6c1\">${total || 0}</div></div><div style=\"padding:12px;border-radius:8px;background:rgba(84,214,255,.08)\"><div style=\"color:#8fb4c8;font-size:11px\">已发布</div><div style=\"font-size:26px;font-weight:700;color:#54d6ff\">${published || 0}</div></div><div style=\"padding:12px;border-radius:8px;background:rgba(255,198,109,.08)\"><div style=\"color:#8fb4c8;font-size:11px\">草稿</div><div style=\"font-size:26px;font-weight:700;color:#ffc66d\">${draft || 0}</div></div><div style=\"padding:12px;border-radius:8px;background:rgba(143,180,200,.08)\"><div style=\"color:#8fb4c8;font-size:11px\">已归档</div><div style=\"font-size:26px;font-weight:700\">${archived || 0}</div></div></div>"
+                    }
+                  },
+                  {
+                    "type": "tpl",
+                    "tpl": "<div style=\"margin-top:16px;color:#8fb4c8;line-height:1.65\">MCP <b>lab</b> 暴露 <code>lab_capability_catalog</code> 与 <code>lab_note_search</code> 两个只读工具。<br/>RAG <b>lab-kb</b> 托管能力说明；Skill <b>lab-capability-guide</b> 负责导览、白名单与降级。</div>"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

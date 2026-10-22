@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100" role="img" aria-label="插件能力实验室图标">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="6" x2="88" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b2542"/>
+      <stop offset="0.52" stop-color="#07172b"/>
+      <stop offset="1" stop-color="#030b16"/>
+    </linearGradient>
+    <linearGradient id="hex" x1="31" y1="22" x2="72" y2="79" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#76fff0"/>
+      <stop offset="0.48" stop-color="#35e5cf"/>
+      <stop offset="1" stop-color="#2b9de6"/>
+    </linearGradient>
+    <linearGradient id="link" x1="16" y1="16" x2="84" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5cf0dc"/>
+      <stop offset="1" stop-color="#4aa9ff"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="0" cy="0" r="1" gradientTransform="translate(50 49) rotate(90) scale(42)">
+      <stop offset="0" stop-color="#43e6d0" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#43e6d0" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="clip"><rect x="2" y="2" width="96" height="96" rx="20"/></clipPath>
+  </defs>
+
+  <rect x="2" y="2" width="96" height="96" rx="20" fill="url(#bg)"/>
+  <g clip-path="url(#clip)" opacity="0.52">
+    <path d="M0 24H100M0 50H100M0 76H100M24 0V100M50 0V100M76 0V100" stroke="#3ccfdd" stroke-opacity="0.075" stroke-width="0.7"/>
+    <circle cx="50" cy="49" r="42" fill="url(#aura)"/>
+  </g>
+
+  <g fill="none" stroke="url(#link)" stroke-linecap="round">
+    <path d="M39 34L24 27M61 34L76 27M50 70V84" stroke-width="1.8" opacity="0.7"/>
+    <path d="M32 57L22 63M68 57L78 63" stroke-width="1.4" opacity="0.44"/>
+  </g>
+
+  <g filter="url(#glow)">
+    <path d="M50 24L70.8 36V60L50 72L29.2 60V36Z" fill="#0a3146" fill-opacity="0.92" stroke="url(#hex)" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M41.5 38.5L50 33.6L58.5 38.5V48.1L50 53L41.5 48.1Z" fill="#3ce6c1" fill-opacity="0.18" stroke="#5bf1dc" stroke-width="1.25" stroke-linejoin="round"/>
+    <path d="M41.5 51.9L50 47L58.5 51.9V61.5L50 66.4L41.5 61.5Z" fill="#278dc1" fill-opacity="0.23" stroke="#55bfff" stroke-width="1.25" stroke-linejoin="round"/>
+    <circle cx="50" cy="43.35" r="1.9" fill="#8ffff1"/>
+    <circle cx="50" cy="56.7" r="1.9" fill="#6dccff"/>
+  </g>
+
+  <g filter="url(#glow)">
+    <circle cx="23.5" cy="26.5" r="4.2" fill="#07192b" stroke="#56f2dd" stroke-width="1.7"/>
+    <circle cx="23.5" cy="26.5" r="1.45" fill="#56f2dd"/>
+    <circle cx="76.5" cy="26.5" r="4.2" fill="#07192b" stroke="#55bfff" stroke-width="1.7"/>
+    <circle cx="76.5" cy="26.5" r="1.45" fill="#55bfff"/>
+    <circle cx="50" cy="84.5" r="4.2" fill="#07192b" stroke="#56f2dd" stroke-width="1.7"/>
+    <circle cx="50" cy="84.5" r="1.45" fill="#56f2dd"/>
+    <circle cx="21.5" cy="63.5" r="2.6" fill="#07192b" stroke="#55bfff" stroke-width="1.25"/>
+    <circle cx="78.5" cy="63.5" r="2.6" fill="#07192b" stroke="#56f2dd" stroke-width="1.25"/>
+  </g>
+
+  <rect x="2" y="2" width="96" height="96" rx="20" fill="none" stroke="#58d9e4" stroke-opacity="0.34" stroke-width="1"/>
+</svg>

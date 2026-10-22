@@ -1,0 +1,258 @@
+---
+# 插件能力实验室：生产风格 Kafka 接入范式。
+# 两个 Source 分别消费访问事件与风险线索，校验后写 ClickHouse；
+# 任意确定性失败进入独立 DLQ Topic，保留原始 message 和 dropped 元数据。
+
+sources:
+  lab_access_raw:
+    type: "kafka"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    group_id: "${LAB_ACCESS_GROUP_ID:-lab-access-clickhouse-v1}"
+    topics:
+      - "${LAB_ACCESS_TOPIC:-lab.access.raw}"
+    auto_offset_reset: "earliest"
+    decoding:
+      codec: "bytes"
+
+  lab_risk_raw:
+    type: "kafka"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    group_id: "${LAB_RISK_GROUP_ID:-lab-risk-clickhouse-v1}"
+    topics:
+      - "${LAB_RISK_TOPIC:-lab.risk.raw}"
+    auto_offset_reset: "earliest"
+    decoding:
+      codec: "bytes"
+
+transforms:
+  lab_access_parse:
+    type: "remap"
+    inputs: ["lab_access_raw"]
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw = to_string(.message) ?? ""
+      event, parse_error = parse_json(raw)
+      assert_eq!(parse_error, null, message: "lab_access_event 必须是合法 JSON")
+      assert!(is_object(event), message: "lab_access_event 根节点必须是对象")
+      event = object!(event)
+      assert_eq!(to_string(event.type) ?? "", "lab.access.event.v1", message: "非预期消息类型")
+      event_id = strip_whitespace(to_string(event.event_id) ?? "")
+      assert!(event_id != "", message: "lab_access_event 缺少 event_id")
+      occurred_at, time_error = parse_timestamp(to_string(event.occurred_at) ?? "", format: "%+")
+      assert_eq!(time_error, null, message: "lab_access_event.occurred_at 必须是 ISO8601 时间")
+      occurred_at_text = format_timestamp!(occurred_at, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+      action = to_string(event.action) ?? ""
+      assert!(includes(["login", "read", "write", "execute", "share"], action), message: "lab_access_event.action 不在枚举范围")
+      result = to_string(event.result) ?? ""
+      assert!(includes(["success", "denied", "failed"], result), message: "lab_access_event.result 不在枚举范围")
+      severity = to_string(event.severity) ?? ""
+      assert!(includes(["info", "low", "medium", "high"], severity), message: "lab_access_event.severity 不在枚举范围")
+      source_ip = strip_whitespace(to_string(event.source_ip) ?? "")
+      destination_ip = strip_whitespace(to_string(event.destination_ip) ?? "")
+      assert!(source_ip != "" && destination_ip != "", message: "lab_access_event 缺少 IP 地址")
+      tags = array(event.tags) ?? []
+      detail = object(event.detail) ?? {}
+      . = {
+        "event_id": event_id,
+        "occurred_at": occurred_at_text,
+        "actor": to_string(event.actor) ?? "unknown",
+        "action": action,
+        "result": result,
+        "severity": severity,
+        "source_ip": source_ip,
+        "destination_ip": destination_ip,
+        "resource": to_string(event.resource) ?? "",
+        "trace_id": to_string(event.trace_id) ?? "",
+        "tags": tags,
+        "detail": detail
+      }
+
+  lab_risk_parse:
+    type: "remap"
+    inputs: ["lab_risk_raw"]
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw = to_string(.message) ?? ""
+      event, parse_error = parse_json(raw)
+      assert_eq!(parse_error, null, message: "lab_risk_signal 必须是合法 JSON")
+      assert!(is_object(event), message: "lab_risk_signal 根节点必须是对象")
+      event = object!(event)
+      assert_eq!(to_string(event.type) ?? "", "lab.risk.signal.v1", message: "非预期消息类型")
+      signal_id = strip_whitespace(to_string(event.signal_id) ?? "")
+      assert!(signal_id != "", message: "lab_risk_signal 缺少 signal_id")
+      detected_at, time_error = parse_timestamp(to_string(event.detected_at) ?? "", format: "%+")
+      assert_eq!(time_error, null, message: "lab_risk_signal.detected_at 必须是 ISO8601 时间")
+      detected_at_text = format_timestamp!(detected_at, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai")
+      severity = to_string(event.severity) ?? ""
+      assert!(includes(["low", "medium", "high", "critical"], severity), message: "lab_risk_signal.severity 不在枚举范围")
+      status = to_string(event.status) ?? ""
+      assert!(includes(["open", "investigating", "resolved", "accepted"], status), message: "lab_risk_signal.status 不在枚举范围")
+      score, score_error = to_float(event.risk_score)
+      assert_eq!(score_error, null, message: "lab_risk_signal.risk_score 必须是数字")
+      assert!(score >= 0.0 && score <= 100.0, message: "lab_risk_signal.risk_score 必须在 0 到 100 之间")
+      tags = array(event.tags) ?? []
+      detail = object(event.detail) ?? {}
+      . = {
+        "signal_id": signal_id,
+        "detected_at": detected_at_text,
+        "rule_code": to_string(event.rule_code) ?? "",
+        "severity": severity,
+        "status": status,
+        "risk_score": score,
+        "source_ip": to_string(event.source_ip) ?? "",
+        "destination_ip": to_string(event.destination_ip) ?? "",
+        "summary": to_string(event.summary) ?? "",
+        "tags": tags,
+        "detail": detail
+      }
+
+sinks:
+  lab_access_clickhouse:
+    type: "clickhouse"
+    inputs: ["lab_access_parse"]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "lab_access_event"
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    healthcheck:
+      enabled: true
+    acknowledgements:
+      enabled: true
+    batch:
+      max_events: 1000
+      timeout_secs: 5
+    buffer:
+      type: "disk"
+      max_size: 268435488
+
+  lab_risk_clickhouse:
+    type: "clickhouse"
+    inputs: ["lab_risk_parse"]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "lab_risk_signal"
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    healthcheck:
+      enabled: true
+    acknowledgements:
+      enabled: true
+    batch:
+      max_events: 1000
+      timeout_secs: 5
+    buffer:
+      type: "disk"
+      max_size: 268435488
+
+  lab_dead_letter:
+    type: "kafka"
+    inputs: ["lab_access_parse.dropped", "lab_risk_parse.dropped"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${LAB_DLQ_TOPIC:-lab.dead-letter}"
+    encoding:
+      codec: "json"
+    acknowledgements:
+      enabled: true
+    buffer:
+      type: "disk"
+      max_size: 268435488
+
+tests:
+  - name: "合法访问事件写入正常输出"
+    inputs:
+      - insert_at: "lab_access_parse"
+        type: "log"
+        log_fields:
+          message: '{"type":"lab.access.event.v1","event_id":"evt-001","occurred_at":"2026-10-21T09:30:00.000+08:00","actor":"alice","action":"read","result":"success","severity":"low","source_ip":"10.24.8.15","destination_ip":"10.24.16.20","resource":"/api/v1/catalog","trace_id":"trace-001","tags":["demo"],"detail":{"method":"GET"}}'
+    outputs:
+      - extract_from: "lab_access_parse"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.event_id, "evt-001")
+              assert_eq!(.occurred_at, "2026-10-21 09:30:00.000")
+              assert_eq!(.action, "read")
+              assert_eq!(.source_ip, "10.24.8.15")
+              true
+
+  - name: "缺少 event_id 的访问事件进入死信"
+    inputs:
+      - insert_at: "lab_access_parse"
+        type: "log"
+        log_fields:
+          message: '{"type":"lab.access.event.v1","occurred_at":"2026-10-21T09:30:00.000+08:00","action":"read","result":"success","severity":"low","source_ip":"10.24.8.15","destination_ip":"10.24.16.20"}'
+    outputs:
+      - extract_from: "lab_access_parse.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              assert!(exists(.metadata.dropped.reason))
+              true
+
+  - name: "非法发生时间的访问事件进入死信"
+    inputs:
+      - insert_at: "lab_access_parse"
+        type: "log"
+        log_fields:
+          message: '{"type":"lab.access.event.v1","event_id":"evt-003","occurred_at":"not-a-timestamp","actor":"alice","action":"read","result":"success","severity":"low","source_ip":"10.24.8.15","destination_ip":"10.24.16.20"}'
+    outputs:
+      - extract_from: "lab_access_parse.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              assert!(exists(.metadata.dropped.reason))
+              true
+
+  - name: "非法动作进入死信"
+    inputs:
+      - insert_at: "lab_access_parse"
+        type: "log"
+        log_fields:
+          message: '{"type":"lab.access.event.v1","event_id":"evt-002","occurred_at":"2026-10-21T09:30:00.000+08:00","actor":"alice","action":"unknown","result":"success","severity":"low","source_ip":"10.24.8.15","destination_ip":"10.24.16.20"}'
+    outputs:
+      - extract_from: "lab_access_parse.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "合法风险线索写入正常输出"
+    inputs:
+      - insert_at: "lab_risk_parse"
+        type: "log"
+        log_fields:
+          message: '{"type":"lab.risk.signal.v1","signal_id":"signal-001","detected_at":"2026-10-21T09:31:00.000+08:00","rule_code":"LAB-ACCESS-001","severity":"high","status":"open","risk_score":81.5,"source_ip":"10.24.8.15","destination_ip":"10.24.16.20","summary":"重复拒绝访问","tags":["demo","risk"],"detail":{"confidence":0.9}}'
+    outputs:
+      - extract_from: "lab_risk_parse"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.signal_id, "signal-001")
+              assert_eq!(.detected_at, "2026-10-21 09:31:00.000")
+              assert_eq!(.risk_score, 81.5)
+              assert_eq!(.status, "open")
+              true
+
+  - name: "非法风险分进入死信"
+    inputs:
+      - insert_at: "lab_risk_parse"
+        type: "log"
+        log_fields:
+          message: '{"type":"lab.risk.signal.v1","signal_id":"signal-002","detected_at":"2026-10-21T09:31:00.000+08:00","rule_code":"LAB-ACCESS-001","severity":"high","status":"open","risk_score":"not-a-number","source_ip":"10.24.8.15","destination_ip":"10.24.16.20"}'
+    outputs:
+      - extract_from: "lab_risk_parse.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true

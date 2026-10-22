@@ -1,0 +1,4 @@
+interface:
+  display_name: "插件能力实验室导览"
+  short_description: "介绍插件全栈能力并执行受控的只读目录与笔记检索"
+  default_prompt: "Use $lab-capability-guide to explain the Plugin Lab capability map, data model, ingestion paths, pages, dashboards, and Agent integrations using only retrieval_search, lab_capability_catalog, and lab_note_search."

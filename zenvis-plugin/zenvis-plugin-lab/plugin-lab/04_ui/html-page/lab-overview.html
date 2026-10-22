@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>插件能力实验室 · 实时能力大屏</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040c17;
+      --panel: rgba(9, 25, 43, .92);
+      --panel-strong: rgba(12, 34, 56, .97);
+      --line: rgba(84, 214, 255, .2);
+      --line-strong: rgba(60, 230, 193, .34);
+      --text: #e8f9ff;
+      --muted: #82a7ba;
+      --cyan: #54d6ff;
+      --teal: #3ce6c1;
+      --blue: #4da3ff;
+      --amber: #ffc66d;
+      --rose: #ff718f;
+      --violet: #a68cff;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; min-height: 0; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 50% -18%, rgba(30, 145, 190, .30), transparent 43%),
+        radial-gradient(circle at 100% 90%, rgba(60, 230, 193, .07), transparent 34%),
+        linear-gradient(rgba(84, 214, 255, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(84, 214, 255, .035) 1px, transparent 1px),
+        var(--bg);
+      background-size: auto, auto, 42px 42px, 42px 42px, auto;
+    }
+    button { font: inherit; }
+    .screen {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      padding: 14px 18px 18px;
+      display: grid;
+      grid-template-rows: 58px 104px minmax(0, 1fr);
+      gap: 12px;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(360px, 1.45fr) minmax(300px, 1fr);
+      align-items: center;
+      gap: 14px;
+    }
+    .brand, .actions {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: linear-gradient(90deg, rgba(16, 43, 68, .86), rgba(7, 21, 38, .66));
+    }
+    .brand-mark {
+      position: relative;
+      width: 27px;
+      height: 27px;
+      flex: 0 0 auto;
+      border: 2px solid var(--teal);
+      border-radius: 8px 3px 8px 3px;
+      box-shadow: 0 0 18px rgba(60, 230, 193, .38), inset 0 0 10px rgba(60, 230, 193, .16);
+      transform: rotate(45deg);
+    }
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border-radius: 2px;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+    .brand strong { display: block; font-size: 13px; letter-spacing: .06em; }
+    .brand span { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .title { text-align: center; min-width: 0; }
+    .title h1 {
+      margin: 0;
+      font-size: clamp(20px, 2vw, 28px);
+      letter-spacing: .16em;
+      white-space: nowrap;
+      text-shadow: 0 0 24px rgba(84, 214, 255, .38);
+    }
+    .title p { margin: 4px 0 0; color: var(--muted); font-size: 10px; letter-spacing: .14em; }
+    .actions { justify-content: flex-end; }
+    .update-stack { min-width: 128px; text-align: right; }
+    .updated { color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .auto-state { margin-top: 2px; color: var(--teal); font-size: 10px; white-space: nowrap; }
+    .auto-state.paused { color: var(--amber); }
+    .clock {
+      min-width: 78px;
+      color: var(--cyan);
+      font-size: 17px;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+    .refresh {
+      border: 1px solid rgba(84, 214, 255, .48);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: rgba(38, 111, 172, .22);
+      color: #dff7ff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .refresh:hover { background: rgba(50, 143, 205, .3); }
+    .refresh:disabled { opacity: .56; cursor: wait; }
+    .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+    .kpi, .panel {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: linear-gradient(158deg, var(--panel-strong), var(--panel));
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .24), inset 0 1px rgba(255, 255, 255, .035);
+    }
+    .kpi::before, .panel::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 72px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), transparent);
+    }
+    .kpi { padding: 12px 13px; display: flex; flex-direction: column; justify-content: space-between; }
+    .kpi-label { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .kpi-value {
+      margin-top: 4px;
+      font-size: clamp(21px, 1.9vw, 30px);
+      font-weight: 800;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-value.teal { color: var(--teal); }
+    .kpi-value.cyan { color: var(--cyan); }
+    .kpi-value.amber { color: var(--amber); }
+    .kpi-value.rose { color: var(--rose); }
+    .kpi-note { color: var(--muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr) minmax(0, .9fr) minmax(0, .9fr);
+      grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+    }
+    .panel { padding: 11px 12px; min-height: 0; display: flex; flex-direction: column; }
+    .span-rows { grid-row: span 2; }
+    .panel-head { flex: 0 0 auto; height: 23px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .panel-title { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .panel-title::before { content: ""; width: 3px; height: 13px; border-radius: 2px; background: var(--teal); box-shadow: 0 0 10px var(--teal); }
+    .panel-meta { color: var(--muted); font-size: 9px; white-space: nowrap; }
+    .panel-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(84, 214, 255, .35) transparent; }
+    .panel-body::-webkit-scrollbar { width: 5px; height: 5px; }
+    .panel-body::-webkit-scrollbar-thumb { background: rgba(84, 214, 255, .32); border-radius: 8px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .chart-wrap { width: 100%; height: 100%; min-height: 110px; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .empty {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+    .event-section + .event-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(84, 214, 255, .12); }
+    .event-section-title { margin: 0 0 6px; color: var(--teal); font-size: 10px; letter-spacing: .08em; }
+    .event-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 7px; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(84, 214, 255, .07); }
+    .event-row:last-child { border-bottom: 0; }
+    .event-time { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+    .event-main { min-width: 0; }
+    .event-main a { color: #dff7ff; text-decoration: none; font-size: 10px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .event-main a:hover { color: var(--cyan); }
+    .event-detail { margin-top: 2px; color: var(--muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; padding: 2px 6px; border-radius: 999px; font-size: 8px; line-height: 1.5; white-space: nowrap; }
+    .badge.ok { background: rgba(60, 230, 193, .12); color: var(--teal); border: 1px solid rgba(60, 230, 193, .24); }
+    .badge.warn { background: rgba(255, 198, 109, .12); color: var(--amber); border: 1px solid rgba(255, 198, 109, .24); }
+    .badge.bad { background: rgba(255, 113, 143, .12); color: var(--rose); border: 1px solid rgba(255, 113, 143, .24); }
+    .badge.neutral { background: rgba(84, 214, 255, .1); color: var(--cyan); border: 1px solid rgba(84, 214, 255, .22); }
+    .ip-list { display: grid; gap: 6px; }
+    .ip-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px; gap: 7px; align-items: center; font-size: 10px; }
+    .ip-rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .ip-main { min-width: 0; }
+    .ip-address { color: #dff7ff; font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; }
+    .ip-track { height: 4px; margin-top: 4px; overflow: hidden; border-radius: 6px; background: rgba(84, 214, 255, .08); }
+    .ip-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--teal)); }
+    .ip-count { color: var(--cyan); font-variant-numeric: tabular-nums; text-align: right; }
+    .cap-list { display: grid; gap: 6px; }
+    .cap-item { padding: 7px 8px; border: 1px solid rgba(84, 214, 255, .13); border-radius: 7px; background: rgba(84, 214, 255, .035); }
+    .cap-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .cap-name { min-width: 0; color: #e9fbff; font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cap-category { flex: 0 0 auto; color: var(--teal); font-size: 8px; }
+    .cap-desc { margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .cap-code { margin-top: 3px; color: rgba(84, 214, 255, .62); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
+    .note-total { margin: 2px 0 10px; color: var(--teal); font-size: 34px; font-weight: 800; line-height: 1; }
+    .note-total small { margin-left: 5px; color: var(--muted); font-size: 10px; font-weight: 400; }
+    .note-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+    .note-cell { padding: 7px 6px; border: 1px solid rgba(84, 214, 255, .12); border-radius: 7px; background: rgba(84, 214, 255, .035); text-align: center; }
+    .note-cell span { display: block; color: var(--muted); font-size: 8px; }
+    .note-cell strong { display: block; margin-top: 3px; font-size: 17px; font-variant-numeric: tabular-nums; }
+    .note-hint { margin-top: 10px; color: var(--muted); font-size: 9px; line-height: 1.55; }
+    .stack-state { padding: 10px; border-radius: 8px; color: var(--muted); background: rgba(255, 113, 143, .06); border: 1px solid rgba(255, 113, 143, .16); font-size: 10px; line-height: 1.5; }
+    .loading {
+      position: fixed;
+      z-index: 8;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 12, 23, .54);
+      backdrop-filter: blur(2px);
+    }
+    .loading.visible { display: flex; }
+    .loader {
+      width: 42px;
+      height: 42px;
+      border: 3px solid rgba(84, 214, 255, .18);
+      border-top-color: var(--teal);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error {
+      position: fixed;
+      z-index: 9;
+      top: 76px;
+      left: 50%;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      max-width: min(760px, calc(100vw - 40px));
+      padding: 9px 12px;
+      border: 1px solid rgba(255, 113, 143, .5);
+      border-radius: 9px;
+      background: rgba(68, 15, 33, .96);
+      color: #ffe1e8;
+      font-size: 11px;
+      transform: translateX(-50%);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, .38);
+    }
+    .error.visible { display: flex; }
+    .error span { min-width: 0; }
+    .error button { flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, .28); border-radius: 6px; padding: 4px 9px; background: transparent; color: #fff; cursor: pointer; }
+    @media (max-height: 760px) {
+      .screen { padding: 10px 14px 14px; grid-template-rows: 50px 88px minmax(0, 1fr); gap: 9px; }
+      .brand, .actions { height: 42px; }
+      .kpi { padding: 9px 10px; }
+      .kpi-value { font-size: 22px; }
+      .panel { padding: 9px; }
+      .panel-head { height: 20px; margin-bottom: 5px; }
+    }
+    @media (max-width: 1360px) {
+      .topbar { grid-template-columns: minmax(190px, 1fr) minmax(320px, 1.3fr) minmax(280px, 1fr); }
+      .brand span { display: none; }
+      .title h1 { letter-spacing: .10em; }
+      .kpis { gap: 7px; }
+      .main { gap: 8px; }
+      .event-row { grid-template-columns: 68px minmax(0, 1fr) auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div><strong>ZenVis · Plugin Lab</strong><span>插件能力实验室 / 1.0.1</span></div>
+      </div>
+      <div class="title">
+        <h1>插件能力实验室大屏</h1>
+        <p>DUAL ENTITY · REAL-TIME API · DARK OPERATIONS CONSOLE</p>
+      </div>
+      <div class="actions">
+        <div class="update-stack">
+          <div class="updated" id="updatedAt">尚未更新</div>
+          <div class="auto-state" id="autoState">自动刷新 60s</div>
+        </div>
+        <div class="clock" id="clock">--:--:--</div>
+        <button class="refresh" id="refresh" type="button">刷新</button>
+      </div>
+    </header>
+
+    <section class="kpis" aria-label="关键指标">
+      <article class="kpi"><div class="kpi-label">累计访问事件</div><div class="kpi-value teal" id="accessTotal">—</div><div class="kpi-note">lab_access_event</div></article>
+      <article class="kpi"><div class="kpi-label">今日访问事件</div><div class="kpi-value cyan" id="accessToday">—</div><div class="kpi-note">TODAY · Asia/Shanghai</div></article>
+      <article class="kpi"><div class="kpi-label">累计风险线索</div><div class="kpi-value amber" id="riskTotal">—</div><div class="kpi-note">lab_risk_signal</div></article>
+      <article class="kpi"><div class="kpi-label">今日风险线索</div><div class="kpi-value amber" id="riskToday">—</div><div class="kpi-note">合成规则数据</div></article>
+      <article class="kpi"><div class="kpi-label">待处置风险</div><div class="kpi-value rose" id="riskOpen">—</div><div class="kpi-note">open + investigating</div></article>
+      <article class="kpi"><div class="kpi-label">实验室笔记</div><div class="kpi-value cyan" id="notesTotal">—</div><div class="kpi-note">MySQL · t_lab_note</div></article>
+    </section>
+
+    <section class="main">
+      <article class="panel span-rows">
+        <header class="panel-head"><div class="panel-title">近 24 小时事件趋势</div><div class="panel-meta">按小时 · 双实体</div></header>
+        <div class="panel-body"><div class="chart-wrap"><canvas id="trendCanvas" role="img" aria-label="近 24 小时访问事件与风险线索趋势"></canvas></div></div>
+      </article>
+
+      <article class="panel span-rows">
+        <header class="panel-head"><div class="panel-title">最新事件</div><div class="panel-meta">访问事件 + 风险线索</div></header>
+        <div class="panel-body" id="latestEvents"><div class="empty">正在读取真实数据…</div></div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head"><div class="panel-title">风险级别分布</div><div class="panel-meta">ALL TIME</div></header>
+        <div class="panel-body"><div class="chart-wrap"><canvas id="riskCanvas" role="img" aria-label="风险级别分布"></canvas></div></div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head"><div class="panel-title">Top IP</div><div class="panel-meta">源 / 目的地址合并</div></header>
+        <div class="panel-body" id="topIps"><div class="empty">正在读取真实数据…</div></div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head"><div class="panel-title">能力矩阵</div><div class="panel-meta">GET /capabilities</div></header>
+        <div class="panel-body" id="capabilities"><div class="empty">正在读取能力目录…</div></div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head"><div class="panel-title">笔记与 Agent</div><div class="panel-meta">MySQL + MCP + RAG</div></header>
+        <div class="panel-body" id="noteStatus"><div class="empty">正在读取笔记状态…</div></div>
+      </article>
+    </section>
+  </main>
+
+  <div class="error" id="error" role="alert"><span id="errorMessage"></span><button id="retry" type="button">重试</button></div>
+  <div class="loading visible" id="loading" role="status" aria-live="polite"><div class="loader" aria-hidden="true"></div></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const REFRESH_SECONDS = 60;
+      const ACCESS_ENTITY = 'lab_access_event';
+      const RISK_ENTITY = 'lab_risk_signal';
+      const PLUGIN_CODE = 'com.coolxer.plugin.lab';
+      const DETAIL_ACCESS = '/#/service/low-code-page/com.coolxer.plugin.lab.detail-access-event?record_id=';
+      const DETAIL_RISK = '/#/service/low-code-page/com.coolxer.plugin.lab.detail-risk-signal?record_id=';
+      const labels = {
+        lab_access_event: '访问事件',
+        lab_risk_signal: '风险线索'
+      };
+      const state = { busy: false, base: '', countdown: REFRESH_SECONDS, tickTimer: null, lastDataAt: null };
+      const numberFormat = new Intl.NumberFormat('zh-CN');
+      const $ = id => document.getElementById(id);
+
+      function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+      }
+
+      function number(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      function prettyTime(value) {
+        const text = String(value == null ? '' : value).trim();
+        if (!text) return '—';
+        return text.replace('T', ' ').replace(/(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/, '').slice(0, 19);
+      }
+
+      function shortTime(value) {
+        const text = prettyTime(value);
+        return text.length >= 16 ? text.slice(5, 16) : text;
+      }
+
+      async function detectBase() {
+        if (state.base) return state.base;
+        const candidates = location.pathname.indexOf('/zenvis/') === 0
+          ? ['/zenvis/api/v1', '/api/v1']
+          : ['/api/v1', '/zenvis/api/v1'];
+        for (const candidate of candidates) {
+          try {
+            const response = await fetch(candidate + '/entity/lab_access_event/list?page=1&perPage=1', {
+              credentials: 'same-origin',
+              headers: { 'Accept': 'application/json' }
+            });
+            if (response.status !== 404) {
+              state.base = candidate;
+              return candidate;
+            }
+          } catch (ignored) {
+            // Try the next deployment base.
+          }
+        }
+        state.base = candidates[0];
+        return state.base;
+      }
+
+      async function request(path, options) {
+        const base = await detectBase();
+        const config = Object.assign({ credentials: 'same-origin', headers: { 'Accept': 'application/json' } }, options || {});
+        if (config.body !== undefined && typeof config.body !== 'string') {
+          config.headers = Object.assign({}, config.headers, { 'Content-Type': 'application/json' });
+          config.body = JSON.stringify(config.body);
+        }
+        const response = await fetch(base + path, config);
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (ignored) {
+          throw new Error('服务返回了非 JSON 响应（HTTP ' + response.status + '）');
+        }
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('登录状态失效或当前账号无访问权限');
+        }
+        if (!response.ok) {
+          throw new Error((payload && (payload.msg || payload.message)) || ('HTTP ' + response.status));
+        }
+        if (payload && typeof payload.status === 'number' && payload.status !== 0) {
+          throw new Error(payload.msg || payload.message || '查询失败');
+        }
+        return payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload;
+      }
+
+      function rowsOf(data) {
+        return data && data.result && Array.isArray(data.result.rows) ? data.result.rows : [];
+      }
+
+      async function fetchOverview() {
+        return request('/entity/overview/query', {
+          method: 'POST',
+          body: {
+            entities: [ACCESS_ENTITY, RISK_ENTITY],
+            time_range: { preset: 'TODAY' },
+            time_field: 'zenvis_insert_time',
+            comparison: 'NONE'
+          }
+        });
+      }
+
+      async function fetchTrend() {
+        return request('/entity/trend/query', {
+          method: 'POST',
+          body: {
+            series: [
+              { entity: ACCESS_ENTITY, label: '访问事件', metric: { operation: 'COUNT' }, time_field: 'occurred_at' },
+              { entity: RISK_ENTITY, label: '风险线索', metric: { operation: 'COUNT' }, time_field: 'detected_at' }
+            ],
+            time_range: { preset: 'LAST_24_HOURS' },
+            granularity: 'HOUR'
+          }
+        });
+      }
+
+      async function fetchRiskDistribution() {
+        return request('/entity/distribution/query', {
+          method: 'POST',
+          body: {
+            mappings: [
+              { entity: RISK_ENTITY, dimension: 'severity', label: '风险级别', time_field: 'detected_at' },
+              { entity: RISK_ENTITY, dimension: 'status', label: '处置状态', time_field: 'detected_at' }
+            ],
+            time_range: { preset: 'ALL_TIME' },
+            limit: 30
+          }
+        });
+      }
+
+      async function fetchTopIpDistribution() {
+        return request('/entity/distribution/query', {
+          method: 'POST',
+          body: {
+            mappings: [
+              { entity: ACCESS_ENTITY, dimension: 'source_ip', label: '访问源 IP', time_field: 'occurred_at' },
+              { entity: ACCESS_ENTITY, dimension: 'destination_ip', label: '访问目的 IP', time_field: 'occurred_at' },
+              { entity: RISK_ENTITY, dimension: 'source_ip', label: '风险源 IP', time_field: 'detected_at' },
+              { entity: RISK_ENTITY, dimension: 'destination_ip', label: '风险目的 IP', time_field: 'detected_at' }
+            ],
+            time_range: { preset: 'ALL_TIME' },
+            limit: 30
+          }
+        });
+      }
+
+      async function fetchLatest(entity, timeField) {
+        const params = new URLSearchParams({ page: '1', perPage: '6', orderBy: timeField, orderDir: 'desc' });
+        return request('/entity/' + encodeURIComponent(entity) + '/list?' + params.toString());
+      }
+
+      function updateKpis(overview, riskDistribution) {
+        const overviewRows = rowsOf(overview);
+        const values = {};
+        overviewRows.forEach(row => {
+          values[String(row.entity || '')] = {
+            total: number(row.all_time_count),
+            today: number(row.current_value)
+          };
+        });
+        $('accessTotal').textContent = numberFormat.format((values[ACCESS_ENTITY] || {}).total || 0);
+        $('accessToday').textContent = numberFormat.format((values[ACCESS_ENTITY] || {}).today || 0);
+        $('riskTotal').textContent = numberFormat.format((values[RISK_ENTITY] || {}).total || 0);
+        $('riskToday').textContent = numberFormat.format((values[RISK_ENTITY] || {}).today || 0);
+
+        let open = 0;
+        rowsOf(riskDistribution).forEach(row => {
+          if (String(row.label || '') === '处置状态' && ['open', 'investigating'].includes(String(row.bucket || ''))) {
+            open += number(row.value);
+          }
+        });
+        $('riskOpen').textContent = numberFormat.format(open);
+      }
+
+      function drawTrend(data) {
+        const canvas = $('trendCanvas');
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.round(rect.width * ratio));
+        canvas.height = Math.max(1, Math.round(rect.height * ratio));
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        const width = rect.width;
+        const height = rect.height;
+        ctx.clearRect(0, 0, width, height);
+
+        const rows = rowsOf(data);
+        const buckets = Array.from(new Set(rows.map(row => String(row.bucket || '')))).filter(Boolean).sort();
+        if (!buckets.length) {
+          drawEmpty(ctx, width, height, '暂无趋势数据');
+          return;
+        }
+        const seriesLabels = Array.from(new Set(rows.map(row => String(row.label || row.series || '')))).filter(Boolean);
+        const colors = [getComputedStyle(document.documentElement).getPropertyValue('--teal').trim(), getComputedStyle(document.documentElement).getPropertyValue('--amber').trim()];
+        const palette = [colors[0] || '#3ce6c1', colors[1] || '#ffc66d', '#54d6ff', '#a68cff'];
+        const values = {};
+        seriesLabels.forEach(label => { values[label] = {}; });
+        rows.forEach(row => {
+          const label = String(row.label || row.series || '');
+          const bucket = String(row.bucket || '');
+          if (!label || !bucket) return;
+          values[label][bucket] = (values[label][bucket] || 0) + number(row.value);
+        });
+        const maxValue = Math.max(1, ...seriesLabels.flatMap(label => buckets.map(bucket => values[label][bucket] || 0)));
+        const pad = { left: 40, right: 12, top: 24, bottom: 27 };
+        const chartWidth = Math.max(1, width - pad.left - pad.right);
+        const chartHeight = Math.max(1, height - pad.top - pad.bottom);
+        const yOf = value => pad.top + chartHeight - (value / maxValue) * chartHeight;
+        const xOf = index => pad.left + (buckets.length <= 1 ? chartWidth / 2 : (index / (buckets.length - 1)) * chartWidth);
+
+        ctx.strokeStyle = 'rgba(84,214,255,.10)';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#82a7ba';
+        ctx.font = '9px "PingFang SC", sans-serif';
+        for (let index = 0; index <= 4; index += 1) {
+          const value = maxValue * index / 4;
+          const y = yOf(value);
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(width - pad.right, y);
+          ctx.stroke();
+          ctx.fillText(String(Math.round(value)), 4, y + 3);
+        }
+        const maxLabels = Math.max(2, Math.floor(chartWidth / 78));
+        const labelStep = Math.max(1, Math.ceil((buckets.length - 1) / Math.max(1, maxLabels - 1)));
+        const labelIndices = [];
+        for (let index = 0; index < buckets.length; index += labelStep) labelIndices.push(index);
+        const lastIndex = buckets.length - 1;
+        if (lastIndex > 0 && lastIndex - labelIndices[labelIndices.length - 1] >= Math.max(2, labelStep * .7)) {
+          labelIndices.push(lastIndex);
+        }
+        labelIndices.forEach(index => {
+          const bucket = buckets[index];
+          const x = xOf(index);
+          const text = bucket.length >= 16 ? bucket.slice(5, 16) : bucket;
+          const textWidth = ctx.measureText(text).width;
+          ctx.fillText(text, Math.min(Math.max(2, x - textWidth / 2), width - textWidth - 2), height - 7);
+        });
+
+        seriesLabels.forEach((label, seriesIndex) => {
+          const color = palette[seriesIndex % palette.length];
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          buckets.forEach((bucket, index) => {
+            const x = xOf(index);
+            const y = yOf(values[label][bucket] || 0);
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          buckets.forEach((bucket, index) => {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(xOf(index), yOf(values[label][bucket] || 0), 2.3, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(pad.left + seriesIndex * 98 + 4, 9, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#8fb4c8';
+          ctx.font = '9px "PingFang SC", sans-serif';
+          ctx.fillText(labels[String((rows.find(row => String(row.label || '') === label) || {}).series || '')] || label, pad.left + seriesIndex * 98 + 11, 12);
+        });
+      }
+
+      function drawRiskDistribution(data) {
+        const canvas = $('riskCanvas');
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.round(rect.width * ratio));
+        canvas.height = Math.max(1, Math.round(rect.height * ratio));
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        const width = rect.width;
+        const height = rect.height;
+        ctx.clearRect(0, 0, width, height);
+        const rows = rowsOf(data).filter(row => String(row.label || '') === '风险级别');
+        const values = rows.map(row => ({
+          label: String(row.bucket || 'unknown'),
+          value: number(row.value)
+        })).filter(item => item.value > 0);
+        if (!values.length) {
+          drawEmpty(ctx, width, height, '暂无风险数据');
+          return;
+        }
+        const colors = { low: '#54d6ff', medium: '#ffc66d', high: '#ff8f62', critical: '#ff718f' };
+        const total = values.reduce((sum, item) => sum + item.value, 0);
+        const radius = Math.max(28, Math.min(width * .22, height * .34));
+        const cx = Math.max(radius + 6, width * .28);
+        const cy = height * .50;
+        let angle = -Math.PI / 2;
+        values.forEach(item => {
+          const next = angle + (item.value / total) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, angle, next);
+          ctx.strokeStyle = colors[item.label] || '#a68cff';
+          ctx.lineWidth = Math.max(10, radius * .38);
+          ctx.lineCap = 'butt';
+          ctx.stroke();
+          angle = next;
+        });
+        ctx.fillStyle = '#e8f9ff';
+        ctx.font = '700 20px "PingFang SC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(numberFormat.format(total), cx, cy + 2);
+        ctx.fillStyle = '#82a7ba';
+        ctx.font = '9px "PingFang SC", sans-serif';
+        ctx.fillText('风险线索', cx, cy + 15);
+        ctx.textAlign = 'left';
+        const legendX = cx + radius + 20;
+        values.forEach((item, index) => {
+          const y = 18 + index * 19;
+          if (y > height - 6) return;
+          ctx.fillStyle = colors[item.label] || '#a68cff';
+          ctx.beginPath();
+          ctx.arc(legendX + 3, y - 3, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#a9c9d8';
+          ctx.font = '9px "PingFang SC", sans-serif';
+          ctx.fillText(item.label + '  ' + numberFormat.format(item.value), legendX + 11, y);
+        });
+      }
+
+      function drawEmpty(ctx, width, height, text) {
+        ctx.fillStyle = '#82a7ba';
+        ctx.font = '11px "PingFang SC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(text, width / 2, height / 2);
+        ctx.textAlign = 'left';
+      }
+
+      function renderLatest(accessData, riskData) {
+        const accessRows = accessData && Array.isArray(accessData.rows) ? accessData.rows : [];
+        const riskRows = riskData && Array.isArray(riskData.rows) ? riskData.rows : [];
+        if (!accessRows.length && !riskRows.length) {
+          $('latestEvents').innerHTML = '<div class="empty">暂无事件数据</div>';
+          return;
+        }
+        const accessHtml = accessRows.map(row => {
+          const href = DETAIL_ACCESS + encodeURIComponent(String(row.zenvis_id || ''));
+          const result = String(row.result || '');
+          const badgeClass = result === 'success' ? 'ok' : result === 'denied' ? 'warn' : 'bad';
+          return '<div class="event-row"><div class="event-time">' + esc(shortTime(row.occurred_at)) + '</div><div class="event-main"><a href="' + href + '" target="_blank" rel="noopener noreferrer">' + esc(row.event_id || '访问事件') + '</a><div class="event-detail">' + esc(row.actor || '-') + ' · ' + esc(row.action || '-') + ' · ' + esc(row.resource || '-') + '</div></div><span class="badge ' + badgeClass + '">' + esc(result || '-') + '</span></div>';
+        }).join('');
+        const riskHtml = riskRows.map(row => {
+          const href = DETAIL_RISK + encodeURIComponent(String(row.zenvis_id || ''));
+          const severity = String(row.severity || '');
+          const badgeClass = severity === 'critical' || severity === 'high' ? 'bad' : severity === 'medium' ? 'warn' : 'neutral';
+          return '<div class="event-row"><div class="event-time">' + esc(shortTime(row.detected_at)) + '</div><div class="event-main"><a href="' + href + '" target="_blank" rel="noopener noreferrer">' + esc(row.rule_code || row.signal_id || '风险线索') + '</a><div class="event-detail">' + esc(row.status || '-') + ' · ' + esc(row.summary || '-') + '</div></div><span class="badge ' + badgeClass + '">' + esc(severity || '-') + '</span></div>';
+        }).join('');
+        $('latestEvents').innerHTML = '<section class="event-section"><h3 class="event-section-title">访问事件</h3>' + (accessHtml || '<div class="empty">暂无访问事件</div>') + '</section><section class="event-section"><h3 class="event-section-title">风险线索</h3>' + (riskHtml || '<div class="empty">暂无风险线索</div>') + '</section>';
+      }
+
+      function renderTopIps(data) {
+        const totals = new Map();
+        rowsOf(data).forEach(row => {
+          const ip = String(row.bucket || '').trim();
+          if (!ip || ip === 'null') return;
+          totals.set(ip, (totals.get(ip) || 0) + number(row.value));
+        });
+        const values = Array.from(totals.entries()).sort((left, right) => right[1] - left[1]).slice(0, 7);
+        if (!values.length) {
+          $('topIps').innerHTML = '<div class="empty">暂无 IP 数据</div>';
+          return;
+        }
+        const max = Math.max(1, values[0][1]);
+        $('topIps').innerHTML = '<div class="ip-list">' + values.map((item, index) => {
+          const width = Math.max(4, Math.round(item[1] / max * 100));
+          return '<div class="ip-row"><span class="ip-rank">' + String(index + 1).padStart(2, '0') + '</span><div class="ip-main"><div class="ip-address">' + esc(item[0]) + '</div><div class="ip-track"><div class="ip-fill" style="width:' + width + '%"></div></div></div><span class="ip-count">' + numberFormat.format(item[1]) + '</span></div>';
+        }).join('') + '</div>';
+      }
+
+      function renderCapabilities(data) {
+        const items = Array.isArray(data) ? data : data && Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+          $('capabilities').innerHTML = '<div class="empty">能力目录为空</div>';
+          return;
+        }
+        $('capabilities').innerHTML = '<div class="cap-list">' + items.map(item => {
+          return '<div class="cap-item"><div class="cap-line"><span class="cap-name">' + esc(item.name || item.code || '能力') + '</span><span class="cap-category">' + esc(item.category || '') + '</span></div><div class="cap-desc">' + esc(item.description || '') + '</div><div class="cap-code">' + esc(item.code || '') + (item.read_only ? ' · READ ONLY' : ' · WRITE API') + '</div></div>';
+        }).join('') + '</div>';
+      }
+
+      function renderNotes(data) {
+        const total = number(data && data.total);
+        const byStatus = data && data.by_status && typeof data.by_status === 'object' ? data.by_status : {};
+        $('notesTotal').textContent = numberFormat.format(total);
+        $('noteStatus').innerHTML = '<div class="note-total">' + numberFormat.format(total) + '<small>条笔记</small></div><div class="note-grid"><div class="note-cell"><span>草稿</span><strong>' + numberFormat.format(number(byStatus.draft)) + '</strong></div><div class="note-cell"><span>已发布</span><strong>' + numberFormat.format(number(byStatus.published)) + '</strong></div><div class="note-cell"><span>已归档</span><strong>' + numberFormat.format(number(byStatus.archived)) + '</strong></div></div><div class="note-hint">MCP <b>lab</b> · RAG <b>lab-kb</b> · Skill <b>lab-capability-guide</b><br>工具只读，写操作仅通过 REST 与低代码页面完成。</div>';
+      }
+
+      function renderStackError(targetId, message) {
+        const element = $(targetId);
+        if (element) element.innerHTML = '<div class="stack-state">' + esc(message) + '</div>';
+      }
+
+      function setLoading(visible) {
+        $('loading').classList.toggle('visible', Boolean(visible));
+      }
+
+      function showError(message) {
+        $('errorMessage').textContent = message;
+        $('error').classList.add('visible');
+      }
+
+      function clearError() {
+        $('error').classList.remove('visible');
+        $('errorMessage').textContent = '';
+      }
+
+      function updateTimestamp() {
+        state.lastDataAt = new Date();
+        $('updatedAt').textContent = '更新于 ' + state.lastDataAt.toLocaleTimeString('zh-CN', { hour12: false });
+      }
+
+      function updateAutoState(text, paused) {
+        $('autoState').textContent = text;
+        $('autoState').classList.toggle('paused', Boolean(paused));
+      }
+
+      async function loadAll(options) {
+        if (state.busy) return;
+        state.busy = true;
+        state.countdown = REFRESH_SECONDS;
+        clearError();
+        $('refresh').disabled = true;
+        if (!options || options.initial) setLoading(true);
+        const failures = [];
+        const safe = async (label, task) => {
+          try {
+            return await task();
+          } catch (error) {
+            failures.push(label + '：' + (error && error.message ? error.message : String(error)));
+            return null;
+          }
+        };
+
+        const [overview, trend, riskDistribution, topIps, accessLatest, riskLatest, capabilities, notes] = await Promise.all([
+          safe('访问与风险总览', fetchOverview),
+          safe('趋势', fetchTrend),
+          safe('风险分布', fetchRiskDistribution),
+          safe('Top IP', fetchTopIpDistribution),
+          safe('最新访问事件', () => fetchLatest(ACCESS_ENTITY, 'occurred_at')),
+          safe('最新风险线索', () => fetchLatest(RISK_ENTITY, 'detected_at')),
+          safe('能力目录', () => request('/plugin/' + PLUGIN_CODE + '/capabilities')),
+          safe('笔记状态', () => request('/plugin/' + PLUGIN_CODE + '/notes/stats'))
+        ]);
+
+        if (overview || riskDistribution) updateKpis(overview || {}, riskDistribution || {});
+        if (trend) drawTrend(trend); else drawEmpty($('trendCanvas').getContext('2d'), $('trendCanvas').getBoundingClientRect().width, $('trendCanvas').getBoundingClientRect().height, '趋势加载失败');
+        if (riskDistribution) drawRiskDistribution(riskDistribution); else drawEmpty($('riskCanvas').getContext('2d'), $('riskCanvas').getBoundingClientRect().width, $('riskCanvas').getBoundingClientRect().height, '分布加载失败');
+        if (topIps) renderTopIps(topIps); else renderStackError('topIps', 'Top IP 加载失败');
+        if (accessLatest || riskLatest) renderLatest(accessLatest, riskLatest); else renderStackError('latestEvents', '事件列表加载失败');
+        if (capabilities) renderCapabilities(capabilities); else renderStackError('capabilities', '能力目录加载失败，请检查动态 API JAR');
+        if (notes) renderNotes(notes); else { $('notesTotal').textContent = '—'; renderStackError('noteStatus', '笔记统计不可用，请检查 MySQL 迁移'); }
+
+        updateTimestamp();
+        state.busy = false;
+        $('refresh').disabled = false;
+        setLoading(false);
+        if (failures.length) {
+          showError('部分数据加载失败：' + failures.slice(0, 3).join('；') + (failures.length > 3 ? '；其余 ' + (failures.length - 3) + ' 项失败' : ''));
+        }
+        updateAutoState(document.hidden ? '自动刷新已暂停' : '自动刷新 ' + state.countdown + 's', document.hidden);
+      }
+
+      function startClock() {
+        if (state.tickTimer) window.clearInterval(state.tickTimer);
+        state.tickTimer = window.setInterval(() => {
+          $('clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+          if (document.hidden) {
+            updateAutoState('自动刷新已暂停', true);
+            return;
+          }
+          state.countdown = Math.max(0, state.countdown - 1);
+          if (state.countdown === 0) {
+            state.countdown = REFRESH_SECONDS;
+            void loadAll({ initial: false });
+          }
+          updateAutoState('自动刷新 ' + state.countdown + 's', false);
+        }, 1000);
+      }
+
+      function handleVisibility() {
+        if (document.hidden) {
+          updateAutoState('自动刷新已暂停', true);
+          return;
+        }
+        state.countdown = REFRESH_SECONDS;
+        updateAutoState('自动刷新 ' + state.countdown + 's', false);
+        void loadAll({ initial: false });
+      }
+
+      $('refresh').addEventListener('click', () => void loadAll({ initial: false }));
+      $('retry').addEventListener('click', () => void loadAll({ initial: false }));
+      document.addEventListener('visibilitychange', handleVisibility);
+      window.addEventListener('resize', () => {
+        // The next refresh redraws both canvases at the current panel size.
+        if (!state.busy) {
+          state.countdown = REFRESH_SECONDS;
+          void loadAll({ initial: false });
+        }
+      });
+
+      startClock();
+      $('clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      void loadAll({ initial: true });
+    })();
+  </script>
+</body>
+</html>

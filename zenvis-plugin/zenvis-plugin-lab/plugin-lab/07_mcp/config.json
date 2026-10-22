@@ -1,0 +1,13 @@
+[
+  {
+    "code": "lab",
+    "name": "插件能力实验室 MCP",
+    "description": "由插件动态 JAR 提供的只读能力目录与实验室笔记检索工具；不提供笔记写入、SQL 或处置能力。",
+    "base_url": "http://127.0.0.1:${server.port}",
+    "sse_endpoint": "/api/v1/plugin/com.coolxer.plugin.lab/mcp/sse",
+    "headers": "{\"Authorization\":\"Bearer ${app.security.api.bearer-token}\"}",
+    "enabled": true,
+    "request_timeout_seconds": 30,
+    "connect_timeout_seconds": 10
+  }
+]

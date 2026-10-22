@@ -1,0 +1,312 @@
+{
+  "type": "page",
+  "title": "插件能力实验室",
+  "subTitle": "一个可运行的全栈插件示例：数据接入、检索、页面、看板与 Agent 能力",
+  "style": {
+    "background": "#06101f",
+    "minHeight": "100vh"
+  },
+  "body": [
+    {
+      "type": "wrapper",
+      "style": {
+        "padding": "18px",
+        "color": "#dff7ff",
+        "background": "radial-gradient(circle at 50% -18%, rgba(19,136,184,.25), transparent 42%), linear-gradient(145deg, #06101f 0%, #08182b 58%, #050b16 100%)"
+      },
+      "body": [
+        {
+          "type": "tpl",
+          "tpl": "<div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:16px\"><div><div style=\"font-size:12px;letter-spacing:.18em;color:#3ce6c1\">ZENVIS PLUGIN LAB / 1.0.1</div><h1 style=\"margin:6px 0 4px;color:#eefcff;font-size:28px;letter-spacing:.08em\">插件能力实验室</h1><div style=\"color:#8fb4c8\">访问事件 + 风险线索双实体 · 合成数据 · 开箱即用</div></div><div style=\"padding:9px 14px;border:1px solid rgba(60,230,193,.28);border-radius:9px;background:rgba(8,42,58,.72);color:#9fe9dc;font-size:12px\">Meta · Vector · API · MySQL · UI · Dashboard · MCP · RAG · Skill</div></div>"
+        },
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "本页所有指标均来自 ZenVis 真实查询接口。演示生成任务每 5 秒写入访问事件、每 9 秒写入风险线索；未看到数据时请先检查推送任务与 ClickHouse。"
+        },
+        {
+          "type": "service",
+          "name": "lab-overview-kpis",
+          "api": {
+            "method": "post",
+            "url": "/zenvis/api/v1/entity/overview/query",
+            "data": {
+              "entities": ["lab_access_event", "lab_risk_signal"],
+              "time_range": {"preset": "TODAY"},
+              "time_field": "zenvis_insert_time",
+              "comparison": "NONE"
+            },
+            "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={access_total:0,access_today:0,risk_total:0,risk_today:0};rows.forEach(function(r){var key=String(r.entity||'');if(key==='lab_access_event'){out.access_total=Number(r.all_time_count||0);out.access_today=Number(r.current_value||0);}if(key==='lab_risk_signal'){out.risk_total=Number(r.all_time_count||0);out.risk_today=Number(r.current_value||0);}});return {status:0,msg:'',data:out};"
+          },
+          "body": {
+            "type": "grid",
+            "gap": "md",
+            "columns": [
+              {
+                "md": 2,
+                "body": {
+                  "type": "panel",
+                  "title": "累计访问事件",
+                  "style": {"background": "linear-gradient(155deg, #0d2a42, #09192b)", "border": "1px solid rgba(60,230,193,.22)", "borderRadius": "10px", "color": "#dff7ff"},
+                  "body": "<div style=\"font-size:30px;font-weight:800;color:#3ce6c1\">${access_total || 0}</div><div style=\"color:#7fa3b5\">lab_access_event</div>"
+                }
+              },
+              {
+                "md": 2,
+                "body": {
+                  "type": "panel",
+                  "title": "今日访问",
+                  "style": {"background": "linear-gradient(155deg, #0d2a42, #09192b)", "border": "1px solid rgba(60,230,193,.22)", "borderRadius": "10px", "color": "#dff7ff"},
+                  "body": "<div style=\"font-size:30px;font-weight:800;color:#54d6ff\">${access_today || 0}</div><div style=\"color:#7fa3b5\">TODAY · Asia/Shanghai</div>"
+                }
+              },
+              {
+                "md": 3,
+                "body": {
+                  "type": "panel",
+                  "title": "累计风险线索",
+                  "style": {"background": "linear-gradient(155deg, #0d2a42, #09192b)", "border": "1px solid rgba(255,198,109,.22)", "borderRadius": "10px", "color": "#dff7ff"},
+                  "body": "<div style=\"font-size:30px;font-weight:800;color:#ffc66d\">${risk_total || 0}</div><div style=\"color:#7fa3b5\">lab_risk_signal</div>"
+                }
+              },
+              {
+                "md": 2,
+                "body": {
+                  "type": "panel",
+                  "title": "今日风险线索",
+                  "style": {"background": "linear-gradient(155deg, #0d2a42, #09192b)", "border": "1px solid rgba(255,198,109,.22)", "borderRadius": "10px", "color": "#dff7ff"},
+                  "body": "<div style=\"font-size:30px;font-weight:800;color:#ffb45d\">${risk_today || 0}</div><div style=\"color:#7fa3b5\">TODAY · 合成数据</div>"
+                }
+              },
+              {
+                "md": 3,
+                "body": {
+                  "type": "panel",
+                  "title": "能力覆盖",
+                  "style": {"background": "linear-gradient(155deg, #0d2a42, #09192b)", "border": "1px solid rgba(84,214,255,.22)", "borderRadius": "10px", "color": "#dff7ff"},
+                  "body": "<div style=\"font-size:22px;font-weight:700;line-height:1.45;color:#eafcff\">双实体 · 双接入<br/>API · MySQL · MCP · RAG · Skill<br/>低代码页面 · 双看板</div>"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "grid",
+          "gap": "md",
+          "columns": [
+            {
+              "md": 8,
+              "body": {
+                "type": "panel",
+                "title": "近 24 小时事件趋势",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(84,214,255,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "chart",
+                  "height": 330,
+                  "style": {"background": "transparent"},
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/trend/query",
+                    "data": {
+                      "series": [
+                        {"entity": "lab_access_event", "label": "访问事件", "metric": {"operation": "COUNT"}, "time_field": "occurred_at"},
+                        {"entity": "lab_risk_signal", "label": "风险线索", "metric": {"operation": "COUNT"}, "time_field": "detected_at"}
+                      ],
+                      "time_range": {"preset": "LAST_24_HOURS"},
+                      "granularity": "HOUR"
+                    },
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
+                  "config": {
+                    "backgroundColor": "transparent",
+                    "title": {"text": "", "textStyle": {"color": "#dff7ff"}},
+                    "tooltip": {"trigger": "axis"},
+                    "legend": {"textStyle": {"color": "#9fc4d6"}},
+                    "dataset": "${chart_dataset}",
+                    "xAxis": {"type": "category", "axisLabel": {"color": "#8fb4c8"}, "axisLine": {"lineStyle": {"color": "#31556b"}}},
+                    "yAxis": {"type": "value", "minInterval": 1, "axisLabel": {"color": "#8fb4c8"}, "splitLine": {"lineStyle": {"color": "rgba(84,214,255,.12)"}}},
+                    "series": "${chart_series}"
+                  }
+                }
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "风险级别分布",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(255,198,109,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "chart",
+                  "height": 330,
+                  "style": {"background": "transparent"},
+                  "api": {
+                    "method": "post",
+                    "url": "/zenvis/api/v1/entity/distribution/query",
+                    "data": {
+                      "mappings": [{"entity": "lab_risk_signal", "dimension": "severity", "label": "风险级别", "time_field": "detected_at"}],
+                      "time_range": {"preset": "ALL_TIME"},
+                      "limit": 10
+                    },
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+                  },
+                  "config": {
+                    "backgroundColor": "transparent",
+                    "tooltip": {"trigger": "axis"},
+                    "legend": {"textStyle": {"color": "#9fc4d6"}},
+                    "dataset": "${chart_dataset}",
+                    "xAxis": {"type": "value", "axisLabel": {"color": "#8fb4c8"}, "splitLine": {"lineStyle": {"color": "rgba(84,214,255,.12)"}}},
+                    "yAxis": {"type": "category", "axisLabel": {"color": "#8fb4c8"}, "axisLine": {"lineStyle": {"color": "#31556b"}}},
+                    "series": "${chart_series}"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "gap": "md",
+          "columns": [
+            {
+              "md": 8,
+              "body": {
+                "type": "panel",
+                "title": "能力矩阵",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(84,214,255,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "service",
+                  "name": "lab-capability-catalog",
+                  "api": {
+                    "method": "get",
+                    "url": "/zenvis/api/v1/plugin/com.coolxer.plugin.lab/capabilities",
+                    "adaptor": "var raw=payload&&payload.data?payload.data:payload,items=Array.isArray(raw)?raw:(raw&&Array.isArray(raw.items)?raw.items:[]);return {status:0,msg:'',data:{items:items}};"
+                  },
+                  "messages": {"fetchFailed": "能力目录不可用，请检查动态 API JAR 是否已安装"},
+                  "body": {
+                    "type": "each",
+                    "source": "${items}",
+                    "placeholder": "暂无能力目录",
+                    "items": {
+                      "type": "panel",
+                      "title": "${item.name}",
+                      "style": {"background": "rgba(11,31,52,.78)", "border": "1px solid rgba(60,230,193,.14)", "borderRadius": "8px", "color": "#dff7ff", "marginBottom": "8px"},
+                      "body": [
+                        {
+                          "type": "tpl",
+                          "tpl": "<div style=\"display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px\"><span style=\"color:#3ce6c1;font-size:11px;letter-spacing:.08em\">${item.category}</span><span style=\"color:#7fa3b5;font-size:11px\">${item.code}</span></div><div style=\"color:#a9c9d8;line-height:1.55\">${item.description}</div><div style=\"margin-top:6px;color:#5fd9c0;font-size:11px\">演示入口：${item.demo_entry}</div>"
+                        },
+                        {"type": "tpl", "tpl": "<span class=\"label label-success\">只读能力</span>", "visibleOn": "${item.read_only}"},
+                        {"type": "tpl", "tpl": "<span class=\"label label-warning\">含写操作</span>", "visibleOn": "${!item.read_only}"}
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "md": 4,
+              "body": {
+                "type": "panel",
+                "title": "笔记状态",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(60,230,193,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "service",
+                  "name": "lab-overview-note-stats",
+                  "api": {
+                    "method": "get",
+                    "url": "/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes/stats",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},s=d.by_status||{};return {status:0,msg:'',data:{total:Number(d.total||0),draft:Number(s.draft||0),published:Number(s.published||0),archived:Number(s.archived||0)}};"
+                  },
+                  "messages": {"fetchFailed": "笔记统计不可用；请确认 MySQL 迁移与数据库连接"},
+                  "body": [
+                    {
+                      "type": "tpl",
+                      "tpl": "<div style=\"font-size:46px;font-weight:800;color:#3ce6c1;line-height:1.1;margin:12px 0 18px\">${total || 0}<span style=\"font-size:13px;color:#7fa3b5;margin-left:8px\">条笔记</span></div>"
+                    },
+                    {
+                      "type": "grid",
+                      "gap": "sm",
+                      "columns": [
+                        {"md": 4, "body": {"type": "tpl", "tpl": "<div style=\"padding:12px;border-radius:8px;background:rgba(84,214,255,.08);border:1px solid rgba(84,214,255,.16)\"><div style=\"color:#8fb4c8;font-size:11px\">草稿</div><div style=\"font-size:24px;font-weight:700\">${draft || 0}</div></div>"}},
+                        {"md": 4, "body": {"type": "tpl", "tpl": "<div style=\"padding:12px;border-radius:8px;background:rgba(60,230,193,.08);border:1px solid rgba(60,230,193,.16)\"><div style=\"color:#8fb4c8;font-size:11px\">已发布</div><div style=\"font-size:24px;font-weight:700\">${published || 0}</div></div>"}},
+                        {"md": 4, "body": {"type": "tpl", "tpl": "<div style=\"padding:12px;border-radius:8px;background:rgba(255,198,109,.08);border:1px solid rgba(255,198,109,.16)\"><div style=\"color:#8fb4c8;font-size:11px\">已归档</div><div style=\"font-size:24px;font-weight:700\">${archived || 0}</div></div>"}}
+                      ]
+                    },
+                    {
+                      "type": "tpl",
+                      "tpl": "<div style=\"margin-top:18px;color:#8fb4c8;line-height:1.6\">进入“实验室笔记”可演示分页、关键字、状态筛选、创建、更新与删除。MCP 只读工具使用相同数据。</div>"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "gap": "md",
+          "columns": [
+            {
+              "md": 6,
+              "body": {
+                "type": "panel",
+                "title": "最新访问事件",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(84,214,255,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "service",
+                  "api": {
+                    "method": "get",
+                    "url": "/zenvis/api/v1/entity/lab_access_event/list?page=1&perPage=6&orderBy=occurred_at&orderDir=desc",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},rows=Array.isArray(d.rows)?d.rows:[];return {status:0,msg:'',data:{rows:rows}};"
+                  },
+                  "body": {
+                    "type": "table",
+                    "source": "${rows}",
+                    "placeholder": "暂无访问事件",
+                    "columns": [
+                      {"name": "occurred_at", "label": "时间", "width": 170},
+                      {"name": "actor", "label": "主体", "width": 120},
+                      {"name": "action", "label": "动作", "width": 90},
+                      {"name": "result", "label": "结果", "width": 90},
+                      {"name": "resource", "label": "资源"}
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "md": 6,
+              "body": {
+                "type": "panel",
+                "title": "最新风险线索",
+                "style": {"background": "rgba(9,25,43,.92)", "border": "1px solid rgba(255,198,109,.2)", "borderRadius": "10px", "color": "#dff7ff"},
+                "body": {
+                  "type": "service",
+                  "api": {
+                    "method": "get",
+                    "url": "/zenvis/api/v1/entity/lab_risk_signal/list?page=1&perPage=6&orderBy=detected_at&orderDir=desc",
+                    "adaptor": "var d=payload&&payload.data?payload.data:{},rows=Array.isArray(d.rows)?d.rows:[];return {status:0,msg:'',data:{rows:rows}};"
+                  },
+                  "body": {
+                    "type": "table",
+                    "source": "${rows}",
+                    "placeholder": "暂无风险线索",
+                    "columns": [
+                      {"name": "detected_at", "label": "时间", "width": 170},
+                      {"name": "rule_code", "label": "规则", "width": 150},
+                      {"name": "severity", "label": "级别", "width": 90},
+                      {"name": "status", "label": "状态", "width": 100},
+                      {"name": "summary", "label": "摘要"}
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

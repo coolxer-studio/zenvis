@@ -1,0 +1,281 @@
+{
+  "type": "page",
+  "title": "实验室笔记管理",
+  "subTitle": "动态 REST API、MySQL 迁移、分页检索与事务写入示例",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "笔记保存在 MySQL 表 t_lab_note。页面使用插件动态 API 完成分页查询、状态统计和增删改查，不直接访问数据库。"
+    },
+    {
+      "type": "service",
+      "name": "lab-note-stats",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes/stats",
+        "adaptor": "var d=payload&&payload.data?payload.data:{},s=d.by_status||{};return {status:0,msg:'',data:{total:Number(d.total||0),draft:Number(s.draft||0),published:Number(s.published||0),archived:Number(s.archived||0)}};"
+      },
+      "messages": {
+        "fetchFailed": "笔记统计不可用，请确认 MySQL 迁移已执行"
+      },
+      "body": {
+        "type": "grid",
+        "gap": "md",
+        "columns": [
+          {
+            "md": 3,
+            "body": {
+              "type": "panel",
+              "title": "全部笔记",
+              "body": "<div style=\"font-size:28px;font-weight:700\">${total || 0}</div><div style=\"color:#64748b\">t_lab_note 总记录数</div>"
+            }
+          },
+          {
+            "md": 3,
+            "body": {
+              "type": "panel",
+              "title": "草稿",
+              "body": "<div style=\"font-size:28px;font-weight:700\">${draft || 0}</div><div style=\"color:#64748b\">仅保存、待发布</div>"
+            }
+          },
+          {
+            "md": 3,
+            "body": {
+              "type": "panel",
+              "title": "已发布",
+              "body": "<div style=\"font-size:28px;font-weight:700\">${published || 0}</div><div style=\"color:#64748b\">可用于 MCP 检索</div>"
+            }
+          },
+          {
+            "md": 3,
+            "body": {
+              "type": "panel",
+              "title": "已归档",
+              "body": "<div style=\"font-size:28px;font-weight:700\">${archived || 0}</div><div style=\"color:#64748b\">保留但不再维护</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "crud",
+      "name": "lab-note-crud",
+      "api": "/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes",
+      "defaultParams": {
+        "page": 1,
+        "perPage": 20
+      },
+      "filter": {
+        "title": "检索笔记",
+        "body": [
+          {
+            "type": "input-text",
+            "name": "keyword",
+            "label": "关键字",
+            "placeholder": "匹配标题或正文，最多 100 个字符",
+            "clearable": true
+          },
+          {
+            "type": "select",
+            "name": "status",
+            "label": "状态",
+            "clearable": true,
+            "options": [
+              {"label": "草稿 draft", "value": "draft"},
+              {"label": "已发布 published", "value": "published"},
+              {"label": "已归档 archived", "value": "archived"}
+            ]
+          }
+        ],
+        "actions": [
+          {"type": "reset", "label": "重置"},
+          {"type": "submit", "label": "查询", "level": "primary"}
+        ]
+      },
+      "headerToolbar": [
+        {
+          "type": "button",
+          "label": "新建笔记",
+          "icon": "fa-solid fa-plus",
+          "level": "primary",
+          "actionType": "dialog",
+          "dialog": {
+            "title": "新建实验室笔记",
+            "size": "lg",
+            "body": {
+              "type": "form",
+              "name": "lab-note-create-form",
+              "mode": "horizontal",
+              "api": "post:/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes",
+              "reload": "lab-note-crud,lab-note-stats",
+              "body": [
+                {
+                  "type": "input-text",
+                  "name": "title",
+                  "label": "标题",
+                  "required": true,
+                  "maxLength": 120,
+                  "placeholder": "最多 120 个字符"
+                },
+                {
+                  "type": "select",
+                  "name": "status",
+                  "label": "状态",
+                  "required": true,
+                  "value": "draft",
+                  "options": [
+                    {"label": "草稿 draft", "value": "draft"},
+                    {"label": "已发布 published", "value": "published"},
+                    {"label": "已归档 archived", "value": "archived"}
+                  ]
+                },
+                {
+                  "type": "input-text",
+                  "name": "owner",
+                  "label": "负责人",
+                  "value": "demo",
+                  "maxLength": 80,
+                  "placeholder": "最多 80 个字符"
+                },
+                {
+                  "type": "textarea",
+                  "name": "content",
+                  "label": "正文",
+                  "minRows": 6,
+                  "maxLength": 4000,
+                  "placeholder": "最多 4000 个字符"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "columnsTogglable": "auto",
+      "placeholder": "暂无笔记，点击“新建笔记”添加第一条记录",
+      "columns": [
+        {
+          "name": "id",
+          "label": "ID",
+          "width": 70,
+          "sortable": true
+        },
+        {
+          "name": "title",
+          "label": "标题",
+          "type": "text",
+          "width": 260
+        },
+        {
+          "name": "status",
+          "label": "状态",
+          "type": "mapping",
+          "width": 110,
+          "map": {
+            "draft": "<span class='label label-default'>草稿</span>",
+            "published": "<span class='label label-success'>已发布</span>",
+            "archived": "<span class='label label-warning'>已归档</span>"
+          }
+        },
+        {
+          "name": "owner",
+          "label": "负责人",
+          "width": 120
+        },
+        {
+          "name": "content",
+          "label": "正文",
+          "type": "tpl",
+          "tpl": "<span class=\"text-truncate d-inline-block\" style=\"max-width: 360px\">${content}</span>",
+          "popOver": {
+            "trigger": "hover",
+            "body": {
+              "type": "tpl",
+              "tpl": "<div style=\"white-space:pre-wrap;max-width:520px\">${content}</div>"
+            }
+          }
+        },
+        {
+          "name": "update_time",
+          "label": "更新时间",
+          "width": 180
+        },
+        {
+          "type": "operation",
+          "label": "操作",
+          "width": 140,
+          "buttons": [
+            {
+              "type": "button",
+              "label": "编辑",
+              "level": "link",
+              "actionType": "dialog",
+              "dialog": {
+                "title": "编辑笔记 · ${title}",
+                "size": "lg",
+                "body": {
+                  "type": "form",
+                  "name": "lab-note-edit-form",
+                  "mode": "horizontal",
+                  "initApi": "/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes/${id}",
+                  "api": "post:/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes/${id}/update",
+                  "reload": "lab-note-crud,lab-note-stats",
+                  "body": [
+                    {
+                      "type": "input-text",
+                      "name": "title",
+                      "label": "标题",
+                      "required": true,
+                      "maxLength": 120
+                    },
+                    {
+                      "type": "select",
+                      "name": "status",
+                      "label": "状态",
+                      "required": true,
+                      "options": [
+                        {"label": "草稿 draft", "value": "draft"},
+                        {"label": "已发布 published", "value": "published"},
+                        {"label": "已归档 archived", "value": "archived"}
+                      ]
+                    },
+                    {
+                      "type": "input-text",
+                      "name": "owner",
+                      "label": "负责人",
+                      "maxLength": 80
+                    },
+                    {
+                      "type": "textarea",
+                      "name": "content",
+                      "label": "正文",
+                      "minRows": 6,
+                      "maxLength": 4000
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "button",
+              "label": "删除",
+              "level": "link",
+              "className": "text-danger",
+              "actionType": "ajax",
+              "api": "delete:/zenvis/api/v1/plugin/com.coolxer.plugin.lab/notes/${id}",
+              "confirmText": "确定删除笔记“${title}”吗？删除后无法恢复。",
+              "reload": "lab-note-crud,lab-note-stats"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "API 查询参数固定为 page、perPage、keyword、status；请求与响应 JSON 使用 snake_case，例如 create_time、update_time、by_status。MCP 只暴露同一份笔记数据的只读检索。"
+    }
+  ]
+}

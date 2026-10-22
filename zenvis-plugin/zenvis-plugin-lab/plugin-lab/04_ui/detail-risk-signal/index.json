@@ -1,0 +1,109 @@
+{
+  "type": "page",
+  "title": "风险线索详情",
+  "subTitle": "通过 ZenVis 平台记录 ID 查询单个合成风险线索",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "返回风险线索列表",
+      "icon": "fa-solid fa-arrow-left",
+      "actionType": "url",
+      "url": "/#/service/low-code-app/com.coolxer.plugin.lab.app?page=%2Frisk-signals",
+      "blank": true
+    },
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前风险线索。"
+    },
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "风险线索为合成演示数据：规则编码、评分和 IP 关联仅用于展示查询能力，不构成真实安全结论。"
+    },
+    {
+      "type": "service",
+      "name": "lab-risk-signal-detail",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/lab_risk_signal/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "messages": {
+        "fetchFailed": "记录不存在、尚未入库或当前账号没有访问权限"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "风险线索",
+          "column": 3,
+          "items": [
+            {"label": "线索 ID", "content": "${signal_id || '-'}", "remark": "业务侧唯一标识，可复制后用于关联。"},
+            {"label": "发现时间", "content": "${detected_at || '-'}", "remark": "合成业务时间（Asia/Shanghai）。"},
+            {"label": "规则编码", "content": "${rule_code || '-'}", "remark": "LAB-ACCESS / LAB-DATA / LAB-TRAFFIC 示例规则。"},
+            {"label": "风险级别", "content": "${severity || '-'}", "remark": "low / medium / high / critical。"},
+            {"label": "处置状态", "content": "${status || '-'}", "remark": "open / investigating / resolved / accepted。"},
+            {"label": "风险分", "content": "${risk_score || '-'}", "remark": "0 到 100 的合成评分。"},
+            {"label": "线索摘要", "content": "${summary || '-'}", "remark": "面向列表和详情的简短说明。"},
+            {"label": "标签", "content": "${tags || '-'}", "remark": "Array(String) 字段的页面展示。"}
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "IP 调查入口",
+          "body": {
+            "type": "tpl",
+            "tpl": "<div style=\"display:flex;gap:28px;flex-wrap:wrap\"><div><strong>源 IP：</strong><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip=${source_ip|url_encode}\">${source_ip || '-'}</a></div><div><strong>目的 IP：</strong><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"/#/service/low-code-page/com.coolxer.plugin.lab.ip-investigation?ip=${destination_ip|url_encode}\">${destination_ip || '-'}</a></div><div style=\"color:#64748b\">IP 查询会同时检索访问事件与风险线索。</div></div>"
+          }
+        },
+        {
+          "type": "tabs",
+          "tabs": [
+            {
+              "title": "规则证据 JSON",
+              "body": {
+                "type": "json",
+                "value": "${detail|raw}",
+                "levelExpand": 3,
+                "mutable": false,
+                "displayDataTypes": false,
+                "enableClipboard": true
+              }
+            },
+            {
+              "title": "平台元数据",
+              "body": {
+                "type": "property",
+                "column": 2,
+                "items": [
+                  {"label": "平台记录 ID", "content": "${zenvis_id || '-'}", "remark": "详情链接和平台记录身份。"},
+                  {"label": "平台入库时间", "content": "${zenvis_insert_time || '-'}", "remark": "ClickHouse 自动维护。"}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

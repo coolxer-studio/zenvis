@@ -1,0 +1,169 @@
+---
+# 插件能力实验室：安装即用的合成数据生成器。
+# 访问事件每 5 秒生成一条，风险线索每 9 秒生成一条，分别写入两个 Kafka Topic。
+# 后续由 lab-kafka-to-clickhouse.yaml 消费、校验并写入 ClickHouse。
+
+sources:
+  lab_access_demo:
+    type: "demo_logs"
+    format: "shuffle"
+    interval: 5
+    lines:
+      - '{"action":"login","result":"success","severity":"info"}'
+      - '{"action":"read","result":"success","severity":"low"}'
+      - '{"action":"write","result":"denied","severity":"medium"}'
+      - '{"action":"execute","result":"failed","severity":"high"}'
+      - '{"action":"share","result":"success","severity":"low"}'
+
+  lab_risk_demo:
+    type: "demo_logs"
+    format: "shuffle"
+    interval: 9
+    lines:
+      - '{"rule_code":"LAB-ACCESS-001","severity":"medium","status":"open","summary":"短时间内出现重复的拒绝访问"}'
+      - '{"rule_code":"LAB-ACCESS-002","severity":"high","status":"investigating","summary":"高权限动作与异常来源地址同时出现"}'
+      - '{"rule_code":"LAB-DATA-001","severity":"critical","status":"open","summary":"敏感资源路径被非常规身份访问"}'
+      - '{"rule_code":"LAB-TRAFFIC-001","severity":"low","status":"resolved","summary":"目的地址首次出现，已完成人工复核"}'
+
+transforms:
+  lab_access_demo_map:
+    type: "remap"
+    inputs: ["lab_access_demo"]
+    source: |-
+      seed = parse_json!(string!(.message))
+      source_ips = ["10.24.8.15", "10.24.8.27", "172.18.4.31", "192.168.50.12"]
+      destination_ips = ["10.24.16.20", "10.24.16.21", "10.24.32.8"]
+      actors = ["alice", "bob", "carol", "service-indexer", "ops-console"]
+      resources = ["/api/v1/catalog", "/api/v1/notes", "/admin/settings", "/reports/daily", "/shared/diagram"]
+      action = to_string(seed.action) ?? "read"
+      result = to_string(seed.result) ?? "success"
+      severity = to_string(seed.severity) ?? "info"
+      tags = ["demo", "access"]
+      if severity == "high" {
+        tags = push(tags, "review")
+      }
+      actor_index = random_int(0, length(actors) - 1) ?? 0
+      source_index = random_int(0, length(source_ips) - 1) ?? 0
+      destination_index = random_int(0, length(destination_ips) - 1) ?? 0
+      resource_index = random_int(0, length(resources) - 1) ?? 0
+      method = if action == "read" { "GET" } else { "POST" }
+      occurred_at = format_timestamp!(now(), format: "%Y-%m-%dT%H:%M:%S%.3f%:z", timezone: "Asia/Shanghai")
+      . = {
+        "type": "lab.access.event.v1",
+        "event_id": uuid_v4(),
+        "occurred_at": occurred_at,
+        "actor": get!(actors, [actor_index]),
+        "action": action,
+        "result": result,
+        "severity": severity,
+        "source_ip": get!(source_ips, [source_index]),
+        "destination_ip": get!(destination_ips, [destination_index]),
+        "resource": get!(resources, [resource_index]),
+        "trace_id": "trace-" + uuid_v4(),
+        "tags": tags,
+        "detail": {"method": method, "source": "demo-generator", "sample": true}
+      }
+
+  lab_risk_demo_map:
+    type: "remap"
+    inputs: ["lab_risk_demo"]
+    source: |-
+      seed = parse_json!(string!(.message))
+      source_ips = ["10.24.8.15", "10.24.8.27", "172.18.4.31", "192.168.50.12"]
+      destination_ips = ["10.24.16.20", "10.24.16.21", "10.24.32.8"]
+      statuses = ["open", "investigating", "resolved", "accepted"]
+      severity = to_string(seed.severity) ?? "low"
+      raw_status = to_string(seed.status) ?? ""
+      status = if includes(statuses, raw_status) { raw_status } else { "open" }
+      score = 38.0
+      if severity == "medium" { score = 62.0 }
+      if severity == "high" { score = 81.0 }
+      if severity == "critical" { score = 94.0 }
+      source_index = random_int(0, length(source_ips) - 1) ?? 0
+      destination_index = random_int(0, length(destination_ips) - 1) ?? 0
+      detected_at = format_timestamp!(now(), format: "%Y-%m-%dT%H:%M:%S%.3f%:z", timezone: "Asia/Shanghai")
+      . = {
+        "type": "lab.risk.signal.v1",
+        "signal_id": "signal-" + uuid_v4(),
+        "detected_at": detected_at,
+        "rule_code": to_string(seed.rule_code) ?? "LAB-DEMO-000",
+        "severity": severity,
+        "status": status,
+        "risk_score": score,
+        "source_ip": get!(source_ips, [source_index]),
+        "destination_ip": get!(destination_ips, [destination_index]),
+        "summary": to_string(seed.summary) ?? "合成风险线索",
+        "tags": ["demo", "risk", severity],
+        "detail": {"confidence": 0.86, "source": "demo-generator", "sample": true}
+      }
+
+sinks:
+  lab_access_kafka:
+    type: "kafka"
+    inputs: ["lab_access_demo_map"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${LAB_ACCESS_TOPIC:-lab.access.raw}"
+    encoding:
+      codec: "json"
+    buffer:
+      type: "disk"
+      max_size: 268435488
+
+  lab_risk_kafka:
+    type: "kafka"
+    inputs: ["lab_risk_demo_map"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${LAB_RISK_TOPIC:-lab.risk.raw}"
+    encoding:
+      codec: "json"
+    buffer:
+      type: "disk"
+      max_size: 268435488
+
+tests:
+  - name: "访问事件演示数据映射"
+    inputs:
+      - insert_at: "lab_access_demo_map"
+        type: "log"
+        log_fields:
+          message: '{"action":"read","result":"success","severity":"high"}'
+    outputs:
+      - extract_from: "lab_access_demo_map"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.type, "lab.access.event.v1")
+              assert!(length(to_string!(.event_id)) > 0)
+              _, time_error = parse_timestamp(to_string!(.occurred_at), format: "%+")
+              assert_eq!(time_error, null)
+              assert_eq!(.action, "read")
+              assert_eq!(.result, "success")
+              assert_eq!(.severity, "high")
+              assert_eq!(.detail.method, "GET")
+              assert_eq!(.detail.source, "demo-generator")
+              assert_eq!(.tags, ["demo", "access", "review"])
+              true
+
+  - name: "风险线索演示数据映射"
+    inputs:
+      - insert_at: "lab_risk_demo_map"
+        type: "log"
+        log_fields:
+          message: '{"rule_code":"LAB-ACCESS-002","severity":"critical","status":"investigating","summary":"高权限动作与异常来源地址同时出现"}'
+    outputs:
+      - extract_from: "lab_risk_demo_map"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.type, "lab.risk.signal.v1")
+              assert!(length(to_string!(.signal_id)) > 0)
+              _, time_error = parse_timestamp(to_string!(.detected_at), format: "%+")
+              assert_eq!(time_error, null)
+              assert_eq!(.rule_code, "LAB-ACCESS-002")
+              assert_eq!(.severity, "critical")
+              assert_eq!(.status, "investigating")
+              assert_eq!(.risk_score, 94.0)
+              assert_eq!(.detail.source, "demo-generator")
+              assert_eq!(.tags, ["demo", "risk", "critical"])
+              true
+

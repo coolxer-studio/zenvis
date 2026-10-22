@@ -29,4 +29,23 @@ public class SkillRuntimeLimitsVo implements Serializable {
 
     @JsonAlias("maxAccumulatedToolResultTokens")
     private Integer maxAccumulatedToolResultTokens;
+
+    /**
+     * 单轮模型输出上限。为空时继承平台默认输出预算。
+     */
+    @JsonAlias("maxOutputTokens")
+    private Integer maxOutputTokens;
+
+    public SkillRuntimeLimitsVo(Integer maxToolCalls,
+                                Integer maxRepeatedFailures,
+                                Integer maxToolResultChars,
+                                Integer maxAccumulatedToolResultChars,
+                                Integer maxAccumulatedToolResultTokens) {
+        this(maxToolCalls,
+                maxRepeatedFailures,
+                maxToolResultChars,
+                maxAccumulatedToolResultChars,
+                maxAccumulatedToolResultTokens,
+                null);
+    }
 }

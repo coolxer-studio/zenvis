@@ -114,17 +114,19 @@ final class OpenAiCompatibleToolCallingManager implements ToolCallingManager {
 
         AssistantMessage assistantMessage = toolGeneration.getOutput();
         ToolRuntimeContext runtimeContext = resolveRuntimeContext(prompt);
-        if (runtimeContext != null
-                && !runtimeContext.reserveToolCalls(assistantMessage.getToolCalls().size())) {
-            return buildTerminalPartialResult(
-                    prompt, assistantMessage, runtimeContext.stopReason());
-        }
-
         List<InvalidToolCall> invalidToolCalls = assistantMessage.getToolCalls().stream()
                 .map(toolCall -> validateToolCall(toolCall, toolSchemas))
                 .flatMap(Optional::stream)
                 .toList();
         if (invalidToolCalls.isEmpty()) {
+            // Only calls that pass validation and actually execute may consume the
+            // tool-call budget. Otherwise a malformed retry consumes the final slot
+            // and prevents the model from using the remaining valid call.
+            if (runtimeContext != null
+                    && !runtimeContext.reserveToolCalls(assistantMessage.getToolCalls().size())) {
+                return buildTerminalPartialResult(
+                        prompt, assistantMessage, runtimeContext.stopReason());
+            }
             ToolExecutionResult result = delegate.executeToolCalls(prompt, normalizedResponse);
             return runtimeContext == null
                     ? result

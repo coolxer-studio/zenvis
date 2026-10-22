@@ -593,12 +593,14 @@ public class SkillService {
                 positiveOrNull(dto.getMaxRepeatedFailures()),
                 positiveOrNull(dto.getMaxToolResultChars()),
                 positiveOrNull(dto.getMaxAccumulatedToolResultChars()),
-                null);
+                null,
+                positiveOrNull(dto.getMaxOutputTokens()));
         boolean hasTools = !tools.getLocal().isEmpty() || !tools.getMcp().isEmpty();
         boolean hasLimits = limits.getMaxToolCalls() != null
                 || limits.getMaxRepeatedFailures() != null
                 || limits.getMaxToolResultChars() != null
-                || limits.getMaxAccumulatedToolResultChars() != null;
+                || limits.getMaxAccumulatedToolResultChars() != null
+                || limits.getMaxOutputTokens() != null;
         if (!hasTools && !hasLimits && StringUtils.isBlank(dto.getPromptMode())) {
             return null;
         }
@@ -724,6 +726,7 @@ public class SkillService {
         putIfPositive(limits, "maxRepeatedFailures", dto.getMaxRepeatedFailures());
         putIfPositive(limits, "maxToolResultChars", dto.getMaxToolResultChars());
         putIfPositive(limits, "maxAccumulatedToolResultChars", dto.getMaxAccumulatedToolResultChars());
+        putIfPositive(limits, "maxOutputTokens", dto.getMaxOutputTokens());
         if (!limits.isEmpty()) {
             runtime.put("limits", limits);
         }
@@ -998,6 +1001,8 @@ public class SkillService {
                 runtime.getLimits() == null ? null : runtime.getLimits().getMaxAccumulatedToolResultChars()));
         limits.setMaxAccumulatedToolResultTokens(minPositive(runtimes, runtime ->
                 runtime.getLimits() == null ? null : runtime.getLimits().getMaxAccumulatedToolResultTokens()));
+        limits.setMaxOutputTokens(minPositive(runtimes, runtime ->
+                runtime.getLimits() == null ? null : runtime.getLimits().getMaxOutputTokens()));
         merged.setLimits(limits);
         return merged;
     }

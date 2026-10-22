@@ -108,7 +108,8 @@ public class ChatMessagePartParser {
                 && !"zenvis:dashboard-config-record".equals(info)
                 && !"zenvis:menu-config-record".equals(info)
                 && !"zenvis:config-record".equals(info)
-                && !"zenvis:mcp-approval".equals(info)) {
+                && !"zenvis:mcp-approval".equals(info)
+                && !"zenvis:tool-call".equals(info)) {
             return null;
         }
 
@@ -133,6 +134,7 @@ public class ChatMessagePartParser {
                 case "zenvis:menu-config-record" -> "menu-config-record";
                 case "zenvis:config-record" -> "config-record";
                 case "zenvis:mcp-approval" -> "mcp-approval";
+                case "zenvis:tool-call" -> "tool-call";
                 default -> "confirm";
             };
             ChatMessagePart.ChatMessagePartBuilder builder = part(type)
@@ -146,7 +148,7 @@ public class ChatMessagePartParser {
                     || "info-steps".equals(type)
                     || "data-access-decision".equals(type)) {
                 builder.status("pending");
-            } else if ("mcp-approval".equals(type)) {
+            } else if ("mcp-approval".equals(type) || "tool-call".equals(type)) {
                 builder.id(textValue(node, "id"))
                         .status(firstTextValue(node, "status", "state"));
             }

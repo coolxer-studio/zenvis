@@ -14,6 +14,8 @@ import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.dto.McpInvocationSearchDto;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.model.dih.vo.McpToolCallResultVo;
+import com.coolxer.service.dih.agentrun.AgentRunService;
+import com.coolxer.service.dih.agentrun.AgentRunMetrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -23,6 +25,7 @@ import jakarta.persistence.criteria.Predicate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -54,6 +57,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class McpApprovalService {
 
+    private static final long RUN_APPROVAL_TIMEOUT_MILLIS = 24L * 60 * 60 * 1000;
+
     private static final int MAX_ERROR_CHARS = 2000;
     private static final Set<String> SENSITIVE_KEYS = Set.of(
             "password", "passwd", "pwd", "token", "secret", "authorization", "apikey", "api_key",
@@ -77,6 +82,12 @@ public class McpApprovalService {
     private final long timeoutMillis;
     private final ConcurrentHashMap<String, PendingApproval> pendingApprovals = new ConcurrentHashMap<>();
 
+    @Autowired(required = false)
+    private AgentRunService agentRunService;
+
+    @Autowired(required = false)
+    private AgentRunMetrics agentRunMetrics;
+
     public McpApprovalService(McpToolInvocationRepository invocationRepository,
                               McpToolPolicyService policyService,
                               McpChatToolGrantService chatToolGrantService,
@@ -95,10 +106,40 @@ public class McpApprovalService {
     public void expireInterruptedInvocations() {
         Date now = new Date();
         for (McpToolInvocation invocation : invocationRepository.findByStatusIn(ACTIVE_STATUSES)) {
-            invocation.setStatus(McpInvocationStatus.EXPIRED)
-                    .setErrorSummary("服务重启，原工具调用已失效")
-                    .setFinishTime(now);
-            invocationRepository.save(invocation);
+            try {
+                if (StringUtils.isNotBlank(invocation.getAgentRunId())) {
+                    if (invocation.getStatus() == McpInvocationStatus.PENDING
+                            || invocation.getStatus() == McpInvocationStatus.APPROVED) {
+                        // Run 审批是持久化的，重启后继续等待用户决定。
+                        continue;
+                    }
+                    invocation.setStatus(McpInvocationStatus.UNKNOWN)
+                            .setErrorSummary("服务重启，工具结果未知，禁止自动重放")
+                            .setFinishTime(now);
+                } else {
+                    invocation.setStatus(McpInvocationStatus.EXPIRED)
+                            .setErrorSummary("服务重启，原工具调用已失效")
+                            .setFinishTime(now);
+                }
+                invocationRepository.save(invocation);
+                if (invocation.getStatus() == McpInvocationStatus.UNKNOWN
+                        && agentRunService != null
+                        && StringUtils.isNotBlank(invocation.getAgentRunId())) {
+                    try {
+                        agentRunService.markPaused(
+                                invocation.getAgentRunId(),
+                                "UNKNOWN_TOOL_RESULT: 服务重启时工具结果未知，禁止自动重放",
+                                stepId(invocation.getTurnId()));
+                    } catch (RuntimeException pauseError) {
+                        log.warn("暂停未知工具结果的 Agent Run 失败: runId={}, requestId={}, error={}",
+                                invocation.getAgentRunId(), invocation.getRequestId(),
+                                pauseError.getMessage());
+                    }
+                }
+            } catch (RuntimeException recoveryError) {
+                log.warn("恢复中断 MCP 调用失败: requestId={}, error={}",
+                        invocation.getRequestId(), recoveryError.getMessage());
+            }
         }
     }
 
@@ -117,6 +158,11 @@ public class McpApprovalService {
                         && configuredPolicy != McpApprovalPolicy.DENY;
         McpApprovalPolicy policy = explicitDemoApproval
                 ? McpApprovalPolicy.ASK : configuredPolicy;
+        if (executionContext.isAgentRun()
+                && Boolean.TRUE.equals(descriptor.readOnlyHint())
+                && policy != McpApprovalPolicy.DENY) {
+            policy = McpApprovalPolicy.ALLOW;
+        }
         boolean sessionGranted = !explicitDemoApproval
                 && policy == McpApprovalPolicy.ASK
                 && chatToolGrantService.isGranted(executionContext, descriptor.toolKey());
@@ -127,15 +173,55 @@ public class McpApprovalService {
                 && policy == McpApprovalPolicy.ASK
                 && executionContext.analysisTaskId() != null
                 && executionContext.taskApprovalMode() == AnalysisTaskApprovalMode.AUTO;
+        String agentRunId = executionContext.isAgentRun()
+                ? resolveAgentRunId(executionContext.turnId()) : null;
+        boolean runGranted = !explicitDemoApproval
+                && policy == McpApprovalPolicy.ASK
+                && agentRunId != null
+                && invocationRepository.existsByAgentRunIdAndToolKeyAndApprovalScopeAndStatusIn(
+                agentRunId,
+                descriptor.toolKey(),
+                McpApprovalScope.RUN,
+                List.of(McpInvocationStatus.APPROVED, McpInvocationStatus.RUNNING,
+                        McpInvocationStatus.SUCCEEDED));
         boolean approvalRequired = policy == McpApprovalPolicy.ASK
-                && !sessionGranted && !taskGranted && !taskAutoApproved;
+                && !sessionGranted && !taskGranted && !taskAutoApproved && !runGranted;
         McpApprovalScope automaticScope = sessionGranted ? McpApprovalScope.SESSION
                 : taskGranted ? McpApprovalScope.TASK_RUN
-                : taskAutoApproved ? McpApprovalScope.TASK_AUTO : null;
-        McpToolInvocation invocation = createInvocation(descriptor, toolInput, executionContext, policy,
-                approvalRequired ? McpInvocationStatus.PENDING
-                        : policy == McpApprovalPolicy.DENY ? McpInvocationStatus.DENIED : McpInvocationStatus.RUNNING,
-                automaticScope);
+                : taskAutoApproved ? McpApprovalScope.TASK_AUTO
+                : runGranted ? McpApprovalScope.RUN : null;
+        McpToolInvocation invocation = null;
+        if (agentRunId != null && policy != McpApprovalPolicy.DENY) {
+            invocation = invocationRepository
+                    .findFirstByAgentRunIdAndTurnIdAndToolKeyAndArgumentsDigestOrderByCreateTimeDesc(
+                            agentRunId, executionContext.turnId(), descriptor.toolKey(), digest(toolInput))
+                    .orElse(null);
+            if (invocation != null) {
+                if (invocation.getStatus() == McpInvocationStatus.SUCCEEDED) {
+                    return invocation.getResult();
+                }
+                if (invocation.getStatus() == McpInvocationStatus.UNKNOWN
+                        || invocation.getStatus() == McpInvocationStatus.RUNNING) {
+                    throw new McpToolResultUnknownException(
+                            invocation.getRequestId(),
+                            "该工具上次已发出但结果未知，禁止自动重放: " + invocation.getRequestId());
+                }
+                if (invocation.getStatus() == McpInvocationStatus.APPROVED) {
+                    approvalRequired = false;
+                } else if (invocation.getStatus() == McpInvocationStatus.PENDING) {
+                    approvalRequired = true;
+                } else {
+                    invocation = null;
+                }
+            }
+        }
+        if (invocation == null) {
+            invocation = createInvocation(descriptor, toolInput, executionContext, policy,
+                    approvalRequired ? McpInvocationStatus.PENDING
+                            : policy == McpApprovalPolicy.DENY
+                            ? McpInvocationStatus.DENIED : McpInvocationStatus.RUNNING,
+                    automaticScope);
+        }
 
         if (taskAutoApproved) {
             invocation.setDecisionComment("AI分析任务配置为无需人工审批，已自动批准 ASK 工具")
@@ -158,6 +244,10 @@ public class McpApprovalService {
         }
 
         if (approvalRequired) {
+            if (executionContext.isAgentRun()) {
+                executionContext.emit(McpApprovalEvent.required(new McpApprovalVo(invocation)));
+                throw new McpApprovalPendingException(invocation.getRequestId());
+            }
             PendingApproval pending = new PendingApproval(new CompletableFuture<>(), executionContext);
             String requestId = invocation.getRequestId();
             try {
@@ -181,6 +271,12 @@ public class McpApprovalService {
             } finally {
                 pendingApprovals.remove(requestId, pending);
             }
+        }
+
+        if (invocation.getStatus() == McpInvocationStatus.APPROVED) {
+            invocation.setStatus(McpInvocationStatus.RUNNING);
+            invocationRepository.save(invocation);
+            executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(invocation)));
         }
 
         if (executionContext.isTaskCancelled()) {
@@ -227,7 +323,10 @@ public class McpApprovalService {
                 }
                 return deniedResult(invocation, executionContext, "AI分析任务已取消");
             }
-            invocation.setStatus(McpInvocationStatus.FAILED)
+            boolean unknownSideEffect = executionContext.isAgentRun()
+                    && !Boolean.TRUE.equals(descriptor.readOnlyHint());
+            invocation.setStatus(unknownSideEffect
+                            ? McpInvocationStatus.UNKNOWN : McpInvocationStatus.FAILED)
                     .setErrorSummary(summarizeJson(e.getMessage(), MAX_ERROR_CHARS))
                     .setDurationMillis(elapsedMillis(startedAt))
                     .setFinishTime(new Date());
@@ -307,18 +406,32 @@ public class McpApprovalService {
 
     @Transactional(transactionManager = "mysqlTransactionManager")
     public McpApprovalVo decide(String requestId, String decision, String comment, User currentUser) {
-        McpToolInvocation invocation = getInvocation(requestId);
+        McpToolInvocation invocation = invocationRepository.findByRequestIdForUpdate(requestId)
+                .orElseThrow(() -> new ApiException(404, "MCP审批请求不存在"));
         assertCanAccess(invocation, currentUser);
-        if (invocation.getStatus() != McpInvocationStatus.PENDING) {
-            throw new ApiException(409, "审批请求已处理或已失效");
-        }
+        recordRunApprovalMetric(invocation);
         String normalizedDecision = StringUtils.trimToEmpty(decision).toLowerCase(Locale.ROOT);
         boolean approved = "approved".equals(normalizedDecision);
         boolean approvedSession = "approved_session".equals(normalizedDecision);
         boolean approvedTask = "approved_task".equals(normalizedDecision);
+        boolean approvedRun = "approved_run".equals(normalizedDecision);
         boolean rejected = "rejected".equals(normalizedDecision);
-        if (!approved && !approvedSession && !approvedTask && !rejected) {
-            throw new ApiException(400, "决策值只支持 approved、approved_session、approved_task 或 rejected");
+        if (!approved && !approvedSession && !approvedTask && !approvedRun && !rejected) {
+            throw new ApiException(400,
+                    "决策值只支持 approved、approved_session、approved_task、approved_run 或 rejected");
+        }
+        if (invocation.getStatus() != McpInvocationStatus.PENDING) {
+            McpInvocationStatus status = invocation.getStatus();
+            boolean duplicateApproval = (approved || approvedSession || approvedTask || approvedRun)
+                    && (status == McpInvocationStatus.APPROVED
+                    || status == McpInvocationStatus.RUNNING
+                    || status == McpInvocationStatus.SUCCEEDED
+                    || status == McpInvocationStatus.UNKNOWN);
+            boolean duplicateRejection = rejected && status == McpInvocationStatus.REJECTED;
+            if (duplicateApproval || duplicateRejection) {
+                return new McpApprovalVo(invocation);
+            }
+            throw new ApiException(409, "审批请求已处理或已失效");
         }
         if (approvedSession) {
             assertSessionApprovalSupported(invocation);
@@ -328,6 +441,10 @@ public class McpApprovalService {
             assertTaskApprovalSupported(invocation);
             return approveForTask(invocation, comment, currentUser);
         }
+        if (approvedRun) {
+            assertRunApprovalSupported(invocation);
+            return approveForRun(invocation, comment, currentUser);
+        }
         invocation.setStatus(approved ? McpInvocationStatus.APPROVED : McpInvocationStatus.REJECTED)
                 .setApprovalScope(approved ? McpApprovalScope.ONCE : null);
         applyDecisionAudit(invocation, comment, currentUser);
@@ -335,6 +452,7 @@ public class McpApprovalService {
             invocation.setFinishTime(new Date()).setErrorSummary("用户拒绝了MCP工具调用");
         }
         invocationRepository.saveAndFlush(invocation);
+        resumeRunAfterDecision(invocation);
         signalDecisionAfterCommit(invocation);
         return new McpApprovalVo(invocation);
     }
@@ -362,6 +480,7 @@ public class McpApprovalService {
             applyDecisionAudit(pendingInvocation, comment, currentUser);
         }
         invocationRepository.saveAllAndFlush(pendingInvocations);
+        pendingInvocations.forEach(this::resumeRunAfterDecision);
         signalDecisionsAfterCommit(pendingInvocations);
         return pendingInvocations.stream()
                 .filter(item -> requestedInvocation.getRequestId().equals(item.getRequestId()))
@@ -392,6 +511,7 @@ public class McpApprovalService {
             applyDecisionAudit(pendingInvocation, comment, currentUser);
         }
         invocationRepository.saveAllAndFlush(pendingInvocations);
+        pendingInvocations.forEach(this::resumeRunAfterDecision);
         signalDecisionsAfterCommit(pendingInvocations);
         return pendingInvocations.stream()
                 .filter(item -> requestedInvocation.getRequestId().equals(item.getRequestId()))
@@ -420,6 +540,68 @@ public class McpApprovalService {
                 || StringUtils.isBlank(invocation.getTaskExecutionId())) {
             throw new ApiException(400, "仅AI分析任务中的MCP调用支持本任务一直允许");
         }
+    }
+
+    private McpApprovalVo approveForRun(McpToolInvocation requestedInvocation,
+                                        String comment,
+                                        User currentUser) {
+        List<McpToolInvocation> pendingInvocations = new ArrayList<>(invocationRepository
+                .findByAgentRunIdAndToolKeyAndStatus(
+                        requestedInvocation.getAgentRunId(),
+                        requestedInvocation.getToolKey(),
+                        McpInvocationStatus.PENDING));
+        if (pendingInvocations.stream().noneMatch(item ->
+                requestedInvocation.getRequestId().equals(item.getRequestId()))) {
+            pendingInvocations.add(requestedInvocation);
+        }
+        for (McpToolInvocation pendingInvocation : pendingInvocations) {
+            pendingInvocation.setStatus(McpInvocationStatus.APPROVED)
+                    .setApprovalScope(McpApprovalScope.RUN);
+            applyDecisionAudit(pendingInvocation, comment, currentUser);
+        }
+        invocationRepository.saveAllAndFlush(pendingInvocations);
+        pendingInvocations.forEach(this::resumeRunAfterDecision);
+        signalDecisionsAfterCommit(pendingInvocations);
+        return pendingInvocations.stream()
+                .filter(item -> requestedInvocation.getRequestId().equals(item.getRequestId()))
+                .findFirst()
+                .map(McpApprovalVo::new)
+                .orElseGet(() -> new McpApprovalVo(requestedInvocation));
+    }
+
+    private void assertRunApprovalSupported(McpToolInvocation invocation) {
+        if (StringUtils.isBlank(invocation.getAgentRunId())) {
+            throw new ApiException(400, "仅持久化智能体任务支持本任务始终允许");
+        }
+    }
+
+    private void resumeRunAfterDecision(McpToolInvocation invocation) {
+        if (agentRunService == null || StringUtils.isBlank(invocation.getAgentRunId())) {
+            return;
+        }
+        agentRunService.markApprovalUpdated(
+                invocation.getAgentRunId(),
+                invocation.getRequestId(),
+                invocation.getStatus().name(),
+                stepId(invocation.getTurnId()));
+    }
+
+    private void recordRunApprovalMetric(McpToolInvocation invocation) {
+        if (agentRunMetrics == null || invocation == null
+                || StringUtils.isBlank(invocation.getAgentRunId())
+                || invocation.getCreateTime() == null) {
+            return;
+        }
+        long millis = Math.max(System.currentTimeMillis() - invocation.getCreateTime().getTime(), 0);
+        agentRunMetrics.approvalDuration(Duration.ofMillis(millis));
+    }
+
+    private String stepId(String turnId) {
+        if (!McpInvocationContext.isAgentRunTurn(turnId)) {
+            return null;
+        }
+        String[] parts = turnId.split(":", 3);
+        return parts.length < 3 ? null : StringUtils.left(parts[2], 64);
     }
 
     private void applyDecisionAudit(McpToolInvocation invocation, String comment, User currentUser) {
@@ -643,6 +825,7 @@ public class McpApprovalService {
                         .setErrorSummary("MCP工具审批已超时")
                         .setFinishTime(now);
                 invocationRepository.save(invocation);
+                resumeRunAfterDecision(invocation);
                 PendingApproval pending = pendingApprovals.get(invocation.getRequestId());
                 if (pending != null) {
                     pending.future().complete(McpInvocationStatus.EXPIRED);
@@ -754,6 +937,7 @@ public class McpApprovalService {
                 .setChatId(context.chatId())
                 .setTurnId(context.turnId())
                 .setAgentType(context.agentType())
+                .setAgentRunId(resolveAgentRunId(context.turnId()))
                 .setAnalysisTaskId(context.analysisTaskId())
                 .setTaskExecutionId(context.executionId())
                 .setMcpSessionId(context.mcpSessionId())
@@ -761,9 +945,22 @@ public class McpApprovalService {
                 .setArguments(McpAuditPayloadUtils.fitLongText(toolInput))
                 .setArgumentsDigest(digest(toolInput));
         if (status == McpInvocationStatus.PENDING && !isManualAnalysisTask(context)) {
-            invocation.setExpireTime(new Date(now.getTime() + timeoutMillis));
+            invocation.setExpireTime(new Date(now.getTime()
+                    + (isAgentRun(context.turnId()) ? RUN_APPROVAL_TIMEOUT_MILLIS : timeoutMillis)));
         }
         return invocationRepository.save(invocation);
+    }
+
+    private boolean isAgentRun(String turnId) {
+        return StringUtils.startsWith(turnId, "run:");
+    }
+
+    private String resolveAgentRunId(String turnId) {
+        if (!isAgentRun(turnId)) {
+            return null;
+        }
+        String[] parts = turnId.split(":", 3);
+        return parts.length < 2 ? null : StringUtils.left(parts[1], 64);
     }
 
     private boolean isManualAnalysisTask(McpInvocationContext context) {

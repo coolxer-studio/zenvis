@@ -66,6 +66,11 @@ public class SkillSaveDto implements Serializable {
     private Integer maxAccumulatedToolResultChars;
 
     /**
+     * 单轮模型输出上限。为空时继承平台默认输出预算。
+     */
+    private Integer maxOutputTokens;
+
+    /**
      * 是否开放 DIH 聊天入口。
      */
     private Boolean chatEnabled;

@@ -273,6 +273,25 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("工具调用围栏应解析为结构化工具片段")
+    void parseToolCallFence() {
+        String content = """
+                ```zenvis:tool-call
+                {"id":"call-1","callId":"call-1","toolName":"lab_note_search","status":"succeeded","arguments":"{\\"keyword\\":\\"接入\\"}","result":"{\\"total\\":0}","durationMillis":41}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("tool-call", parts.get(0).getType());
+        assertEquals("call-1", parts.get(0).getId());
+        assertEquals("succeeded", parts.get(0).getStatus());
+        assertEquals("lab_note_search", parts.get(0).getMetadata().get("toolName"));
+        assertEquals(41, parts.get(0).getMetadata().get("durationMillis"));
+    }
+
+    @Test
     @DisplayName("think 标签应解析为思考片段并从正文中剥离")
     void parseThinkingTag() {
         List<ChatMessagePart> parts = parser.parse("<think>先分析问题\n再给结论</think>\n最终回答", MessageType.TEXT);

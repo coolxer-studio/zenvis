@@ -67,6 +67,9 @@ public class DataVisualizationWorkflowDefinition implements WorkflowDefinition {
                     : AgentWorkflowStep.INTENT_CONFIRMATION;
         }
         if ("confirm".equals(part.getType())) {
+            if ("data_visualization.execute_approved_query".equals(action)) {
+                return AgentWorkflowStep.BLOCKED;
+            }
             if ("data_visualization.confirm_query_plan".equals(action)) {
                 return AgentWorkflowStep.QUERY_PLAN_CONFIRMATION;
             }
@@ -335,15 +338,37 @@ public class DataVisualizationWorkflowDefinition implements WorkflowDefinition {
     private AgentWorkflowStep retryStep(AgentWorkflowState state) {
         List<Map<String, Object>> failures = state.getFailures();
         if (failures != null && !failures.isEmpty()) {
-            String retryStep = text(failures.get(failures.size() - 1).get("retryStep"));
-            try {
-                return AgentWorkflowStep.valueOf(retryStep);
-            } catch (RuntimeException ignored) {
-                // Use deterministic fallback.
+            for (int index = failures.size() - 1; index >= 0; index--) {
+                String retryStep = text(failures.get(index).get("retryStep"));
+                try {
+                    AgentWorkflowStep candidate = AgentWorkflowStep.valueOf(retryStep);
+                    if (candidate == AgentWorkflowStep.BLOCKED
+                            || candidate == AgentWorkflowStep.CANCELLED
+                            || (candidate == AgentWorkflowStep.DATA_QUERY
+                            && !hasRetryableQuery(state))) {
+                        continue;
+                    }
+                    return candidate;
+                } catch (RuntimeException ignored) {
+                    // Try the previous actionable failure.
+                }
             }
+        }
+        if (hasRetryableQuery(state)) {
+            return AgentWorkflowStep.DATA_QUERY;
         }
         return state.getArtifactId() == null
                 ? AgentWorkflowStep.ENTITY_META : AgentWorkflowStep.ARTIFACT_READY;
+    }
+
+    private boolean hasRetryableQuery(AgentWorkflowState state) {
+        Map<String, Object> context = state.getContext();
+        if (context == null) {
+            return false;
+        }
+        Map<String, Object> query = map(context.get("query"));
+        return StringUtils.hasText(text(query.get("tool")))
+                && !map(query.get("request")).isEmpty();
     }
 
     private String visualizationObjectType(String value) {

@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -227,10 +228,30 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         if (currentUser == null || !Objects.equals(chatSession.getCreateBy(), currentUser.getId())) {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
         }
-        List<Message> messages = parseMessages(chatSession.getMessages());
+        ChatSession lockedSession = chatSession.getId() == null
+                ? chatSession
+                : chatSessionRepository.findOwnedByIdForUpdate(
+                        chatSession.getId(), currentUser.getId()).orElse(chatSession);
+        if (chatSession != lockedSession && StringUtils.isNotBlank(chatSession.getExtraData())) {
+            lockedSession.setExtraData(mergeReservedExtraData(
+                    lockedSession.getExtraData(), chatSession.getExtraData()));
+        }
+        List<Message> messages = parseMessages(lockedSession.getMessages());
         messages.add(message);
-        chatSession.setMessages(JacksonUtil.toJson(messages));
-        return chatSessionRepository.save(chatSession);
+        lockedSession.setMessages(JacksonUtil.toJson(messages));
+        return chatSessionRepository.save(lockedSession);
+    }
+
+    private String mergeReservedExtraData(String currentExtraData, String incomingExtraData) {
+        Map<String, Object> current = workflowStateStore.parse(currentExtraData);
+        Map<String, Object> incoming = workflowStateStore.parse(incomingExtraData);
+        for (String key : List.of(
+                WorkflowStateStore.RESERVED_KEY, AgentDemoStateStore.RESERVED_KEY)) {
+            if (incoming.containsKey(key)) {
+                current.put(key, incoming.get(key));
+            }
+        }
+        return JacksonUtil.toJson(current);
     }
 
     private static void checkCreateOrUpdate(ChatSessionDto chatSessionDto) {

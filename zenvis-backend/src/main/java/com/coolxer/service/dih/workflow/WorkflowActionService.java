@@ -13,6 +13,7 @@ import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,7 @@ import java.util.Objects;
 import java.util.Set;
 
 @Service
+@Slf4j
 public class WorkflowActionService {
 
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(
@@ -79,10 +81,14 @@ public class WorkflowActionService {
         require(Objects.equals(request.getWorkflowId(), text(metadata.get("workflowId"))),
                 "工作流与卡片不匹配");
 
-        AgentWorkflowState state = stateStore.load(chatSession, request.getWorkflowId())
-                .orElseThrow(() -> invalid("工作流不存在或已过期"));
-        WorkflowDefinition definition = workflowDefinition(state.getAgentType());
+        WorkflowDefinition definition = workflowDefinition(chatSession.getType());
         require(definition != null, "当前智能体没有可用的共享工作流定义");
+        AgentWorkflowState state = stateStore.load(chatSession, request.getWorkflowId())
+                .orElseGet(() -> restoreWorkflowState(
+                        definition, located.part(), metadata, request));
+        require(state != null, "工作流不存在或已过期");
+        require(Objects.equals(definition.agentType(), state.getAgentType()),
+                "工作流与当前智能体类型不匹配");
         if (state.getContext() == null) {
             state.setContext(new LinkedHashMap<>());
         }
@@ -108,6 +114,17 @@ public class WorkflowActionService {
             validateAnswers(state, metadata, request.getAnswers());
             definition.rememberAnswers(state, request.getAnswers());
         }
+        if (("approve".equals(request.getAction()) || "retry".equals(request.getAction()))
+                && DataVisualizationAgent.AGENT_TYPE.equals(state.getAgentType())) {
+            if (metadata.containsKey("query")) {
+                metadata.put("query", VisualizationQueryNormalizer.normalizeQuery(
+                        metadata.get("query")));
+            }
+            if (state.getContext().containsKey("query")) {
+                state.getContext().put("query", VisualizationQueryNormalizer.normalizeQuery(
+                        state.getContext().get("query")));
+            }
+        }
         String validationError = definition.validateAction(
                 state, located.part(), metadata, request.getAction());
         require(!StringUtils.hasText(validationError), validationError);
@@ -131,14 +148,53 @@ public class WorkflowActionService {
                     state, request.getAction());
         }
 
+        boolean retryIntoDataQuery = "retry".equals(request.getAction())
+                && state.getStep() == AgentWorkflowStep.DATA_QUERY
+                && hasRetryableQuery(state);
+        boolean retryApprovedPlan = retryIntoDataQuery
+                && (isQueryPlanCard(metadata)
+                || isExecuteApprovedQueryCard(metadata));
+        if (retryIntoDataQuery) {
+            Map<String, Object> cardQuery = map(metadata.get("query"));
+            Map<String, Object> retryQuery = VisualizationQueryNormalizer.normalizeQuery(
+                    cardQuery.isEmpty() ? state.getContext().get("query") : cardQuery);
+            String retryPlanId = firstText(
+                    text(metadata.get("planId")),
+                    text(state.getContext().get("planId")));
+            if (!retryQuery.isEmpty()) {
+                state.getContext().put("query", retryQuery);
+                state.getContext().put("approvedQuery", retryQuery);
+            }
+            if (StringUtils.hasText(retryPlanId)) {
+                state.getContext().put("planId", retryPlanId);
+                state.getContext().put("approvedPlanId", retryPlanId);
+            }
+        }
+        if ("approve".equals(request.getAction())
+                && state.getStep() == AgentWorkflowStep.DATA_QUERY) {
+            state.getContext().put("approvedPlanId",
+                    text(metadata.get("planId")));
+            state.getContext().put("approvedQuery",
+                    VisualizationQueryNormalizer.normalizeQuery(
+                            metadata.get("query")));
+        }
         String partStatus = partStatus(request.getAction());
+        if (retryApprovedPlan) {
+            partStatus = "approved";
+        }
         located.part().setStatus(partStatus);
-        metadata.put("validationStatus",
-                "reject".equals(request.getAction()) ? "cancelled" : "success");
         state.setMessageId(request.getMessageId());
         state.setPartId(request.getPartId());
         state.setStateRevision(state.getStateRevision() + 1);
         state.setUpdatedAt(Instant.now().toString());
+        synchronizePartMetadata(
+                definition,
+                state,
+                located.part(),
+                metadata,
+                request.getAction(),
+                retryIntoDataQuery,
+                retryApprovedPlan);
         stateStore.upsert(chatSession, state);
         chatSession.setMessages(JacksonUtil.toJson(messages));
         chatSessionService.updateWorkflowState(
@@ -156,6 +212,88 @@ public class WorkflowActionService {
                 "retry".equals(request.getAction())
                         || state.getStep() == AgentWorkflowStep.BLOCKED,
                 chatSession.getExtraData());
+    }
+
+    /**
+     * Older sessions may still contain a valid server-generated card while the
+     * workflow section was lost by a message append race. Rehydrate only from
+     * immutable workflow metadata persisted with that card, and only while the
+     * card is still actionable, so a completed action is never replayed.
+     */
+    private AgentWorkflowState restoreWorkflowState(
+            WorkflowDefinition definition,
+            ChatMessagePart part,
+            Map<String, Object> metadata,
+            WorkflowActionDto request) {
+        if (!definition.supportsPart(part)
+                || !"workflow".equals(text(metadata.get("source")))
+                || (StringUtils.hasText(part.getStatus())
+                && !"pending".equals(part.getStatus()))) {
+            return null;
+        }
+        AgentWorkflowStep step = workflowStep(text(metadata.get("step")));
+        if (step == null) {
+            return null;
+        }
+        String now = Instant.now().toString();
+        AgentWorkflowState restored = new AgentWorkflowState()
+                .setWorkflowId(request.getWorkflowId())
+                .setWorkflowVersion(firstText(
+                        text(metadata.get("workflowVersion")), AgentWorkflowState.VERSION))
+                .setAgentType(definition.agentType())
+                .setWorkflowType(definition.workflowType())
+                .setObjectType(firstText(
+                        text(metadata.get("objectType")), definition.defaultObjectType()))
+                .setStep(step)
+                .setStatus(terminalStatus(step))
+                .setMessageId(request.getMessageId())
+                .setPartId(request.getPartId())
+                .setContext(new LinkedHashMap<>())
+                .setCreatedAt(now)
+                .setUpdatedAt(now);
+        if (metadata.get("stateRevision") instanceof Number revision) {
+            restored.setStateRevision(revision.longValue());
+        }
+        definition.updateContext(restored, part, metadata);
+        Map<String, List<String>> strictOptions = restoredStrictOptions(metadata);
+        if (!strictOptions.isEmpty()) {
+            restored.getContext().put("strictOptions", strictOptions);
+        }
+        restored.setEvidenceRefs(listOfMaps(metadata.get("evidenceRefs")));
+        String artifactId = text(metadata.get("artifactId"));
+        if (StringUtils.hasText(artifactId)) {
+            restored.setArtifactId(artifactId);
+        }
+        log.warn("工作流状态缺失，已从卡片元数据恢复: chatId={}, workflowId={}, step={}",
+                request.getChatId(), request.getWorkflowId(), step);
+        return restored;
+    }
+
+    private AgentWorkflowStep workflowStep(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return AgentWorkflowStep.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private Map<String, List<String>> restoredStrictOptions(
+            Map<String, Object> metadata) {
+        Map<String, List<String>> restored = new LinkedHashMap<>();
+        for (Map<String, Object> step : listOfMaps(metadata.get("steps"))) {
+            if (!Boolean.TRUE.equals(step.get("strictOptions"))) {
+                continue;
+            }
+            String id = text(step.get("id"));
+            Set<String> values = optionValues(step.get("suggestions"));
+            if (StringUtils.hasText(id) && !values.isEmpty()) {
+                restored.put(id, new ArrayList<>(values));
+            }
+        }
+        return restored;
     }
 
     private WorkflowDefinition workflowDefinition(String agentType) {
@@ -415,6 +553,76 @@ public class WorkflowActionService {
             case "add_to_library" -> "added";
             default -> "pending";
         };
+    }
+
+    private boolean isQueryPlanCard(Map<String, Object> metadata) {
+        String action = firstText(
+                text(metadata.get("action")),
+                text(metadata.get("blockedAction")));
+        return "data_visualization.confirm_query_plan".equals(action)
+                && StringUtils.hasText(text(metadata.get("planId")))
+                && !map(metadata.get("query")).isEmpty();
+    }
+
+    private boolean isExecuteApprovedQueryCard(Map<String, Object> metadata) {
+        return "data_visualization.execute_approved_query".equals(firstText(
+                text(metadata.get("action")),
+                text(metadata.get("blockedAction"))));
+    }
+
+    private boolean hasRetryableQuery(AgentWorkflowState state) {
+        Map<String, Object> context = state.getContext();
+        if (context == null) {
+            return false;
+        }
+        Map<String, Object> query = map(context.get("query"));
+        return StringUtils.hasText(text(query.get("tool")))
+                && !map(query.get("request")).isEmpty();
+    }
+
+    /**
+     * Keep the card contract aligned with the workflow state after an action.
+     * A retried query is immediately approved and executed, so it must not keep
+     * rendering confirm buttons, and a blocked card must only expose retry/revise.
+     */
+    private void synchronizePartMetadata(
+            WorkflowDefinition definition,
+            AgentWorkflowState state,
+            ChatMessagePart part,
+            Map<String, Object> metadata,
+            String action,
+            boolean retryIntoDataQuery,
+            boolean retryApprovedQuery) {
+        if ("add_to_library".equals(action)) {
+            metadata.put("step", state.getStep().name());
+            metadata.put("stateRevision", state.getStateRevision());
+            return;
+        }
+        if ("reject".equals(action)) {
+            metadata.put("validationStatus", "cancelled");
+            metadata.put("allowedActions", List.of());
+        } else {
+            boolean retryPendingArtifact = retryIntoDataQuery
+                    && !retryApprovedQuery
+                    && "visualization-chart-preview".equals(part.getType());
+            metadata.put("validationStatus", state.getStep() == AgentWorkflowStep.BLOCKED
+                    ? "blocked"
+                    : retryPendingArtifact ? "pending" : "success");
+            metadata.put("allowedActions",
+                    definition.allowedActions(state.getStep(), metadata));
+        }
+        if (retryIntoDataQuery) {
+            String queryAction = firstText(
+                    text(metadata.get("action")),
+                    text(metadata.get("blockedAction")));
+            if (retryApprovedQuery && StringUtils.hasText(queryAction)) {
+                metadata.put("action", queryAction);
+            }
+            metadata.remove("blockedAction");
+            metadata.remove("validationMessage");
+        }
+        metadata.put("step", state.getStep().name());
+        metadata.put("stateRevision", state.getStateRevision());
     }
 
     private String text(Object value) {

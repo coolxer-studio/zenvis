@@ -61,6 +61,201 @@ class WorkflowActionServiceTest {
     }
 
     @Test
+    void restoresWorkflowStateFromPendingCardWhenSessionStateWasLost() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = session();
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("entity", "user_event");
+        request.put("dimensions", List.of(new LinkedHashMap<>(Map.of(
+                "field", "event_type",
+                "kind", "CATEGORY"))));
+        Map<String, Object> query = new LinkedHashMap<>(Map.of(
+                "tool", "entity_aggregate",
+                "request", request));
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("workflowId", "workflow-restored");
+        metadata.put("workflowVersion", "1");
+        metadata.put("step", "QUERY_PLAN_CONFIRMATION");
+        metadata.put("stateRevision", 1);
+        metadata.put("objectType", "visualization");
+        metadata.put("source", "workflow");
+        metadata.put("validationStatus", "success");
+        metadata.put("allowedActions", List.of("approve", "reject", "revise"));
+        metadata.put("planId", "plan-1");
+        metadata.put("entity", "user_event");
+        metadata.put("fields", List.of(Map.of("field", "event_type", "role", "dimension")));
+        metadata.put("query", query);
+        ChatMessagePart part = ChatMessagePart.builder()
+                .id("part-restored")
+                .type("confirm")
+                .title("确认实体与字段查询方案")
+                .status("pending")
+                .metadata(metadata)
+                .build();
+        session.setMessages(JacksonUtil.toJson(List.of(message("message-restored", part))));
+        assertThat(session.getExtraData()).isNull();
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        var result = service.handle(request(
+                "chat-1", "message-restored", "part-restored",
+                "workflow-restored", "approve"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getState()).isEqualTo("DATA_QUERY");
+        List<Message> persisted = JacksonUtil.toList(
+                session.getMessages(), new com.fasterxml.jackson.core.type.TypeReference<List<Message>>() {});
+        assertThat(persisted.get(0).getParts().get(0).getStatus()).isEqualTo("approved");
+        AgentWorkflowState restored = store.load(session, "workflow-restored").orElseThrow();
+        assertThat(restored.getStep()).isEqualTo(AgentWorkflowStep.DATA_QUERY);
+        assertThat(restored.getContext())
+                .containsEntry("planId", "plan-1");
+        Map<String, Object> restoredQuery = (Map<String, Object>) restored.getContext().get("query");
+        assertThat(dimensions(restoredQuery)).singleElement()
+                .satisfies(dimension -> assertThat(dimension).containsEntry("kind", "FIELD"));
+        Map<String, Object> persistedQuery = (Map<String, Object>) persisted.get(0)
+                .getParts().get(0).getMetadata().get("query");
+        assertThat(dimensions(persistedQuery)).singleElement()
+                .satisfies(dimension -> assertThat(dimension).containsEntry("kind", "FIELD"));
+    }
+
+    @Test
+    void retryBlockedQueryApprovesPlanAndNormalizesDimensionKind() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = session();
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("entity", "user_event");
+        request.put("dimensions", List.of(new LinkedHashMap<>(Map.of(
+                "field", "event_type",
+                "kind", "CATEGORY"))));
+        Map<String, Object> query = new LinkedHashMap<>(Map.of(
+                "tool", "entity_aggregate",
+                "request", request));
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("workflowId", "workflow-retry");
+        metadata.put("action", "data_visualization.confirm_query_plan");
+        metadata.put("step", "BLOCKED");
+        metadata.put("stateRevision", 1);
+        metadata.put("allowedActions", List.of("retry", "revise"));
+        metadata.put("planId", "plan-1");
+        metadata.put("query", query);
+        ChatMessagePart part = ChatMessagePart.builder()
+                .id("part-retry")
+                .type("confirm")
+                .status("blocked")
+                .metadata(metadata)
+                .build();
+        session.setMessages(JacksonUtil.toJson(List.of(message("message-retry", part))));
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("workflow-retry")
+                .setAgentType("agent_data_visualization")
+                .setStep(AgentWorkflowStep.BLOCKED)
+                .setStatus("blocked")
+                .setMessageId("message-retry")
+                .setPartId("part-retry")
+                .setStateRevision(1)
+                .setFailures(List.of(
+                        Map.of("stage", "DATA_QUERY", "retryStep", "DATA_QUERY"),
+                        Map.of("stage", "BLOCKED", "retryStep", "BLOCKED")))
+                .setContext(new LinkedHashMap<>(Map.of("query", query, "planId", "plan-1"))));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        var result = service.handle(request(
+                "chat-1", "message-retry", "part-retry",
+                "workflow-retry", "retry"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getState()).isEqualTo("DATA_QUERY");
+        assertThat(result.getPartStatus()).isEqualTo("approved");
+        AgentWorkflowState restored = store.load(session, "workflow-retry").orElseThrow();
+        assertThat(restored.getContext())
+                .containsEntry("approvedPlanId", "plan-1");
+        Map<String, Object> restoredQuery = (Map<String, Object>) restored.getContext().get("query");
+        assertThat(dimensions(restoredQuery)).singleElement()
+                .satisfies(dimension -> assertThat(dimension).containsEntry("kind", "FIELD"));
+        List<Message> persisted = JacksonUtil.toList(
+                session.getMessages(), new com.fasterxml.jackson.core.type.TypeReference<List<Message>>() {});
+        assertThat(persisted.get(0).getParts().get(0).getStatus()).isEqualTo("approved");
+        assertThat(persisted.get(0).getParts().get(0).getMetadata())
+                .containsEntry("step", "DATA_QUERY")
+                .containsEntry("action", "data_visualization.confirm_query_plan")
+                .doesNotContainKey("blockedAction");
+        assertThat((List<?>) persisted.get(0).getParts().get(0)
+                .getMetadata().get("allowedActions")).isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void retryBlockedArtifactReusesItsApprovedQueryWithoutMarkingArtifactSuccessful() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = session();
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("entity", "user_event");
+        request.put("dimensions", List.of(new LinkedHashMap<>(Map.of(
+                "field", "event_type",
+                "kind", "CATEGORY"))));
+        Map<String, Object> query = new LinkedHashMap<>(Map.of(
+                "tool", "entity_aggregate",
+                "request", request));
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("workflowId", "workflow-artifact-retry");
+        metadata.put("action", "data_visualization.add_chart_library");
+        metadata.put("blockedAction", "data_visualization.add_chart_library");
+        metadata.put("step", "BLOCKED");
+        metadata.put("stateRevision", 3);
+        metadata.put("allowedActions", List.of("retry", "revise"));
+        metadata.put("validationStatus", "blocked");
+        metadata.put("validationMessage", "查询方案未批准或本轮数据 MCP 未成功");
+        metadata.put("artifactId", "artifact-1");
+        metadata.put("planId", "plan-2");
+        metadata.put("query", query);
+        ChatMessagePart part = ChatMessagePart.builder()
+                .id("part-artifact")
+                .type("visualization-chart-preview")
+                .status("blocked")
+                .metadata(metadata)
+                .build();
+        session.setMessages(JacksonUtil.toJson(List.of(message("message-artifact", part))));
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("workflow-artifact-retry")
+                .setAgentType("agent_data_visualization")
+                .setStep(AgentWorkflowStep.BLOCKED)
+                .setStatus("blocked")
+                .setMessageId("message-artifact")
+                .setPartId("part-artifact")
+                .setStateRevision(3)
+                .setFailures(List.of(
+                        Map.of("stage", "DATA_QUERY", "retryStep", "DATA_QUERY"),
+                        Map.of("stage", "BLOCKED", "retryStep", "BLOCKED")))
+                .setContext(new LinkedHashMap<>(Map.of("query", query, "planId", "plan-2"))));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        var result = service.handle(request(
+                "chat-1", "message-artifact", "part-artifact",
+                "workflow-artifact-retry", "retry"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getState()).isEqualTo("DATA_QUERY");
+        assertThat(result.getPartStatus()).isEqualTo("pending");
+        AgentWorkflowState restored = store.load(session, "workflow-artifact-retry").orElseThrow();
+        assertThat(restored.getContext())
+                .containsEntry("approvedPlanId", "plan-2")
+                .containsEntry("planId", "plan-2");
+        Map<String, Object> approvedQuery = (Map<String, Object>) restored.getContext()
+                .get("approvedQuery");
+        assertThat(dimensions(approvedQuery)).singleElement()
+                .satisfies(dimension -> assertThat(dimension).containsEntry("kind", "FIELD"));
+        List<Message> persisted = JacksonUtil.toList(
+                session.getMessages(), new com.fasterxml.jackson.core.type.TypeReference<List<Message>>() {});
+        ChatMessagePart persistedPart = persisted.get(0).getParts().get(0);
+        assertThat(persistedPart.getStatus()).isEqualTo("pending");
+        assertThat(persistedPart.getMetadata())
+                .containsEntry("step", "DATA_QUERY")
+                .containsEntry("validationStatus", "pending")
+                .doesNotContainKeys("blockedAction", "validationMessage");
+        assertThat((List<?>) persistedPart.getMetadata().get("allowedActions")).isEmpty();
+    }
+
+    @Test
     void addToLibraryCopiesVerifiedArtifactAndIsIdempotent() {
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -201,6 +396,12 @@ class WorkflowActionServiceTest {
     private List<Map<String, Object>> listOfMaps(Object value) {
         return value instanceof List<?> list
                 ? (List<Map<String, Object>>) list : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> dimensions(Map<String, Object> query) {
+        Map<String, Object> request = (Map<String, Object>) query.get("request");
+        return (List<Map<String, Object>>) request.get("dimensions");
     }
 
     private record Fixture(WorkflowActionService service, User user) {

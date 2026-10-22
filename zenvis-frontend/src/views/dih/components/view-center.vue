@@ -27,6 +27,10 @@
           分析结果
         </el-button>
 
+        <el-button class="agent-run-button" :icon="Tickets" @click="emit('openAgentRuns')">
+          <span class="agent-run-label">智能体任务</span>
+        </el-button>
+
         <el-skeleton-item
           v-if="taskQueueLoading && !taskQueueAvailable"
           class="task-status-skeleton"
@@ -112,6 +116,7 @@
               <message-card-renderer
                 v-else
                 :message="message"
+                :workflow-revisions="currentWorkflowRevisions"
                 @copy-code="copyMessage"
                 @decide-action="handleActionDecision(message, $event)"
                 @submit-info-steps="handleInfoStepsSubmit(message, $event)"
@@ -119,21 +124,52 @@
                 @chart-render-failed="handleChartRenderFailure($event)"
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
                 @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
+                @resume-agent-run="handleResumeAgentRun"
                 @select-prompt-suggestion="fillPromptSuggestion"
               />
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：AI消息的交互按钮 -->
-              <div class="message-actions" v-show="isHoveredAiMessage === index">
-                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument"
-                  >复制</el-button
-                >
-                <el-button @click="shareMessage(message.content)" size="small" :icon="Share"
-                  >分享</el-button
-                >
-                <el-button @click="likeMessage(index)" size="small" :icon="Sunny">准确</el-button>
-                <el-button @click="dislikeMessage(index)" size="small" :icon="Lightning"
-                  >不准确</el-button
-                >
+              <div class="message-actions">
+                <el-tooltip content="复制回答" placement="top">
+                  <el-button
+                    text
+                    circle
+                    size="small"
+                    :icon="CopyDocument"
+                    aria-label="复制回答"
+                    @click="copyMessage(message.content)"
+                  />
+                </el-tooltip>
+                <el-tooltip content="分享回答" placement="top">
+                  <el-button
+                    text
+                    circle
+                    size="small"
+                    :icon="Share"
+                    aria-label="分享回答"
+                    @click="shareMessage(message.content)"
+                  />
+                </el-tooltip>
+                <el-tooltip content="回答准确" placement="top">
+                  <el-button
+                    text
+                    circle
+                    size="small"
+                    :icon="Sunny"
+                    aria-label="回答准确"
+                    @click="likeMessage(index)"
+                  />
+                </el-tooltip>
+                <el-tooltip content="回答不准确" placement="top">
+                  <el-button
+                    text
+                    circle
+                    size="small"
+                    :icon="Lightning"
+                    aria-label="回答不准确"
+                    @click="dislikeMessage(index)"
+                  />
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -170,10 +206,17 @@
               </div>
               <div class="message-time">{{ message.time }}</div>
               <!-- 新增：用户消息的交互按钮 -->
-              <div class="message-actions" v-show="isHoveredUserMessage === index">
-                <el-button @click="copyMessage(message.content)" size="small" :icon="CopyDocument"
-                  >复制</el-button
-                >
+              <div class="message-actions">
+                <el-tooltip content="复制消息" placement="top">
+                  <el-button
+                    text
+                    circle
+                    size="small"
+                    :icon="CopyDocument"
+                    aria-label="复制消息"
+                    @click="copyMessage(message.content)"
+                  />
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -288,22 +331,22 @@
               </el-button>
             </el-tooltip>
 
-            <el-tooltip v-if="isStreamingResponse" content="停止生成" placement="top">
+            <el-tooltip v-if="canStopCurrent" content="停止任务" placement="top">
               <el-button
                 class="action-btn stop-btn"
                 circle
-                aria-label="停止生成"
+                aria-label="停止任务"
                 @click="stopCurrentChat"
               >
                 <span class="stop-icon-square" aria-hidden="true"></span>
               </el-button>
             </el-tooltip>
 
-            <el-tooltip v-else content="发送" placement="top">
+            <el-tooltip :content="isAgentRunActive ? '追加指令' : '发送'" placement="top">
               <el-button
                 class="action-btn send-btn"
                 circle
-                aria-label="发送消息"
+                :aria-label="isAgentRunActive ? '追加指令' : '发送消息'"
                 :disabled="!canSendMessage"
                 @click="sendMessage"
               >
@@ -354,6 +397,7 @@ import {
   Position,
   Share,
   Sunny,
+  Tickets,
   VideoPlay,
   WarningFilled,
 } from '@element-plus/icons-vue';
@@ -363,6 +407,7 @@ import { useRouter } from 'vue-router';
 import { generateUUID } from '@/utils/util-common';
 import { copyTextToClipboard } from '@/utils/clipboard';
 import MessageCardRenderer from '@/components/dih-message/message-card-renderer.vue';
+import { currentWorkflowRevisions as resolveCurrentWorkflowRevisions } from '@/components/dih-message/workflow-card-state';
 import { useChatAttachments } from '../composables/use-chat-attachments';
 import { useChatMessageActions } from '../composables/use-chat-message-actions';
 import { useChatSession } from '../composables/use-chat-session';
@@ -430,6 +475,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 const emit = defineEmits<{
   (event: 'openAnalysisTasks'): void;
+  (event: 'openAgentRuns'): void;
   (event: 'openSessions'): void;
   (event: 'openResults'): void;
 }>();
@@ -508,12 +554,15 @@ const {
   chatSessionExtraData,
   ensureChatSessionRecordId,
   refreshChatSessionExtraData,
+  ensureChatSessionId,
 } = useChatSession({
   props,
   router,
   processMessageFormat: message => processMessageFormat(message),
   scrollToBottom,
 });
+
+const currentWorkflowRevisions = computed(() => resolveCurrentWorkflowRevisions(messages.value));
 
 // 添加深度思考状态
 const isDeepThinking = ref(false);
@@ -713,7 +762,6 @@ const createMarkdownParts = (content: string): ChatMessagePart[] => [
 const {
   isMcpApprovalPart,
   upsertMcpApprovalPart,
-  mergeFinalApprovalParts,
   handleMcpApprovalDecision,
   rejectPendingMcpApprovals,
 } = useMcpApproval({
@@ -771,7 +819,16 @@ const processMessageFormat = (message: ChatMessage) => {
   }
 };
 
-const { isStreamingResponse, canSendMessage, sendMessage, stopCurrentChat } = useChatStream({
+const {
+  isStreamingResponse,
+  isAgentRunActive,
+  canStopCurrent,
+  canSendMessage,
+  sendMessage,
+  stopCurrentChat,
+  resumeAgentRun,
+  restoreActiveAgentRun,
+} = useChatStream({
   router,
   messages,
   inputMessage,
@@ -786,12 +843,23 @@ const { isStreamingResponse, canSendMessage, sendMessage, stopCurrentChat } = us
   scrollToBottom,
   processMessageFormat,
   refreshChatSessionExtraData,
+  ensureChatSessionId,
   isMcpApprovalPart,
   upsertMcpApprovalPart,
-  mergeFinalApprovalParts,
   rejectPendingMcpApprovals,
   isChatUnavailable: computed(() => props.skillEntryUnavailable),
 });
+
+watch(
+  [chatSessionId, chatSessionRecordId],
+  ([sessionId, recordId]) => {
+    if (!sessionId || !recordId) return;
+    window.setTimeout(() => {
+      void restoreActiveAgentRun();
+    }, 0);
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
   void fetchModelList();
@@ -817,6 +885,15 @@ const {
   chatSessionExtraData,
   sendMessage,
 });
+
+const handleResumeAgentRun = async (runId: string) => {
+  try {
+    await resumeAgentRun(runId);
+    ElMessage.success('任务已继续');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '继续任务失败');
+  }
+};
 
 const fetchModelList = async () => {
   try {
@@ -981,9 +1058,9 @@ const dislikeMessage = (index: number) => {};
 
 .center-header {
   display: flex;
-  height: 72px;
-  min-height: 72px;
-  padding: 10px 18px;
+  height: 64px;
+  min-height: 64px;
+  padding: 8px 20px;
   align-items: center;
   justify-content: space-between;
   gap: var(--zv-space-3);
@@ -1030,8 +1107,8 @@ const dislikeMessage = (index: number) => {};
 .center-title {
   margin: 0;
   color: var(--zv-text-primary);
-  font-size: 20px;
-  font-weight: var(--zv-font-weight-bold);
+  font-size: var(--zv-font-size-lg);
+  font-weight: var(--zv-font-weight-semibold);
   line-height: var(--zv-line-height-tight);
   white-space: nowrap;
 }
@@ -1054,7 +1131,7 @@ const dislikeMessage = (index: number) => {};
 
 .current-session-title {
   max-width: min(420px, 44cqw);
-  margin: var(--zv-space-1) 0 0;
+  margin: 2px 0 0;
   overflow: hidden;
   color: var(--zv-text-muted);
   font-size: var(--zv-font-size-xs);
@@ -1176,6 +1253,10 @@ const dislikeMessage = (index: number) => {};
   margin: 0;
 }
 
+.agent-run-button {
+  margin: 0;
+}
+
 .compact-header {
   padding: 9px 14px;
   color: var(--zv-text-primary);
@@ -1186,13 +1267,14 @@ const dislikeMessage = (index: number) => {};
 .chat-content {
   flex: 1;
   min-height: 0;
-  padding: var(--zv-space-6) clamp(18px, 4vw, 54px);
+  padding: var(--zv-space-8) clamp(20px, 5vw, 64px) var(--zv-space-6);
   overflow-y: auto;
   background: var(--zv-bg-surface);
+  scrollbar-gutter: stable;
 }
 
 .message-list {
-  width: min(100%, 840px);
+  width: min(100%, 920px);
   margin: 0 auto;
   gap: 0;
 }
@@ -1202,11 +1284,11 @@ const dislikeMessage = (index: number) => {};
 }
 
 .message-item + .message-item {
-  margin-top: var(--zv-space-10);
+  margin-top: var(--zv-space-8);
 }
 
 .is-ai-message-item + .message-item {
-  margin-top: 72px;
+  margin-top: var(--zv-space-10);
 }
 
 .ai-message-container,
@@ -1226,16 +1308,16 @@ const dislikeMessage = (index: number) => {};
 
 .avatar {
   display: grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   overflow: hidden;
-  color: var(--zv-text-inverse);
+  color: var(--zv-primary);
   place-items: center;
-  background: linear-gradient(145deg, var(--zv-primary), var(--zv-accent));
-  border: 1px solid color-mix(in srgb, var(--zv-bg-surface) 75%, transparent);
-  border-radius: var(--zv-radius-md);
-  box-shadow: 0 7px 16px color-mix(in srgb, var(--zv-primary) 18%, transparent);
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-sm);
+  box-shadow: none;
 }
 
 .avatar img {
@@ -1250,9 +1332,9 @@ const dislikeMessage = (index: number) => {};
 }
 
 .ai-message {
-  width: calc(100% - 48px);
-  max-width: calc(100% - 48px);
-  padding: 5px 0 var(--zv-space-1);
+  width: calc(100% - 40px);
+  max-width: calc(100% - 40px);
+  padding: 2px 0 0;
   color: var(--zv-text-primary);
   background: transparent;
   box-shadow: none;
@@ -1260,31 +1342,48 @@ const dislikeMessage = (index: number) => {};
 
 .user-message {
   width: auto;
-  max-width: 82%;
-  padding: 13px 16px 9px;
+  max-width: 78%;
+  padding: 11px 14px 7px;
   color: var(--zv-text-primary);
-  background: linear-gradient(135deg, var(--zv-primary-soft), var(--zv-bg-subtle));
-  border: 1px solid var(--zv-primary-border);
-  border-bottom-right-radius: var(--zv-radius-xs);
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-bottom-right-radius: var(--zv-radius-sm);
 }
 
 .message-time {
-  margin-top: var(--zv-space-2);
+  margin-top: 6px;
   color: var(--zv-text-placeholder);
   font-size: 11px;
+  line-height: 1.35;
 }
 
 .message-actions {
+  display: flex;
+  margin-top: 2px;
   gap: var(--zv-space-1);
   padding: 0;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  transition: opacity var(--zv-motion-fast) var(--zv-ease-standard);
+}
+
+.message-item:hover .message-actions,
+.message-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message-actions :deep(.el-button) {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
   margin: 0;
+  padding: 0;
   color: var(--zv-text-muted);
   background: transparent;
   border-color: transparent;
@@ -1301,19 +1400,15 @@ const dislikeMessage = (index: number) => {};
 
 .input-area {
   flex: 0 0 auto;
-  padding: var(--zv-space-3) clamp(18px, 4vw, 54px) var(--zv-space-4);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--zv-bg-surface) 72%, transparent),
-    var(--zv-bg-surface) 22%
-  );
+  padding: var(--zv-space-3) clamp(20px, 5vw, 64px) var(--zv-space-5);
+  background: var(--zv-bg-surface);
   border-top: 0;
 }
 
 .skill-unavailable-alert,
 .input-container,
 .suggestions {
-  width: min(100%, 840px);
+  width: min(100%, 920px);
   margin-inline: auto;
 }
 
@@ -1327,7 +1422,7 @@ const dislikeMessage = (index: number) => {};
   overflow: hidden;
   background: var(--zv-bg-surface);
   border: 1px solid var(--zv-border);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--zv-shadow-1);
   transition: border-color var(--zv-motion-fast) var(--zv-ease-standard),
     box-shadow var(--zv-motion-fast) var(--zv-ease-standard);
@@ -1339,10 +1434,11 @@ const dislikeMessage = (index: number) => {};
 }
 
 .input-container :deep(.el-textarea__inner) {
-  min-height: 64px !important;
-  padding: 14px 16px 4px;
+  min-height: 60px !important;
+  padding: 14px 16px 3px;
   color: var(--zv-text-primary);
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.65;
   background: transparent;
   border: 0;
   resize: none;
@@ -1706,9 +1802,11 @@ const dislikeMessage = (index: number) => {};
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-round);
   box-shadow: none;
-  transition: color var(--zv-duration-fast) ease, background-color var(--zv-duration-fast) ease,
-    border-color var(--zv-duration-fast) ease, box-shadow var(--zv-duration-fast) ease,
-    transform var(--zv-duration-fast) ease;
+  transition: color var(--zv-motion-fast) var(--zv-ease-standard),
+    background-color var(--zv-motion-fast) var(--zv-ease-standard),
+    border-color var(--zv-motion-fast) var(--zv-ease-standard),
+    box-shadow var(--zv-motion-fast) var(--zv-ease-standard),
+    transform var(--zv-motion-fast) var(--zv-ease-standard);
 }
 
 .suggestion-btn:hover {
@@ -1720,7 +1818,7 @@ const dislikeMessage = (index: number) => {};
 .suggestion-btn.active {
   color: var(--zv-primary);
   font-weight: 600;
-  background: linear-gradient(180deg, var(--zv-bg-card), var(--zv-primary-soft));
+  background: var(--zv-primary-soft);
   border-color: var(--zv-border);
   box-shadow: 0 3px 10px color-mix(in srgb, var(--zv-primary) 12%, transparent);
 }
@@ -1806,8 +1904,9 @@ const dislikeMessage = (index: number) => {};
 
 @media (max-width: 720px) {
   .center-header {
-    min-height: 68px;
-    padding: 10px 12px;
+    height: 62px;
+    min-height: 62px;
+    padding: 8px 12px;
   }
 
   .center-title {
@@ -1835,8 +1934,8 @@ const dislikeMessage = (index: number) => {};
   }
 
   .ai-message {
-    width: calc(100% - 44px);
-    max-width: calc(100% - 44px);
+    width: calc(100% - 36px);
+    max-width: calc(100% - 36px);
   }
 
   .user-message {
@@ -1850,6 +1949,11 @@ const dislikeMessage = (index: number) => {};
 
   .deep-thinking-btn span {
     display: none;
+  }
+
+  .message-actions {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 

@@ -6,6 +6,7 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.mcp.McpToolUtils;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.definition.DefaultToolDefinition;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
 
@@ -48,7 +49,42 @@ public class McpApprovalToolCallbackProvider implements ToolCallbackProvider {
 
     private ToolCallback wrap(ToolCallback callback) {
         McpToolDescriptor descriptor = descriptorsByCallbackName.get(callback.getToolDefinition().name());
-        return descriptor == null ? callback : new ApprovalToolCallback(callback, descriptor, approvalService);
+        ToolCallback normalized = new NormalizedToolCallback(callback);
+        return descriptor == null
+                ? normalized
+                : new ApprovalToolCallback(normalized, descriptor, approvalService);
+    }
+
+    private record NormalizedToolCallback(ToolCallback delegate) implements ToolCallback {
+
+        @Override
+        public ToolDefinition getToolDefinition() {
+            ToolDefinition definition = delegate.getToolDefinition();
+            String normalizedSchema = ToolSchemaNormalizer.normalize(definition.inputSchema());
+            if (normalizedSchema.equals(definition.inputSchema())) {
+                return definition;
+            }
+            return DefaultToolDefinition.builder()
+                    .name(definition.name())
+                    .description(definition.description())
+                    .inputSchema(normalizedSchema)
+                    .build();
+        }
+
+        @Override
+        public ToolMetadata getToolMetadata() {
+            return delegate.getToolMetadata();
+        }
+
+        @Override
+        public String call(String toolInput) {
+            return delegate.call(toolInput);
+        }
+
+        @Override
+        public String call(String toolInput, ToolContext toolContext) {
+            return delegate.call(toolInput, toolContext);
+        }
     }
 
     private record ApprovalToolCallback(ToolCallback delegate,

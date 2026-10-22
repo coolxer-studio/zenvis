@@ -9,10 +9,11 @@ public enum McpInvocationStatus {
     REJECTED,
     DENIED,
     EXPIRED,
+    UNKNOWN,
     CANCELLED;
 
     public boolean isTerminal() {
         return this == SUCCEEDED || this == FAILED || this == REJECTED
-                || this == DENIED || this == EXPIRED || this == CANCELLED;
+                || this == DENIED || this == EXPIRED || this == UNKNOWN || this == CANCELLED;
     }
 }

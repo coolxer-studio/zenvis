@@ -4,6 +4,11 @@ import { DihService } from '@/service/api';
 import type { ChatMessage } from '@/types/type-dih';
 import { generateUUID } from '@/utils/util-common';
 import { getCurrentFormattedDate } from '@/utils/util-time';
+import {
+  normalizeChatSessionId,
+  resolveChatSessionId,
+  shouldCreateChatSession,
+} from './chat-session-id';
 
 type ChatSessionSource = {
   chatSessionId?: string;
@@ -36,6 +41,16 @@ export const useChatSession = ({
   const chatSessionRecordId = ref('');
   const chatSessionType = ref('');
   const chatSessionExtraData = ref('');
+  let ensureChatSessionIdPromise: Promise<string> | null = null;
+  let loadGeneration = 0;
+
+  const queryText = (value: unknown): string => normalizeChatSessionId(value);
+
+  const resolveChatSessionType = (): string => {
+    const propType = queryText(props.chatSessionType);
+    if (propType) return propType;
+    return queryText(router.currentRoute.value.query.type) || 'ask';
+  };
 
   const resetSession = () => {
     messages.value = [createWelcomeMessage()];
@@ -73,52 +88,98 @@ export const useChatSession = ({
     }
   };
 
-  const loadChatSession = async () => {
-    if (props.chatSessionType) {
-      chatSessionType.value = props.chatSessionType;
-    } else {
-      const currentSessionType = router.currentRoute.value.query.type;
-      chatSessionType.value = currentSessionType ? currentSessionType.toString() : 'ask';
+  const ensureChatSessionId = async (): Promise<string> => {
+    const currentSessionId = normalizeChatSessionId(chatSessionId.value);
+    if (!chatSessionType.value) {
+      chatSessionType.value = resolveChatSessionType();
+    }
+    if (currentSessionId) {
+      return currentSessionId;
+    }
+    if (ensureChatSessionIdPromise) {
+      return ensureChatSessionIdPromise;
     }
 
-    if (props.chatSessionId) {
-      chatSessionId.value = props.chatSessionId;
-    } else {
-      const currentChatSessionId = router.currentRoute.value.query.chatSessionId;
-      if (currentChatSessionId) {
-        chatSessionId.value = currentChatSessionId.toString();
-      } else {
-        chatSessionId.value = generateUUID();
-        router.push({
-          name: 'service-dih',
-          query: {
-            type: chatSessionType.value,
-            chatSessionId: chatSessionId.value,
-            createSession: 1,
-          },
-        });
+    const route = router.currentRoute.value;
+    const context = {
+      currentSessionId,
+      propsSessionId: props.chatSessionId,
+      routeSessionId: route.query.chatSessionId,
+    };
+    const sessionId = resolveChatSessionId(context, generateUUID);
+    const createSession = shouldCreateChatSession(context)
+      || queryText(route.query.createSession) === '1';
+    chatSessionId.value = sessionId;
+
+    ensureChatSessionIdPromise = (async () => {
+      if (!createSession && queryText(route.query.chatSessionId) === sessionId) {
+        return sessionId;
       }
-    }
-
-    if (chatSessionId.value) {
+      const query = {
+        ...route.query,
+        type: chatSessionType.value,
+        chatSessionId: sessionId,
+        ...(createSession ? { createSession: 1 } : {}),
+      };
       try {
-        const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
-        chatSessionRecordId.value = data.id || '';
-        messages.value = data.messageList;
-        chatSessionExtraData.value = data.extraData || '';
-
-        window.setTimeout(() => {
-          messages.value.forEach(processMessageFormat);
-          void scrollToBottom();
-        }, 500);
-
-        chatSessionTitle.value = data.title || '新的会话';
-        void scrollToBottom();
+        await router.replace({ name: 'service-dih', query });
       } catch (error) {
-        console.error('获取聊天会话数据失败:', error);
-        resetSession();
+        console.warn('同步会话ID到路由失败:', error);
       }
+      return sessionId;
+    })();
+
+    try {
+      return await ensureChatSessionIdPromise;
+    } finally {
+      ensureChatSessionIdPromise = null;
+    }
+  };
+
+  const loadChatSession = async () => {
+    const generation = ++loadGeneration;
+    chatSessionType.value = resolveChatSessionType();
+    const route = router.currentRoute.value;
+    const routeSessionId = normalizeChatSessionId(route.query.chatSessionId);
+    const propsSessionId = normalizeChatSessionId(props.chatSessionId);
+
+    if (propsSessionId) {
+      chatSessionId.value = propsSessionId;
+    } else if (routeSessionId) {
+      chatSessionId.value = routeSessionId;
     } else {
+      await ensureChatSessionId();
+      if (generation !== loadGeneration) return;
+    }
+
+    if (!chatSessionId.value) {
+      resetSession();
+      showSuggestionBtn.value = true;
+      void scrollToBottom();
+      return;
+    }
+
+    if (queryText(route.query.createSession) === '1') {
+      resetSession();
+    }
+
+    try {
+      const data = await DihService.getChatSession(chatSessionId.value, { type: chatSessionType.value });
+      if (generation !== loadGeneration) return;
+      chatSessionRecordId.value = data.id || '';
+      messages.value = data.messageList;
+      chatSessionExtraData.value = data.extraData || '';
+
+      window.setTimeout(() => {
+        messages.value.forEach(processMessageFormat);
+        void scrollToBottom();
+      }, 500);
+
+      chatSessionTitle.value = data.title || '新的会话';
+      void scrollToBottom();
+    } catch (error) {
+      if (generation !== loadGeneration) return;
+      console.error('获取聊天会话数据失败:', error);
       resetSession();
     }
 
@@ -147,6 +208,7 @@ export const useChatSession = ({
     chatSessionExtraData,
     ensureChatSessionRecordId,
     refreshChatSessionExtraData,
+    ensureChatSessionId,
     loadChatSession,
   };
 };

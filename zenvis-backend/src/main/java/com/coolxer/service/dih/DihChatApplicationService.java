@@ -8,13 +8,18 @@ import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.ChatMessagePart;
 import com.coolxer.model.dih.ChatStreamEvent;
 import com.coolxer.model.dih.Message;
+import com.coolxer.model.dih.RagSearchEventData;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ReportActionDto;
+import com.coolxer.model.dih.dto.AgentRunRequestDto;
+import com.coolxer.model.dih.vo.AgentRunEventVo;
+import com.coolxer.model.dih.vo.AgentRunVo;
 import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.agentrun.AgentRunService;
 import com.coolxer.service.dih.demo.AgentDemoStateStore;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -28,6 +33,7 @@ import com.coolxer.service.dih.workflow.WorkflowEvidenceService;
 import com.coolxer.service.dih.workflow.WorkflowOrchestrator;
 import com.coolxer.service.dih.workflow.WorkflowStateStore;
 import com.coolxer.service.dih.workflow.WorkflowMetrics;
+import com.coolxer.service.dih.workflow.VisualizationQueryNormalizer;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.commons.enums.McpInvocationChannel;
 import com.coolxer.service.config.ConfigService;
@@ -59,7 +65,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
@@ -80,6 +88,10 @@ public class DihChatApplicationService {
     private static final String CHAT_ERROR_MESSAGE = "抱歉，回复失败，请稍后重试~";
     private static final String CHAT_CONTEXT_LENGTH_EXCEEDED_MESSAGE =
             "当前对话内容过长，已超过模型可处理的上下文长度。请新建对话，或减少历史消息、附件及输入内容后重试。";
+    private static final String CHAT_TOOL_SCHEMA_INVALID_MESSAGE =
+            "模型服务无法加载当前智能体的工具定义，请联系管理员检查工具参数后重试。";
+    private static final String REPORT_DOCUMENT_FENCE_INFO = "```zenvis:report-document-config";
+    private static final String INCOMPLETE_REPORT_FALLBACK = "报表生成未完成，请重试。";
     private static final Set<String> VISUALIZATION_META_ENTITY_TOOLS = Set.of(
             "retrieval_list_display_entity", "retrieval_list_entity");
     private static final Set<String> VISUALIZATION_META_ATTRIBUTE_TOOLS = Set.of(
@@ -134,6 +146,9 @@ public class DihChatApplicationService {
 
     @Autowired(required = false)
     private ReportDocumentService reportDocumentService;
+
+    @Autowired(required = false)
+    private AgentRunService agentRunService;
 
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
@@ -214,6 +229,10 @@ public class DihChatApplicationService {
         }
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
+        }
+        if (executionPolicy.isAgent() && agentRunService != null
+                && agentRunService.isEnabledFor(executionPolicy.agentType())) {
+            return compatibilityRunChat(chatDto, currentUser, eventStream);
         }
         ChatSession existingChatSession = chatSessionService.getChatSessionBySessionId(chatId, currentUser);
         McpToolLogStream builtinDemoToolStream = McpToolLogStream.disabled();
@@ -452,7 +471,7 @@ public class DihChatApplicationService {
      * model. The resulting call is visible in the chat stream and is also retained as validation
      * evidence for the selection/confirmation cards.
      */
-    private String bootstrapVisualizationWorkflow(
+    public String bootstrapVisualizationWorkflow(
             DihChatExecutionPolicy executionPolicy,
             McpToolContext mcpToolContext,
             String prompt,
@@ -1618,9 +1637,11 @@ public class DihChatApplicationService {
             AgentWorkflowState workflow) {
         Map<String, Object> context = workflow == null || workflow.getContext() == null
                 ? Map.of() : workflow.getContext();
-        Map<String, Object> query = mapValue(context.get("query"));
+        Map<String, Object> query = VisualizationQueryNormalizer.normalizeQuery(
+                context.get("query"));
         String toolName = stringValue(query, "tool", "");
-        Map<String, Object> request = mapValue(query.get("request"));
+        Map<String, Object> request = VisualizationQueryNormalizer.normalizeRequest(
+                mapValue(query.get("request")));
         if (!VISUALIZATION_DATA_TOOLS.contains(toolName) || request.isEmpty()) {
             return prompt + """
 
@@ -1716,7 +1737,7 @@ public class DihChatApplicationService {
         return chatDto != null && RESPONSE_FORMAT_EVENTS.equals(chatDto.getResponseFormat());
     }
 
-    private Flux<String> dispatchChat(String chatType,
+    public Flux<String> dispatchChat(String chatType,
                                       String chatId,
                                       String model,
                                       String prompt,
@@ -1726,6 +1747,11 @@ public class DihChatApplicationService {
                                       DihChatExecutionPolicy executionPolicy,
                                       boolean effectiveDeepThink,
                                       AtomicReference<MessageType> messageType) {
+        model = resolveDispatchModel(model, effectiveDeepThink, chatDto);
+        if (!StringUtils.hasText(model)) {
+            return Flux.error(new AgentCapabilityUnavailableException(
+                    "当前没有可用的对话模型，请检查模型服务配置。"));
+        }
         String agentType = executionPolicy.agentType();
         if (DataAccessAgent.AGENT_TYPE.equals(agentType)) {
             messageType.set(MessageType.TEXT);
@@ -1792,6 +1818,7 @@ public class DihChatApplicationService {
         if (executionPolicy.isAgent()) {
             return Flux.error(new IllegalStateException("智能体类型没有对应的执行器。"));
         }
+
         return chatService.qaChat(
                 chatId,
                 model,
@@ -1800,6 +1827,20 @@ public class DihChatApplicationService {
                 currentUser,
                 effectiveDeepThink
         );
+    }
+
+    String resolveDispatchModel(String model, boolean deepThinking, ChatDto chatDto) {
+        if (StringUtils.hasText(model)
+                && !"auto".equalsIgnoreCase(model)
+                && !"x-sage-v1".equalsIgnoreCase(model)) {
+            return model;
+        }
+        return baseService.resolveChatModel(
+                model,
+                deepThinking,
+                chatAttachmentService != null
+                        && chatDto != null
+                        && chatAttachmentService.hasImageAttachment(chatDto.getAttachments()));
     }
 
     private Optional<Flux<String>> findReportDemoResponse(String chatType,
@@ -1971,9 +2012,29 @@ public class DihChatApplicationService {
                                                  String demoId,
                                                  ReportActionDto reportAction) {
         StringBuilder modelResponse = new StringBuilder();
+        AtomicBoolean outputTruncated = new AtomicBoolean(false);
         if (eventStream) {
             return fluxResponse
                     .handle((value, sink) -> {
+                        if (isOutputTruncatedMarker(value)) {
+                            outputTruncated.set(true);
+                            return;
+                        }
+                        RagSearchEventData ragSearchEvent =
+                                McpToolLogStream.parseRagSearchEvent(value);
+                        if (ragSearchEvent != null) {
+                            toolActivityStream.recordRagSearch(ragSearchEvent);
+                            sink.next(toNdjson(ChatStreamEvent.ragSearch(ragSearchEvent)));
+                            return;
+                        }
+                        Map<String, Object> toolEvent = McpToolLogStream.parseToolEvent(value);
+                        if (toolEvent != null) {
+                            toolActivityStream.recordToolPosition(
+                                    String.valueOf(toolEvent.get("callId")),
+                                    modelResponse.length());
+                            sink.next(toNdjson(ChatStreamEvent.toolCall(toolEvent)));
+                            return;
+                        }
                         McpApprovalEvent approvalEvent = McpToolLogStream.parseApprovalEvent(value);
                         if (approvalEvent != null) {
                             toolActivityStream.recordApprovalPosition(
@@ -1997,7 +2058,8 @@ public class DihChatApplicationService {
                                 toolActivityStream.approvalParts(),
                                 toolActivityStream,
                                 demoId,
-                                reportAction
+                                reportAction,
+                                outputTruncated.get()
                         );
                         return Flux.just(toNdjson(ChatStreamEvent.done(aiMessage)));
                     }))
@@ -2009,11 +2071,30 @@ public class DihChatApplicationService {
                     });
         }
 
-        return fluxResponse.filter(value -> McpToolLogStream.parseApprovalEvent(value) == null)
-                .doOnNext(modelResponse::append)
+        return fluxResponse
+                .handle((value, sink) -> {
+                    if (isOutputTruncatedMarker(value)) {
+                        outputTruncated.set(true);
+                        return;
+                    }
+                    if (McpToolLogStream.parseRagSearchEvent(value) != null) {
+                        return;
+                    }
+                    Map<String, Object> toolEvent = McpToolLogStream.parseToolEvent(value);
+                    if (toolEvent != null) {
+                        sink.next(McpToolLogStream.formatToolEvent(toolEvent));
+                        return;
+                    }
+                    if (McpToolLogStream.parseApprovalEvent(value) != null) {
+                        return;
+                    }
+                    modelResponse.append(value);
+                    sink.next(value);
+                })
+                .cast(String.class)
                 .doOnComplete(() -> saveAiResponse(chatSession, currentUser, modelResponse.toString(),
                         messageType.get(), false, false, toolActivityStream.approvalParts(),
-                        toolActivityStream, demoId, reportAction))
+                        toolActivityStream, demoId, reportAction, outputTruncated.get()))
                 .onErrorResume(e -> {
                     log.error("聊天返回失败: {}", e.getMessage(), e);
                     String errorMessage = resolveChatErrorMessage(e);
@@ -2064,6 +2145,9 @@ public class DihChatApplicationService {
         if (isContextLengthExceeded(error)) {
             return CHAT_CONTEXT_LENGTH_EXCEEDED_MESSAGE;
         }
+        if (isInvalidToolSchema(error)) {
+            return CHAT_TOOL_SCHEMA_INVALID_MESSAGE;
+        }
         return CHAT_ERROR_MESSAGE;
     }
 
@@ -2102,6 +2186,35 @@ public class DihChatApplicationService {
         return false;
     }
 
+    private boolean isInvalidToolSchema(Throwable error) {
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 20) {
+            if (containsInvalidToolSchemaSignal(current.getMessage())) {
+                return true;
+            }
+            if (current instanceof WebClientResponseException responseException
+                    && containsInvalidToolSchemaSignal(responseException.getResponseBodyAsString())) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsInvalidToolSchemaSignal(String details) {
+        if (!StringUtils.hasText(details)) {
+            return false;
+        }
+        String normalized = details.toLowerCase(Locale.ROOT);
+        return normalized.contains("invalid schema for function")
+                || normalized.contains("invalid_function_parameters")
+                || normalized.contains("pointer '/$defs/");
+    }
+
     private boolean containsContextLengthExceededSignal(String details) {
         if (!StringUtils.hasText(details)) {
             return false;
@@ -2136,6 +2249,81 @@ public class DihChatApplicationService {
             return Flux.just(toNdjson(ChatStreamEvent.error(message)));
         }
         return Flux.just(message);
+    }
+
+    private Flux<String> compatibilityRunChat(ChatDto chatDto, User currentUser, boolean eventStream) {
+        AgentRunRequestDto request = new AgentRunRequestDto();
+        request.setChatId(chatDto.getChatId());
+        request.setType(chatDto.getType());
+        request.setMessage(chatDto.getMessage());
+        request.setModel(chatDto.getModel());
+        request.setAttachments(chatDto.getAttachments());
+        request.setReportAction(chatDto.getReportAction());
+        AgentRunVo run;
+        try {
+            run = agentRunService.create(request, currentUser);
+        } catch (RuntimeException e) {
+            return errorResponse(eventStream, e.getMessage());
+        }
+        if (!eventStream) {
+            return Flux.just("任务已创建，请在任务中心查看进度。runId=" + run.getRunId());
+        }
+        return agentRunService.eventStream(run.getRunId(), 0, currentUser)
+                .<String>handle((line, sink) -> {
+                    AgentRunEventVo event;
+                    try {
+                        event = JacksonUtil.toObject(line.trim(), AgentRunEventVo.class);
+                    } catch (RuntimeException e) {
+                        return;
+                    }
+                    ChatStreamEvent mapped = compatibilityEvent(event);
+                    if (mapped != null) {
+                        sink.next(toNdjson(mapped));
+                    }
+                })
+                .takeUntil(this::isCompatibilityTerminal);
+    }
+
+    private ChatStreamEvent compatibilityEvent(AgentRunEventVo event) {
+        if (event == null || StringUtils.isEmpty(event.getType())) {
+            return null;
+        }
+        Map<String, Object> data = event.getData() instanceof Map<?, ?> map
+                ? copyMap(map) : Map.of();
+        return switch (event.getType()) {
+            case "assistant.delta" -> ChatStreamEvent.delta(
+                    String.valueOf(data.getOrDefault("content", "")));
+            case "rag.search" -> ChatStreamEvent.ragSearch(data);
+            case "tool.started", "tool.succeeded", "tool.failed" -> ChatStreamEvent.toolCall(data);
+            case "tool.approval_required" -> ChatStreamEvent.approval("approval_required", data);
+            case "tool.approval_updated" -> ChatStreamEvent.approval("approval_updated", data);
+            case "run.succeeded" -> ChatStreamEvent.done(
+                    new Message("ai", String.valueOf(data.getOrDefault("answer", ""))));
+            case "run.failed" -> ChatStreamEvent.error(
+                    String.valueOf(data.getOrDefault("error", "智能体任务执行失败")));
+            case "run.cancelled" -> ChatStreamEvent.done(new Message("ai", "任务已取消。"));
+            case "run.paused" -> ChatStreamEvent.done(new Message(
+                    "ai", "任务已暂停：" + data.getOrDefault("reason", "请在任务中心继续")));
+            case "run.waiting_user" -> ChatStreamEvent.done(new Message(
+                    "ai", String.valueOf(data.getOrDefault("question", "请补充信息后继续"))));
+            default -> null;
+        };
+    }
+
+    private boolean isCompatibilityTerminal(String line) {
+        try {
+            AgentRunEventVo event = JacksonUtil.toObject(line.trim(), AgentRunEventVo.class);
+            return event != null && Set.of("run.succeeded", "run.failed", "run.cancelled",
+                    "run.paused", "run.waiting_user").contains(event.getType());
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private Map<String, Object> copyMap(Map<?, ?> source) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        source.forEach((key, value) -> copy.put(String.valueOf(key), value));
+        return copy;
     }
 
     private boolean isPlaceholderBuiltinAgent(String chatType) {
@@ -2230,13 +2418,45 @@ public class DihChatApplicationService {
                                    McpToolLogStream toolActivityStream,
                                    String demoId,
                                    ReportActionDto reportAction) {
+        return saveAiResponse(
+                chatSession,
+                currentUser,
+                content,
+                type,
+                withParts,
+                deepThinkRequested,
+                supplementalParts,
+                toolActivityStream,
+                demoId,
+                reportAction,
+                false);
+    }
+
+    private Message saveAiResponse(ChatSession chatSession,
+                                   User currentUser,
+                                   String content,
+                                   MessageType type,
+                                   boolean withParts,
+                                   boolean deepThinkRequested,
+                                   List<ChatMessagePart> supplementalParts,
+                                   McpToolLogStream toolActivityStream,
+                                   String demoId,
+                                   ReportActionDto reportAction,
+                                   boolean outputTruncated) {
         Message aiMessage = new Message("ai", content, type);
         List<ChatMessagePart> parts = List.of();
         List<Map<String, Object>> reportEvidenceRefs = List.of();
         if (withParts) {
-            String parsableContent = insertSupplementalMarkers(content, supplementalParts);
+            List<ChatMessagePart> streamedParts = new ArrayList<>();
+            if (toolActivityStream != null) {
+                streamedParts.addAll(toolActivityStream.toolParts());
+            }
+            if (supplementalParts != null) {
+                streamedParts.addAll(supplementalParts);
+            }
+            String parsableContent = insertSupplementalMarkers(content, streamedParts);
             parts = new ArrayList<>(chatMessagePartParser.parse(parsableContent, type));
-            parts = mergeSupplementalParts(content, parts, supplementalParts);
+            parts = mergeSupplementalParts(content, parts, streamedParts);
             reportEvidenceRefs = buildReportEvidenceRefs(
                     chatSession, toolActivityStream, reportAction, aiMessage.getId());
             if (StringUtils.hasText(demoId)) {
@@ -2256,7 +2476,8 @@ public class DihChatApplicationService {
                     reportAction,
                     reportEvidenceRefs,
                     aiMessage.getId(),
-                    demoId);
+                    demoId,
+                    outputTruncated);
             if (deepThinkRequested && parts.stream().noneMatch(part -> "thinking".equals(part.getType()))) {
                 parts.add(0, ChatMessagePart.builder()
                         .id(java.util.UUID.randomUUID().toString())
@@ -2266,7 +2487,20 @@ public class DihChatApplicationService {
                         .status("completed")
                         .build());
             }
-            if (parts.stream().anyMatch(this::isReportDocumentPart)) {
+            if (toolActivityStream != null) {
+                List<ChatMessagePart> ragParts = toolActivityStream.ragSearchParts();
+                if (!ragParts.isEmpty()) {
+                    List<ChatMessagePart> merged = new ArrayList<>(ragParts);
+                    merged.addAll(parts);
+                    parts = merged;
+                }
+            }
+            if (isIncompleteReportOutput(content, reportAction, outputTruncated)) {
+                String visiblePrefix = visibleContentBeforeReportFence(content);
+                aiMessage.setContent(StringUtils.hasText(visiblePrefix)
+                        ? visiblePrefix
+                        : INCOMPLETE_REPORT_FALLBACK);
+            } else if (parts.stream().anyMatch(this::isReportDocumentPart)) {
                 aiMessage.setContent(stripReportDocumentFence(content));
             }
             aiMessage.setParts(parts);
@@ -2377,8 +2611,54 @@ public class DihChatApplicationService {
             List<Map<String, Object>> sourceRefs,
             String messageId,
             String demoId) {
+        return applyReportProtocol(
+                sourceParts,
+                rawContent,
+                action,
+                sourceRefs,
+                messageId,
+                demoId,
+                false);
+    }
+
+    private List<ChatMessagePart> applyReportProtocol(
+            List<ChatMessagePart> sourceParts,
+            String rawContent,
+            ReportActionDto action,
+            List<Map<String, Object>> sourceRefs,
+            String messageId,
+            String demoId,
+            boolean outputTruncated) {
         List<ChatMessagePart> parts = new ArrayList<>(sourceParts == null ? List.of() : sourceParts);
+        boolean expectedFullDocument = action != null && action.isFullDocumentAction();
+        boolean reportRequest = expectedFullDocument
+                || hasReportDocumentFence(rawContent)
+                || parts.stream().anyMatch(this::isReportDocumentPart);
+        if (reportRequest
+                && (outputTruncated || hasUnclosedReportDocumentFence(rawContent))) {
+            removeIncompleteReportArtifacts(parts);
+            parts.add(outputTruncated
+                    ? reportNotice(
+                    "报表输出被截断",
+                    "模型输出达到本轮上限，报表正文未完整生成。本次结果未写入文档；"
+                            + "请重试，或缩小报表范围后分批生成。",
+                    "failed")
+                    : reportNotice(
+                    "报表格式不完整",
+                    "报表配置围栏未闭合，原始内容已隐藏且未写入文档。请重试。",
+                    "failed"));
+            return parts;
+        }
+
         if (action != null && action.isSelectionRewrite()) {
+            if (outputTruncated) {
+                removeIncompleteReportArtifacts(parts);
+                parts.add(reportNotice(
+                        "选区改写失败",
+                        "模型输出达到本轮上限，原文未被修改。请缩小改写范围后重试。",
+                        "failed"));
+                return parts;
+            }
             String fragmentContent = parts.stream()
                     .filter(this::isReportDocumentPart)
                     .map(ChatMessagePart::getContent)
@@ -2423,7 +2703,6 @@ public class DihChatApplicationService {
         List<ChatMessagePart> reportParts = parts.stream()
                 .filter(this::isReportDocumentPart)
                 .toList();
-        boolean expectedFullDocument = action != null && action.isFullDocumentAction();
         if (expectedFullDocument && reportParts.size() != 1) {
             reportParts.forEach(part -> part.setStatus("failed"));
             parts.add(reportNotice(
@@ -2553,6 +2832,68 @@ public class DihChatApplicationService {
         return StringUtils.hasText(visible) ? visible : "报表已更新至编辑器。";
     }
 
+    private boolean isOutputTruncatedMarker(String value) {
+        return value != null && value.startsWith(AIChatService.OUTPUT_TRUNCATED_MARKER_PREFIX);
+    }
+
+    private boolean isIncompleteReportOutput(String content,
+                                             ReportActionDto action,
+                                             boolean outputTruncated) {
+        boolean reportRequest = (action != null && action.isFullDocumentAction())
+                || hasReportDocumentFence(content);
+        return reportRequest && (outputTruncated || hasUnclosedReportDocumentFence(content));
+    }
+
+    private boolean hasReportDocumentFence(String content) {
+        return content != null && content.contains(REPORT_DOCUMENT_FENCE_INFO);
+    }
+
+    private boolean hasUnclosedReportDocumentFence(String content) {
+        if (!hasReportDocumentFence(content)) {
+            return false;
+        }
+        int markerIndex = content.indexOf(REPORT_DOCUMENT_FENCE_INFO);
+        long fenceLines = content.substring(markerIndex)
+                .lines()
+                .map(String::stripLeading)
+                .filter(line -> line.startsWith("```"))
+                .count();
+        return fenceLines % 2 != 0;
+    }
+
+    private String visibleContentBeforeReportFence(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "";
+        }
+        int markerIndex = content.indexOf(REPORT_DOCUMENT_FENCE_INFO);
+        return markerIndex < 0 ? "" : content.substring(0, markerIndex).stripTrailing();
+    }
+
+    private void removeIncompleteReportArtifacts(List<ChatMessagePart> parts) {
+        parts.removeIf(part -> {
+            if (part == null || isReportDocumentPart(part)) {
+                return true;
+            }
+            if (!"markdown".equals(part.getType()) && !"code".equals(part.getType())) {
+                return false;
+            }
+            String content = part.getContent();
+            int markerIndex = content == null
+                    ? -1
+                    : content.indexOf(REPORT_DOCUMENT_FENCE_INFO);
+            if (markerIndex >= 0) {
+                String visiblePrefix = content.substring(0, markerIndex).stripTrailing();
+                if (!StringUtils.hasText(visiblePrefix)) {
+                    return true;
+                }
+                part.setContent(visiblePrefix);
+                return false;
+            }
+            String normalized = content == null ? "" : content.toLowerCase(Locale.ROOT);
+            return normalized.contains("<!doctype html") || normalized.contains("<html");
+        });
+    }
+
     private String reportContentHash(String content) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -2626,7 +2967,9 @@ public class DihChatApplicationService {
             marker.put("title", part.getTitle());
             marker.put("content", part.getContent());
             marker.put("status", part.getStatus());
-            marked.insert(offset, "\n```zenvis:mcp-approval\n" + JacksonUtil.toJson(marker) + "\n```\n");
+            String fence = "tool-call".equals(part.getType())
+                    ? "zenvis:tool-call" : "zenvis:mcp-approval";
+            marked.insert(offset, "\n```" + fence + "\n" + JacksonUtil.toJson(marker) + "\n```\n");
         }
         return marked.toString();
     }
@@ -2637,12 +2980,13 @@ public class DihChatApplicationService {
         if (supplementalParts == null || supplementalParts.isEmpty()) {
             return parsedParts;
         }
-        java.util.Set<String> parsedApprovalIds = parsedParts.stream()
-                .filter(part -> "mcp-approval".equals(part.getType()))
+        java.util.Set<String> parsedStructuredIds = parsedParts.stream()
+                .filter(part -> "mcp-approval".equals(part.getType())
+                        || "tool-call".equals(part.getType()))
                 .map(ChatMessagePart::getId)
                 .filter(StringUtils::hasText)
                 .collect(java.util.stream.Collectors.toSet());
-        if (supplementalParts.stream().allMatch(part -> parsedApprovalIds.contains(part.getId()))) {
+        if (supplementalParts.stream().allMatch(part -> parsedStructuredIds.contains(part.getId()))) {
             return parsedParts;
         }
         boolean plainMarkdown = parsedParts.stream().allMatch(part -> "markdown".equals(part.getType()));
@@ -2680,6 +3024,19 @@ public class DihChatApplicationService {
                     .build());
         }
         return merged;
+    }
+
+    private String latestWorkflowFailureMessage(
+            AgentWorkflowState workflow,
+            String fallback) {
+        if (workflow == null || workflow.getFailures() == null
+                || workflow.getFailures().isEmpty()) {
+            return fallback;
+        }
+        Map<String, Object> failure = workflow.getFailures().get(
+                workflow.getFailures().size() - 1);
+        String error = failure == null ? "" : stringValue(failure, "error", "");
+        return StringUtils.hasText(error) ? error : fallback;
     }
 
     private void ensurePlatformVisualizationChartPreview(
@@ -2822,8 +3179,19 @@ public class DihChatApplicationService {
                         && StringUtils.hasText(stringValue(raw, "entity", ""))
                         && hasSafeVisualizationQuery(raw);
                 if (complete) {
-                    raw.put("validationStatus", "success");
-                    raw.put("metaVerified", true);
+                    AgentWorkflowState activeWorkflow = workflowStateStore == null
+                            ? null : workflowStateStore.loadActive(
+                            chatSession, DataVisualizationAgent.AGENT_TYPE).orElse(null);
+                    if (activeWorkflow != null
+                            && activeWorkflow.getStep() == AgentWorkflowStep.BLOCKED) {
+                        blockVisualizationPart(part, raw,
+                                latestWorkflowFailureMessage(
+                                        activeWorkflow,
+                                        "工作流当前处于阻塞状态，请先重试失败阶段"));
+                    } else {
+                        raw.put("validationStatus", "success");
+                        raw.put("metaVerified", true);
+                    }
                 } else {
                     blockVisualizationPart(part, raw,
                             StringUtils.hasText(metaValidationError)
@@ -3336,6 +3704,8 @@ public class DihChatApplicationService {
                 "fields", verifiedFields,
                 "entityTool", entityCall.toolName(),
                 "attributeTool", attributeCall.toolName()));
+        request = VisualizationQueryNormalizer.normalizeRequest(request);
+        query = new LinkedHashMap<>(query);
         query.put("request", request);
         raw.put("query", query);
         part.setContent(visualizationPlanContent(
@@ -3350,8 +3720,8 @@ public class DihChatApplicationService {
         return toolNames.stream()
                 .map(evidence::successfulCall)
                 .filter(Objects::nonNull)
-                .max(java.util.Comparator.comparing(
-                        McpToolLogStream.SuccessfulToolCall::time))
+                .max(java.util.Comparator.comparingInt(
+                        McpToolLogStream.SuccessfulToolCall::sequence))
                 .orElse(null);
     }
 
@@ -3541,7 +3911,8 @@ public class DihChatApplicationService {
         Map<String, Object> approvedPlan = approvedVisualizationPlan(chatSession, planId);
         Map<String, Object> approvedQuery = mapValue(approvedPlan.get("query"));
         String approvedTool = stringValue(approvedQuery, "tool", "");
-        Map<String, Object> approvedRequest = mapValue(approvedQuery.get("request"));
+        Map<String, Object> approvedRequest = VisualizationQueryNormalizer.normalizeRequest(
+                mapValue(approvedQuery.get("request")));
         McpToolLogStream.SuccessfulToolCall call = evidence.successfulCall(approvedTool);
         if (!StringUtils.hasText(planId)
                 || approvedPlan.isEmpty()
@@ -3558,8 +3929,14 @@ public class DihChatApplicationService {
         Map<String, Object> arguments = parseJsonObject(call.arguments());
         Object request = arguments.containsKey("request")
                 ? arguments.get("request") : arguments;
-        if (!(request instanceof Map<?, ?>)
-                || !approvedRequest.equals(mapValue(request))) {
+        if (!(request instanceof Map<?, ?>)) {
+            blockVisualizationPart(part, raw,
+                    "实际数据 MCP 查询参数与已批准方案不一致，图表不能验证或入库");
+            return;
+        }
+        Map<String, Object> executedRequest = VisualizationQueryNormalizer.normalizeRequest(
+                mapValue(request));
+        if (!approvedRequest.equals(executedRequest)) {
             blockVisualizationPart(part, raw,
                     "实际数据 MCP 查询参数与已批准方案不一致，图表不能验证或入库");
             return;
@@ -3580,7 +3957,7 @@ public class DihChatApplicationService {
 
         Map<String, Object> verifiedQuery = new LinkedHashMap<>();
         verifiedQuery.put("tool", approvedTool);
-        verifiedQuery.put("request", request);
+        verifiedQuery.put("request", executedRequest);
         raw.put("query", verifiedQuery);
         raw.put("queryMeta", mapValue(toolResult.get("meta")));
         raw.put("echartsOption", option);
@@ -3618,7 +3995,7 @@ public class DihChatApplicationService {
             if (messages == null) {
                 return Map.of();
             }
-            return messages.stream()
+            Map<String, Object> approved = messages.stream()
                     .filter(Objects::nonNull)
                     .flatMap(message -> message.getParts() == null
                             ? java.util.stream.Stream.empty()
@@ -3633,10 +4010,58 @@ public class DihChatApplicationService {
                     .findFirst()
                     .<Map<String, Object>>map(LinkedHashMap::new)
                     .orElseGet(Map::of);
+            if (!approved.isEmpty()) {
+                return approved;
+            }
+            AgentWorkflowState workflow = workflowStateStore == null
+                    ? null : workflowStateStore.loadActive(
+                    chatSession, DataVisualizationAgent.AGENT_TYPE).orElse(null);
+            if (workflow == null || workflow.getContext() == null
+                    || !planId.equals(stringValue(workflow.getContext(), "planId", ""))
+                    || !workflowQueryWasApproved(workflow)) {
+                return Map.of();
+            }
+            return new LinkedHashMap<>(workflow.getContext());
         } catch (RuntimeException e) {
             log.warn("读取数据可视化查询方案状态失败: {}", e.getMessage());
             return Map.of();
         }
+    }
+
+    private boolean workflowQueryWasApproved(AgentWorkflowState workflow) {
+        Map<String, Object> context = workflow.getContext();
+        if (context == null) {
+            return false;
+        }
+        String approvedPlanId = stringValue(context, "approvedPlanId", "");
+        String planId = stringValue(context, "planId", "");
+        Map<String, Object> query = mapValue(context.get("query"));
+        if (!StringUtils.hasText(planId)
+                || !VISUALIZATION_DATA_TOOLS.contains(stringValue(query, "tool", ""))
+                || mapValue(query.get("request")).isEmpty()) {
+            return false;
+        }
+        if (planId.equals(approvedPlanId)) {
+            return true;
+        }
+        if (Set.of(
+                AgentWorkflowStep.DATA_QUERY,
+                AgentWorkflowStep.ARTIFACT_READY,
+                AgentWorkflowStep.PERSIST_CONFIRMATION,
+                AgentWorkflowStep.PERSISTING,
+                AgentWorkflowStep.VERIFIED,
+                AgentWorkflowStep.COMPLETED).contains(workflow.getStep())) {
+            return true;
+        }
+        return workflow.getFailures() != null && workflow.getFailures().stream()
+                .anyMatch(failure -> Set.of(
+                                "DATA_QUERY",
+                                "ARTIFACT_READY",
+                                "PERSIST_CONFIRMATION",
+                                "PERSISTING",
+                                "VERIFIED",
+                                "COMPLETED")
+                        .contains(stringValue(failure, "retryStep", "")));
     }
 
     private void blockVisualizationPart(ChatMessagePart part,
@@ -4864,6 +5289,9 @@ public class DihChatApplicationService {
     private static class McpToolLogStream {
 
         private static final String APPROVAL_EVENT_PREFIX = "\u001ezenvis-mcp-approval:";
+        private static final String TOOL_EVENT_PREFIX = "\u001ezenvis-tool-call:";
+        private static final Set<String> TOOL_CONTENT_KEYS =
+                Set.of("text", "type", "mimeType", "mime_type");
 
         private final Sinks.Many<String> sink;
 
@@ -4871,27 +5299,43 @@ public class DihChatApplicationService {
 
         private final Map<String, Integer> approvalOffsets;
 
-        private final Map<String, String> pendingArguments;
-
         private final Map<String, SuccessfulToolCall> successfulCalls;
 
         private final Map<String, FailedToolCall> failedCalls;
+
+        private final Map<String, ToolCallState> toolCalls;
+
+        private final Map<String, Integer> toolOffsets;
+
+        private final AtomicInteger toolSequence;
+
+        private final Map<String, RagSearchPartState> ragSearchStates;
+
+        private final AtomicInteger ragSearchSequence;
 
         private final String turnId;
 
         private McpToolLogStream(Sinks.Many<String> sink,
                                  Map<String, McpApprovalVo> approvalStates,
                                  Map<String, Integer> approvalOffsets,
-                                 Map<String, String> pendingArguments,
                                  Map<String, SuccessfulToolCall> successfulCalls,
                                  Map<String, FailedToolCall> failedCalls,
+                                 Map<String, ToolCallState> toolCalls,
+                                 Map<String, Integer> toolOffsets,
+                                 AtomicInteger toolSequence,
+                                 Map<String, RagSearchPartState> ragSearchStates,
+                                 AtomicInteger ragSearchSequence,
                                  String turnId) {
             this.sink = sink;
             this.approvalStates = approvalStates;
             this.approvalOffsets = approvalOffsets;
-            this.pendingArguments = pendingArguments;
             this.successfulCalls = successfulCalls;
             this.failedCalls = failedCalls;
+            this.toolCalls = toolCalls;
+            this.toolOffsets = toolOffsets;
+            this.toolSequence = toolSequence;
+            this.ragSearchStates = ragSearchStates;
+            this.ragSearchSequence = ragSearchSequence;
             this.turnId = turnId;
         }
 
@@ -4902,13 +5346,17 @@ public class DihChatApplicationService {
         private static McpToolLogStream create(String turnId) {
             return new McpToolLogStream(Sinks.many().multicast().onBackpressureBuffer(),
                     new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>(),
                     new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
-                    new ConcurrentHashMap<>(), turnId);
+                    new ConcurrentHashMap<>(), new AtomicInteger(),
+                    new ConcurrentHashMap<>(), new AtomicInteger(), turnId);
         }
 
         private static McpToolLogStream disabled() {
             return new McpToolLogStream(
-                    null, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), null);
+                    null, Map.of(), Map.of(), Map.of(), Map.of(),
+                    Map.of(), Map.of(), new AtomicInteger(),
+                    new ConcurrentHashMap<>(), new AtomicInteger(), null);
         }
 
         private String turnId() {
@@ -4920,10 +5368,7 @@ public class DihChatApplicationService {
                 return List.of();
             }
             return successfulCalls.values().stream()
-                    .sorted(java.util.Comparator.comparing(
-                            SuccessfulToolCall::time,
-                            java.util.Comparator.nullsLast(
-                                    java.util.Comparator.naturalOrder())))
+                    .sorted(java.util.Comparator.comparingInt(SuccessfulToolCall::sequence))
                     .map(call -> {
                         Map<String, Object> evidence = new LinkedHashMap<>();
                         evidence.put("evidenceId", firstNonBlankStatic(
@@ -4969,38 +5414,115 @@ public class DihChatApplicationService {
             if (!enabled() || logEvent == null) {
                 return;
             }
+            ToolCallState state = toolCalls.get(logEvent.callId());
             if ("started".equals(logEvent.status())) {
-                pendingArguments.put(logEvent.toolName(),
-                        StringUtils.hasText(logEvent.rawArguments())
-                                ? logEvent.rawArguments() : logEvent.arguments());
+                String arguments = StringUtils.hasText(logEvent.rawArguments())
+                        ? logEvent.rawArguments() : logEvent.arguments();
+                state = new ToolCallState(
+                        logEvent.callId(), logEvent.toolName(), toolSequence.incrementAndGet());
+                state.status = "running";
+                state.arguments = arguments;
+                state.startedAt = logEvent.time();
+                toolCalls.put(logEvent.callId(), state);
             } else if ("succeeded".equals(logEvent.status())) {
-                failedCalls.remove(logEvent.toolName());
-                successfulCalls.put(logEvent.toolName(), new SuccessfulToolCall(
+                String arguments = state == null ? "" : state.arguments;
+                String result = StringUtils.hasText(logEvent.rawResult())
+                        ? logEvent.rawResult() : logEvent.result();
+                if (state == null) {
+                    state = new ToolCallState(
+                            logEvent.callId(), logEvent.toolName(), toolSequence.incrementAndGet());
+                    state.arguments = arguments;
+                    toolCalls.put(logEvent.callId(), state);
+                }
+                successfulCalls.put(logEvent.callId(), new SuccessfulToolCall(
+                        logEvent.callId(),
                         logEvent.toolName(),
-                        pendingArguments.remove(logEvent.toolName()),
-                        StringUtils.hasText(logEvent.rawResult())
-                                ? logEvent.rawResult() : logEvent.result(),
+                        state.sequence,
+                        arguments,
+                        result,
                         logEvent.time()));
+                state.status = "succeeded";
+                state.result = result;
+                state.durationMillis = logEvent.durationMillis();
+                state.completedAt = logEvent.time();
             } else if ("failed".equals(logEvent.status())) {
-                failedCalls.put(logEvent.toolName(), new FailedToolCall(
+                String arguments = state == null ? "" : state.arguments;
+                if (state == null) {
+                    state = new ToolCallState(
+                            logEvent.callId(), logEvent.toolName(), toolSequence.incrementAndGet());
+                    state.arguments = arguments;
+                    toolCalls.put(logEvent.callId(), state);
+                }
+                failedCalls.put(logEvent.callId(), new FailedToolCall(
+                        logEvent.callId(),
                         logEvent.toolName(),
-                        pendingArguments.remove(logEvent.toolName()),
+                        state.sequence,
+                        arguments,
                         logEvent.error(),
                         logEvent.time()));
+                state.status = "failed";
+                state.error = logEvent.error();
+                state.durationMillis = logEvent.durationMillis();
+                state.completedAt = logEvent.time();
             }
-            sink.tryEmitNext(formatLog(logEvent));
+            if (state != null) {
+                sink.tryEmitNext(TOOL_EVENT_PREFIX + JacksonUtil.toJson(toToolEventData(state)));
+            }
+        }
+
+        private void recordRagSearch(RagSearchEventData event) {
+            if (event == null || !StringUtils.hasText(event.getSearchId())) {
+                return;
+            }
+            RagSearchPartState existing = ragSearchStates.get(event.getSearchId());
+            int sequence = existing == null
+                    ? ragSearchSequence.incrementAndGet() : existing.sequence();
+            ragSearchStates.put(event.getSearchId(),
+                    new RagSearchPartState(toRagSearchPart(event), sequence));
+        }
+
+        private List<ChatMessagePart> ragSearchParts() {
+            return ragSearchStates.values().stream()
+                    .sorted(java.util.Comparator.comparingInt(RagSearchPartState::sequence))
+                    .map(RagSearchPartState::part)
+                    .toList();
+        }
+
+        private static ChatMessagePart toRagSearchPart(RagSearchEventData event) {
+            int hitCount = event.getHitCount() == null ? 0 : event.getHitCount();
+            String summary = switch (event.getStatus() == null ? "" : event.getStatus()) {
+                case "succeeded" -> "知识库检索 · " + hitCount + " 个来源";
+                case "empty" -> "知识库检索 · 无匹配";
+                case "failed" -> "知识库检索 · 失败";
+                default -> "知识库检索 · 已跳过";
+            };
+            return ChatMessagePart.builder()
+                    .id(event.getSearchId())
+                    .type("rag-search")
+                    .title("知识库检索")
+                    .content(summary)
+                    .status(event.getStatus())
+                    .metadata(JacksonUtil.toMap(event))
+                    .build();
         }
 
         private boolean hasSuccessfulTool(String toolName) {
-            return successfulCalls.containsKey(toolName);
+            return successfulCalls.values().stream()
+                    .anyMatch(call -> toolName.equals(call.toolName()));
         }
 
         private SuccessfulToolCall successfulCall(String toolName) {
-            return successfulCalls.get(toolName);
+            return successfulCalls.values().stream()
+                    .filter(call -> toolName.equals(call.toolName()))
+                    .max(java.util.Comparator.comparingInt(SuccessfulToolCall::sequence))
+                    .orElse(null);
         }
 
         private FailedToolCall failedCall(String toolName) {
-            return failedCalls.get(toolName);
+            return failedCalls.values().stream()
+                    .filter(call -> toolName.equals(call.toolName()))
+                    .max(java.util.Comparator.comparingInt(FailedToolCall::sequence))
+                    .orElse(null);
         }
 
         private void emitApproval(McpApprovalEvent approvalEvent) {
@@ -5021,6 +5543,187 @@ public class DihChatApplicationService {
         private void recordApprovalPosition(String requestId, int contentOffset) {
             if (enabled() && StringUtils.hasText(requestId)) {
                 approvalOffsets.putIfAbsent(requestId, Math.max(contentOffset, 0));
+            }
+        }
+
+        private void recordToolPosition(String callId, int contentOffset) {
+            if (enabled() && StringUtils.hasText(callId)) {
+                toolOffsets.putIfAbsent(callId, Math.max(contentOffset, 0));
+            }
+        }
+
+        private static RagSearchEventData parseRagSearchEvent(String value) {
+            if (value == null || !value.startsWith(RagSearchEventData.STREAM_MARKER_PREFIX)) {
+                return null;
+            }
+            try {
+                return JacksonUtil.toObject(
+                        value.substring(RagSearchEventData.STREAM_MARKER_PREFIX.length()),
+                        RagSearchEventData.class);
+            } catch (Exception e) {
+                log.warn("解析 RAG 检索事件失败: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        private static Map<String, Object> parseToolEvent(String value) {
+            if (value == null || !value.startsWith(TOOL_EVENT_PREFIX)) {
+                return null;
+            }
+            try {
+                return JacksonConfig.OBJECT_MAPPER.readValue(
+                        value.substring(TOOL_EVENT_PREFIX.length()),
+                        new TypeReference<Map<String, Object>>() {
+                        });
+            } catch (Exception e) {
+                log.warn("解析 MCP 工具事件失败: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        private static Map<String, Object> toToolEventData(ToolCallState state) {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("callId", state.callId);
+            data.put("toolName", state.toolName);
+            data.put("status", state.status);
+            data.put("arguments", state.arguments);
+            data.put("result", normalizeToolResultForDisplay(state.result));
+            data.put("error", state.error);
+            data.put("durationMillis", state.durationMillis);
+            data.put("startedAt", state.startedAt == null ? null : state.startedAt.toString());
+            data.put("completedAt", state.completedAt == null ? null : state.completedAt.toString());
+            return data;
+        }
+
+        private static String formatToolEvent(Map<String, Object> event) {
+            String toolName = inlineCode(stringEventValue(event, "toolName"));
+            String status = stringEventValue(event, "status");
+            Long durationMillis = event.get("durationMillis") instanceof Number number
+                    ? number.longValue() : null;
+            if ("running".equals(status)) {
+                return "\n\n**MCP调用开始：** " + toolName
+                        + formatPayload("调用参数", stringEventValue(event, "arguments"))
+                        + "\n\n";
+            }
+            if ("succeeded".equals(status)) {
+                return "\n\n**MCP调用成功：** " + toolName
+                        + formatDuration(durationMillis)
+                        + formatPayload("返回结果", stringEventValue(event, "result"))
+                        + "\n\n";
+            }
+            return "\n\n**MCP调用失败：** " + toolName
+                    + formatDuration(durationMillis)
+                    + formatPayload("错误信息", stringEventValue(event, "error"))
+                    + "\n\n";
+        }
+
+        private static String stringEventValue(Map<String, Object> event, String key) {
+            Object value = event.get(key);
+            return value == null ? "" : value.toString();
+        }
+
+        private List<ChatMessagePart> toolParts() {
+            if (toolCalls.isEmpty()) {
+                return List.of();
+            }
+            return toolCalls.values().stream()
+                    .sorted(java.util.Comparator.comparingInt(state -> state.sequence))
+                    .map(state -> {
+                        Map<String, Object> metadata = new LinkedHashMap<>();
+                        metadata.put("callId", state.callId);
+                        metadata.put("toolName", state.toolName);
+                        metadata.put("arguments", state.arguments);
+                        metadata.put("result", normalizeToolResultForDisplay(state.result));
+                        metadata.put("error", state.error);
+                        metadata.put("durationMillis", state.durationMillis);
+                        metadata.put("startedAt",
+                                state.startedAt == null ? null : state.startedAt.toString());
+                        metadata.put("completedAt",
+                                state.completedAt == null ? null : state.completedAt.toString());
+                        Integer contentOffset = toolOffsets.get(state.callId);
+                        if (contentOffset != null) {
+                            metadata.put("contentOffset", contentOffset);
+                        }
+                        String summary = state.toolName + " · " + switch (state.status) {
+                            case "succeeded" -> "调用成功";
+                            case "failed" -> "调用失败";
+                            default -> "调用中";
+                        };
+                        return ChatMessagePart.builder()
+                                .id(state.callId)
+                                .type("tool-call")
+                                .title("MCP 工具调用")
+                                .content(summary)
+                                .status(state.status)
+                                .metadata(metadata)
+                                .build();
+                    })
+                    .toList();
+        }
+
+        private static String normalizeToolResultForDisplay(String value) {
+            if (!StringUtils.hasText(value)) {
+                return "";
+            }
+            try {
+                Object parsed = JacksonConfig.OBJECT_MAPPER.readValue(value, Object.class);
+                Object normalized = unwrapToolContent(parsed, 0);
+                if (normalized instanceof String text) {
+                    return text;
+                }
+                return JacksonConfig.OBJECT_MAPPER.writerWithDefaultPrettyPrinter()
+                        .writeValueAsString(normalized);
+            } catch (Exception ignored) {
+                return value;
+            }
+        }
+
+        private static Object unwrapToolContent(Object value, int depth) {
+            if (depth >= 6) {
+                return value;
+            }
+            if (isTextContentBlock(value)) {
+                Map<?, ?> block = (Map<?, ?>) value;
+                Object parsed = parseToolJson(String.valueOf(block.get("text")));
+                return unwrapToolContent(parsed, depth + 1);
+            }
+            if (value instanceof List<?> list) {
+                List<Object> normalized = list.stream()
+                        .map(item -> unwrapToolContent(item, depth + 1))
+                        .toList();
+                if (!list.isEmpty() && list.stream().allMatch(McpToolLogStream::isTextContentBlock)) {
+                    return list.size() == 1 ? normalized.get(0) : normalized;
+                }
+                return normalized;
+            }
+            if (value instanceof Map<?, ?> map
+                    && map.get("content") instanceof List<?> content
+                    && !content.isEmpty()
+                    && content.stream().allMatch(McpToolLogStream::isTextContentBlock)) {
+                return unwrapToolContent(content, depth + 1);
+            }
+            return value;
+        }
+
+        private static boolean isTextContentBlock(Object value) {
+            if (!(value instanceof Map<?, ?> map)
+                    || !(map.get("text") instanceof String)) {
+                return false;
+            }
+            return map.keySet().stream()
+                    .map(String::valueOf)
+                    .allMatch(TOOL_CONTENT_KEYS::contains);
+        }
+
+        private static Object parseToolJson(String value) {
+            String trimmed = value == null ? "" : value.trim();
+            if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+                return value;
+            }
+            try {
+                return JacksonConfig.OBJECT_MAPPER.readValue(trimmed, Object.class);
+            } catch (Exception ignored) {
+                return value;
             }
         }
 
@@ -5124,13 +5827,39 @@ public class DihChatApplicationService {
             return "`" + normalized.replace('`', '\'') + "`";
         }
 
-        private record SuccessfulToolCall(String toolName,
+        private record RagSearchPartState(ChatMessagePart part, int sequence) {
+        }
+
+        private static class ToolCallState {
+            private final String callId;
+            private final String toolName;
+            private final int sequence;
+            private volatile String status;
+            private volatile String arguments;
+            private volatile String result;
+            private volatile String error;
+            private volatile Long durationMillis;
+            private volatile java.time.Instant startedAt;
+            private volatile java.time.Instant completedAt;
+
+            private ToolCallState(String callId, String toolName, int sequence) {
+                this.callId = callId;
+                this.toolName = toolName;
+                this.sequence = sequence;
+            }
+        }
+
+        private record SuccessfulToolCall(String callId,
+                                          String toolName,
+                                          int sequence,
                                           String arguments,
                                           String result,
                                           java.time.Instant time) {
         }
 
-        private record FailedToolCall(String toolName,
+        private record FailedToolCall(String callId,
+                                      String toolName,
+                                      int sequence,
                                       String arguments,
                                       String error,
                                       java.time.Instant time) {

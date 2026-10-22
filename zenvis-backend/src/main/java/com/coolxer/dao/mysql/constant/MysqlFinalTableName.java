@@ -72,9 +72,29 @@ public class MysqlFinalTableName {
     public static final String T_AI_CHAT_SESSION = TABLE_PREFIX + "ai_chat_session";
 
     /**
+     * 持久化 DIH Agent Run
+     */
+    public static final String T_AI_AGENT_RUN = TABLE_PREFIX + "ai_agent_run";
+
+    /**
+     * Agent Run 只追加事件日志
+     */
+    public static final String T_AI_AGENT_RUN_EVENT = TABLE_PREFIX + "ai_agent_run_event";
+
+    /**
+     * Agent Run 运行中追加输入（steer）
+     */
+    public static final String T_AI_AGENT_RUN_INPUT = TABLE_PREFIX + "ai_agent_run_input";
+
+    /**
      * 报表工作文档
      */
     public static final String T_AI_REPORT_DOCUMENT = TABLE_PREFIX + "ai_report_document";
+
+    /**
+     * 报表分章节草稿
+     */
+    public static final String T_AI_REPORT_DRAFT = TABLE_PREFIX + "ai_report_draft";
 
     /**
      * 报表文档修订

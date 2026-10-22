@@ -66,8 +66,14 @@ const errorMessage = (error: unknown, fallback: string) => {
     return error.message;
   }
   const payload = asObject(error);
+  const nested = asObject(payload.data);
   return textValue(
-    payload.msg || payload.message || payload.error,
+    payload.msg
+      || payload.message
+      || payload.error
+      || nested.msg
+      || nested.message
+      || nested.error,
     fallback,
   );
 };
@@ -289,10 +295,18 @@ export const useChatMessageActions = ({
       return;
     }
     await nextTick();
-    await sendMessage({
-      content: display || requestContent,
-      requestContent: requestContent || display,
-    });
+    try {
+      await sendMessage({
+        content: display || requestContent,
+        requestContent: requestContent || display,
+      });
+    } catch (error) {
+      console.error('工作流动作已生效，但自动续跑失败:', error);
+      ElMessage.warning(errorMessage(
+        error,
+        '操作已生效，但自动续跑失败，请发送“继续”恢复任务',
+      ));
+    }
   };
 
   const performWorkflowAction = async (
@@ -308,18 +322,41 @@ export const useChatMessageActions = ({
     if (!chatSessionId.value || !message.id || !part.id || !id) {
       throw new Error('缺少工作流动作定位信息');
     }
-    const result = await DihService.workflowAction({
-      chat_id: chatSessionId.value,
-      message_id: message.id,
-      part_id: part.id,
-      workflow_id: id,
-      action,
-      answers: options.answers,
-      revision: options.revision,
-    });
-    part.status = result.partStatus;
-    await continueWorkflow(result);
-    return result;
+    if (part.metadata?.deciding === true) {
+      throw new Error('工作流动作正在处理中，请稍候');
+    }
+    part.metadata = {
+      ...(part.metadata || {}),
+      deciding: true,
+      decisionInFlight: action,
+    };
+    try {
+      const result = await DihService.workflowAction({
+        chat_id: chatSessionId.value,
+        message_id: message.id,
+        part_id: part.id,
+        workflow_id: id,
+        action,
+        answers: options.answers,
+        revision: options.revision,
+      });
+      if (!result.accepted) {
+        throw new Error('工作流动作未被受理，请刷新后重试');
+      }
+      if (!result.partStatus) {
+        throw new Error('工作流动作未返回卡片状态，请刷新后重试');
+      }
+      part.status = result.partStatus;
+      await nextTick();
+      await continueWorkflow(result);
+      return result;
+    } finally {
+      part.metadata = {
+        ...(part.metadata || {}),
+        deciding: false,
+        decisionInFlight: '',
+      };
+    }
   };
 
   const handleInfoStepsSubmit = async (
@@ -339,7 +376,7 @@ export const useChatMessageActions = ({
         ElMessage.success('已提交补充信息');
       } catch (error) {
         console.error('提交工作流补充信息失败:', error);
-        ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
+        ElMessage.error(errorMessage(error, '提交补充信息失败'));
       }
       return;
     }
@@ -409,7 +446,7 @@ export const useChatMessageActions = ({
         );
       } catch (error) {
         console.error('执行工作流确认动作失败:', error);
-        ElMessage.error(error instanceof Error ? error.message : '执行工作流动作失败');
+        ElMessage.error(errorMessage(error, '执行工作流动作失败'));
       }
       return;
     }

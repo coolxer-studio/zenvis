@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'code' | 'config' | 'report-document' | 'report-fragment' | 'notice' | 'confirm' | 'mcp-approval' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'rag-search' | 'code' | 'config' | 'report-document' | 'report-fragment' | 'notice' | 'confirm' | 'mcp-approval' | 'tool-call' | 'agent-run' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -35,6 +35,7 @@ export type ChatMessage = {
   sender: 'user' | 'ai'
   content: string
   time: string
+  runId?: string
   type?: 'text' | 'chart' | 'code' | 'table' | 'image' | string
   parts?: ChatMessagePart[]
   attachments?: ChatAttachment[]
@@ -47,8 +48,8 @@ export type ChatMessage = {
 export type McpApprovalStatus = 'pending' | 'approved' | 'running' | 'succeeded' | 'failed'
   | 'rejected' | 'denied' | 'expired' | 'cancelled' | string;
 
-export type McpApprovalDecision = 'approved' | 'approved_session' | 'rejected';
-export type McpApprovalScope = 'once' | 'session' | string;
+export type McpApprovalDecision = 'approved' | 'approved_session' | 'approved_run' | 'rejected';
+export type McpApprovalScope = 'once' | 'session' | 'run' | 'task_run' | string;
 
 export type McpApprovalData = {
   requestId: string;
@@ -61,6 +62,8 @@ export type McpApprovalData = {
   policy?: string;
   approvalScope?: McpApprovalScope;
   sessionApprovalAllowed?: boolean;
+  runApprovalAllowed?: boolean;
+  agentRunId?: string;
   status?: McpApprovalStatus;
   arguments?: string;
   result?: string;
@@ -76,7 +79,7 @@ export type McpApprovalData = {
 };
 
 export type ChatStreamEvent = {
-  event: 'delta' | 'done' | 'error' | string;
+  event: 'delta' | 'done' | 'error' | 'tool_call' | 'rag_search' | string;
   content?: string;
   message?: ChatMessage | string;
   data?: McpApprovalData | Record<string, unknown>;
@@ -93,6 +96,99 @@ export type ChatSession = {
   onlineSearch: boolean;
   updateTime: string;
   pin: boolean;
+};
+
+export type AgentRunStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'WAITING_APPROVAL'
+  | 'WAITING_USER'
+  | 'PAUSED'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'CANCELING'
+  | 'CANCELLED';
+
+export type AgentRunStepStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'SKIPPED' | 'BLOCKED' | string;
+
+export type AgentRunPlanStep = {
+  id: string;
+  title: string;
+  acceptance?: string;
+  status?: AgentRunStepStatus;
+  summary?: string;
+  evidenceRefs?: Array<Record<string, unknown>>;
+};
+
+export type AgentRunPlan = {
+  goal?: string;
+  steps: AgentRunPlanStep[];
+};
+
+export type AgentRun = {
+  runId: string;
+  chatId: string;
+  chatType: string;
+  agentType: string;
+  model?: string;
+  status: AgentRunStatus;
+  statusLabel?: string;
+  goal?: string;
+  plan?: AgentRunPlan;
+  planRevision?: number;
+  currentStepId?: string;
+  decisionSteps: number;
+  toolCalls: number;
+  effectiveMillis: number;
+  maxSteps: number;
+  maxDurationSeconds: number;
+  maxToolCalls: number;
+  lastEventSequence: number;
+  lastError?: string;
+  finalAnswer?: string;
+  pausedReason?: string;
+  pendingAction?: string;
+  attemptCount: number;
+  recoveryCount: number;
+  truncationCount: number;
+  startedAt?: string;
+  finishedAt?: string;
+  createTime?: string;
+  updateTime?: string;
+  skillIds?: string[];
+  steered?: boolean;
+};
+
+export type AgentRunEvent = {
+  sequence: number;
+  run_id: string;
+  type: string;
+  step_id?: string;
+  created_at?: string;
+  data?: Record<string, unknown>;
+};
+
+export type AgentRunCreateParams = {
+  chatId: string;
+  type: string;
+  message: string;
+  model?: string;
+  attachments?: ChatAttachment[];
+  reportAction?: ReportAction;
+  clientMessageId?: string;
+};
+
+export type AgentRunSteerParams = {
+  message: string;
+  attachments?: ChatAttachment[];
+  clientMessageId?: string;
+};
+
+export type AgentRunListParams = {
+  chatId?: string;
+  status?: AgentRunStatus;
+  page?: number;
+  perPage?: number;
 };
 
 export type ReportDocument = {

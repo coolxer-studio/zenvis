@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -79,6 +80,7 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
 
         private String callInternal(String toolInput, ToolContext toolContext) {
             String toolName = toolName();
+            String callId = UUID.randomUUID().toString();
             ToolRuntimeContext runtimeContext = resolveRuntimeContext(toolContext);
             if (runtimeContext != null && runtimeContext.stopRequested()) {
                 throw new IllegalStateException(
@@ -86,7 +88,7 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
             }
             long startedAt = System.nanoTime();
             emit(McpToolCallLog.started(
-                    toolName, summarize(toolInput, MAX_ARGUMENT_CHARS), toolInput));
+                    callId, toolName, summarize(toolInput, MAX_ARGUMENT_CHARS), toolInput));
             log.info("MCP工具调用开始: tool={}, arguments={}", toolName, summarize(toolInput, MAX_ARGUMENT_CHARS));
             try {
                 String result = toolContext == null
@@ -94,7 +96,7 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
                         : delegate.call(toolInput, toolContext);
                 long durationMillis = elapsedMillis(startedAt);
                 emit(McpToolCallLog.succeeded(
-                        toolName, durationMillis, summarize(result, MAX_RESULT_CHARS), result));
+                        callId, toolName, durationMillis, summarize(result, MAX_RESULT_CHARS), result));
                 log.info("MCP工具调用成功: tool={}, durationMs={}, result={}",
                         toolName, durationMillis, summarize(result, MAX_RESULT_CHARS));
                 return result;
@@ -104,7 +106,8 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
                     runtimeContext.registerFailure(
                             executionFailureSignature(toolName, toolInput, e));
                 }
-                emit(McpToolCallLog.failed(toolName, durationMillis, summarize(e.getMessage(), MAX_RESULT_CHARS)));
+                emit(McpToolCallLog.failed(
+                        callId, toolName, durationMillis, summarize(e.getMessage(), MAX_RESULT_CHARS)));
                 log.warn("MCP工具调用失败: tool={}, durationMs={}, error={}",
                         toolName, durationMillis, e.getMessage(), e);
                 throw e;
@@ -190,31 +193,52 @@ public class McpToolCallLoggingProvider implements ToolCallbackProvider {
                                  Long durationMillis,
                                  Instant time,
                                  String rawArguments,
-                                 String rawResult) {
+                                 String rawResult,
+                                 String callId) {
 
         public static McpToolCallLog started(String toolName, String arguments) {
-            return started(toolName, arguments, arguments);
+            return started(UUID.randomUUID().toString(), toolName, arguments, arguments);
         }
 
         public static McpToolCallLog started(
                 String toolName, String arguments, String rawArguments) {
+            return started(UUID.randomUUID().toString(), toolName, arguments, rawArguments);
+        }
+
+        public static McpToolCallLog started(
+                String callId, String toolName, String arguments, String rawArguments) {
             return new McpToolCallLog("started", toolName, arguments, null, null, null,
-                    Instant.now(), rawArguments, null);
+                    Instant.now(), rawArguments, null, callId);
         }
 
         public static McpToolCallLog succeeded(String toolName, long durationMillis, String result) {
-            return succeeded(toolName, durationMillis, result, result);
+            return succeeded(UUID.randomUUID().toString(), toolName, durationMillis, result, result);
         }
 
         public static McpToolCallLog succeeded(
                 String toolName, long durationMillis, String result, String rawResult) {
+            return succeeded(
+                    UUID.randomUUID().toString(), toolName, durationMillis, result, rawResult);
+        }
+
+        public static McpToolCallLog succeeded(
+                String callId,
+                String toolName,
+                long durationMillis,
+                String result,
+                String rawResult) {
             return new McpToolCallLog("succeeded", toolName, null, result, null,
-                    durationMillis, Instant.now(), null, rawResult);
+                    durationMillis, Instant.now(), null, rawResult, callId);
         }
 
         public static McpToolCallLog failed(String toolName, long durationMillis, String error) {
+            return failed(UUID.randomUUID().toString(), toolName, durationMillis, error);
+        }
+
+        public static McpToolCallLog failed(
+                String callId, String toolName, long durationMillis, String error) {
             return new McpToolCallLog("failed", toolName, null, null, error,
-                    durationMillis, Instant.now(), null, null);
+                    durationMillis, Instant.now(), null, null, callId);
         }
     }
 }

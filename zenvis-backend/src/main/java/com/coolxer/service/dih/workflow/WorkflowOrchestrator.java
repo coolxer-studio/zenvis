@@ -127,6 +127,12 @@ public class WorkflowOrchestrator {
                     step == AgentWorkflowStep.BLOCKED ? "blocked" : "success");
             definition.decorate(state, part, metadata);
             if (step == AgentWorkflowStep.BLOCKED) {
+                part.setStatus("blocked");
+                String blockedAction = text(metadata.get("action"));
+                if (StringUtils.hasText(blockedAction)) {
+                    metadata.put("blockedAction", blockedAction);
+                    metadata.remove("action");
+                }
                 appendFailure(state, metadata, previousStep);
                 if (workflowMetrics != null) {
                     workflowMetrics.blocked(previousStep);

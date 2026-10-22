@@ -10,10 +10,13 @@ import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.McpToolInvocation;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
+import com.coolxer.model.dih.vo.McpApprovalVo;
+import com.coolxer.service.dih.agentrun.AgentRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -38,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -87,6 +91,8 @@ class McpApprovalServiceTest {
             }
             return Optional.ofNullable(invocations.get(call.getArgument(0)));
         });
+        when(repository.findByRequestIdForUpdate(any())).thenAnswer(call ->
+                Optional.ofNullable(invocations.get(call.getArgument(0))));
         when(repository.findByStatusIn(any())).thenAnswer(call -> {
             List<McpInvocationStatus> statuses = call.getArgument(0);
             return invocations.values().stream()
@@ -718,8 +724,74 @@ class McpApprovalServiceTest {
         throw new AssertionError("approval requests were not created");
     }
 
+    @Test
+    void agentRunApprovalIsPersistedWithoutBlockingAndRunScopeDecisionIsIdempotent() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        AgentRunService runService = mock(AgentRunService.class);
+        ReflectionTestUtils.setField(service, "agentRunService", runService);
+        User requester = user(42, false);
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor(), "{\"id\":1}", runContext(null), () -> "should-not-run"))
+                .isInstanceOf(McpApprovalPendingException.class);
+
+        McpToolInvocation pending = invocations.values().stream()
+                .filter(item -> item.getStatus() == McpInvocationStatus.PENDING)
+                .findFirst().orElseThrow();
+        assertThat(pending.getAgentRunId()).isEqualTo("run-1");
+        assertThat(pending.getTurnId()).isEqualTo("run:run-1:1");
+        assertThat(service.pendingApprovalCount()).isZero();
+
+        McpApprovalVo approved = service.decide(
+                pending.getRequestId(), "approved_run", "同类工具允许", requester);
+        assertThat(approved.getStatus()).isEqualTo(McpInvocationStatus.APPROVED);
+        assertThat(approved.getApprovalScope()).isEqualTo(McpApprovalScope.RUN);
+        assertThat(approved.getAgentRunId()).isEqualTo("run-1");
+        verify(runService, times(1)).markApprovalUpdated(
+                "run-1", pending.getRequestId(), "APPROVED", "1");
+
+        service.decide(pending.getRequestId(), "approved_run", "重复审批", requester);
+        verify(runService, times(1)).markApprovalUpdated(
+                "run-1", pending.getRequestId(), "APPROVED", "1");
+    }
+
+    @Test
+    void existingRunScopeGrantExecutesAnotherCallOfSameToolWithoutApproval() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        when(repository.existsByAgentRunIdAndToolKeyAndApprovalScopeAndStatusIn(
+                anyString(), anyString(), any(), any())).thenReturn(true);
+        AtomicBoolean called = new AtomicBoolean();
+
+        String result = service.execute(descriptor(), "{\"id\":2}", runContext(null), () -> {
+            called.set(true);
+            return "run-approved";
+        });
+
+        assertThat(result).isEqualTo("run-approved");
+        assertThat(called).isTrue();
+        assertThat(invocations.values()).singleElement()
+                .satisfies(invocation -> {
+                    assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.SUCCEEDED);
+                    assertThat(invocation.getApprovalScope()).isEqualTo(McpApprovalScope.RUN);
+                    assertThat(invocation.getAgentRunId()).isEqualTo("run-1");
+                });
+    }
+
     private McpInvocationContext context(List<McpApprovalEvent> events) {
         return contextWithConsumer(events == null ? null : events::add);
+    }
+
+    private McpInvocationContext runContext(List<McpApprovalEvent> events) {
+        return new McpInvocationContext(
+                McpInvocationChannel.CHAT_AGENT,
+                42,
+                "chat-1",
+                "run:run-1:1",
+                "agent_report",
+                null,
+                "agent-run:run-1",
+                events == null ? null : events::add
+        );
     }
 
     private McpInvocationContext contextWithConsumer(

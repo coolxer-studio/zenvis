@@ -15,7 +15,10 @@
         :max="showInlineResult ? '28%' : '34%'"
       >
         <aside class="workspace-sidebar">
-          <ViewLeft :system-info="systemInfo" :user-info="userInfo" />
+          <ViewLeft
+            :system-info="systemInfo"
+            :user-info="userInfo"
+          />
         </aside>
       </el-splitter-panel>
 
@@ -37,6 +40,7 @@
             :show-session-toggle="false"
             :show-result-toggle="hasRightPanel && !showInlineResult"
             @open-analysis-tasks="drawerVisible = true"
+            @open-agent-runs="agentRunDrawerVisible = true"
             @open-sessions="sessionDrawerVisible = true"
             @open-results="resultDrawerVisible = true"
           />
@@ -91,6 +95,7 @@
         :show-session-toggle="true"
         :show-result-toggle="hasRightPanel"
         @open-analysis-tasks="drawerVisible = true"
+        @open-agent-runs="agentRunDrawerVisible = true"
         @open-sessions="sessionDrawerVisible = true"
         @open-results="resultDrawerVisible = true"
       />
@@ -137,6 +142,17 @@
       </div>
     </el-drawer>
 
+    <el-drawer
+      v-model="agentRunDrawerVisible"
+      class="agent-run-drawer"
+      direction="rtl"
+      :size="isMobile ? '96%' : 'min(980px, 88vw)'"
+      :with-header="false"
+      append-to-body
+    >
+      <AgentRunCenter @open-chat="openAgentRunChat" />
+    </el-drawer>
+
     <div class="analysis-drawer" :class="{ 'is-open': drawerVisible }" aria-live="polite">
       <ViewDrawer
         :visible="drawerVisible"
@@ -159,7 +175,7 @@ import {
   ref,
   watch,
 } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { Close, CloseBold, FullScreen } from '@element-plus/icons-vue';
 import {
   Connection,
@@ -177,6 +193,7 @@ import type { SystemInfo } from '@/types/type-system';
 import { getUserInfo } from '@u/auth-session';
 import { getAssetUrl } from '@u/url';
 import ViewCenter from './components/view-center.vue';
+import AgentRunCenter from './components/agent-run-center.vue';
 import ViewDrawer from './components/view-drawer.vue';
 import ViewLeft from './components/view-left.vue';
 import ViewRightConfigManagement from './components/view-right-config-management.vue';
@@ -208,9 +225,11 @@ type ResultAgentType =
   | 'agent_report';
 
 const route = useRoute();
+const router = useRouter();
 const drawerVisible = ref(false);
 const sessionDrawerVisible = ref(false);
 const resultDrawerVisible = ref(false);
+const agentRunDrawerVisible = ref(false);
 const resultFullscreen = ref(false);
 const viewportWidth = ref(window.innerWidth);
 const mySuggestions = ref<Suggestion[]>([]);
@@ -323,6 +342,17 @@ const loadWorkspaceData = async () => {
     entriesLoaded.value = true;
   }
   if (info.status === 'fulfilled') systemInfo.value = info.value;
+};
+
+const openAgentRunChat = (run: { chatId: string; chatType: string }) => {
+  agentRunDrawerVisible.value = false;
+  void router.push({
+    name: 'service-dih',
+    query: {
+      type: run.chatType,
+      chatSessionId: run.chatId,
+    },
+  });
 };
 
 const loadTaskQueueStatus = async () => {

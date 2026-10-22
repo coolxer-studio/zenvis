@@ -64,46 +64,6 @@ export const useMcpApproval = ({
     message.loading = false;
   };
 
-  const mergeFinalApprovalParts = (
-    liveParts: ChatMessagePart[] | undefined,
-    finalParts: ChatMessagePart[] | undefined,
-  ) => {
-    if (!liveParts?.some(isMcpApprovalPart)) return finalParts;
-    const liveApprovalById = new Map(
-      liveParts.filter(isMcpApprovalPart).map(part => [part.id, part]),
-    );
-    const finalApprovalById = new Map(
-      (finalParts || []).filter(isMcpApprovalPart).map(part => [part.id, part]),
-    );
-    if (finalApprovalById.size > 0) {
-      return (finalParts || []).map(part => {
-        if (!isMcpApprovalPart(part)) return part;
-        const livePart = liveApprovalById.get(part.id);
-        if (!livePart) return part;
-        return {
-          ...livePart,
-          ...part,
-          metadata: {
-            ...livePart.metadata,
-            ...part.metadata,
-          },
-        };
-      });
-    }
-    const finalContentParts = (finalParts || []).filter(part => !isMcpApprovalPart(part));
-    const liveContentParts = liveParts.filter(part => !isMcpApprovalPart(part));
-    const finalIsPlainContent = finalContentParts.every(part => part.type === 'markdown' || part.type === 'thinking');
-    if (!finalIsPlainContent) {
-      return [
-        ...liveParts.filter(isMcpApprovalPart).map(part => finalApprovalById.get(part.id) || part),
-        ...finalContentParts,
-      ];
-    }
-    return liveParts
-      .map(part => isMcpApprovalPart(part) ? (finalApprovalById.get(part.id) || part) : part)
-      .concat(finalContentParts.length && !liveContentParts.length ? finalContentParts : []);
-  };
-
   const handleMcpApprovalDecision = async (
     message: ChatMessage,
     payload: McpApprovalDecisionPayload,
@@ -141,7 +101,6 @@ export const useMcpApproval = ({
   return {
     isMcpApprovalPart,
     upsertMcpApprovalPart,
-    mergeFinalApprovalParts,
     handleMcpApprovalDecision,
     rejectPendingMcpApprovals,
   };

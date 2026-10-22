@@ -2,6 +2,8 @@ package com.coolxer.service.dih;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.model.dih.RagSearchEventData;
+import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
@@ -12,6 +14,7 @@ import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -52,6 +55,48 @@ class AIChatServiceExecutionBoundaryTest {
 
         verify(ragContextService).retrieve("普通问题", "ask");
         verify(ragContextService).retrieve("深度问题", "deep_think");
+    }
+
+    @Test
+    void qaAndAgentStreamsEmitRagSnapshotBeforeModelContent() {
+        RagContextService ragContextService = mock(RagContextService.class);
+        RagSearchEventData qaSearch = ragSearch("rag-qa", "普通问题", "ask", "all");
+        RagSearchEventData agentSearch = ragSearch("rag-agent", "执行任务", "agent", "bound");
+        when(ragContextService.retrieve("普通问题", "ask"))
+                .thenReturn(new RagContextService.RagContext(
+                        "RAG资料", true, true, 1, 2, "ok", qaSearch));
+        when(ragContextService.retrieve("执行任务", "agent", List.of(7)))
+                .thenReturn(new RagContextService.RagContext(
+                        "RAG资料", true, true, 1, 2, "ok", agentSearch));
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(
+                new ChatResponse(List.of(new Generation(new AssistantMessage("回答"))))));
+        AIChatService service = service(ragContextService, chatModel);
+
+        List<String> qaChunks = service.qaChat(
+                "chat-qa", "model-1", "普通问题", List.of(), null, false)
+                .collectList().block();
+        List<String> agentChunks = service.agentChat(
+                "chat-agent", "model-1", "Agent系统提示", "执行任务",
+                List.of(), null, List.of(7), McpToolContext.empty())
+                .collectList().block();
+
+        assertThat(qaChunks).isNotNull();
+        assertThat(agentChunks).isNotNull();
+        assertThat(qaChunks.get(0))
+                .startsWith(RagSearchEventData.STREAM_MARKER_PREFIX)
+                .contains("\"searchId\":\"rag-qa\"")
+                .contains("\"scopeType\":\"all\"");
+        assertThat(agentChunks.get(0))
+                .startsWith(RagSearchEventData.STREAM_MARKER_PREFIX)
+                .contains("\"searchId\":\"rag-agent\"")
+                .contains("\"scopeType\":\"bound\"");
+        assertThat(qaChunks.subList(1, qaChunks.size()))
+                .containsExactly("回答")
+                .noneMatch(chunk -> chunk.contains("zenvis-rag-search"));
+        assertThat(agentChunks.subList(1, agentChunks.size()))
+                .containsExactly("回答")
+                .noneMatch(chunk -> chunk.contains("zenvis-rag-search"));
     }
 
     @Test
@@ -132,6 +177,87 @@ class AIChatServiceExecutionBoundaryTest {
         assertThat(toolOptions.getMaxTokens()).isEqualTo(4096);
         assertThat(qaOptions.getTemperature()).isEqualTo(0.8);
         assertThat(qaOptions.getMaxTokens()).isEqualTo(4096);
+    }
+
+    @Test
+    void agentChatUsesSkillOutputTokenBudgetForModelAndContextPreflight() {
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.retrieve("执行任务", "agent", List.of()))
+                .thenReturn(new RagContextService.RagContext(
+                        "", true, false, 0, 0, "no_bound_knowledge_base"));
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.empty());
+        AIChatService service = service(ragContextService, chatModel);
+        SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
+                null,
+                null,
+                new SkillRuntimeLimitsVo(12, 2, 8000, 24000, 12000, 8192));
+
+        service.agentChat(
+                "chat-output-budget",
+                "model-1",
+                "Agent系统提示",
+                "执行任务",
+                List.of(),
+                null,
+                List.of(),
+                McpToolContext.empty(runtime)
+        ).collectList().block();
+
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(promptCaptor.capture());
+        assertThat(((OpenAiChatOptions) promptCaptor.getValue().getOptions()).getMaxTokens())
+                .isEqualTo(8192);
+    }
+
+    @Test
+    void lengthFinishReasonEmitsInternalTruncationMarker() {
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.retrieve("普通问题", "ask"))
+                .thenReturn(new RagContextService.RagContext(
+                        "", false, false, 0, 0, "ok"));
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatGenerationMetadata metadata = ChatGenerationMetadata.builder()
+                .finishReason("length")
+                .build();
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(new ChatResponse(
+                List.of(new Generation(new AssistantMessage("半截内容"), metadata)))));
+        AIChatService service = service(ragContextService, chatModel);
+
+        List<String> chunks = service.qaChat(
+                "chat-length", "model-1", "普通问题", List.of(), null, false)
+                .collectList().block();
+
+        assertThat(chunks).containsExactly(
+                "半截内容",
+                AIChatService.OUTPUT_TRUNCATED_MARKER);
+    }
+
+    @Test
+    void intermediateLengthFinishReasonDoesNotOutliveFinalStopReason() {
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.retrieve("普通问题", "ask"))
+                .thenReturn(new RagContextService.RagContext(
+                        "", false, false, 0, 0, "ok"));
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatGenerationMetadata lengthMetadata = ChatGenerationMetadata.builder()
+                .finishReason("length")
+                .build();
+        ChatGenerationMetadata stopMetadata = ChatGenerationMetadata.builder()
+                .finishReason("stop")
+                .build();
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(
+                new ChatResponse(List.of(new Generation(
+                        new AssistantMessage("中间片段"), lengthMetadata))),
+                new ChatResponse(List.of(new Generation(
+                        new AssistantMessage("最终片段"), stopMetadata)))));
+        AIChatService service = service(ragContextService, chatModel);
+
+        List<String> chunks = service.qaChat(
+                "chat-recovered", "model-1", "普通问题", List.of(), null, false)
+                .collectList().block();
+
+        assertThat(chunks).containsExactly("中间片段", "最终片段");
     }
 
     @Test
@@ -243,6 +369,24 @@ class AIChatServiceExecutionBoundaryTest {
                 .extracting(Message::getText)
                 .anyMatch(text -> text.contains("evidence.log"))
                 .noneMatch(text -> text.contains("RAW_ATTACHMENT_BODY"));
+    }
+
+    private RagSearchEventData ragSearch(String searchId, String query, String mode, String scopeType) {
+        return RagSearchEventData.builder()
+                .searchId(searchId)
+                .query(query)
+                .mode(mode)
+                .scopeType(scopeType)
+                .knowledgeBaseIds(scopeType.equals("bound") ? List.of(7) : List.of())
+                .topK(6)
+                .status("succeeded")
+                .reason("ok")
+                .hitCount(1)
+                .durationMillis(2L)
+                .startedAt("2026-10-22T10:00:00Z")
+                .completedAt("2026-10-22T10:00:00.002Z")
+                .results(List.of())
+                .build();
     }
 
     private AIChatService service(RagContextService ragContextService) {

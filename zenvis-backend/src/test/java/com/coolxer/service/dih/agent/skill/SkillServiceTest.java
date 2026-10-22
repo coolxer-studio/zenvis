@@ -96,6 +96,7 @@ class SkillServiceTest {
         dto.setEnabled(true);
         dto.setKnowledgeBaseIds(List.of(42));
         dto.setPromptMode("skill_only");
+        dto.setMaxOutputTokens(8192);
         SkillSaveDto.ServerToolsDto mcpTools = new SkillSaveDto.ServerToolsDto();
         mcpTools.setServer("tracehub");
         mcpTools.setTools(List.of("ioc_lookup", "ip_location_lookup"));
@@ -111,12 +112,14 @@ class SkillServiceTest {
         assertThat(updated.getRuntime().getPromptMode()).isEqualTo("skill_only");
         assertThat(updated.getRuntime().getTools().getMcp().get("tracehub"))
                 .containsExactly("ioc_lookup", "ip_location_lookup");
+        assertThat(updated.getRuntime().getLimits().getMaxOutputTokens()).isEqualTo(8192);
 
         String manifest = Files.readString(skillDir.resolve("skill.json"));
         assertThat(manifest)
                 .doesNotContain("knowledgeBaseCodes")
                 .contains("\"source\" : \"com.acme.demo\"")
-                .contains("\"knowledgeBaseIds\" : [ 42 ]");
+                .contains("\"knowledgeBaseIds\" : [ 42 ]")
+                .contains("\"maxOutputTokens\" : 8192");
     }
 
     @Test
@@ -217,7 +220,8 @@ class SkillServiceTest {
                               "maxRepeatedFailures": 2,
                               "maxToolResultChars": 12000,
                               "maxAccumulatedToolResultChars": 48000,
-                              "maxAccumulatedToolResultTokens": 12000
+                              "maxAccumulatedToolResultTokens": 12000,
+                              "maxOutputTokens": 8192
                             }
                           },
                           "entry": "SKILL.md"
@@ -254,6 +258,7 @@ class SkillServiceTest {
                     assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(12000);
                     assertThat(runtime.getLimits().getMaxAccumulatedToolResultChars()).isEqualTo(48000);
                     assertThat(runtime.getLimits().getMaxAccumulatedToolResultTokens()).isEqualTo(12000);
+                    assertThat(runtime.getLimits().getMaxOutputTokens()).isEqualTo(8192);
                 });
     }
 
@@ -309,7 +314,7 @@ class SkillServiceTest {
                 """
                         {"id":"retrieval-a","name":"A","enabled":true,
                          "runtime":{"tools":{"local":{"retrieval":["retrieval_search"]}},
-                         "limits":{"maxToolCalls":12,"maxToolResultChars":12000}},
+                         "limits":{"maxToolCalls":12,"maxToolResultChars":12000,"maxOutputTokens":8192}},
                          "entry":"SKILL.md"}
                         """,
                 "A"
@@ -320,7 +325,7 @@ class SkillServiceTest {
                         {"id":"retrieval-b","name":"B","enabled":true,
                          "runtime":{"tools":{"local":{"retrieval":["entity_view"],
                          "config":["config_read"]}},
-                         "limits":{"maxToolCalls":8,"maxToolResultChars":16000}},
+                         "limits":{"maxToolCalls":8,"maxToolResultChars":16000,"maxOutputTokens":4096}},
                          "entry":"SKILL.md"}
                         """,
                 "B"
@@ -336,6 +341,7 @@ class SkillServiceTest {
                 .containsExactly("config_read");
         assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(8);
         assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(12_000);
+        assertThat(runtime.getLimits().getMaxOutputTokens()).isEqualTo(4096);
     }
 
     @Test
@@ -819,7 +825,15 @@ class SkillServiceTest {
                 .contains("zenvis:report-document-config")
                 .contains("证据记录与查询结果")
                 .contains("自然语言修改")
+                .contains("report_upsert_section")
+                .contains("report_finalize")
+                .contains("`comparison` 只允许使用 `NONE` 或 `PREVIOUS_PERIOD`")
                 .contains("不要为了写报表调用写入、删除、创建或执行类工具");
+        assertThat(service.resolveRuntimeConfig(List.of("report-agent")).getLimits())
+                .satisfies(limits -> {
+                    assertThat(limits.getMaxToolCalls()).isEqualTo(60);
+                    assertThat(limits.getMaxOutputTokens()).isEqualTo(4096);
+                });
     }
 
     private SkillService newSkillService() {

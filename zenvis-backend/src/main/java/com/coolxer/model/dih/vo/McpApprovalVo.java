@@ -44,6 +44,8 @@ public class McpApprovalVo {
     private Date createTime;
     private String riskLevel;
     private Boolean sessionApprovalAllowed;
+    private Boolean runApprovalAllowed;
+    private String agentRunId;
 
     public McpApprovalVo(McpToolInvocation invocation) {
         this.requestId = invocation.getRequestId();
@@ -82,5 +84,8 @@ public class McpApprovalVo {
                         && !com.coolxer.service.dih.mcp.McpInvocationContext
                         .isExplicitApprovalDemoClient(
                                 invocation.getMcpClientInfo());
+        this.agentRunId = invocation.getAgentRunId();
+        this.runApprovalAllowed = invocation.getChannel() == McpInvocationChannel.CHAT_AGENT
+                && org.apache.commons.lang3.StringUtils.isNotBlank(invocation.getAgentRunId());
     }
 }

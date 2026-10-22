@@ -81,6 +81,9 @@ public class McpToolInvocation extends BaseEntity {
     @Column(name = "task_execution_id", length = 64)
     private String taskExecutionId;
 
+    @Column(name = "agent_run_id", length = 64)
+    private String agentRunId;
+
     @Column(name = "mcp_session_id", length = 255)
     private String mcpSessionId;
 

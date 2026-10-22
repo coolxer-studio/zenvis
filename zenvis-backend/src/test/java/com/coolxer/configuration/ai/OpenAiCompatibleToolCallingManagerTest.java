@@ -221,6 +221,51 @@ class OpenAiCompatibleToolCallingManagerTest {
     }
 
     @Test
+    void invalidRetryDoesNotConsumeTheLastExecutableToolSlot() {
+        ToolCallingManager delegate = mock(ToolCallingManager.class);
+        ToolCallingChatOptions options = ToolCallingChatOptions.builder().build();
+        ToolRuntimeContext runtimeContext = new ToolRuntimeContext(
+                new SkillRuntimeLimitsVo(1, 2, 12_000, 48_000, 12_000));
+        options.setToolContext(Map.of(ToolRuntimeContext.TOOL_CONTEXT_KEY, runtimeContext));
+        Prompt prompt = new Prompt("test", options);
+        when(delegate.resolveToolDefinitions(same(options))).thenReturn(List.of(
+                requestObjectToolDefinition()
+        ));
+        ChatResponse invalid = responseWithToolCalls(
+                new AssistantMessage.ToolCall("call-invalid", "function", "retrieval_search", "{\"request\":{}}")
+        );
+        ChatResponse valid = responseWithToolCalls(
+                new AssistantMessage.ToolCall(
+                        "call-valid", "function", "retrieval_search", "{\"request\":{\"entity\":\"asset\"}}")
+        );
+        ToolResponseMessage toolResponse = ToolResponseMessage.builder()
+                .responses(List.of(new ToolResponseMessage.ToolResponse(
+                        "call-valid", "retrieval_search", "{\"total\":1}")))
+                .build();
+        when(delegate.executeToolCalls(same(prompt), same(valid))).thenReturn(
+                ToolExecutionResult.builder()
+                        .conversationHistory(List.of(valid.getResult().getOutput(), toolResponse))
+                        .returnDirect(false)
+                        .build());
+        OpenAiCompatibleToolCallingManager manager =
+                new OpenAiCompatibleToolCallingManager(delegate);
+
+        ToolExecutionResult retry = manager.executeToolCalls(prompt, invalid);
+        assertThat(retry.returnDirect()).isFalse();
+        assertThat(runtimeContext.toolCalls()).isZero();
+        assertThat(runtimeContext.stopRequested()).isFalse();
+
+        ToolExecutionResult executed = manager.executeToolCalls(prompt, valid);
+        assertThat(runtimeContext.toolCalls()).isEqualTo(1);
+        assertThat(runtimeContext.stopReason()).isEqualTo("tool_call_budget_exhausted");
+        assertThat(executed.returnDirect()).isFalse();
+        assertThat(((ToolResponseMessage) executed.conversationHistory().get(1))
+                .getResponses().get(0).responseData())
+                .contains("\"stop\":true", "tool_call_budget_exhausted");
+        verify(delegate).executeToolCalls(same(prompt), same(valid));
+    }
+
+    @Test
     void returnsToolErrorWhenRequiredNestedArgumentIsMissing() {
         ToolCallingManager delegate = mock(ToolCallingManager.class);
         ToolCallingChatOptions options = ToolCallingChatOptions.builder().build();

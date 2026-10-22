@@ -3,6 +3,7 @@ package com.coolxer.service.dih;
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.model.dih.RagSearchEventData;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.coolxer.service.dih.advisor.ReasoningContentAdvisor;
 import com.coolxer.service.dih.logging.LlmLogHelper;
@@ -11,6 +12,7 @@ import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.rag.RagContextService;
 import com.coolxer.service.dih.rag.RagContextService.RagContext;
+import com.coolxer.utils.JacksonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -22,6 +24,7 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -64,6 +67,17 @@ public class AIChatService {
     private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 102_400;
 
     private static final int DEFAULT_OUTPUT_RESERVE_TOKENS = 4_096;
+
+    /**
+     * Internal marker appended after model content when the provider stops
+     * because the output token budget was exhausted. It must never be exposed
+     * to clients or persisted in assistant content.
+     */
+    public static final String OUTPUT_TRUNCATED_MARKER_PREFIX =
+            "\u001ezenvis-output-truncated:";
+
+    public static final String OUTPUT_TRUNCATED_MARKER =
+            OUTPUT_TRUNCATED_MARKER_PREFIX + "length";
 
     private static final int DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS = 4_096;
 
@@ -260,7 +274,7 @@ public class AIChatService {
                 chatId, systemPrompt, prompt, null, null);
 
         if (canUseNativeQaStream(model, attachments, deepThinking)) {
-            return finalizeModelMemory(nativeOpenAiChat(
+            return withRagSearchEvent(finalizeModelMemory(nativeOpenAiChat(
                     chatId,
                     model,
                     preparedInput.prompt(),
@@ -272,7 +286,7 @@ public class AIChatService {
                             ? "AIChatService.qaChat.deepThink.native"
                             : "AIChatService.qaChat.native",
                     ragContext
-            ), chatId, preparedInput.prompt(), attachments);
+            ), chatId, preparedInput.prompt(), attachments), ragContext);
         }
 
         String scene = deepThinking ? "AIChatService.qaChat.deepThink" : "AIChatService.qaChat";
@@ -304,13 +318,17 @@ public class AIChatService {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);
         }
 
-        return finalizeModelMemory(
+        return withRagSearchEvent(finalizeModelMemory(
                 LlmLogHelper.logStringStream(
-                        log, requestId, scene, promptSpec.stream().content(), startedAtNanos),
+                        log,
+                        requestId,
+                        scene,
+                        streamChatResponseText(promptSpec.stream().chatResponse(), chatId, scene),
+                        startedAtNanos),
                 chatId,
                 preparedInput.prompt(),
                 attachments
-        );
+        ), ragContext);
     }
 
     /**
@@ -344,6 +362,7 @@ public class AIChatService {
         McpToolContext resolvedMcpToolContext = mcpToolContext == null
                 ? McpToolContext.empty()
                 : mcpToolContext;
+        int outputTokenBudget = resolveOutputTokenBudget(resolvedMcpToolContext);
         RagContext ragContext = ragContextService.retrieve(prompt, "agent", knowledgeBaseIds);
         String effectiveSystemPrompt = appendSystemPrompt(systemPrompt, ragContext.systemPrompt());
         PreparedChatInput preparedInput = prepareChatInput(
@@ -355,12 +374,13 @@ public class AIChatService {
                         : null,
                 resolvedMcpToolContext.hasTools()
                         ? resolvedMcpToolContext.toolRuntimeContext()
-                        : null
+                        : null,
+                outputTokenBudget
         );
         if (!resolvedMcpToolContext.hasTools()
                 && chatAttachmentService.hasImageAttachment(attachments)
                 && canUseNativeOpenAiStream()) {
-            return finalizeModelMemory(nativeOpenAiChat(
+            return withRagSearchEvent(finalizeModelMemory(nativeOpenAiChat(
                     chatId,
                     model,
                     preparedInput.prompt(),
@@ -370,7 +390,7 @@ public class AIChatService {
                     effectiveSystemPrompt,
                     "AIChatService.agentChat.native",
                     ragContext
-            ), chatId, preparedInput.prompt(), attachments);
+            ), chatId, preparedInput.prompt(), attachments), ragContext);
         }
 
         String scene = "AIChatService.agentChat";
@@ -380,10 +400,12 @@ public class AIChatService {
                 buildChatLogRequest(chatId, model, preparedInput.prompt(), attachments, false,
                         ragContext.requested(), ragContext.used(), ragContext.documentCount(),
                         effectiveSystemPrompt,
-                        resolvedMcpToolContext.hasTools()));
+                        resolvedMcpToolContext.hasTools(),
+                        outputTokenBudget));
 
         var promptSpec = systemPromptChatClient.prompt()
-                .options(buildRuntimeOptions(model, resolvedMcpToolContext.hasTools()))
+                .options(buildRuntimeOptions(
+                        model, resolvedMcpToolContext.hasTools(), outputTokenBudget))
                 .system(effectiveSystemPrompt)
                 .user(preparedInput.prompt())
                 .advisors(memoryAdvisor -> memoryAdvisor
@@ -413,13 +435,17 @@ public class AIChatService {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);
         }
 
-        return finalizeModelMemory(
+        return withRagSearchEvent(finalizeModelMemory(
                 LlmLogHelper.logStringStream(
-                        log, requestId, scene, promptSpec.stream().content(), startedAtNanos),
+                        log,
+                        requestId,
+                        scene,
+                        streamChatResponseText(promptSpec.stream().chatResponse(), chatId, scene),
+                        startedAtNanos),
                 chatId,
                 preparedInput.prompt(),
                 attachments
-        );
+        ), ragContext);
     }
 
     public Flux<String> deepThinkingChat(String chatId, String model, String prompt) {
@@ -440,6 +466,55 @@ public class AIChatService {
             return true;
         }
         return chatAttachmentService.hasImageAttachment(attachments);
+    }
+
+    private Flux<String> withRagSearchEvent(Flux<String> response, RagContext ragContext) {
+        if (ragContext == null || ragContext.searchEvent() == null) {
+            return response;
+        }
+        String marker = RagSearchEventData.STREAM_MARKER_PREFIX
+                + JacksonUtil.toJson(ragContext.searchEvent());
+        return Flux.concat(Flux.just(marker), response);
+    }
+
+    private Flux<String> streamChatResponseText(Flux<ChatResponse> responses,
+                                                String chatId,
+                                                String scene) {
+        AtomicReference<String> lastFinishReason = new AtomicReference<>();
+        Flux<String> content = responses
+                .doOnNext(response -> {
+                    if (response == null
+                            || response.getResult() == null
+                            || response.getResult().getMetadata() == null) {
+                        return;
+                    }
+                    String finishReason = response.getResult().getMetadata().getFinishReason();
+                    if (StringUtils.hasText(finishReason)) {
+                        lastFinishReason.set(finishReason);
+                    }
+                })
+                .map(this::chatResponseText)
+                .filter(this::hasContent);
+        return content.concatWith(Flux.defer(() -> {
+            if (!"length".equalsIgnoreCase(lastFinishReason.get())) {
+                return Flux.empty();
+            }
+            log.warn(
+                    "模型输出达到上限: chatId={}, scene={}, finishReason=length",
+                    chatId,
+                    scene);
+            return Flux.just(OUTPUT_TRUNCATED_MARKER);
+        }));
+    }
+
+    private String chatResponseText(ChatResponse response) {
+        if (response == null
+                || response.getResult() == null
+                || response.getResult().getOutput() == null) {
+            return "";
+        }
+        String text = response.getResult().getOutput().getText();
+        return text == null ? "" : text;
     }
 
     private String buildQaSystemPrompt(String model, boolean deepThinking, String ragSystemPrompt) {
@@ -481,6 +556,7 @@ public class AIChatService {
     ) {
         AtomicReference<String> finalAnswer = new AtomicReference<>("");
         AtomicReference<String> fullResponse = new AtomicReference<>("");
+        AtomicBoolean outputTruncated = new AtomicBoolean(false);
         String requestId = LlmLogHelper.newRequestId();
         long startedAtNanos = System.nanoTime();
 
@@ -525,12 +601,25 @@ public class AIChatService {
                                 if ("[DONE]".equals(data)) {
                                     break;
                                 }
-                                emitNativeChatChunk(data, inThinking, finalAnswer, fullResponse, sink);
+                                emitNativeChatChunk(
+                                        data,
+                                        inThinking,
+                                        finalAnswer,
+                                        fullResponse,
+                                        outputTruncated,
+                                        sink);
                             }
                         }
 
                         if (inThinking.get() && !sink.isCancelled()) {
                             emitText("</think>", fullResponse, sink);
+                        }
+                        if (outputTruncated.get() && !sink.isCancelled()) {
+                            log.warn(
+                                    "模型输出达到上限: chatId={}, scene={}, finishReason=length",
+                                    chatId,
+                                    scene);
+                            sink.next(OUTPUT_TRUNCATED_MARKER);
                         }
                         if (!sink.isCancelled()) {
                             sink.complete();
@@ -561,6 +650,33 @@ public class AIChatService {
             String systemPrompt,
             boolean toolCalling
     ) {
+        return buildChatLogRequest(
+                chatId,
+                model,
+                prompt,
+                attachments,
+                deepThinking,
+                ragRequested,
+                ragUsed,
+                ragDocumentCount,
+                systemPrompt,
+                toolCalling,
+                outputReserveTokens);
+    }
+
+    private Map<String, Object> buildChatLogRequest(
+            String chatId,
+            String model,
+            String prompt,
+            List<ChatAttachment> attachments,
+            boolean deepThinking,
+            boolean ragRequested,
+            boolean ragUsed,
+            int ragDocumentCount,
+            String systemPrompt,
+            boolean toolCalling,
+            int outputTokenBudget
+    ) {
         Map<String, Object> request = new LinkedHashMap<>();
         String resolvedModel = StringUtils.hasText(model) ? model : defaultChatModel;
         List<Map<String, Object>> messages = buildChatLogMessages(chatId, systemPrompt, prompt);
@@ -569,7 +685,7 @@ public class AIChatService {
         requestBody.put("messages", messages);
         requestBody.put("temperature", toolCalling ? 0.1 : 0.8);
         requestBody.put("stream", true);
-        requestBody.put("max_tokens", outputReserveTokens);
+        requestBody.put("max_tokens", outputTokenBudget);
         if (toolCalling) {
             requestBody.put("parallel_tool_calls", false);
         }
@@ -695,6 +811,7 @@ public class AIChatService {
             AtomicBoolean inThinking,
             AtomicReference<String> finalAnswer,
             AtomicReference<String> fullResponse,
+            AtomicBoolean outputTruncated,
             reactor.core.publisher.FluxSink<String> sink
     ) throws Exception {
         JsonNode root = JacksonConfig.OBJECT_MAPPER.readTree(data);
@@ -703,7 +820,12 @@ public class AIChatService {
             return;
         }
 
-        JsonNode delta = choices.get(0).path("delta");
+        JsonNode choice = choices.get(0);
+        String finishReason = firstText(choice, "finish_reason", "finishReason");
+        if ("length".equalsIgnoreCase(finishReason)) {
+            outputTruncated.set(true);
+        }
+        JsonNode delta = choice.path("delta");
         String reasoningContent = firstText(delta, "reasoning_content", "reasoningContent");
         String content = firstText(delta, "content");
 
@@ -787,10 +909,26 @@ public class AIChatService {
                 """;
     }
 
+    private int resolveOutputTokenBudget(McpToolContext context) {
+        if (context == null
+                || context.skillRuntime() == null
+                || context.skillRuntime().getLimits() == null) {
+            return outputReserveTokens;
+        }
+        Integer configured = context.skillRuntime().getLimits().getMaxOutputTokens();
+        return configured != null && configured > 0 ? configured : outputReserveTokens;
+    }
+
     private OpenAiChatOptions buildRuntimeOptions(String model, boolean toolCalling) {
+        return buildRuntimeOptions(model, toolCalling, outputReserveTokens);
+    }
+
+    private OpenAiChatOptions buildRuntimeOptions(String model,
+                                                  boolean toolCalling,
+                                                  int outputTokenBudget) {
         var builder = OpenAiChatOptions.builder()
                 .temperature(toolCalling ? 0.1 : 0.8)
-                .maxTokens(outputReserveTokens);
+                .maxTokens(outputTokenBudget);
         if (toolCalling) {
             builder.parallelToolCalls(false);
         }
@@ -805,8 +943,23 @@ public class AIChatService {
                                                String prompt,
                                                ToolCallbackProvider toolCallbackProvider,
                                                ToolRuntimeContext toolRuntimeContext) {
+        return prepareChatInput(
+                chatId,
+                systemPrompt,
+                prompt,
+                toolCallbackProvider,
+                toolRuntimeContext,
+                outputReserveTokens);
+    }
+
+    private PreparedChatInput prepareChatInput(String chatId,
+                                               String systemPrompt,
+                                               String prompt,
+                                               ToolCallbackProvider toolCallbackProvider,
+                                               ToolRuntimeContext toolRuntimeContext,
+                                               int outputTokenBudget) {
         int maxInputTokens = Math.max(
-                contextWindowTokens - outputReserveTokens - contextSafetyMarginTokens,
+                contextWindowTokens - outputTokenBudget - contextSafetyMarginTokens,
                 MIN_CURRENT_PROMPT_TOKENS
         );
         int systemTokens = tokenEstimator.estimate(systemPrompt);

@@ -42,6 +42,12 @@ public interface ChatSessionRepository extends BaseRepository<ChatSession, Integ
      */
     Optional<ChatSession> findBySessionIdAndCreateBy(String sessionId, Integer createBy);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select session from ChatSession session where session.sessionId = :sessionId and session.createBy = :createBy")
+    Optional<ChatSession> findBySessionIdAndCreateByForUpdate(
+            @Param("sessionId") String sessionId,
+            @Param("createBy") Integer createBy);
+
     /**
      * 报表素材选择器只读取当前用户最近的会话，避免跨用户暴露智能体产物。
      */

@@ -3,6 +3,8 @@ package com.coolxer.service.dih.rag;
 import com.coolxer.configuration.ai.AiEmbeddingProperties;
 import com.coolxer.dao.mysql.repository.RagKnowledgeBaseRepository;
 import com.coolxer.dao.mysql.entity.RagRetrievalLog;
+import com.coolxer.model.dih.RagSearchEventData;
+import com.coolxer.model.dih.RagSearchEventData.RagSearchResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -11,9 +13,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 为 DIH 问答和业务会话构建只读 RAG 参考上下文。
@@ -23,6 +31,10 @@ import java.util.Map;
 public class RagContextService {
 
     static final int TOP_K = 6;
+
+    private static final int MAX_DISPLAY_TEXT = 500;
+
+    private static final Pattern KNOWLEDGE_BASE_SOURCE_PATTERN = Pattern.compile("^kb_(\\d+)$");
 
     private static final String CONTEXT_HEADER = """
             【知识库参考资料】
@@ -51,44 +63,50 @@ public class RagContextService {
      * 普通问答和深度问答：在全部未删除知识库中检索。
      */
     public RagContext retrieve(String query, String mode) {
+        long startedAtNanos = System.nanoTime();
+        Instant startedAt = Instant.now();
         List<Integer> knowledgeBaseIds;
         try {
             knowledgeBaseIds = ragKnowledgeBaseRepository.findActiveIds();
         } catch (Exception e) {
-            long durationMs = 0L;
             log.warn("DIH RAG knowledge base lookup failed: mode={}, reason=knowledge_base_lookup_error",
                     mode, e);
-            recordChatRetrieval(query, durationMs, List.of(), "retrieval_error", e.getMessage());
-            return new RagContext("", true, false, 0, durationMs, "retrieval_error");
+            return complete(query, mode, "all", List.of(), startedAtNanos, startedAt,
+                    List.of(), "knowledge_base_lookup_error", e.getMessage());
         }
-        return retrieve(query, mode, knowledgeBaseIds, "no_knowledge_base");
+        return retrieveInternal(query, mode, knowledgeBaseIds, "all", "no_knowledge_base",
+                startedAtNanos, startedAt);
     }
 
     /**
      * 业务 Agent / Skill：只在显式绑定的知识库范围内检索；空范围不查询向量库。
      */
     public RagContext retrieve(String query, String mode, List<Integer> knowledgeBaseIds) {
-        return retrieve(query, mode, knowledgeBaseIds, "no_bound_knowledge_base");
+        long startedAtNanos = System.nanoTime();
+        Instant startedAt = Instant.now();
+        return retrieveInternal(query, mode, knowledgeBaseIds, "bound", "no_bound_knowledge_base",
+                startedAtNanos, startedAt);
     }
 
-    private RagContext retrieve(String query,
-                                String mode,
-                                List<Integer> knowledgeBaseIds,
-                                String emptyScopeReason) {
-        long startedAt = System.nanoTime();
+    private RagContext retrieveInternal(String query,
+                                        String mode,
+                                        List<Integer> knowledgeBaseIds,
+                                        String scopeType,
+                                        String emptyScopeReason,
+                                        long startedAtNanos,
+                                        Instant startedAt) {
+        List<Integer> scopedKnowledgeBaseIds = normalizeKnowledgeBaseIds(knowledgeBaseIds);
         if (!StringUtils.hasText(query)) {
-            return finish(mode, startedAt, true, List.of(), "empty_query", query);
+            return complete(query, mode, scopeType, scopedKnowledgeBaseIds, startedAtNanos,
+                    startedAt, List.of(), "empty_query", null);
         }
         if (!embeddingProperties.isEnabled()) {
-            return finish(mode, startedAt, true, List.of(), "embedding_disabled", query);
+            return complete(query, mode, scopeType, scopedKnowledgeBaseIds, startedAtNanos,
+                    startedAt, List.of(), "embedding_disabled", null);
         }
-        List<Integer> scopedKnowledgeBaseIds = knowledgeBaseIds == null
-                ? List.of()
-                : new LinkedHashSet<>(knowledgeBaseIds).stream()
-                .filter(java.util.Objects::nonNull)
-                .toList();
         if (scopedKnowledgeBaseIds.isEmpty()) {
-            return finish(mode, startedAt, true, List.of(), emptyScopeReason, query);
+            return complete(query, mode, scopeType, scopedKnowledgeBaseIds, startedAtNanos,
+                    startedAt, List.of(), emptyScopeReason, null);
         }
         try {
             List<Object> knowledgeBaseSources = scopedKnowledgeBaseIds.stream()
@@ -108,60 +126,82 @@ public class RagContextService {
                     .filter(document -> document != null && StringUtils.hasText(document.getText()))
                     .toList();
             String reason = usableDocuments.isEmpty() ? "no_match" : "ok";
-            return finish(mode, startedAt, true, usableDocuments, reason, query);
+            return complete(query, mode, scopeType, scopedKnowledgeBaseIds, startedAtNanos,
+                    startedAt, usableDocuments, reason, null);
         } catch (Exception e) {
-            long durationMs = elapsedMillis(startedAt);
+            long durationMs = elapsedMillis(startedAtNanos);
             log.warn("DIH RAG retrieval degraded: mode={}, rag_requested=true, rag_used=false, "
                             + "document_count=0, duration_ms={}, reason=retrieval_error",
                     mode, durationMs, e);
-            recordChatRetrieval(query, durationMs, List.of(), "retrieval_error", e.getMessage());
-            return new RagContext("", true, false, 0, durationMs, "retrieval_error");
+            return complete(query, mode, scopeType, scopedKnowledgeBaseIds, startedAtNanos,
+                    startedAt, List.of(), "retrieval_error", e.getMessage());
         }
     }
 
-    private RagContext finish(String mode,
-                              long startedAt,
-                              boolean requested,
-                              List<Document> documents,
-                              String reason,
-                              String query) {
-        long durationMs = elapsedMillis(startedAt);
-        boolean used = !documents.isEmpty();
+    private RagContext complete(String query,
+                                String mode,
+                                String scopeType,
+                                List<Integer> knowledgeBaseIds,
+                                long startedAtNanos,
+                                Instant startedAt,
+                                List<Document> documents,
+                                String reason,
+                                String errorMessage) {
+        long durationMs = elapsedMillis(startedAtNanos);
+        List<RagSearchResult> results = toSearchResults(documents);
+        boolean used = !results.isEmpty();
         String context = used ? formatDocuments(documents) : "";
-        log.info("DIH RAG retrieval completed: mode={}, rag_requested={}, rag_used={}, "
+        String status = toDisplayStatus(reason);
+        log.info("DIH RAG retrieval completed: mode={}, rag_requested=true, rag_used={}, "
                         + "document_count={}, duration_ms={}, reason={}",
-                mode, requested, used, documents.size(), durationMs, reason);
-        recordChatRetrieval(query, durationMs, documents, reason, null);
-        return new RagContext(context, requested, used, documents.size(), durationMs, reason);
+                mode, used, results.size(), durationMs, reason);
+        RagSearchEventData searchEvent = RagSearchEventData.builder()
+                .searchId(UUID.randomUUID().toString())
+                .query(truncate(query, MAX_DISPLAY_TEXT))
+                .mode(mode)
+                .scopeType(scopeType)
+                .knowledgeBaseIds(knowledgeBaseIds)
+                .topK(TOP_K)
+                .status(status)
+                .reason(reason)
+                .hitCount(results.size())
+                .durationMillis(durationMs)
+                .startedAt(startedAt.toString())
+                .completedAt(Instant.now().toString())
+                .results(results)
+                .error(errorMessage)
+                .build();
+        recordChatRetrieval(query, durationMs, results, knowledgeBaseIds, reason, errorMessage);
+        return new RagContext(context, true, used, results.size(), durationMs, reason, searchEvent);
     }
 
-    private void recordChatRetrieval(String query, long durationMs, List<Document> documents,
-                                     String status, String errorMessage) {
+    private void recordChatRetrieval(String query,
+                                     long durationMs,
+                                     List<RagSearchResult> results,
+                                     List<Integer> knowledgeBaseIds,
+                                     String status,
+                                     String errorMessage) {
         try {
-            // 按命中数最多的知识库归属，便于按知识库查看审计记录
-            Integer kbId = RagRetrievalLogService.dominantKnowledgeBaseId(
-                    documents == null ? List.of()
-                            : documents.stream().map(Document::getMetadata).toList());
-            List<Object> summaries = documents == null ? List.of() : documents.stream()
-                    .map(doc -> {
-                        Map<String, Object> md = doc.getMetadata();
-                        return RagRetrievalLogService.summary(
-                                doc.getId(),
-                                RagRetrievalLogService.stringValue(md.get("source")),
-                                RagRetrievalLogService.stringValue(md.get("knowledge_base_name")),
-                                RagRetrievalLogService.stringValue(md.get("dataset_name")),
-                                RagRetrievalLogService.stringValue(md.get("file_name")),
-                                doc.getText());
-                    })
-                    .map(s -> (Object) s)
+            Integer kbId = dominantKnowledgeBaseId(results);
+            if (kbId == null && knowledgeBaseIds.size() == 1) {
+                kbId = knowledgeBaseIds.get(0);
+            }
+            List<Object> summaries = results == null ? List.of() : results.stream()
+                    .map(result -> (Object) RagRetrievalLogService.summary(
+                            result.getDocumentId(),
+                            result.getSource(),
+                            result.getKnowledgeBaseName(),
+                            result.getDatasetName(),
+                            result.getFileName(),
+                            result.getText()))
                     .toList();
             RagRetrievalLog entity = new RagRetrievalLog()
                     .setRequestType(RagRetrievalLog.REQUEST_TYPE_CHAT)
                     .setQueryText(query == null ? "" : query)
                     .setTopK(TOP_K)
                     .setKnowledgeBaseId(kbId)
-                    .setDocumentCount(documents == null ? 0 : documents.size())
-                    .setStatus(status)
+                    .setDocumentCount(results == null ? 0 : results.size())
+                    .setStatus(toAuditStatus(status))
                     .setDurationMs(durationMs)
                     .setResultJson(ragRetrievalLogService.toResultJson(summaries))
                     .setErrorMessage(errorMessage);
@@ -169,6 +209,31 @@ public class RagContextService {
         } catch (Exception e) {
             log.warn("记录问答检索日志失败", e);
         }
+    }
+
+    private List<RagSearchResult> toSearchResults(List<Document> documents) {
+        if (documents == null || documents.isEmpty()) {
+            return List.of();
+        }
+        List<RagSearchResult> results = new ArrayList<>(documents.size());
+        for (Document document : documents) {
+            if (document == null || !StringUtils.hasText(document.getText())) {
+                continue;
+            }
+            Map<String, Object> metadata = document.getMetadata() == null
+                    ? Map.of() : document.getMetadata();
+            String source = stringValue(metadata.get("source"));
+            results.add(RagSearchResult.builder()
+                    .documentId(document.getId())
+                    .knowledgeBaseId(resolveKnowledgeBaseId(metadata.get("knowledge_base_id"), source))
+                    .knowledgeBaseName(stringValue(metadata.get("knowledge_base_name")))
+                    .datasetName(stringValue(metadata.get("dataset_name")))
+                    .fileName(stringValue(metadata.get("file_name")))
+                    .source(source)
+                    .text(truncate(document.getText().trim(), MAX_DISPLAY_TEXT))
+                    .build());
+        }
+        return List.copyOf(results);
     }
 
     private String formatDocuments(List<Document> documents) {
@@ -186,6 +251,85 @@ public class RagContextService {
         return context.toString();
     }
 
+    private static List<Integer> normalizeKnowledgeBaseIds(List<Integer> knowledgeBaseIds) {
+        if (knowledgeBaseIds == null) {
+            return List.of();
+        }
+        return new LinkedHashSet<>(knowledgeBaseIds).stream()
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    private static String toAuditStatus(String reason) {
+        if (RagRetrievalLog.STATUS_OK.equals(reason)
+                || RagRetrievalLog.STATUS_NO_MATCH.equals(reason)
+                || RagRetrievalLog.STATUS_EMPTY_QUERY.equals(reason)
+                || RagRetrievalLog.STATUS_EMBEDDING_DISABLED.equals(reason)) {
+            return reason;
+        }
+        return RagRetrievalLog.STATUS_RETRIEVAL_ERROR;
+    }
+
+    private static String toDisplayStatus(String reason) {
+        if ("ok".equals(reason)) {
+            return "succeeded";
+        }
+        if ("no_match".equals(reason)) {
+            return "empty";
+        }
+        if ("retrieval_error".equals(reason)) {
+            return "failed";
+        }
+        return "skipped";
+    }
+
+    private static Integer resolveKnowledgeBaseId(Object metadataValue, String source) {
+        Integer fromMetadata = toInteger(metadataValue);
+        if (fromMetadata != null) {
+            return fromMetadata;
+        }
+        Matcher matcher = KNOWLEDGE_BASE_SOURCE_PATTERN.matcher(source == null ? "" : source);
+        return matcher.matches() ? toInteger(matcher.group(1)) : null;
+    }
+
+    private static Integer toInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static Integer dominantKnowledgeBaseId(List<RagSearchResult> results) {
+        if (results == null || results.isEmpty()) {
+            return null;
+        }
+        Map<Integer, Long> counts = new LinkedHashMap<>();
+        for (RagSearchResult result : results) {
+            if (result.getKnowledgeBaseId() != null) {
+                counts.merge(result.getKnowledgeBaseId(), 1L, Long::sum);
+            }
+        }
+        return counts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() > maxLength ? value.substring(0, maxLength) + "..." : value;
+    }
+
     private long elapsedMillis(long startedAt) {
         return (System.nanoTime() - startedAt) / 1_000_000L;
     }
@@ -196,7 +340,16 @@ public class RagContextService {
             boolean used,
             int documentCount,
             long durationMs,
-            String reason
+            String reason,
+            RagSearchEventData searchEvent
     ) {
+        public RagContext(String systemPrompt,
+                          boolean requested,
+                          boolean used,
+                          int documentCount,
+                          long durationMs,
+                          String reason) {
+            this(systemPrompt, requested, used, documentCount, durationMs, reason, null);
+        }
     }
 }

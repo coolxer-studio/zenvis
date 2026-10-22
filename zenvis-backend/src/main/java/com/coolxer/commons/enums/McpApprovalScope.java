@@ -4,5 +4,6 @@ public enum McpApprovalScope {
     ONCE,
     SESSION,
     TASK_AUTO,
-    TASK_RUN
+    TASK_RUN,
+    RUN
 }

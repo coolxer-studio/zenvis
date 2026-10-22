@@ -45,4 +45,18 @@ public class ChatStreamEvent {
                 .data(data)
                 .build();
     }
+
+    public static ChatStreamEvent ragSearch(Object data) {
+        return ChatStreamEvent.builder()
+                .event("rag_search")
+                .data(data)
+                .build();
+    }
+
+    public static ChatStreamEvent toolCall(Object data) {
+        return ChatStreamEvent.builder()
+                .event("tool_call")
+                .data(data)
+                .build();
+    }
 }

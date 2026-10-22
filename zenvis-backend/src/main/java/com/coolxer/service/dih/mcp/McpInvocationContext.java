@@ -82,6 +82,14 @@ public record McpInvocationContext(
         return cancelled != null && cancelled.getAsBoolean();
     }
 
+    public boolean isAgentRun() {
+        return isAgentRunTurn(turnId);
+    }
+
+    public static boolean isAgentRunTurn(String turnId) {
+        return turnId != null && turnId.startsWith("run:");
+    }
+
     /**
      * Deterministic demos are meant to demonstrate the real MCP approval
      * boundary. Their default-ASK tools must therefore request approval on

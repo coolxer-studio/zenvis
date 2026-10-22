@@ -281,7 +281,7 @@ class AgentMcpToolServiceTest {
                                 "payload_decode_base64",
                                 "ioc_lookup"))
                 ),
-                new SkillRuntimeLimitsVo(16, 2, 12000, 48000, 12000)
+                new SkillRuntimeLimitsVo(16, 2, 12000, 48000, 12000, 8192)
         );
         when(skillService.resolveRuntimeConfig(List.of("jmr-continuous-threat-analysis")))
                 .thenReturn(runtime);
@@ -310,6 +310,7 @@ class AgentMcpToolServiceTest {
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.skillRuntime()).isSameAs(runtime);
+        assertThat(context.skillRuntime().getLimits().getMaxOutputTokens()).isEqualTo(8192);
         assertThat(context.toolRuntimeContext()).isNotNull();
         assertThat(context.systemPrompt())
                 .contains("retrieval_search", "retrieval_list_attribute")

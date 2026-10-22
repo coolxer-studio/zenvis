@@ -23,6 +23,75 @@ import static org.mockito.Mockito.when;
 class McpApprovalToolCallbackProviderTest {
 
     @Test
+    void normalizesNestedDefinitionsBeforeExposingToolSchema() throws Exception {
+        String brokenSchema = """
+                {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "$defs": {
+                        "Criteria": {
+                          "type": "object",
+                          "properties": {"value_list": {"type": "array"}}
+                        }
+                      },
+                      "type": "object",
+                      "properties": {
+                        "criteria": {
+                          "type": "array",
+                          "items": {"$ref": "#/$defs/Criteria"}
+                        }
+                      }
+                    }
+                  }
+                }
+                """;
+        ToolCallback delegate = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("entity_trend")
+                        .description("test")
+                        .inputSchema(brokenSchema)
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "{}";
+            }
+        };
+        McpToolDescriptor descriptor = new McpToolDescriptor(
+                "local::entity_trend",
+                McpToolSourceType.LOCAL,
+                null,
+                "retrieval",
+                "检索服务",
+                "entity_trend",
+                "entity_trend",
+                null,
+                "test",
+                true,
+                false,
+                McpToolRiskLevel.LOW,
+                McpApprovalPolicy.ALLOW
+        );
+        McpApprovalToolCallbackProvider provider = new McpApprovalToolCallbackProvider(
+                () -> new ToolCallback[]{delegate},
+                Map.of("entity_trend", descriptor),
+                mock(McpApprovalService.class),
+                mock(McpToolPolicyService.class)
+        );
+
+        String schema = provider.getToolCallbacks()[0].getToolDefinition().inputSchema();
+
+        assertThat(schema)
+                .doesNotContain("$defs")
+                .doesNotContain("$ref")
+                .contains("\"value_list\"");
+    }
+
+    @Test
     void doesNotForwardInternalRuntimeObjectsAsExternalMcpMetadata() throws Exception {
         AtomicReference<ToolContext> forwardedContext = new AtomicReference<>();
         ToolCallback delegate = new ToolCallback() {

@@ -444,7 +444,8 @@ public class AgentMcpToolService {
                         maxRepeatedFailures,
                         maxToolResultChars,
                         maxAccumulatedToolResultChars,
-                        maxAccumulatedToolResultTokens
+                        maxAccumulatedToolResultTokens,
+                        current == null ? null : current.getMaxOutputTokens()
                 )
         );
     }

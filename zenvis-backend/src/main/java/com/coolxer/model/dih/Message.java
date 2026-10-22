@@ -32,6 +32,14 @@ public class Message {
      * 用户消息携带的附件；历史消息没有该字段时前端忽略。
      */
     private List<ChatAttachment> attachments;
+    /**
+     * 产生该消息的持久化 Agent Run。
+     */
+    private String runId;
+    /**
+     * 内部执行消息不进入普通会话消息渲染。
+     */
+    private Boolean internal;
     public Message(String sender, String content) {
         this.id = UUID.randomUUID().toString();
         this.sender = sender;

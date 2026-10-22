@@ -62,6 +62,20 @@ class DihChatExecutionBoundaryTest {
     }
 
     @Test
+    void agentDispatchResolvesAutoModelInsteadOfSendingItToProvider() {
+        Fixture fixture = fixture();
+        when(fixture.baseService.resolveChatModel("auto", false, false))
+                .thenReturn("deepseek-v4-flash");
+
+        assertThat(fixture.service.resolveDispatchModel("auto", false, chatDto("ask", false)))
+                .isEqualTo("deepseek-v4-flash");
+        assertThat(fixture.service.resolveDispatchModel("model-1", false, chatDto("ask", false)))
+                .isEqualTo("model-1");
+        verify(fixture.baseService).resolveChatModel("auto", false, false);
+        verify(fixture.baseService, never()).resolveChatModel("model-1", false, false);
+    }
+
+    @Test
     void agentIgnoresDeepThinkingAndOnlyResolvesAgentMcp() {
         Fixture fixture = fixture();
         when(fixture.skillService.isBuiltinAgentEnabled(

@@ -6,6 +6,7 @@ import com.coolxer.model.dih.dto.ChatSessionDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -74,6 +75,10 @@ public class ChatSession extends BaseEntity {
      */
     @Column()
     private Boolean pin;
+
+    @Version
+    @Column(name = "lock_version", nullable = false, columnDefinition = "BIGINT DEFAULT 0")
+    private Long lockVersion = 0L;
 
     public void updateFromDto(ChatSessionDto chatSessionDto) {
         if (StringUtils.isNotEmpty(chatSessionDto.getSessionId())) {

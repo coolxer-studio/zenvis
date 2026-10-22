@@ -12,6 +12,7 @@ import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.ChatMessagePart;
 import com.coolxer.model.dih.Message;
+import com.coolxer.model.dih.RagSearchEventData;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.dto.ChatSessionSearchDto;
@@ -32,6 +33,7 @@ import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.utils.JacksonUtil;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
@@ -122,6 +124,270 @@ class DihChatApplicationServiceTest {
                 .allMatch(part -> "failed".equals(part.getStatus()));
         assertThat(parts).anyMatch(part ->
                 "notice".equals(part.getType()) && part.getContent().contains("重复"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void truncatedReportHidesRawHtmlAndAddsActionableNotice() {
+        DihChatApplicationService service = emptyService();
+        ReportActionDto action = new ReportActionDto();
+        action.setType(ReportActionDto.FULL_REWRITE);
+        String raw = """
+                正在生成本期报表。
+
+                ```zenvis:report-document-config
+                <!DOCTYPE html>
+                <html lang="zh-CN"><body><p>分布特征解读：
+                """;
+        ChatMessagePart leakedMarkdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content(raw)
+                .build();
+
+        List<ChatMessagePart> parts = ReflectionTestUtils.invokeMethod(
+                service,
+                "applyReportProtocol",
+                List.of(leakedMarkdown),
+                raw,
+                action,
+                List.of(),
+                "message-1",
+                null,
+                true
+        );
+
+        assertThat(parts).isNotNull();
+        assertThat(parts).noneMatch(part -> part.getContent() != null
+                && part.getContent().toLowerCase().contains("<!doctype html"));
+        assertThat(parts).anyMatch(part -> "notice".equals(part.getType())
+                && "报表输出被截断".equals(part.getTitle())
+                && part.getContent().contains("未完整生成"));
+        assertThat(parts).anyMatch(part -> "markdown".equals(part.getType())
+                && "正在生成本期报表。".equals(part.getContent()));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void unclosedReportFenceWithoutLengthSignalIsReportedAsIncomplete() {
+        DihChatApplicationService service = emptyService();
+        String raw = """
+                报表生成中。
+
+                ```zenvis:report-document-config
+                <html><body><p>未闭合
+                """;
+        ChatMessagePart leakedMarkdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content(raw)
+                .build();
+
+        List<ChatMessagePart> parts = ReflectionTestUtils.invokeMethod(
+                service,
+                "applyReportProtocol",
+                List.of(leakedMarkdown),
+                raw,
+                null,
+                List.of(),
+                "message-2",
+                null,
+                false
+        );
+
+        assertThat(parts).isNotNull();
+        assertThat(parts).noneMatch(part -> part.getContent() != null
+                && part.getContent().toLowerCase().contains("<html"));
+        assertThat(parts).anyMatch(part -> "notice".equals(part.getType())
+                && "报表格式不完整".equals(part.getTitle()));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void truncatedReportMessageFallbackExcludesRawHtml() {
+        DihChatApplicationService service = streamingService();
+        ReportActionDto action = new ReportActionDto();
+        action.setType(ReportActionDto.FULL_REWRITE);
+        String raw = """
+                即将生成报表。
+
+                ```zenvis:report-document-config
+                <!DOCTYPE html>
+                <html><body><p>未完成
+                """;
+
+        Message message = ReflectionTestUtils.invokeMethod(
+                service,
+                "saveAiResponse",
+                null,
+                null,
+                raw,
+                MessageType.TEXT,
+                true,
+                false,
+                List.of(),
+                null,
+                null,
+                action,
+                true
+        );
+
+        assertThat(message).isNotNull();
+        assertThat(message.getContent())
+                .isEqualTo("即将生成报表。")
+                .doesNotContain("<!DOCTYPE html", "<html");
+        assertThat(message.getParts()).anyMatch(part -> "notice".equals(part.getType())
+                && "报表输出被截断".equals(part.getTitle()));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void eventStreamEmitsOneRagSearchAndPersistsItBeforeAnswer() {
+        DihChatApplicationService service = streamingService();
+        RagSearchEventData event = RagSearchEventData.builder()
+                .searchId("rag-1")
+                .query("接入链路")
+                .mode("ask")
+                .scopeType("all")
+                .knowledgeBaseIds(List.of(1, 2))
+                .topK(6)
+                .status("succeeded")
+                .reason("ok")
+                .hitCount(1)
+                .durationMillis(43L)
+                .startedAt("2026-10-22T10:00:00Z")
+                .completedAt("2026-10-22T10:00:00.043Z")
+                .results(List.of(RagSearchEventData.RagSearchResult.builder()
+                        .documentId("doc-1")
+                        .knowledgeBaseId(1)
+                        .knowledgeBaseName("产品文档")
+                        .fileName("quick-start.md")
+                        .source("kb_1")
+                        .text("接入链路说明")
+                        .build()))
+                .build();
+        String marker = RagSearchEventData.STREAM_MARKER_PREFIX + JacksonUtil.toJson(event);
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.just(marker, "最终回答"),
+                null,
+                null,
+                true,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        List<String> events = response.collectList().block();
+        assertThat(events).hasSize(3);
+        assertThat(events.get(0)).contains("\"event\":\"rag_search\"");
+        assertThat(events.get(0)).doesNotContain(RagSearchEventData.STREAM_MARKER_PREFIX);
+        Map<String, Object> ragEvent = JacksonUtil.toMap(
+                events.get(0), new TypeReference<Map<String, Object>>() {
+                });
+        Map<String, Object> ragData = (Map<String, Object>) ragEvent.get("data");
+        assertThat(ragData)
+                .containsEntry("searchId", "rag-1")
+                .containsEntry("query", "接入链路")
+                .containsEntry("scopeType", "all")
+                .containsEntry("status", "succeeded")
+                .containsEntry("hitCount", 1);
+        assertThat(events.get(1)).contains("\"delta\"").contains("最终回答");
+
+        Map<String, Object> doneEvent = JacksonUtil.toMap(
+                events.get(2), new TypeReference<Map<String, Object>>() {
+                });
+        Map<String, Object> message = (Map<String, Object>) doneEvent.get("message");
+        List<Map<String, Object>> parts = (List<Map<String, Object>>) message.get("parts");
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0))
+                .containsEntry("id", "rag-1")
+                .containsEntry("type", "rag-search")
+                .containsEntry("status", "succeeded")
+                .containsEntry("content", "知识库检索 · 1 个来源");
+        assertThat((Map<String, Object>) parts.get(0).get("metadata"))
+                .containsEntry("hitCount", 1)
+                .containsEntry("reason", "ok");
+        assertThat(parts.get(1)).containsEntry("type", "markdown");
+        assertThat(String.valueOf(parts.get(1).get("content"))).contains("最终回答");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void nonEventStreamDropsInternalRagMarker() {
+        DihChatApplicationService service = streamingService();
+        RagSearchEventData event = RagSearchEventData.builder()
+                .searchId("rag-hidden")
+                .query("问题")
+                .mode("ask")
+                .scopeType("all")
+                .status("empty")
+                .reason("no_match")
+                .hitCount(0)
+                .results(List.of())
+                .build();
+        String marker = RagSearchEventData.STREAM_MARKER_PREFIX + JacksonUtil.toJson(event);
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.just(marker, "最终回答"),
+                null,
+                null,
+                false,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        List<String> chunks = response.collectList().block();
+        assertThat(chunks).containsExactly("最终回答");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void eventStreamConsumesTruncationMarkerWithoutExposingOrPersistingIt() {
+        DihChatApplicationService service = streamingService();
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.just("半截回答", AIChatService.OUTPUT_TRUNCATED_MARKER),
+                null,
+                null,
+                true,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        List<String> events = response.collectList().block();
+        assertThat(events).hasSize(2);
+        assertThat(events.get(0)).contains("\"delta\"").contains("半截回答");
+        assertThat(events.get(1))
+                .contains("\"event\":\"done\"")
+                .doesNotContain(AIChatService.OUTPUT_TRUNCATED_MARKER_PREFIX);
+        assertThat(events).noneMatch(event -> event.contains(AIChatService.OUTPUT_TRUNCATED_MARKER_PREFIX));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void nonEventStreamDropsTruncationMarker() {
+        DihChatApplicationService service = streamingService();
+
+        Flux<String> response = ReflectionTestUtils.invokeMethod(
+                service,
+                "emitAndSaveTextResponse",
+                Flux.just("半截回答", AIChatService.OUTPUT_TRUNCATED_MARKER),
+                null,
+                null,
+                false,
+                new AtomicReference<>(MessageType.TEXT),
+                false
+        );
+
+        assertThat(response).isNotNull();
+        assertThat(response.collectList().block()).containsExactly("半截回答");
     }
 
     @Test
@@ -220,6 +486,23 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
+    void invalidToolSchemaUsesActionableErrorMessage() {
+        DihChatApplicationService service = emptyService();
+        WebClientResponseException providerError = providerBadRequest("""
+                {"error":{"message":"Invalid schema for function 'entity_trend': Pointer '/$defs/RequestCriteriaDto' does not exist"}}
+                """);
+
+        String message = ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveChatErrorMessage",
+                new IllegalStateException("wrapped provider failure", providerError)
+        );
+
+        assertThat(message)
+                .isEqualTo("模型服务无法加载当前智能体的工具定义，请联系管理员检查工具参数后重试。");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void nonEventStreamReturnsSameContextLengthExceededMessage() {
         DihChatApplicationService service = emptyService();
@@ -301,6 +584,134 @@ class DihChatApplicationServiceTest {
         assertThat(parts.get(1).getContent()).contains("\n  \"request\"");
         assertThat(parts.get(3).getLanguage()).isEqualTo("json");
         assertThat(parts.get(3).getContent()).contains("\n  \"id\" : 502");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void mcpToolLogStreamKeepsConcurrentCallsSeparateAndMergesByCallId() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("create");
+        var emit = streamType.getDeclaredMethod(
+                "emit", McpToolCallLoggingProvider.McpToolCallLog.class);
+        var toolParts = streamType.getDeclaredMethod("toolParts");
+        var evidenceRefs = streamType.getDeclaredMethod("evidenceRefs");
+        create.setAccessible(true);
+        emit.setAccessible(true);
+        toolParts.setAccessible(true);
+        evidenceRefs.setAccessible(true);
+
+        Object stream = create.invoke(null);
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.started(
+                "call-a", "search", "{\"q\":\"a\",\"limit\":20}", "{\"q\":\"a\",\"limit\":20}"));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.started(
+                "call-b", "search", "{\"q\":\"b\",\"limit\":20}", "{\"q\":\"b\",\"limit\":20}"));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.succeeded(
+                "call-a", "search", 41L, "{\"total\":1}", "{\"total\":1}"));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.failed(
+                "call-b", "search", 17L, "timeout"));
+
+        List<ChatMessagePart> parts = (List<ChatMessagePart>) toolParts.invoke(stream);
+
+        assertThat(parts).extracting(ChatMessagePart::getId)
+                .containsExactly("call-a", "call-b");
+        assertThat(parts).extracting(ChatMessagePart::getStatus)
+                .containsExactly("succeeded", "failed");
+        assertThat(parts.get(0).getMetadata())
+                .containsEntry("arguments", "{\"q\":\"a\",\"limit\":20}")
+                .containsEntry("durationMillis", 41L)
+                .containsEntry("error", null);
+        assertThat(JacksonUtil.toMap(
+                String.valueOf(parts.get(0).getMetadata().get("result")),
+                new TypeReference<Map<String, Object>>() {
+                })).containsEntry("total", 1);
+        assertThat(parts.get(1).getMetadata())
+                .containsEntry("arguments", "{\"q\":\"b\",\"limit\":20}")
+                .containsEntry("error", "timeout")
+                .containsEntry("durationMillis", 17L);
+
+        List<Map<String, Object>> evidence =
+                (List<Map<String, Object>>) evidenceRefs.invoke(stream);
+        assertThat(evidence).hasSize(1);
+        assertThat(evidence.get(0))
+                .containsEntry("tool", "search")
+                .containsEntry("argumentsSummary", "{\"q\":\"a\",\"limit\":20}");
+    }
+
+    @Test
+    void mcpToolLogStreamSelectsLatestStartedSuccessfulCallBySequence() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("create");
+        var emit = streamType.getDeclaredMethod(
+                "emit", McpToolCallLoggingProvider.McpToolCallLog.class);
+        var successfulCall = streamType.getDeclaredMethod("successfulCall", String.class);
+        create.setAccessible(true);
+        emit.setAccessible(true);
+        successfulCall.setAccessible(true);
+
+        Object stream = create.invoke(null);
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.started(
+                "call-b", "search", "{\"q\":\"b\"}", "{\"q\":\"b\"}"));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.started(
+                "call-a", "search", "{\"q\":\"a\"}", "{\"q\":\"a\"}"));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.succeeded(
+                "call-a", "search", 11L, "{\"total\":1}", "{\"total\":1}"));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.succeeded(
+                "call-b", "search", 22L, "{\"total\":2}", "{\"total\":2}"));
+
+        Object latest = successfulCall.invoke(stream, "search");
+
+        assertThat((String) ReflectionTestUtils.invokeMethod(latest, "callId")).isEqualTo("call-a");
+        assertThat((String) ReflectionTestUtils.invokeMethod(latest, "arguments"))
+                .isEqualTo("{\"q\":\"a\"}");
+        assertThat((String) ReflectionTestUtils.invokeMethod(latest, "result"))
+                .isEqualTo("{\"total\":1}");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void mcpToolLogStreamUnwrapsNestedTextResultForDisplay() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("create");
+        var emit = streamType.getDeclaredMethod(
+                "emit", McpToolCallLoggingProvider.McpToolCallLog.class);
+        var toolParts = streamType.getDeclaredMethod("toolParts");
+        create.setAccessible(true);
+        emit.setAccessible(true);
+        toolParts.setAccessible(true);
+
+        Object stream = create.invoke(null);
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.started(
+                "call-wrapped", "lab_note_search", "{\"keyword\":\"接入\"}", "{\"keyword\":\"接入\"}"));
+        String nested = JacksonUtil.toJson(Map.of(
+                "rows", List.of(Map.of("id", 3, "title", "最后验证 Agent 能力")),
+                "total", 1));
+        String wrapped = JacksonUtil.toJson(List.of(Map.of("text", nested)));
+        emit.invoke(stream, McpToolCallLoggingProvider.McpToolCallLog.succeeded(
+                "call-wrapped", "lab_note_search", 41L, wrapped, wrapped));
+
+        List<ChatMessagePart> parts = (List<ChatMessagePart>) toolParts.invoke(stream);
+        String result = String.valueOf(parts.get(0).getMetadata().get("result"));
+        Map<String, Object> parsed = JacksonUtil.toMap(
+                result,
+                new TypeReference<Map<String, Object>>() {
+                });
+
+        assertThat(result).doesNotContain("\\\"rows\\\"", "\"text\"");
+        assertThat(parsed).containsEntry("total", 1);
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) parsed.get("rows");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0))
+                .containsEntry("id", 3)
+                .containsEntry("title", "最后验证 Agent 能力");
     }
 
     @Test
@@ -605,6 +1016,33 @@ class DihChatApplicationServiceTest {
                 .contains("网络流量（traffic）", "创建时间（zenvis_insert_time，time）",
                         "事实类型（fact_type，dimension）");
 
+        ChatMessagePart categorizedPlan = ChatMessagePart.builder()
+                .type("confirm")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "data_visualization.confirm_query_plan",
+                        "planId", "plan-category-kind",
+                        "query", Map.of(
+                                "tool", "entity_aggregate",
+                                "request", Map.of(
+                                        "entity", "traffic",
+                                        "dimensions", List.of(Map.of(
+                                                "name", "fact_type",
+                                                "field", "fact_type",
+                                                "kind", "CATEGORY")))))))
+                .build();
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                null, List.of(categorizedPlan), evidence);
+        assertThat(categorizedPlan.getStatus()).isEqualTo("pending");
+        Map<String, Object> categorizedQuery =
+                (Map<String, Object>) categorizedPlan.getMetadata().get("query");
+        Map<String, Object> categorizedRequest =
+                (Map<String, Object>) categorizedQuery.get("request");
+        assertThat((List<Map<String, Object>>) categorizedRequest.get("dimensions"))
+                .singleElement()
+                .satisfies(dimension -> assertThat(dimension)
+                        .containsEntry("kind", "FIELD"));
+
         ChatMessagePart hallucinatedFieldPlan = ChatMessagePart.builder()
                 .type("confirm")
                 .status("pending")
@@ -804,12 +1242,23 @@ class DihChatApplicationServiceTest {
                                     String tool,
                                     String arguments,
                                     String result) throws Exception {
+        String callId = java.util.UUID.randomUUID().toString();
         emit.invoke(evidence,
                 McpToolCallLoggingProvider.McpToolCallLog.started(
-                        tool, arguments, arguments));
+                        callId, tool, arguments, arguments));
         emit.invoke(evidence,
                 McpToolCallLoggingProvider.McpToolCallLog.succeeded(
-                        tool, 1L, result, result));
+                        callId, tool, 1L, result, result));
+    }
+
+    private DihChatApplicationService streamingService() {
+        return new DihChatApplicationService(
+                null, null, null, null, null, null,
+                (ReportAgent) null, (DataAccessAgent) null, (DataVisualizationAgent) null,
+                new ChatMessagePartParser(), null, null,
+                (AgentMcpToolService) null, (SkillService) null,
+                null, (PushTaskService) null, (DashboardService) null, (MenuService) null
+        );
     }
 
     private DihChatApplicationService emptyService() {

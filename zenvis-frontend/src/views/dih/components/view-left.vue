@@ -150,7 +150,9 @@ const props = defineProps<{
   systemInfo?: SystemInfo;
   userInfo?: { name?: string; email?: string };
 }>();
-const emit = defineEmits<{ (event: 'navigate'): void }>();
+const emit = defineEmits<{
+  (event: 'navigate'): void;
+}>();
 
 const router = useRouter();
 const route = useRoute();
@@ -360,7 +362,10 @@ onMounted(() => {
 }
 
 .chat-action {
+  display: flex;
   margin: var(--zv-space-4) 0 var(--zv-space-5);
+  flex-direction: column;
+  gap: 8px;
 }
 
 .new-chat-btn {

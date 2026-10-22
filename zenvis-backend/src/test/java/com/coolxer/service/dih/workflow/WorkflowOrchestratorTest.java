@@ -222,4 +222,35 @@ class WorkflowOrchestratorTest {
                 .containsEntry("step", "BLOCKED")
                 .containsEntry("validationStatus", "blocked");
     }
+
+    @Test
+    void failedVisualizationQueryCardIsBlockedAndRetryable() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession session = new ChatSession()
+                .setType("agent_data_visualization");
+        ChatMessagePart failure = ChatMessagePart.builder()
+                .id("query-failure")
+                .type("confirm")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "data_visualization.execute_approved_query",
+                        "query", Map.of(
+                                "tool", "entity_aggregate",
+                                "request", Map.of("entity", "user_event")),
+                        "planId", "plan-1")))
+                .build();
+
+        orchestrator.prepareParts(
+                session, List.of(failure), List.of(), "message-1");
+
+        assertThat(failure.getStatus()).isEqualTo("blocked");
+        assertThat(failure.getMetadata())
+                .containsEntry("step", "BLOCKED")
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("blockedAction",
+                        "data_visualization.execute_approved_query")
+                .containsEntry("allowedActions", List.of("retry", "revise"))
+                .doesNotContainKey("action");
+    }
 }

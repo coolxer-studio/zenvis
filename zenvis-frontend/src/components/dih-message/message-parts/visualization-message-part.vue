@@ -36,6 +36,17 @@
     </div>
     <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
     <div v-if="part.content" class="visualization-chart-preview-desc">{{ part.content }}</div>
+    <div v-if="interactive && isWorkflowRetryable" class="confirm-actions">
+      <el-button
+        size="small"
+        type="primary"
+        :loading="workflowRetryInFlight"
+        :disabled="workflowRetryInFlight"
+        @click="requestWorkflowRetry"
+      >
+        重试当前阶段
+      </el-button>
+    </div>
     <SafeEcharts
       :option="chartPreviewOption"
       :loading="part.status === 'loading'"
@@ -89,16 +100,26 @@ import {
 import SafeEcharts from '@/components/visualization/safe-echarts.vue';
 import type { ChatMessagePart } from '@/types/type-dih';
 import { metadataJsonText, metadataText, useDefaultExpanded } from './message-part-context';
+import { workflowRevision } from '../workflow-card-state';
 
 const props = defineProps<{
   part: ChatMessagePart;
   interactive?: boolean;
+  workflowCurrentRevision?: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'copyCode', content: string): void;
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
+  (
+    e: 'decideAction',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'retry';
+      detail?: string;
+    },
+  ): void;
 }>();
 
 const { isExpanded, toggleExpanded } = useDefaultExpanded(toRef(props, 'part'));
@@ -129,6 +150,40 @@ const workflowSummary = computed(() => {
   const validation = metadataText(props.part, 'validationStatus') || 'unverified';
   return `工作流阶段：${step}；产物校验：${validation}`;
 });
+
+const isWorkflowCurrent = computed(() => {
+  const current = props.workflowCurrentRevision;
+  const own = workflowRevision(props.part);
+  if (current === undefined || own === undefined) return true;
+  return own >= current;
+});
+
+const workflowAllowedActions = computed(() => {
+  const value = props.part.metadata?.allowedActions;
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+});
+
+const isWorkflowRetryable = computed(
+  () =>
+    isWorkflowCurrent.value &&
+    props.part.type === 'visualization-chart-preview' &&
+    workflowAllowedActions.value.includes('retry') &&
+    (metadataText(props.part, 'step').toUpperCase() === 'BLOCKED' ||
+      metadataText(props.part, 'validationStatus') === 'blocked'),
+);
+
+const workflowRetryInFlight = computed(() => props.part.metadata?.deciding === true);
+
+const requestWorkflowRetry = () => {
+  if (!props.interactive || !isWorkflowRetryable.value || workflowRetryInFlight.value) return;
+  emit('decideAction', {
+    part: props.part,
+    decision: 'retry',
+    detail: metadataText(props.part, 'validationMessage') || '重试当前失败阶段',
+  });
+};
 
 const isChartLibraryAdded = computed(() => {
   return props.part.status === 'submitted' || props.part.status === 'added';
@@ -188,5 +243,4 @@ const dataVisualizationRecordTitle = computed(() => {
   if (props.part.type === 'menu-config-record') return props.part.title || '菜单配置记录';
   return props.part.title || '数据可视化记录';
 });
-
 </script>

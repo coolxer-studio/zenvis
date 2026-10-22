@@ -1,5 +1,6 @@
 package com.coolxer.model.dih.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 
 import java.util.List;
@@ -16,10 +17,15 @@ public class ReportActionDto {
     public static final String SELECTION_REWRITE = "selection_rewrite";
 
     private String type;
+    @JsonAlias("documentId")
     private String documentId;
+    @JsonAlias("baseRevision")
     private Long baseRevision;
+    @JsonAlias("selectionId")
     private String selectionId;
+    @JsonAlias("selectionHash")
     private String selectionHash;
+    @JsonAlias("sourceRefs")
     private List<Map<String, Object>> sourceRefs;
 
     public boolean isSelectionRewrite() {

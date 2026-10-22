@@ -31,6 +31,14 @@ import {
   ReportRevision,
   ReportSourceRef,
   ReportWorkspace,
+  AgentRun,
+  AgentRunCreateParams,
+  AgentRunEvent,
+  AgentRunListParams,
+  AgentRunPlan,
+  AgentRunPlanStep,
+  AgentRunSteerParams,
+  AgentRunStatus,
 } from '@/types/type-dih';
 import { withBaseUrl } from '@u/url';
 import {
@@ -92,6 +100,10 @@ type RawMcpApproval = Record<string, unknown> & {
   approvalScope?: string;
   session_approval_allowed?: boolean;
   sessionApprovalAllowed?: boolean;
+  run_approval_allowed?: boolean;
+  runApprovalAllowed?: boolean;
+  agent_run_id?: string;
+  agentRunId?: string;
   status?: string;
   arguments?: string;
   result?: string;
@@ -123,6 +135,88 @@ type RawStreamEvent = {
   content?: string;
   message?: RawMessage | string;
   data?: RawMcpApproval | Record<string, unknown>;
+};
+
+type RawAgentRun = Record<string, unknown> & {
+  run_id?: string;
+  runId?: string;
+  chat_id?: string;
+  chatId?: string;
+  chat_type?: string;
+  chatType?: string;
+  agent_type?: string;
+  agentType?: string;
+  status_label?: string;
+  statusLabel?: string;
+  plan_revision?: number;
+  planRevision?: number;
+  current_step_id?: string;
+  currentStepId?: string;
+  decision_steps?: number;
+  decisionSteps?: number;
+  tool_calls?: number;
+  toolCalls?: number;
+  effective_millis?: number;
+  effectiveMillis?: number;
+  max_steps?: number;
+  maxSteps?: number;
+  max_duration_seconds?: number;
+  maxDurationSeconds?: number;
+  max_tool_calls?: number;
+  maxToolCalls?: number;
+  last_event_sequence?: number;
+  lastEventSequence?: number;
+  last_error?: string;
+  lastError?: string;
+  final_answer?: string;
+  finalAnswer?: string;
+  paused_reason?: string;
+  pausedReason?: string;
+  pending_action?: string;
+  pendingAction?: string;
+  attempt_count?: number;
+  attemptCount?: number;
+  recovery_count?: number;
+  recoveryCount?: number;
+  truncation_count?: number;
+  truncationCount?: number;
+  started_at?: string;
+  startedAt?: string;
+  finished_at?: string;
+  finishedAt?: string;
+  create_time?: string;
+  createTime?: string;
+  update_time?: string;
+  updateTime?: string;
+  skill_ids?: string[];
+  skillIds?: string[];
+};
+
+type RawAgentRunPlanStep = Record<string, unknown> & {
+  id?: string;
+  title?: string;
+  acceptance?: string;
+  status?: string;
+  summary?: string;
+  evidence_refs?: Array<Record<string, unknown>>;
+  evidenceRefs?: Array<Record<string, unknown>>;
+};
+
+type RawAgentRunPlan = Record<string, unknown> & {
+  goal?: string;
+  steps?: RawAgentRunPlanStep[];
+};
+
+type RawAgentRunEvent = Record<string, unknown> & {
+  sequence?: number;
+  run_id?: string;
+  runId?: string;
+  type?: string;
+  step_id?: string;
+  stepId?: string;
+  created_at?: string;
+  createdAt?: string;
+  data?: Record<string, unknown>;
 };
 
 type RawSkill = {
@@ -222,6 +316,9 @@ const normalizeMcpApproval = (item: RawMcpApproval): McpApprovalData => ({
   approvalScope: String(item?.approval_scope || item?.approvalScope || '').toLowerCase(),
   sessionApprovalAllowed:
     item?.session_approval_allowed ?? item?.sessionApprovalAllowed ?? true,
+  runApprovalAllowed:
+    item?.run_approval_allowed ?? item?.runApprovalAllowed ?? false,
+  agentRunId: item?.agent_run_id || item?.agentRunId || '',
   status: String(item?.status || 'pending').toLowerCase(),
   arguments: item?.arguments ?? item?.arguments_summary ?? item?.argumentsSummary ?? '',
   result: item?.result ?? item?.result_summary ?? item?.resultSummary ?? '',
@@ -266,6 +363,83 @@ const parseStreamLine = (line: string): ChatStreamEvent => {
     };
   }
 };
+
+const normalizeAgentRunPlanStep = (item: RawAgentRunPlanStep): AgentRunPlanStep => ({
+  id: String(item?.id || ''),
+  title: String(item?.title || item?.id || ''),
+  acceptance: item?.acceptance ? String(item.acceptance) : undefined,
+  status: String(item?.status || 'PENDING').toUpperCase(),
+  summary: item?.summary ? String(item.summary) : undefined,
+  evidenceRefs: Array.isArray(item?.evidence_refs || item?.evidenceRefs)
+    ? (item.evidence_refs || item.evidenceRefs) as Array<Record<string, unknown>>
+    : [],
+});
+
+const normalizeAgentRunPlan = (plan: unknown): AgentRunPlan => {
+  const raw = plan && typeof plan === 'object' ? plan as RawAgentRunPlan : {};
+  return {
+    goal: raw.goal ? String(raw.goal) : undefined,
+    steps: Array.isArray(raw.steps) ? raw.steps.map(normalizeAgentRunPlanStep) : [],
+  };
+};
+
+const normalizeAgentRun = (item: RawAgentRun): AgentRun => ({
+  runId: String(item.run_id || item.runId || ''),
+  chatId: String(item.chat_id || item.chatId || ''),
+  chatType: String(item.chat_type || item.chatType || ''),
+  agentType: String(item.agent_type || item.agentType || ''),
+  model: item.model ? String(item.model) : undefined,
+  status: String(item.status || 'QUEUED').toUpperCase() as AgentRunStatus,
+  statusLabel: item.status_label ? String(item.status_label) : String(item.statusLabel || ''),
+  goal: item.goal ? String(item.goal) : undefined,
+  plan: normalizeAgentRunPlan(item.plan),
+  planRevision: Number(item.plan_revision ?? item.planRevision ?? 0),
+  currentStepId: item.current_step_id
+    ? String(item.current_step_id)
+    : (item.currentStepId ? String(item.currentStepId) : undefined),
+  decisionSteps: Number(item.decision_steps ?? item.decisionSteps ?? 0),
+  toolCalls: Number(item.tool_calls ?? item.toolCalls ?? 0),
+  effectiveMillis: Number(item.effective_millis ?? item.effectiveMillis ?? 0),
+  maxSteps: Number(item.max_steps ?? item.maxSteps ?? 30),
+  maxDurationSeconds: Number(item.max_duration_seconds ?? item.maxDurationSeconds ?? 1800),
+  maxToolCalls: Number(item.max_tool_calls ?? item.maxToolCalls ?? 80),
+  lastEventSequence: Number(item.last_event_sequence ?? item.lastEventSequence ?? 0),
+  lastError: item.last_error ? String(item.last_error) : (item.lastError ? String(item.lastError) : ''),
+  finalAnswer: item.final_answer
+    ? String(item.final_answer)
+    : (item.finalAnswer ? String(item.finalAnswer) : ''),
+  pausedReason: item.paused_reason
+    ? String(item.paused_reason)
+    : (item.pausedReason ? String(item.pausedReason) : ''),
+  pendingAction: item.pending_action
+    ? String(item.pending_action)
+    : (item.pendingAction ? String(item.pendingAction) : ''),
+  attemptCount: Number(item.attempt_count ?? item.attemptCount ?? 0),
+  recoveryCount: Number(item.recovery_count ?? item.recoveryCount ?? 0),
+  truncationCount: Number(item.truncation_count ?? item.truncationCount ?? 0),
+  startedAt: item.started_at ? String(item.started_at) : (item.startedAt ? String(item.startedAt) : ''),
+  finishedAt: item.finished_at ? String(item.finished_at) : (item.finishedAt ? String(item.finishedAt) : ''),
+  createTime: item.create_time ? String(item.create_time) : (item.createTime ? String(item.createTime) : ''),
+  updateTime: item.update_time ? String(item.update_time) : (item.updateTime ? String(item.updateTime) : ''),
+  skillIds: Array.isArray(item.skill_ids || item.skillIds)
+    ? (item.skill_ids || item.skillIds) as string[]
+    : [],
+  steered: Boolean(item.steered),
+});
+
+const normalizeAgentRunEvent = (
+  item: RawAgentRunEvent,
+  fallbackRunId = '',
+): AgentRunEvent => ({
+  sequence: Number(item?.sequence || 0),
+  run_id: String(item?.run_id || item?.runId || fallbackRunId),
+  type: String(item?.type || ''),
+  step_id: item?.step_id ? String(item.step_id) : (item?.stepId ? String(item.stepId) : undefined),
+  created_at: item?.created_at
+    ? String(item.created_at)
+    : (item?.createdAt ? String(item.createdAt) : undefined),
+  data: item?.data && typeof item.data === 'object' ? item.data : {},
+});
 
 const normalizeSkill = (item: RawSkill): SkillVo => ({
   id: item?.id || '',
@@ -536,6 +710,155 @@ export class DihService {
       { silent: true },
     );
     return normalizeMcpApproval(response);
+  }
+
+  static async getMcpApproval(requestId: string): Promise<McpApprovalData> {
+    const response = await request<RawMcpApproval>(
+      `${prefix}/mcp/approvals/${encodeURIComponent(requestId)}/view`,
+      {},
+      'GET',
+      { silent: true },
+    );
+    return normalizeMcpApproval(response);
+  }
+
+  static async createAgentRun(params: AgentRunCreateParams): Promise<AgentRun> {
+    const response = await request<RawAgentRun>(
+      `${prefix}/chat/runs`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return normalizeAgentRun(response);
+  }
+
+  static async getAgentRun(runId: string): Promise<AgentRun> {
+    const response = await request<RawAgentRun>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}`,
+      {},
+      'GET',
+      { silent: true },
+    );
+    return normalizeAgentRun(response);
+  }
+
+  static async listAgentRuns(params: AgentRunListParams): Promise<PageRowsVo<AgentRun>> {
+    const response = await request<{ rows?: RawAgentRun[]; total?: number }>(
+      `${prefix}/chat/runs`,
+      {
+        ...params,
+        perPage: params.perPage ?? 20,
+      },
+      'GET',
+      { silent: true },
+    );
+    return {
+      rows: Array.isArray(response?.rows) ? response.rows.map(normalizeAgentRun) : [],
+      total: Number(response?.total || 0),
+    };
+  }
+
+  static async listAgentRunEvents(runId: string, after = 0): Promise<AgentRunEvent[]> {
+    const response = await request<RawAgentRunEvent[]>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/events/list`,
+      { after },
+      'GET',
+      { silent: true },
+    );
+    return Array.isArray(response)
+      ? response.map(item => normalizeAgentRunEvent(item, runId))
+      : [];
+  }
+
+  static async steerAgentRun(runId: string, params: AgentRunSteerParams): Promise<AgentRun> {
+    const response = await request<RawAgentRun>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/steer`,
+      params,
+      'POST',
+    );
+    return normalizeAgentRun(response);
+  }
+
+  static async pauseAgentRun(runId: string, reason = '用户暂停'): Promise<AgentRun> {
+    const response = await request<RawAgentRun>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/pause?reason=${encodeURIComponent(reason)}`,
+      {},
+      'POST',
+      { silent: true },
+    );
+    return normalizeAgentRun(response);
+  }
+
+  static async resumeAgentRun(runId: string): Promise<AgentRun> {
+    const response = await request<RawAgentRun>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/resume`,
+      {},
+      'POST',
+      { silent: true },
+    );
+    return normalizeAgentRun(response);
+  }
+
+  static async cancelAgentRun(runId: string): Promise<AgentRun> {
+    const response = await request<RawAgentRun>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+      'POST',
+      { silent: true },
+    );
+    return normalizeAgentRun(response);
+  }
+
+  static async streamAgentRunEvents(
+    runId: string,
+    after: number,
+    onEvent: (event: AgentRunEvent) => void | Promise<void>,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(withBaseUrl(
+        `${prefix}/chat/runs/${encodeURIComponent(runId)}/events?after=${Math.max(0, after)}`,
+      ), {
+        method: 'GET',
+        credentials: 'include',
+        signal: options.signal,
+        headers: { Accept: 'application/x-ndjson' },
+      });
+      if (!response.ok || !response.body) {
+        return false;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      const consume = async (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        try {
+          const raw = JSON.parse(trimmed) as RawAgentRunEvent;
+          await onEvent(normalizeAgentRunEvent(raw, runId));
+        } catch (error) {
+          console.error('Agent Run 事件解析失败:', error, trimmed);
+        }
+      };
+      while (true) {
+        const { value, done } = await reader.read();
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            await consume(line);
+          }
+        }
+        if (done) break;
+      }
+      await consume(buffer);
+      return true;
+    } catch (error) {
+      if (options.signal?.aborted) return false;
+      console.error('Agent Run 事件订阅失败:', error);
+      return false;
+    }
   }
 
   static async getModelList(): Promise<ModelInfo[]> {

@@ -87,6 +87,13 @@ embedded:
     enabled: false
 
 external:
+  minio:
+    endpoint: http://minio.example.com:9000
+    buckets:
+      rag: zenvis-rag
+      chat: zenvis-chat
+      plugins: zenvis-plugins
+      reports: zenvis-reports
   mysql:
     host: ""
     port: 3306

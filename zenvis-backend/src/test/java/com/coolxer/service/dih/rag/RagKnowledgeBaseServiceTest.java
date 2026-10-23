@@ -104,7 +104,7 @@ class RagKnowledgeBaseServiceTest {
                 new RagKnowledgeBaseDataset().setKnowledgeBaseId(1).setDatasetId(2)));
         when(datasetRepository.findAllById(any())).thenReturn(List.of(dataset));
         when(vectorStoreInitializerService.isRagAvailable()).thenReturn(true);
-        when(minioService.listObjects("rag/dataset", null)).thenReturn(List.of());
+        when(minioService.listObjects("rag/dataset", "zenvis-rag")).thenReturn(List.of());
         when(vectorStoreDelegate.getVectorStore("redis")).thenReturn(mock(VectorStore.class));
         RagKnowledgeBaseService service = newService(repository);
         ReflectionTestUtils.setField(service, "ragKnowledgeBaseDatasetRepository", relationRepository);

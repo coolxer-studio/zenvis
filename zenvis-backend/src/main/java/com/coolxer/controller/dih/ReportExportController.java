@@ -3,6 +3,7 @@ package com.coolxer.controller.dih;
 import com.coolxer.controller.BaseController;
 import com.coolxer.service.dih.ReportExportService;
 import com.coolxer.service.dih.ReportExportService.ExportedReport;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -25,19 +26,20 @@ public class ReportExportController extends BaseController {
     }
 
     @GetMapping("/export/{format}")
-    public ResponseEntity<byte[]> export(
+    public ResponseEntity<InputStreamResource> export(
             @PathVariable Long sessionId,
             @PathVariable String format) {
         ExportedReport report = reportExportService.export(
                 sessionId, format, getSessionUser());
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(report.contentType()))
+                .contentLength(report.size())
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment()
                                 .filename(report.fileName(), StandardCharsets.UTF_8)
                                 .build()
                                 .toString())
-                .body(report.content());
+                .body(new InputStreamResource(report.content()));
     }
 }

@@ -16,7 +16,7 @@
 
 ## 上下游关系
 
-- 上游：`deploy/open_config`、平台 MySQL/ClickHouse/Redis/Redis Stack、Kafka、Vectum、模型服务和已安装插件。
+- 上游：`deploy/open_config`、平台 MySQL/ClickHouse/Redis/Redis Stack/MinIO、Kafka、Vectum、模型服务和已安装插件。
 - 下游：`zenvis-frontend`、业务服务 Starter、插件动态 API、MCP 客户端及其他 `/api/v1/**` 调用方。
 - 契约边界：后端定义统一响应、Meta、Retrieval、插件生命周期和公开上报接口；跨项目修改必须同步前端类型、部署配置、插件契约或 Starter 文档。
 
@@ -32,6 +32,7 @@
 | 分析数据 | ClickHouse |
 | Session/缓存 | Redis |
 | RAG | Redis Stack |
+| 对象存储 | MinIO（默认附件 Bucket + RAG/Chat/Plugins/Reports 四个业务 Bucket） |
 | 数据接入 | Kafka、Vectum |
 | API 文档 | SpringDoc OpenAPI 2.3.0 |
 | 测试 | Spring Boot Test、JUnit 5、H2 和领域测试替身 |
@@ -98,7 +99,7 @@ Controller 负责 HTTP 契约和参数校验，Service 负责业务规则、权�
 ```bash
 docker compose -f deploy/docker-compose.yml up -d \
   redis-service redis-stack-service mysql-service \
-  clickhouse-service kafka-service zenvis-service-vectum
+  clickhouse-service minio-service kafka-service zenvis-service-vectum
 ```
 
 如果只开发不涉及 RAG 或推送任务的功能，可以按实际依赖减少服务，但完整测试仍应覆盖相应组件。
@@ -125,6 +126,7 @@ docker compose -f deploy/docker-compose.yml up -d \
 | `spring.data.redis.*` | Redis 连接 |
 | `spring.ai.vectorstore.redis.*` | Redis Stack 向量存储 |
 | `spring.ai.openai.*` | OpenAI 兼容模型服务 |
+| `app.minio.*` | MinIO 地址、凭据、默认 Bucket 与四个业务 Bucket |
 | `app.services.data.url` | Vectum 服务地址 |
 | `app.paths.config.base` | 开放配置根路径 |
 | `app.paths.plugins` | 插件展开目录 |
@@ -259,12 +261,20 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 修改插件能力时重点检查：
 
 - `PluginServiceImpl` 的安装、升级、恢复和回滚；
+- 插件包、候选和快照的 MinIO 对象键、本地缓存重建与失败清理；
 - Meta 跨文件合并与冲突校验；
 - 动态 Jar 的注册、重载和类加载隔离；
 - MySQL 迁移版本和 SHA-256；
 - 配置索引、静态文件路径和卸载清理；
 - `08_rag` 托管身份、名称冲突、旧目录切换、构建指纹和失败状态；
 - 旧插件兼容与测试归档。
+
+对象存储开发约束：
+
+- 业务域通过 `MinioBucketDomain` 选择 Bucket，不能以空 Bucket 回退到默认 Bucket。
+- 对象键必须使用 `StorageObjectKey` 生成或校验，禁止业务代码自行拼接未清洗路径。
+- 下载保持后端流式鉴权，不签发 presigned URL；对象缺失或 MinIO 不可用时直接失败。
+- 报表当前正文仍在 MySQL，正式修订与导出在 `zenvis-reports`；不要恢复 `ReportRevision`/`ReportArtifact` 正文副本。
 
 ## 扩展点
 
@@ -330,6 +340,10 @@ lsof -i :11001
 ### 插件加载失败
 
 检查归档根目录、`index.json`、唯一包名、动态 API Jar 数量、迁移校验和及后端插件日志。
+
+### MinIO 初始化或对象访问失败
+
+检查 MinIO 健康、默认/四个业务 Bucket 名称、凭据和创建权限。运行时出现对象缺失时，RAG、聊天附件、插件和报表都会直接失败而不是回退本地文件；需要重新上传或从对象存储备份恢复。
 
 ### AI 页面可用但问答失败
 

@@ -1,6 +1,6 @@
 # Docker Compose 部署
 
-Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHouse、Redis、Redis Stack 和单节点 Kafka。该模式将数据保存在 `deploy/data/`，适合单机部署和测试环境。
+Compose 编排包含 9 个服务：ZenVis 前后端、Vectum、MySQL、ClickHouse、Redis、Redis Stack、MinIO 和单节点 Kafka。该模式将数据保存在 `deploy/data/`，适合单机部署和测试环境。
 
 运行环境支持 Docker Compose v2（推荐）或 legacy `docker-compose` 1.29.2；不支持更低版本的 `docker-compose` v1。
 
@@ -15,7 +15,7 @@ Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHous
 工具执行以下安全初始化：
 
 - 根据主机生成 `ARCH=amd64` 或 `ARCH=arm64`；
-- 为数据库、Redis、API、MCP、Vectum 和内置账号生成独立随机凭据；
+- 为数据库、Redis、MinIO、API、MCP、Vectum 和内置账号生成独立随机凭据；
 - 将凭据写入 Git 忽略的 `deploy/.env` 并设置权限 `600`；
 - 对已有 `deploy/.env` 保留原值，并自动补齐缺失的监听地址和主机端口；
 - 如发现历史数据而 `.env` 丢失，则终止初始化，不猜测旧密码。
@@ -30,7 +30,7 @@ Compose 编排包含 8 个服务：ZenVis 前后端、Vectum、MySQL、ClickHous
 cp /path/to/plugin-xxx.tar.gz deploy/open_config/plugin-package_config/bootstrap/
 ```
 
-首次启动时 zenvis-backend 会自动注册并安装目录中的全部插件包，处理完成后生成标记文件 `.bootstrap-install.flag`，此后重启不再自动安装（卸载或删除插件也不会复活）。安装失败可在「插件管理」界面重试；需要重新触发时删除标记文件后重启。详见 `deploy/open_config/plugin-package_config/bootstrap/index.md`。
+首次启动时 zenvis-backend 会自动注册并安装目录中的全部插件包，正式包写入 `zenvis-plugins` Bucket，处理完成后生成标记文件 `.bootstrap-install.flag`，此后重启不再自动安装（卸载或删除插件也不会复活）。安装失败可在「插件管理」界面重试；需要重新触发时删除标记文件后重启。详见 `deploy/open_config/plugin-package_config/bootstrap/index.md`。
 
 ## 检查与启动
 
@@ -63,7 +63,10 @@ cp /path/to/plugin-xxx.tar.gz deploy/open_config/plugin-package_config/bootstrap
 | ClickHouse HTTP/TCP | `clickhouse-service:8123/9000` | `127.0.0.1:8123/9000` |
 | Redis | `redis-service:6379` | `127.0.0.1:6379` |
 | Redis Stack | `redis-stack-service:6379` | `127.0.0.1:16379` |
+| MinIO API / Console | `minio-service:9000/9001` | `127.0.0.1:19000/19001` |
 | Kafka | `kafka-service:9092` | `127.0.0.1:9094` |
+
+后端通过 `MINIO_ENDPOINT`、`MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD` 连接 MinIO，并使用 `MINIO_BUCKET`、`MINIO_RAG_BUCKET`、`MINIO_CHAT_BUCKET`、`MINIO_PLUGINS_BUCKET`、`MINIO_REPORTS_BUCKET` 选择默认 Bucket 和四个业务 Bucket。启动时自动创建缺失 Bucket；创建失败或名称重复会使后端启动失败。业务下载经后端鉴权，不直接暴露 MinIO 端口给浏览器。
 
 对外发布时仅暴露 Web，使用反向代理终止 TLS。若必须从其他主机访问 API，先设置防火墙和身份认证，再修改 `ZENVIS_API_BIND_ADDRESS`。
 

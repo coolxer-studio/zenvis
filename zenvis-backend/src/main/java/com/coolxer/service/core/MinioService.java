@@ -1,5 +1,6 @@
 package com.coolxer.service.core;
 
+import com.coolxer.model.core.vo.MinioObjectInfo;
 import io.minio.messages.Bucket;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -84,6 +85,22 @@ public interface MinioService {
      * @return 文件大小（字节）
      */
     long getFileSize(String objectName, String bucketName);
+
+    /**
+     * 获取对象元信息。
+     */
+    MinioObjectInfo getObjectInfo(String objectName, String bucketName);
+
+    /**
+     * 服务端复制对象，可用于跨 Bucket 或同 Bucket 复制。
+     */
+    void copyObject(String sourceBucket, String sourceObjectName,
+                    String targetBucket, String targetObjectName);
+
+    /**
+     * 删除指定前缀下的全部对象，返回删除数量。
+     */
+    int deletePrefix(String prefix, String bucketName);
 
     /**
      * 删除文件

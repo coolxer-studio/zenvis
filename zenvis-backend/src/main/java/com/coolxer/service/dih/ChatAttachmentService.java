@@ -1,9 +1,15 @@
 package com.coolxer.service.dih;
 
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.User;
+import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.model.dih.ChatAttachment;
-import com.coolxer.utils.ImageDataUriUtil;
+import com.coolxer.service.core.MinioService;
+import com.coolxer.utils.StorageObjectKey;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,10 +22,10 @@ import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,7 +35,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * 聊天附件上传与模型上下文读取。
+ * 聊天附件上传与模型上下文读取。附件正文仅保存在 MinIO 的 zenvis-chat Bucket。
  */
 @Service
 public class ChatAttachmentService {
@@ -56,33 +62,40 @@ public class ChatAttachmentService {
             "image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"
     );
 
-    private final CustomWebConfig customWebConfig;
-
+    private final MinioService minioService;
+    private final MinioProperties minioProperties;
     private final int maxContextCharsPerFile;
-
     private final int maxContextCharsTotal;
 
     @Autowired
     public ChatAttachmentService(
-            CustomWebConfig customWebConfig,
+            MinioService minioService,
+            MinioProperties minioProperties,
             @Value("${app.ai.dih.context.max-attachment-chars-per-file:12000}")
             int maxContextCharsPerFile,
             @Value("${app.ai.dih.context.max-attachment-chars:24000}")
             int maxContextCharsTotal
     ) {
-        this.customWebConfig = customWebConfig;
+        this.minioService = minioService;
+        this.minioProperties = minioProperties;
         this.maxContextCharsPerFile = positiveOrDefault(
                 maxContextCharsPerFile, DEFAULT_MAX_CONTEXT_CHARS_PER_FILE);
         this.maxContextCharsTotal = positiveOrDefault(
                 maxContextCharsTotal, DEFAULT_MAX_CONTEXT_CHARS_TOTAL);
     }
 
-    public ChatAttachmentService(CustomWebConfig customWebConfig) {
-        this(
-                customWebConfig,
-                DEFAULT_MAX_CONTEXT_CHARS_PER_FILE,
-                DEFAULT_MAX_CONTEXT_CHARS_TOTAL
-        );
+    public ChatAttachmentService(MinioService minioService, MinioProperties minioProperties) {
+        this(minioService, minioProperties,
+                DEFAULT_MAX_CONTEXT_CHARS_PER_FILE, DEFAULT_MAX_CONTEXT_CHARS_TOTAL);
+    }
+
+    /**
+     * 兼容旧测试/调用方的构造器。未注入 MinIO 时上传会明确失败，不会回退到本地磁盘。
+     */
+    @Deprecated
+    public ChatAttachmentService(CustomWebConfig ignored) {
+        this(null, new MinioProperties(),
+                DEFAULT_MAX_CONTEXT_CHARS_PER_FILE, DEFAULT_MAX_CONTEXT_CHARS_TOTAL);
     }
 
     public ChatAttachment upload(MultipartFile file, User user) throws IOException {
@@ -92,26 +105,46 @@ public class ChatAttachmentService {
         if (file.getSize() > MAX_UPLOAD_BYTES) {
             throw new IllegalArgumentException("文件大小不能超过 30MB");
         }
+        if (minioService == null) {
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "聊天附件存储未配置");
+        }
+        if (user == null || user.getId() == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "上传附件前必须登录");
+        }
 
         String fileId = UUID.randomUUID().toString();
-        String fileName = sanitizeFileName(file.getOriginalFilename());
-        Path uploadRoot = uploadRoot(user);
-        Files.createDirectories(uploadRoot);
-
-        Path targetPath = uploadRoot.resolve(fileId + "_" + fileName).normalize();
-        if (!targetPath.startsWith(uploadRoot)) {
-            throw new IllegalArgumentException("非法文件名");
+        String fileName = StorageObjectKey.sanitizeFileName(file.getOriginalFilename());
+        boolean imageClaim = claimsImageContent(fileName, file.getContentType());
+        String imageContentType = null;
+        try (InputStream headerStream = file.getInputStream()) {
+            if (imageClaim) {
+                imageContentType = detectImageContentType(headerStream).orElse(null);
+            }
         }
-        file.transferTo(targetPath);
 
-        boolean imageAttachment = isImageAttachment(fileName, file.getContentType()) && isSupportedImageFile(targetPath);
+        boolean imageAttachment = imageContentType != null;
         boolean textAttachment = isTextAttachment(fileName, file.getContentType());
         String kind = imageAttachment ? KIND_IMAGE : textAttachment ? KIND_TEXT : KIND_FILE;
+        String contentType;
+        if (imageAttachment) {
+            contentType = imageContentType;
+        } else if (imageClaim) {
+            contentType = "application/octet-stream";
+        } else if (StringUtils.hasText(file.getContentType())) {
+            contentType = file.getContentType();
+        } else {
+            contentType = textAttachment ? "text/plain" : "application/octet-stream";
+        }
+        String objectKey = StorageObjectKey.chat(user.getId(), fileId, fileName);
+        try (InputStream inputStream = file.getInputStream()) {
+            minioService.uploadStream(objectKey, inputStream, file.getSize(), contentType, chatBucket());
+        }
+
         return ChatAttachment.builder()
                 .fileId(fileId)
                 .fileName(fileName)
                 .fileSize(file.getSize())
-                .contentType(imageAttachment ? detectContentType(targetPath) : file.getContentType())
+                .contentType(contentType)
                 .kind(kind)
                 .fileUrl("/api/v1/dih/upload/" + fileId + "/preview")
                 .parseStatus(imageAttachment ? "image" : textAttachment ? "readable" : "unsupported")
@@ -166,10 +199,6 @@ public class ChatAttachmentService {
         return builder.toString();
     }
 
-    /**
-     * Keep stable attachment references in chat memory without retaining the raw
-     * attachment body injected for the current model call.
-     */
     public String compactPromptForMemory(String expandedPrompt, List<ChatAttachment> attachments) {
         if (attachments == null || attachments.isEmpty()) {
             return expandedPrompt;
@@ -219,66 +248,79 @@ public class ChatAttachmentService {
                 .toList();
     }
 
-    public Optional<Path> resolveAttachmentFile(String fileId, User user) {
-        if (!StringUtils.hasText(fileId)) {
+    /**
+     * 以流方式打开附件，供后端鉴权接口直接转发。
+     */
+    public Optional<AttachmentStream> openAttachment(String fileId, User user) {
+        if (!isValidFileId(fileId) || user == null || user.getId() == null) {
             return Optional.empty();
         }
-        if (!isValidFileId(fileId)) {
-            return Optional.empty();
-        }
+        String prefix = StorageObjectKey.chatUserFilePrefix(user.getId(), fileId);
         try {
-            return Optional.ofNullable(resolveStoredFile(fileId, user));
-        } catch (IOException e) {
+            List<String> objects = minioService.listObjects(prefix, chatBucket());
+            if (objects.size() != 1 || !objects.get(0).startsWith(prefix + "/")) {
+                return Optional.empty();
+            }
+            String objectKey = objects.get(0);
+            MinioObjectInfo info = minioService.getObjectInfo(objectKey, chatBucket());
+            InputStream inputStream = minioService.downloadFile(objectKey, chatBucket());
+            String fileName = objectKey.substring(objectKey.lastIndexOf('/') + 1);
+            String contentType = StringUtils.hasText(info.contentType())
+                    ? info.contentType() : "application/octet-stream";
+            return Optional.of(new AttachmentStream(inputStream, fileName, contentType, info.size()));
+        } catch (Exception e) {
             return Optional.empty();
         }
     }
 
-    public String detectContentType(Path filePath) {
-        Optional<String> imageContentType = detectImageContentType(filePath);
-        if (imageContentType.isPresent()) {
-            return imageContentType.get();
-        }
-        try {
-            String detected = Files.probeContentType(filePath);
-            if (isSupportedImageContentType(detected)) {
-                return detected.toLowerCase(Locale.ROOT);
+    /**
+     * 兼容接口：仅在明确请求本地文件路径时物化临时文件；业务接口应使用 openAttachment 流式读取。
+     */
+    public Optional<Path> resolveAttachmentFile(String fileId, User user) {
+        return openAttachment(fileId, user).map(stream -> {
+            try (stream) {
+                Path temp = Files.createTempFile("zenvis-chat-", "-" + stream.fileName());
+                Files.copy(stream.inputStream(), temp, StandardCopyOption.REPLACE_EXISTING);
+                temp.toFile().deleteOnExit();
+                return temp;
+            } catch (IOException e) {
+                throw new IllegalStateException("读取聊天附件失败", e);
             }
-        } catch (IOException ignored) {
-        }
-        return "application/octet-stream";
+        });
     }
 
     private String readAttachmentText(ChatAttachment attachment, User user, int maxChars) {
         if (attachment == null || !StringUtils.hasText(attachment.getFileId())) {
             return "";
         }
-        String contentType = attachment.getContentType();
-        String fileName = attachment.getFileName();
-        if (!isTextAttachment(fileName, contentType)) {
+        if (!isTextAttachment(attachment.getFileName(), attachment.getContentType())) {
             return "";
         }
-
-        try {
-            Path filePath = resolveStoredFile(attachment.getFileId(), user);
-            if (filePath == null || !Files.isRegularFile(filePath)) {
+        try (AttachmentStream stream = openAttachment(attachment.getFileId(), user).orElse(null)) {
+            if (stream == null) {
                 return "";
             }
-            return readTextLimit(filePath, maxChars);
+            return readTextLimit(stream.inputStream(), maxChars);
         } catch (Exception e) {
             return "";
         }
     }
 
     private Optional<Map<String, Object>> toOpenAiImageContentPart(ChatAttachment attachment, User user) {
-        try {
-            Path filePath = resolveStoredFile(attachment.getFileId(), user);
-            if (filePath == null || !Files.isRegularFile(filePath)) {
+        if (attachment == null) {
+            return Optional.empty();
+        }
+        try (AttachmentStream stream = openAttachment(attachment.getFileId(), user).orElse(null)) {
+            if (stream == null) {
                 return Optional.empty();
             }
-            if (detectImageContentType(filePath).isEmpty()) {
+            byte[] content = stream.inputStream().readAllBytes();
+            Optional<String> contentType = detectImageContentType(content);
+            if (contentType.isEmpty()) {
                 return Optional.empty();
             }
-            String dataUri = ImageDataUriUtil.toDataUri(filePath.toFile());
+            String dataUri = "data:" + contentType.get() + ";base64,"
+                    + Base64.getEncoder().encodeToString(content);
             return Optional.of(Map.of(
                     "type", "image_url",
                     "image_url", Map.of(
@@ -291,7 +333,7 @@ public class ChatAttachmentService {
         }
     }
 
-    private String readTextLimit(Path filePath, int maxChars) throws IOException {
+    private String readTextLimit(InputStream inputStream, int maxChars) throws IOException {
         var decoder = StandardCharsets.UTF_8
                 .newDecoder()
                 .onMalformedInput(CodingErrorAction.REPLACE)
@@ -299,7 +341,7 @@ public class ChatAttachmentService {
         StringBuilder builder = new StringBuilder();
         char[] buffer = new char[4096];
         boolean truncated = false;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(Files.newInputStream(filePath), decoder))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, decoder))) {
             int read;
             while ((read = reader.read(buffer)) != -1) {
                 if (builder.length() >= maxChars) {
@@ -320,30 +362,10 @@ public class ChatAttachmentService {
         return builder.toString();
     }
 
-    private Path resolveStoredFile(String fileId, User user) throws IOException {
-        if (!isValidFileId(fileId)) {
-            return null;
-        }
-        Path uploadRoot = uploadRoot(user);
-        if (!Files.isDirectory(uploadRoot)) {
-            return null;
-        }
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(uploadRoot, fileId + "_*")) {
-            for (Path path : stream) {
-                Path normalized = path.toAbsolutePath().normalize();
-                if (normalized.startsWith(uploadRoot) && Files.isRegularFile(normalized)) {
-                    return normalized;
-                }
-            }
-        }
-        return null;
-    }
-
-    private Path uploadRoot(User user) {
-        String userFolder = user != null && user.getId() != null ? String.valueOf(user.getId()) : "anonymous";
-        return Paths.get(customWebConfig.getSessionWorkspacePath(), "chat-uploads", userFolder)
-                .toAbsolutePath()
-                .normalize();
+    private String chatBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_CHAT_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.CHAT);
     }
 
     private boolean isTextAttachment(String fileName, String contentType) {
@@ -377,6 +399,14 @@ public class ChatAttachmentService {
         return isSupportedImageContentType(contentType);
     }
 
+    private boolean claimsImageContent(String fileName, String contentType) {
+        if (IMAGE_EXTENSIONS.contains(extensionOf(fileName))) {
+            return true;
+        }
+        return StringUtils.hasText(contentType)
+                && contentType.toLowerCase(Locale.ROOT).trim().startsWith("image/");
+    }
+
     private String uploadMessage(String kind) {
         if (KIND_IMAGE.equals(kind)) {
             return "图片已上传，将随下一条消息发送给支持视觉能力的模型。";
@@ -385,18 +415,6 @@ public class ChatAttachmentService {
             return "文件已上传，将随下一条消息发送给模型。";
         }
         return "文件已上传；当前仅文本类文件会解析为模型上下文。";
-    }
-
-    private String sanitizeFileName(String originalFilename) {
-        String fallback = "attachment";
-        String name = StringUtils.hasText(originalFilename) ? originalFilename : fallback;
-        name = name.replace('\\', '/');
-        int lastSlash = name.lastIndexOf('/');
-        if (lastSlash >= 0 && lastSlash < name.length() - 1) {
-            name = name.substring(lastSlash + 1);
-        }
-        name = name.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
-        return StringUtils.hasText(name) ? name : fallback;
     }
 
     private String extensionOf(String fileName) {
@@ -424,24 +442,25 @@ public class ChatAttachmentService {
 
     private boolean isSupportedImageContentType(String contentType) {
         return StringUtils.hasText(contentType)
-                && IMAGE_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT));
+                && IMAGE_CONTENT_TYPES.contains(normalizedContentType(contentType));
     }
 
-    private boolean isSupportedImageFile(Path filePath) {
-        return detectImageContentType(filePath).isPresent();
+    /**
+     * 预览接口仅允许后端魔数校验通过的图片类型，避免 SVG/HTML 伪装为图片后内联执行。
+     */
+    public static boolean isPreviewableImageContentType(String contentType) {
+        return StringUtils.hasText(contentType)
+                && IMAGE_CONTENT_TYPES.contains(normalizedContentType(contentType));
     }
 
-    private Optional<String> detectImageContentType(Path filePath) {
-        if (filePath == null || !Files.isRegularFile(filePath)) {
-            return Optional.empty();
-        }
-        byte[] header = new byte[12];
-        int read;
-        try (InputStream inputStream = Files.newInputStream(filePath)) {
-            read = inputStream.read(header);
-        } catch (IOException e) {
-            return Optional.empty();
-        }
+    private static String normalizedContentType(String contentType) {
+        int parameterIndex = contentType.indexOf(';');
+        String value = parameterIndex >= 0 ? contentType.substring(0, parameterIndex) : contentType;
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Optional<String> detectImageContentType(byte[] header) {
+        int read = header.length;
         if (read >= 8
                 && (header[0] & 0xFF) == 0x89
                 && header[1] == 0x50
@@ -483,5 +502,54 @@ public class ChatAttachmentService {
             return Optional.of("image/bmp");
         }
         return Optional.empty();
+    }
+
+    private Optional<String> detectImageContentType(InputStream inputStream) throws IOException {
+        byte[] header = new byte[12];
+        int read = inputStream.read(header);
+        if (read <= 0) {
+            return Optional.empty();
+        }
+        byte[] actual = new byte[read];
+        System.arraycopy(header, 0, actual, 0, read);
+        return detectImageContentType(actual);
+    }
+
+    private Optional<String> detectImageContentType(Path filePath) {
+        if (filePath == null || !Files.isRegularFile(filePath)) {
+            return Optional.empty();
+        }
+        try (InputStream inputStream = Files.newInputStream(filePath)) {
+            return detectImageContentType(inputStream);
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    public String detectContentType(Path filePath) {
+        Optional<String> imageContentType = detectImageContentType(filePath);
+        if (imageContentType.isPresent()) {
+            return imageContentType.get();
+        }
+        try {
+            String detected = Files.probeContentType(filePath);
+            if (isSupportedImageContentType(detected)) {
+                return detected.toLowerCase(Locale.ROOT);
+            }
+        } catch (IOException ignored) {
+        }
+        return "application/octet-stream";
+    }
+
+    public record AttachmentStream(
+            InputStream inputStream,
+            String fileName,
+            String contentType,
+            long size
+    ) implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            inputStream.close();
+        }
     }
 }

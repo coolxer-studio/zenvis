@@ -9,6 +9,7 @@
 | ZenVis 后端与 MySQL | 会话、消息、模型调用编排 | 数智中心不可正常使用 |
 | OpenAI 兼容 Chat 服务 | 普通问答和深度思考 | 自定义问答失败，确定性演示仍可能可用 |
 | Redis Stack 与 embedding | RAG 语义检索 | 问答与业务会话降级为无 RAG 模式 |
+| MinIO `zenvis-chat` | 上传、预览和读取聊天附件 | 附件上传与预览失败，已上传附件不可读取 |
 | 浏览器 `/zenvis` 代理 | 同源访问后端 API | 页面可能出现 404 或认证失效 |
 
 先在登录会话或配置好的 Bearer Token 下检查：
@@ -105,7 +106,7 @@ ZenVis 同时维护两类数据：
 
 | 数据 | 用途 |
 | --- | --- |
-| ZenVis 会话消息 | 页面历史、附件元信息、结构化消息、业务卡片和右侧工作台状态 |
+| ZenVis 会话消息 | 页面历史、附件元信息、结构化消息、业务卡片和右侧工作台状态；附件正文在 MinIO |
 | Spring AI Chat Memory | 提供给模型的多轮上下文 |
 
 两者不是同一份数据。典型表现：
@@ -149,23 +150,26 @@ Skill 可通过 `runtime.limits.maxOutputTokens` 覆盖本轮最大输出 Token�
 ### 上传与类型
 
 - 单个聊天附件最大 30 MB。
+- 上传直接流式写入 `zenvis-chat`，对象键为 `chat/{userId}/{fileId}/{sanitizedFileName}`；不再在 `sessionWorkspace/chat-uploads` 创建持久文件。
 - 文本类附件按 UTF-8 读取，非法字节使用替换字符。
 - 图片支持 PNG、JPEG、WebP、GIF 和 BMP，并检查实际文件内容。
 - 其他文件只向模型提供文件名、大小和类型，不会伪装成已经读取正文。
 
 平台级 multipart 上限可以更大，但聊天附件服务仍执行独立的 30 MB 限制。
 
+文件名只保留 basename，并清洗路径分隔符、控制字符和不允许的字符。对象的实际 `contentType` 根据文件头与类型判断写入；图片扩展名或浏览器声明不能单独决定媒体类型。
+
 ### 文本上下文
 
 默认每个文本附件最多读取前 12,000 字符，本轮所有文本附件合计最多 24,000 字符。被截断的附件会带明确提示。
 
-页面历史和 Chat Memory 只保留稳定附件引用与元信息，不持续保存每轮展开后的完整附件正文。
+页面历史和 Chat Memory 只保留稳定附件引用与元信息，不持续保存每轮展开后的完整附件正文。文本上下文读取时从 MinIO 流式获取对象；对象缺失时本轮附件读取失败，不回退到本地 `chat-uploads` 文件。
 
 ### 图片输入
 
 图片只有在当前模型调用走支持图片的 OpenAI 兼容路径时，才作为 `image_url` 内容发送。模型不支持视觉、图片校验失败或模型配置不完整时，不能声称已经识别图片内容。
 
-附件只允许当前上传用户访问；图片预览接口同时校验用户和媒体类型。
+附件只允许当前上传用户访问：服务端按 `chat/{userId}/...` 前缀校验归属，不能仅凭 `fileId` 读取。图片预览接口同时校验用户、实际媒体类型和文件头；预览和图片 Data URI 都从 MinIO 流读取。
 
 ## 事件流与结构化消息
 
@@ -229,6 +233,10 @@ Skill 可通过 `runtime.limits.maxOutputTokens` 覆盖本轮最大输出 Token�
 
 确认文件是否为支持的文本或图片类型、是否被字符预算截断、图片模型是否支持视觉。其他文件只传递元信息。
 
+### 附件上传或预览失败
+
+检查 `MINIO_ENDPOINT`、凭据、`zenvis-chat` Bucket 和对象是否仍存在。聊天附件以 MinIO 为唯一内容来源，不能从本地 `chat-uploads` 或 `zenvis-attachments` 回退读取；对象缺失时需要重新上传。
+
 ### RAG 故障但问答仍有结果
 
 这是 fail-open 行为。查看后端 RAG 日志中的 `no_knowledge_base`、`no_bound_knowledge_base`、`embedding_disabled`、`no_match` 或 `retrieval_error`，再按[RAG 与知识库运维](/04-AI与数据智能/RAG与知识库运维.md)排查。
@@ -262,6 +270,7 @@ Skill 可通过 `runtime.limits.maxOutputTokens` 覆盖本轮最大输出 Token�
 - 健康检查和模型列表可访问；
 - 普通问答能收到 `delta` 和 `done`；
 - 重新打开会话后消息、附件元信息和结构化 part 正常；
+- 聊天附件写入 `zenvis-chat`，其他用户不能读取，对象缺失时返回失败而不是读取本地文件；
 - `tool_call` 和 `rag_search` 能按 ID 增量更新，且不会与旧 Markdown 日志重复显示；
 - 深度思考开关只影响普通问答；
 - 文本附件的每文件和总字符预算生效；

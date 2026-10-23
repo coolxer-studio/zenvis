@@ -253,6 +253,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       MINIO_BUCKET: ${MINIO_BUCKET:-zenvis-attachments}
+      MINIO_RAG_BUCKET: ${MINIO_RAG_BUCKET:-zenvis-rag}
+      MINIO_CHAT_BUCKET: ${MINIO_CHAT_BUCKET:-zenvis-chat}
+      MINIO_PLUGINS_BUCKET: ${MINIO_PLUGINS_BUCKET:-zenvis-plugins}
+      MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-zenvis-reports}
     ports:
       - "${ZENVIS_API_BIND_ADDRESS}:${ZENVIS_API_PORT}:11001"
     volumes:

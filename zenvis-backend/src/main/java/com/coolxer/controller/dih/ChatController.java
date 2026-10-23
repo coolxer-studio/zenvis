@@ -31,7 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -51,7 +51,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.nio.file.Path;
 import java.time.Duration;
 
 /**
@@ -165,24 +164,23 @@ public class ChatController extends BaseController {
     @Operation(summary = "预览聊天图片附件")
     public ResponseEntity<Resource> previewAttachment(@PathVariable("fileId") String fileId) {
         try {
-            Optional<Path> filePathOptional = chatAttachmentService.resolveAttachmentFile(fileId, getSessionUser());
-            if (filePathOptional.isEmpty()) {
+            Optional<ChatAttachmentService.AttachmentStream> attachment =
+                    chatAttachmentService.openAttachment(fileId, getSessionUser());
+            if (attachment.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
-            Path filePath = filePathOptional.get();
-            String contentType = chatAttachmentService.detectContentType(filePath);
-            if (!contentType.startsWith("image/")) {
-                return ResponseEntity.notFound().build();
-            }
-            Resource resource = new UrlResource(filePath.toUri());
-            if (!resource.exists() || !resource.isReadable()) {
+            ChatAttachmentService.AttachmentStream stream = attachment.get();
+            String contentType = stream.contentType();
+            if (!ChatAttachmentService.isPreviewableImageContentType(contentType)) {
+                stream.close();
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
+                    .contentLength(stream.size())
                     .cacheControl(CacheControl.maxAge(Duration.ofMinutes(10)).cachePrivate())
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filePath.getFileName() + "\"")
-                    .body(resource);
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + stream.fileName() + "\"")
+                    .body(new InputStreamResource(stream.inputStream()));
         } catch (Exception e) {
             log.error("预览聊天附件失败: {}", e.getMessage(), e);
             return ResponseEntity.notFound().build();

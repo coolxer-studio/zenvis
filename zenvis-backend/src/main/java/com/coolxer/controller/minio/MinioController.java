@@ -1,6 +1,9 @@
 package com.coolxer.controller.minio;
 
 import com.coolxer.controller.BaseController;
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.core.vo.MinioFileVo;
 import com.coolxer.model.core.vo.MinioItemVo;
@@ -37,19 +40,18 @@ public class MinioController extends BaseController {
 
     private final MinioService minioService;
 
+    private final MinioProperties minioProperties;
+
     @PostMapping("/upload")
     @Operation(summary = "文件上传", description = "上传文件到 MinIO 对象存储，支持指定 bucket 和路径，保持原始文件名")
     public ResponseWrap<MinioFileVo> upload(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "bucket", required = false) String bucket,
             @RequestParam(value = "path", required = false) String path) {
-        String objectName = minioService.uploadFile(file, bucket, path);
+        String objectName = minioService.uploadFile(file, requireDefaultBucket(bucket), path);
         String fileName = file.getOriginalFilename();
         long size = file.getSize();
         String downloadUrl = "/api/v1/minio/download?objectName=" + URLEncoder.encode(objectName, StandardCharsets.UTF_8);
-        if (StringUtils.isNotBlank(bucket)) {
-            downloadUrl += "&bucket=" + URLEncoder.encode(bucket, StandardCharsets.UTF_8);
-        }
 
         MinioFileVo vo = MinioFileVo.builder()
                 .objectName(objectName)
@@ -65,11 +67,12 @@ public class MinioController extends BaseController {
     public ResponseEntity<Resource> download(
             @RequestParam("objectName") String objectName,
             @RequestParam(value = "bucket", required = false) String bucket) {
+        String defaultBucket = requireDefaultBucket(bucket);
         try {
-            if (minioService.isFile(objectName, bucket)) {
-                return downloadSingleFile(objectName, bucket);
-            } else if (minioService.isDirectory(objectName, bucket)) {
-                return downloadDirectoryAsTar(objectName, bucket);
+            if (minioService.isFile(objectName, defaultBucket)) {
+                return downloadSingleFile(objectName, defaultBucket);
+            } else if (minioService.isDirectory(objectName, defaultBucket)) {
+                return downloadDirectoryAsTar(objectName, defaultBucket);
             } else {
                 return ResponseEntity.notFound().build();
             }
@@ -157,7 +160,7 @@ public class MinioController extends BaseController {
     public ResponseWrap<List<MinioItemVo>> list(
             @RequestParam(value = "path", required = false, defaultValue = "") String path,
             @RequestParam(value = "bucket", required = false) String bucket) {
-        List<Map<String, Object>> items = minioService.listDirectory(path, bucket);
+        List<Map<String, Object>> items = minioService.listDirectory(path, requireDefaultBucket(bucket));
         List<MinioItemVo> voList = items.stream().map(item -> {
             MinioItemVo vo = MinioItemVo.builder()
                     .name((String) item.get("name"))
@@ -178,7 +181,16 @@ public class MinioController extends BaseController {
     public ResponseWrap<Void> delete(
             @RequestParam("objectName") String objectName,
             @RequestParam(value = "bucket", required = false) String bucket) {
-        minioService.deleteFile(objectName, bucket);
+        minioService.deleteFile(objectName, requireDefaultBucket(bucket));
         return ResponseWrap.success();
+    }
+
+    private String requireDefaultBucket(String requestedBucket) {
+        String defaultBucket = minioProperties.getBucketName();
+        if (StringUtils.isBlank(requestedBucket) || requestedBucket.equals(defaultBucket)) {
+            return defaultBucket;
+        }
+        throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(),
+                "通用文件接口不允许访问业务存储桶");
     }
 }

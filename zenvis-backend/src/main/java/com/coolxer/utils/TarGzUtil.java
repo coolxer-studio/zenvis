@@ -104,6 +104,10 @@ public final class TarGzUtil {
             Files.walk(normalizedSourceDir).forEach(p -> {
                 try {
                     Path relativePath = normalizedSourceDir.relativize(p);
+                    if (relativePath.toString().isBlank()) {
+                        // 不写入源目录自身，避免生成非法根条目 "/"
+                        return;
+                    }
                     if (relativePath.startsWith("..") || relativePath.isAbsolute()) {
                         log.warn("Skip illegal path during compress: {}", p);
                         return;

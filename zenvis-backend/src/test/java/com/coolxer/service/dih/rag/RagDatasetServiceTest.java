@@ -60,7 +60,13 @@ class RagDatasetServiceTest {
     void createPassesWhenNameUnique() {
         RagDatasetRepository repository = mock(RagDatasetRepository.class);
         when(repository.countByName("测试数据集", null)).thenReturn(0L);
-        when(repository.save(any(RagDataset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(RagDataset.class))).thenAnswer(invocation -> {
+            RagDataset saved = invocation.getArgument(0);
+            if (saved.getId() == null) {
+                saved.setId(11);
+            }
+            return saved;
+        });
         RagDatasetService service = newService(repository);
 
         RagDatasetDto dto = new RagDatasetDto();

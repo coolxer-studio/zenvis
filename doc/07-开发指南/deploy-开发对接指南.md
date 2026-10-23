@@ -12,9 +12,9 @@
 
 ## 技术栈与当前服务
 
-编排基于 Docker Compose，基础设施包含 MySQL、ClickHouse、Redis、Redis Stack 和 Kafka，应用层包含 ZenVis 后端、前端与 Vectum。
+编排基于 Docker Compose，基础设施包含 MySQL、ClickHouse、Redis、Redis Stack、MinIO 和 Kafka，应用层包含 ZenVis 后端、前端与 Vectum。
 
-`docker-compose.yml` 当前声明 8 个服务：
+`docker-compose.yml` 当前声明 9 个服务：
 
 | 服务 | 容器内职责 | 宿主机入口 |
 | --- | --- | --- |
@@ -25,6 +25,7 @@
 | `clickhouse-service` | 插件实体分析数据 | `8123`、`9000`、`9009` |
 | `redis-service` | Session、缓存和运行状态 | `6379` |
 | `redis-stack-service` | RAG 向量索引 | `16379` 映射到容器 `6379` |
+| `minio-service` | 附件和四域业务对象存储 | `19000` 映射 API，`19001` 映射 Console |
 | `kafka-service` | 数据接入消息队列 | `9094` 映射到外部 listener |
 
 镜像后缀由 `deploy/.env` 中的 `ARCH` 决定，当前支持 `amd64` 和 `arm64` 镜像命名。
@@ -46,6 +47,7 @@ deploy/
 │   ├── clickhouse/
 │   ├── redis/
 │   ├── redis-stack/
+│   ├── minio/
 │   ├── kafka/
 │   └── vectum/
 └── open_config/
@@ -61,7 +63,7 @@ deploy/
 - `config/`：容器启动配置，属于部署模板。
 - `data/`：数据库、Kafka、Vectum 等运行数据，不是源码。
 - `open_config/`：后端读取的开放配置根目录，容器内挂载为 `/config/open_config`。
-- `plugin-package_config/`：已安装插件的展开目录和运行时安装状态，不应手工当作插件源码维护。
+- `plugin-package_config/`：插件展开目录、升级工作目录和 Bootstrap 输入，属于可重建缓存；权威插件包在 MinIO。
 
 ## 环境与配置
 
@@ -87,7 +89,7 @@ docker compose config
 
 ### 3. 配置凭据
 
-数据库、REST API、MCP、Vectum 和模型服务凭据应通过部署环境注入或受控配置管理。仓库中的默认值只用于开发基线，生产部署必须替换，并保持：
+数据库、Redis、MinIO、REST API、MCP、Vectum 和模型服务凭据应通过部署环境注入或受控配置管理。仓库中的默认值只用于开发基线，生产部署必须替换，并保持：
 
 - Compose 环境变量；
 - `config/zenvis-backend/config/application.properties`；
@@ -116,7 +118,7 @@ docker compose ps
 ```bash
 docker compose up -d \
   redis-service redis-stack-service mysql-service \
-  clickhouse-service kafka-service zenvis-service-vectum
+  clickhouse-service minio-service kafka-service zenvis-service-vectum
 ```
 
 ### 查看状态和日志
@@ -136,11 +138,11 @@ docker compose up -d
 docker compose ps
 ```
 
-更新前应备份数据库和 `open_config`，确认插件与目标后端版本兼容。不要在没有备份的情况下删除 `data/` 或执行 `docker compose down -v`。
+更新前应备份数据库、MinIO 五个 Bucket、`open_config` 和插件运行缓存，确认插件与目标后端版本兼容。不要在没有备份的情况下删除 `data/` 或执行 `docker compose down -v`。
 
 ## 启动关系和健康检查
 
-- 后端等待 Redis、Redis Stack、MySQL 和 ClickHouse 健康后启动。
+- 后端等待 Redis、Redis Stack、MySQL、ClickHouse 和 MinIO 健康后启动，并在启动时创建缺失 Bucket。
 - 前端依赖后端容器，但 `depends_on` 不等同于业务接口完全可用。
 - Kafka 和 Vectum 独立启动；推送任务还需要它们各自健康。
 - 后端健康检查访问 `/api/v1/system/about/info`。
@@ -187,7 +189,7 @@ curl -fsS http://localhost:11002/actuator/health
 - 新增服务时同步声明镜像、网络、端口、挂载、环境变量、健康检查和实际依赖条件。
 - 新增开放配置类型时同步后端 DTO、Schema、加载/重载逻辑和 `open_config/<type>_config` 基线。
 - 调整反向代理时同时核对前端 `/zenvis` 基础路径、Nginx 配置和后端 `/api/v1/**`，不改变既有公开 API。
-- 调整持久化布局时提供迁移和回滚说明，不把已有 `data/` 当成可重新生成的临时目录。
+- 调整持久化布局时提供迁移和回滚说明，不把已有 `data/` 当成可重新生成的临时目录；插件展开目录除外，它应从 MinIO 包重建。
 
 ## 常见问题
 
@@ -197,7 +199,7 @@ curl -fsS http://localhost:11002/actuator/health
 
 ### 后端健康检查失败
 
-依次检查 MySQL、ClickHouse、Redis、Redis Stack 的健康状态，再检查后端外部配置、挂载路径和日志。
+依次检查 MySQL、ClickHouse、Redis、Redis Stack、MinIO 的健康状态，再检查后端外部配置、挂载路径和日志。Bucket 初始化失败会直接阻止后端启动。
 
 ### 前端页面可访问但 API 404
 

@@ -116,7 +116,9 @@
 
 普通工作流动作要求 `chat_id`、`message_id`、`part_id`、`workflow_id`、`action`，并按动作提供 `answers` 或 `revision`。服务端校验会话归属、消息/part 精确匹配、状态版本、允许动作和严格候选快照。遥测接口当前只接受数据可视化工作流的 `chart_render_failed`。
 
-附件上传结果应原样放入下一次 Chat 请求的 `attachments`。预览接口只允许访问当前用户上传且媒体类型为图片的附件。
+附件上传结果应原样放入下一次 Chat 请求的 `attachments`。上传接口把内容流式写入 `zenvis-chat` 的 `chat/{userId}/{fileId}/{sanitizedFileName}`，返回结构和 `fileUrl` 保持不变；调用方不应自行拼接或解析对象键。
+
+预览与上下文读取只允许访问当前用户上传的附件，服务端按 `userId` 前缀校验归属。预览接口还要求对象实际媒体类型为图片，并在上传时通过文件头识别 PNG、JPEG、WebP、GIF 或 BMP。下载由后端鉴权后流式返回，不返回 presigned URL；MinIO 不可用或对象缺失时请求失败，不回退读取本地 `chat-uploads` 或默认 Bucket。
 
 ## AgentRunController
 
@@ -359,7 +361,9 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 | `artifacts` | 归档产物 |
 | `extra_data` | 扩展数据 |
 
-导出接口不使用 `ResponseWrap`，返回带 `Content-Disposition` 文件名的字节流；支持格式以 `ReportExportService` 当前实现为准。
+报表当前可编辑正文仍以 `ReportDocument.content` 为权威副本。保存、归档时正式修订写入 `zenvis-reports` 的 `documents/{documentId}/revisions/{revision}/content.{md|html}`；`ReportRevision` 与 `ReportArtifact` 复用该对象，不保存第二份正文。归档、恢复和工作区读取都从 MinIO 获取修订内容，对象缺失时返回业务错误，不回退 MySQL 正文字段。
+
+导出接口不使用 `ResponseWrap`，继续返回带 `Content-Disposition` 文件名的流式响应；当前支持 `docx` 和 `pdf`。输出对象键为 `documents/{documentId}/revisions/{revision}/exports/v1/{format}/{exportHash}.{docx|pdf}`，其中 `exportHash` 由文档 ID、修订号、源格式、标题、内容哈希和导出器版本计算；相同输入再次请求时复用已存在对象。接口 URL、下载行为和响应头保持兼容，不签发 presigned URL。
 
 启用 Agent Run 时，报表正文通过 `report_prepare_document`、`report_upsert_section`、`report_replace_section`、`report_reorder_sections` 和 `report_finalize` 写入章节草稿，单章硬上限 2,400 字符。正式修订只在 `report_finalize` 校验通过后生成，`run.succeeded.data.artifact` 携带文档和修订信息。
 
@@ -416,7 +420,7 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 
 基础路径：`/api/v1/dih/vectorstore/datasets`
 
-数据集是 Markdown 文件的存储单元，文件保存在 MinIO 的 `rag/datasets/{id}` 目录下。数据库存储名称、来源、标签、描述、目录和文件数。
+数据集是 Markdown 文件的存储单元，文件保存在 `zenvis-rag` Bucket 的 `rag/datasets/{id}/...` 对象前缀下。数据库存储名称、来源、标签、描述、目录和文件数；`directory` 只是该 Bucket 内的对象键前缀，不能用于切换到默认 Bucket。
 
 | 方法 | 路径 | 输入 | 返回/用途 |
 | --- | --- | --- | --- |
@@ -432,6 +436,8 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 | DELETE | `/api/v1/dih/vectorstore/datasets/{id}/files` | query `objectName` | 删除指定文件 |
 
 `upload` 仅接受 `.md` 文件。传入 `relativePath`（如 `guide/intro.md`，对应浏览器 `File.webkitRelativePath`）时按目录层级存储；服务端会清洗路径，去除盘符、开头斜杠和 `..` 越级片段。上传后自动刷新数据集文件数。`files/content` 与 `files` 删除接口都校验 `objectName` 必须属于该数据集目录。
+
+对象缺失或 MinIO 不可用时，文件列表、读取、上传、删除和知识库构建直接失败，不读取旧 `zenvis-attachments` 数据或本地文件。插件数据集由插件生命周期写入 `rag/plugins/{packageName}/{datasetCode}/{operationId}/...`，同样使用 `zenvis-rag`。
 
 `RagDatasetDto` 字段：`name`（必填）、`source`、`tags`、`description`。`name` 在未删除的数据集范围内唯一，创建或更新为重名时返回「数据集名称已存在」（更新时排除自身）。唯一性为应用层校验，未加数据库唯一索引——表使用逻辑删除（`is_delete`），数据库级唯一约束会导致删除后无法重建同名数据集。
 

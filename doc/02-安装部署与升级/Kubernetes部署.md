@@ -46,7 +46,7 @@ cp deploy/helm/zenvis/values-production.example.yaml /secure/path/zenvis-product
 
 - 固定的 `global.version`，不能使用 `latest`；
 - 私有镜像仓库凭据 `global.imagePullSecrets`；
-- MySQL、ClickHouse、Redis、Redis Stack 和 Kafka 的内部地址；
+- MySQL、ClickHouse、Redis、Redis Stack、Kafka 和外部 MinIO 的内部地址；
 - StorageClass、Ingress、TLS 和必要的 NetworkPolicy；
 - 与目标节点一致的 `global.arch`。
 
@@ -72,9 +72,13 @@ MCP_BEARER_TOKEN
 VECTUM_AUTH_TOKEN
 ZENVIS_BOOTSTRAP_SUPER_ADMIN_PASSWORD
 ZENVIS_BOOTSTRAP_ADMIN_PASSWORD
+MINIO_ROOT_USER
+MINIO_ROOT_PASSWORD
 ```
 
 其中 `MYSQL_ROOT_PASSWORD` 仅供内置 MySQL 使用，外部 MySQL 模式仍可保留该键以统一 Secret 结构。不要把 Secret 明文写入 values 或 Git。
+
+Chart 不部署内置 MinIO。必须在 values 中设置 `external.minio.endpoint` 和 `external.minio.buckets.rag/chat/plugins/reports`；后端获得这四个业务 Bucket 名称，并使用默认 `zenvis-attachments` 以及来自 Secret 的 MinIO 凭据。凭据需要具备创建和访问默认 Bucket、四个业务 Bucket 的权限，否则后端会启动失败。
 
 ## 资源与持久化
 

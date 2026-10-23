@@ -2,7 +2,9 @@ package com.coolxer.service.core.impl;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
+import com.coolxer.configuration.minio.MinioBucketDomain;
 import com.coolxer.configuration.minio.MinioProperties;
+import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.service.core.MinioService;
 import io.minio.*;
 import io.minio.messages.Bucket;
@@ -19,7 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -32,19 +34,34 @@ public class MinioServiceImpl implements MinioService {
     @PostConstruct
     public void init() {
         try {
+            Set<String> businessBuckets = minioProperties.requiredBusinessBuckets();
+            if (businessBuckets.size() != MinioBucketDomain.values().length
+                    || businessBuckets.stream().anyMatch(StringUtils::isBlank)) {
+                throw new IllegalStateException("MinIO 业务存储桶名称不能为空且必须互不相同");
+            }
             String bucketName = minioProperties.getBucketName();
             if (StringUtils.isBlank(bucketName)) {
-                log.warn("MinIO bucket name is not configured, skip auto-creation");
-                return;
+                throw new IllegalStateException("MinIO 默认存储桶名称不能为空");
             }
-            if (!bucketExists(bucketName)) {
-                createBucket(bucketName);
-                log.info("MinIO bucket '{}' created successfully", bucketName);
-            } else {
-                log.info("MinIO bucket '{}' already exists", bucketName);
+            if (businessBuckets.contains(bucketName)) {
+                throw new IllegalStateException("MinIO 默认存储桶不能与业务存储桶重复");
+            }
+            ensureBucket(bucketName);
+            for (String businessBucket : businessBuckets) {
+                ensureBucket(businessBucket);
             }
         } catch (Exception e) {
             log.error("MinIO initialization failed: {}", e.getMessage(), e);
+            throw new IllegalStateException("MinIO 初始化失败: " + e.getMessage(), e);
+        }
+    }
+
+    private void ensureBucket(String bucketName) {
+        if (!bucketExists(bucketName)) {
+            createBucket(bucketName);
+            log.info("MinIO bucket '{}' created successfully", bucketName);
+        } else {
+            log.info("MinIO bucket '{}' already exists", bucketName);
         }
     }
 
@@ -271,6 +288,89 @@ public class MinioServiceImpl implements MinioService {
             log.error("Failed to get file info from MinIO: {}", e.getMessage(), e);
             throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "获取文件信息失败：" + e.getMessage());
         }
+    }
+
+    @Override
+    public MinioObjectInfo getObjectInfo(String objectName, String bucketName) {
+        if (StringUtils.isBlank(objectName)) {
+            throw new ApiException(ResultCodeEnum.FILE_NAME_INVALID.getCode(), "文件对象名称不能为空");
+        }
+        String resolvedBucket = resolveBucket(bucketName);
+        try {
+            StatObjectResponse stat = minioClient.statObject(StatObjectArgs.builder()
+                    .bucket(resolvedBucket)
+                    .object(objectName)
+                    .build());
+            return new MinioObjectInfo(
+                    stat.size(),
+                    stat.contentType(),
+                    stat.etag(),
+                    stat.lastModified() == null ? null : stat.lastModified().toInstant());
+        } catch (Exception e) {
+            log.error("Failed to get object info from MinIO: bucket={}, object={}, error={}",
+                    resolvedBucket, objectName, e.getMessage(), e);
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "获取文件信息失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public void copyObject(String sourceBucket, String sourceObjectName,
+                           String targetBucket, String targetObjectName) {
+        if (StringUtils.isBlank(sourceObjectName) || StringUtils.isBlank(targetObjectName)) {
+            throw new ApiException(ResultCodeEnum.FILE_NAME_INVALID.getCode(), "文件对象名称不能为空");
+        }
+        String resolvedSource = resolveBucket(sourceBucket);
+        String resolvedTarget = resolveBucket(targetBucket);
+        try {
+            minioClient.copyObject(CopyObjectArgs.builder()
+                    .bucket(resolvedTarget)
+                    .object(targetObjectName)
+                    .source(CopySource.builder()
+                            .bucket(resolvedSource)
+                            .object(sourceObjectName)
+                            .build())
+                    .build());
+            log.info("Object copied successfully: {}:{}, -> {}:{}",
+                    resolvedSource, sourceObjectName, resolvedTarget, targetObjectName);
+        } catch (Exception e) {
+            log.error("Failed to copy object in MinIO: {}", e.getMessage(), e);
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "文件复制失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public int deletePrefix(String prefix, String bucketName) {
+        if (StringUtils.isBlank(prefix)) {
+            throw new ApiException(ResultCodeEnum.FILE_NAME_INVALID.getCode(), "对象前缀不能为空");
+        }
+        String resolvedBucket = resolveBucket(bucketName);
+        String normalizedPrefix = prefix.endsWith("/") ? prefix : prefix + "/";
+        int deleted = 0;
+        try {
+            Iterable<Result<Item>> results = minioClient.listObjects(ListObjectsArgs.builder()
+                    .bucket(resolvedBucket)
+                    .prefix(normalizedPrefix)
+                    .recursive(true)
+                    .build());
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                if (!item.isDir()) {
+                    minioClient.removeObject(RemoveObjectArgs.builder()
+                            .bucket(resolvedBucket)
+                            .object(item.objectName())
+                            .build());
+                    deleted++;
+                }
+            }
+            return deleted;
+        } catch (Exception e) {
+            log.error("Failed to delete object prefix from MinIO: {}", e.getMessage(), e);
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "文件删除失败：" + e.getMessage());
+        }
+    }
+
+    private String resolveBucket(String bucketName) {
+        return StringUtils.isBlank(bucketName) ? minioProperties.getBucketName() : bucketName;
     }
 
     @Override

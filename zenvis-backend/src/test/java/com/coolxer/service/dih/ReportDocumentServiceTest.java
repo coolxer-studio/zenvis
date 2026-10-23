@@ -1,5 +1,6 @@
 package com.coolxer.service.dih;
 
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.ReportArtifact;
 import com.coolxer.dao.mysql.entity.ReportDocument;
@@ -14,12 +15,20 @@ import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ReportArchiveDto;
 import com.coolxer.model.dih.dto.ReportDocumentSaveDto;
 import com.coolxer.model.dih.vo.ReportWorkspaceVo;
+import com.coolxer.model.core.vo.MinioObjectInfo;
+import com.coolxer.service.core.MinioService;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +37,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -39,6 +51,7 @@ class ReportDocumentServiceTest {
     private final ReportDocumentRepository documentRepository = mock(ReportDocumentRepository.class);
     private final ReportRevisionRepository revisionRepository = mock(ReportRevisionRepository.class);
     private final ReportArtifactRepository artifactRepository = mock(ReportArtifactRepository.class);
+    private final MinioService minioService = mock(MinioService.class);
 
     private ReportDocumentService service;
     private ChatSession session;
@@ -50,7 +63,16 @@ class ReportDocumentServiceTest {
                 chatSessionRepository,
                 documentRepository,
                 revisionRepository,
-                artifactRepository);
+                artifactRepository,
+                minioService,
+                new MinioProperties());
+        when(minioService.isFile(anyString(), eq("zenvis-reports"))).thenReturn(false);
+        when(minioService.uploadStream(anyString(), any(InputStream.class), anyLong(), anyString(), eq("zenvis-reports")))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(minioService.getObjectInfo(anyString(), eq("zenvis-reports")))
+                .thenReturn(new MinioObjectInfo(16, "text/markdown", "etag", Instant.now()));
+        when(minioService.downloadFile(anyString(), eq("zenvis-reports")))
+                .thenAnswer(invocation -> new ByteArrayInputStream("不可变快照".getBytes(StandardCharsets.UTF_8)));
         session = new ChatSession();
         session.setId(11);
         session.setCreateBy(7);
@@ -71,7 +93,7 @@ class ReportDocumentServiceTest {
     }
 
     @Test
-    void saveCreatesRevisionWithoutCreatingArtifactOrOverwritingOtherExtraData() {
+    void saveCreatesRevisionWithoutCreatingArtifactOrOverwritingOtherExtraData() throws Exception {
         when(documentRepository.findFirstByChatSessionIdOrderByUpdateTimeDesc(11))
                 .thenReturn(Optional.empty());
         ReportDocumentSaveDto request = saveRequest(null, 0L, "# 周报\n\n正文");
@@ -90,7 +112,17 @@ class ReportDocumentServiceTest {
         Map<String, Object> report = castMap(extraData.get("report"));
         assertThat(castMap(report.get("currentDocument"))).doesNotContainKey("content");
         assertThat((List<?>) report.get("artifacts")).isEmpty();
-        verify(revisionRepository).save(any());
+        ArgumentCaptor<com.coolxer.dao.mysql.entity.ReportRevision> revisionCaptor =
+                ArgumentCaptor.forClass(com.coolxer.dao.mysql.entity.ReportRevision.class);
+        verify(revisionRepository).save(revisionCaptor.capture());
+        assertThat(revisionCaptor.getValue().getContent()).isNull();
+        ArgumentCaptor<InputStream> uploadCaptor = ArgumentCaptor.forClass(InputStream.class);
+        verify(minioService).uploadStream(
+                eq("documents/" + workspace.getCurrentDocument().get("documentId")
+                        + "/revisions/1/content.md"),
+                uploadCaptor.capture(), anyLong(), eq("text/markdown; charset=utf-8"), eq("zenvis-reports"));
+        assertThat(new String(uploadCaptor.getValue().readAllBytes(), StandardCharsets.UTF_8))
+                .isEqualTo("# 周报\n\n正文");
         verify(artifactRepository, never()).save(any());
     }
 
@@ -106,6 +138,31 @@ class ReportDocumentServiceTest {
                 .hasMessageContaining("刷新");
         verify(documentRepository, never()).save(any());
         verify(revisionRepository, never()).save(any());
+    }
+
+    @Test
+    void rollbackDeletesRevisionObjectCreatedByFailedTransaction() throws Exception {
+        when(documentRepository.findFirstByChatSessionIdOrderByUpdateTimeDesc(11))
+                .thenReturn(Optional.empty());
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.save(11L, saveRequest(null, 0L, "# 回滚正文"), user);
+
+            ArgumentCaptor<String> objectKey = ArgumentCaptor.forClass(String.class);
+            verify(minioService).uploadStream(
+                    objectKey.capture(), any(InputStream.class), anyLong(),
+                    eq("text/markdown; charset=utf-8"), eq("zenvis-reports"));
+            List<TransactionSynchronization> synchronizations =
+                    TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+
+            synchronizations.forEach(synchronization ->
+                    synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            verify(minioService).deleteFile(objectKey.getValue(), "zenvis-reports");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -131,7 +188,7 @@ class ReportDocumentServiceTest {
 
         ArgumentCaptor<ReportArtifact> captor = ArgumentCaptor.forClass(ReportArtifact.class);
         verify(artifactRepository).save(captor.capture());
-        assertThat(captor.getValue().getContent()).isEqualTo("不可变快照");
+        assertThat(captor.getValue().getContent()).isNull();
         assertThat(captor.getValue().getRevision()).isEqualTo(4L);
         assertThat(workspace.getArtifacts()).hasSize(1);
         assertThat(workspace.getArtifacts().get(0))

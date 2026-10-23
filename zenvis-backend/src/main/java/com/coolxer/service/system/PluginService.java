@@ -133,6 +133,12 @@ public interface PluginService {
     void recoverInterruptedUpgrades();
 
     /**
+     * 应用启动时从对象存储重建已安装插件的本地静态文件缓存。
+     * 该过程不得重复执行数据库迁移、菜单、推送任务等安装副作用。
+     */
+    void restoreInstalledPluginCaches();
+
+    /**
      * 启动时扫描 Bootstrap 目录，一次性自动注册并安装预置插件包；
      * 处理完成后写入 .bootstrap-install.flag，此后不再自动安装。
      */

@@ -4,6 +4,8 @@ import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.enums.RagKnowledgeBaseStatus;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.JacksonConfig;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.RagDataset;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBase;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBaseDataset;
@@ -17,6 +19,7 @@ import com.coolxer.model.dih.vo.RagDatasetFileVo;
 import com.coolxer.model.dih.vo.RagDatasetVo;
 import com.coolxer.service.core.MinioService;
 import com.coolxer.utils.CommonUtil;
+import com.coolxer.utils.StorageObjectKey;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -56,6 +59,9 @@ public class RagDatasetService {
 
     @Autowired
     private MinioService minioService;
+
+    @Autowired
+    private MinioProperties minioProperties;
 
     /**
      * 分页查询数据集
@@ -136,10 +142,10 @@ public class RagDatasetService {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
                     "数据集已被 " + references.size() + " 个知识库引用，请先解除引用后再删除");
         }
-        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), null);
+        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), ragBucket());
         for (String objectName : objectNames) {
             try {
-                minioService.deleteFile(objectName, null);
+                minioService.deleteFile(objectName, ragBucket());
             } catch (Exception e) {
                 log.warn("删除数据集文件失败: objectName={}", objectName, e);
             }
@@ -180,7 +186,7 @@ public class RagDatasetService {
         RagDataset dataset = getDatasetOrThrow(id);
         validateFile(file);
         MultipartFile target = wrapWithRelativePath(file, relativePath);
-        String objectName = minioService.uploadFile(target, null, dataset.getDirectory());
+        String objectName = minioService.uploadFile(target, ragBucket(), dataset.getDirectory());
         String fileName = objectName.substring(objectName.lastIndexOf('/') + 1);
         refreshFileCount(dataset);
         ragDatasetRepository.save(dataset);
@@ -196,7 +202,7 @@ public class RagDatasetService {
      */
     public List<RagDatasetFileVo> listFiles(Integer id) {
         RagDataset dataset = getDatasetOrThrow(id);
-        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), null);
+        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), ragBucket());
         String prefix = dataset.getDirectory() + "/";
         List<RagDatasetFileVo> files = new ArrayList<>();
         for (String objectName : objectNames) {
@@ -205,7 +211,7 @@ public class RagDatasetService {
             String relative = objectName.startsWith(prefix) ? objectName.substring(prefix.length()) : objectName;
             vo.setName(relative);
             try {
-                vo.setSize(minioService.getFileSize(objectName, null));
+                vo.setSize(minioService.getFileSize(objectName, ragBucket()));
             } catch (Exception e) {
                 vo.setSize(0);
             }
@@ -226,7 +232,7 @@ public class RagDatasetService {
         if (StringUtils.isBlank(objectName) || !objectName.startsWith(dataset.getDirectory() + "/")) {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "文件不属于该数据集");
         }
-        try (InputStream inputStream = minioService.downloadFile(objectName, null)) {
+        try (InputStream inputStream = minioService.downloadFile(objectName, ragBucket())) {
             return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "读取文件内容失败: " + e.getMessage());
@@ -245,7 +251,7 @@ public class RagDatasetService {
         if (StringUtils.isBlank(objectName) || !objectName.startsWith(dataset.getDirectory() + "/")) {
             throw new ApiException(ResultCodeEnum.NO_AUTHORITY.getCode(), "文件不属于该数据集");
         }
-        minioService.deleteFile(objectName, null);
+        minioService.deleteFile(objectName, ragBucket());
         refreshFileCount(dataset);
         RagDataset saved = ragDatasetRepository.save(dataset);
         invalidateKnowledgeBaseFingerprints(saved.getId());
@@ -286,7 +292,7 @@ public class RagDatasetService {
 
     private void refreshFileCount(RagDataset dataset) {
         try {
-            List<String> objectNames = minioService.listObjects(dataset.getDirectory(), null);
+            List<String> objectNames = minioService.listObjects(dataset.getDirectory(), ragBucket());
             dataset.setFileCount(objectNames.size());
         } catch (Exception e) {
             log.warn("刷新数据集文件数量失败: id={}", dataset.getId(), e);
@@ -308,6 +314,12 @@ public class RagDatasetService {
             }
             ragKnowledgeBaseRepository.save(knowledgeBase);
         }
+    }
+
+    private String ragBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_RAG_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.RAG);
     }
 
     /**
@@ -404,7 +416,7 @@ public class RagDatasetService {
     }
 
     private String buildDirectory(Integer id) {
-        return DATASET_DIR_PREFIX + id;
+        return StorageObjectKey.ragDataset(id);
     }
 
     private String writeTags(List<String> tags) {

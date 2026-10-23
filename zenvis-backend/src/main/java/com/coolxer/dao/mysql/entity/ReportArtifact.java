@@ -49,7 +49,7 @@ public class ReportArtifact extends BaseEntity {
     @Column(name = "content_hash", nullable = false, length = 64)
     private String contentHash;
 
-    @Column(columnDefinition = "LONGTEXT", nullable = false, updatable = false)
+    @Column(columnDefinition = "LONGTEXT", updatable = false)
     private String content;
 
     @Column(columnDefinition = "LONGTEXT", updatable = false)

@@ -62,6 +62,13 @@ app.ai.vectorstore.management.enabled=true
 
 插件 RAG 完全由 `08_rag/config.json` 接管。安装器不再把 `00_doc` 自动加载到公共向量索引；没有 `08_rag` 声明的插件可以正常安装，但不会创建插件托管的数据集或知识库。数据集路径可以指向 `00_doc` 下的目录，也可以指向 `08_rag/datasets/<code>/`。
 
+RAG 原始文档与插件数据集统一存储在 `zenvis-rag` Bucket，使用固定对象键：
+
+- 数据集：`rag/datasets/{datasetId}/...`；
+- 插件数据集：`rag/plugins/{packageName}/{datasetCode}/{operationId}/...`。
+
+数据库中的 `directory` 仍保存对象键前缀，Bucket 由 RAG 业务域固定选择。旧数据若只存在于 `zenvis-attachments`，不会在运行时回退读取；需要重新创建或导入数据集。MinIO 对象缺失时上传、下载、删除和知识库构建直接失败，不使用本地文件或 MySQL 正文降级。
+
 托管资源使用以下身份：
 
 | 资源 | 托管身份 | 说明 |

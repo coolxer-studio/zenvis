@@ -91,13 +91,13 @@ public class Plugin extends BaseEntity {
     /**
      * 插件包路径
      */
-    @Column(name = "plugin_path")
+    @Column(name = "plugin_path", length = 512)
     private String pluginPath;
 
     /**
      * 升级候选包路径。升级提交成功前不会覆盖当前插件包路径。
      */
-    @Column(name = "pending_upgrade_path")
+    @Column(name = "pending_upgrade_path", length = 512)
     private String pendingUpgradePath;
 
     /**

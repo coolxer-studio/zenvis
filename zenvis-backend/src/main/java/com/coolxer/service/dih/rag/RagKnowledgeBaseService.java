@@ -4,6 +4,8 @@ import com.coolxer.commons.enums.RagKnowledgeBaseStatus;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.JacksonConfig;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.RagDataset;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBase;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBaseDataset;
@@ -71,6 +73,9 @@ public class RagKnowledgeBaseService {
 
     @Autowired
     private MinioService minioService;
+
+    @Autowired
+    private MinioProperties minioProperties;
 
     @Autowired
     private VectorStoreInitializerService vectorStoreInitializerService;
@@ -360,7 +365,7 @@ public class RagKnowledgeBaseService {
     }
 
     private int buildDatasetDocuments(VectorStore vectorStore, RagKnowledgeBase knowledgeBase, RagDataset dataset, String kbSource, Integer knowledgeBaseId) throws Exception {
-        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), null);
+        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), ragBucket());
         List<String> markdownObjects = objectNames.stream()
                 .filter(name -> StringUtils.endsWithIgnoreCase(name, ".md"))
                 .toList();
@@ -375,7 +380,7 @@ public class RagKnowledgeBaseService {
                 String fileName = objectName.substring(dataset.getDirectory().length() + 1);
                 Path tempFile = tempDir.resolve(fileName);
                 Files.createDirectories(tempFile.getParent());
-                try (InputStream inputStream = minioService.downloadFile(objectName, null)) {
+                try (InputStream inputStream = minioService.downloadFile(objectName, ragBucket())) {
                     Files.copy(inputStream, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 }
                 MarkdownDocumentReader reader = new MarkdownDocumentReader(tempFile.toAbsolutePath().toUri().toString());
@@ -399,6 +404,12 @@ public class RagKnowledgeBaseService {
         } finally {
             deleteDirectory(tempDir);
         }
+    }
+
+    private String ragBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_RAG_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.RAG);
     }
 
     private void unloadKnowledgeBaseVectors(Integer id) {

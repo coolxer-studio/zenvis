@@ -27,7 +27,7 @@ DIH 是应用编排层，不是单一模型代理。它先确定会话分支，�
 
 | 数据 | 存储 | 用途 |
 | --- | --- | --- |
-| ZenVis 会话与消息 | MySQL 平台表 | 页面历史、附件、结构化消息和业务状态 |
+| ZenVis 会话与消息 | MySQL 平台表 + `zenvis-chat` | 页面历史、附件元信息/归属、结构化消息和业务状态；附件正文在 MinIO |
 | Spring AI Chat Memory | MySQL JDBC Chat Memory | 提供给模型的多轮上下文 |
 
 两者不能互相替代。删除或截断模型上下文不应破坏页面历史，页面消息迁移也不能假设模型记忆自动同步。
@@ -71,6 +71,8 @@ Run 消息保存 `runId`，前端据此把每轮任务卡挂回对应 AI 消息�
 ```
 
 知识库向量文档使用 `source=kb_<knowledge_base_id>` 标识。普通问答把所有未删除知识库 ID 转为该标签的 `in` 过滤条件；业务会话只使用所选 Skill 绑定知识库的 ID。范围过滤复用现有 Redis 索引字段，不新增向量字段或数据库迁移。
+
+RAG 原文和插件数据集以 `zenvis-rag` 为权威存储。Redis 只保存可重建的切分文本、Embedding 和索引元数据；对象缺失时知识库构建直接失败，不回退读取旧 Bucket 或本地文件。
 
 向量能力可通过配置关闭。关闭后普通聊天仍可使用模型，但依赖 RAG 的管理和召回能力不可用。
 
@@ -276,6 +278,17 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
 启用 Agent Run 时，报表 Agent 先创建草稿，再通过受控工具逐章节写入，最后由 `report_finalize` 生成正式修订。单章目标约 1,200 字、硬上限 2,400 字符；已写入章节独立保存，当前章节失败不会删除其他成果。Run 只有在存在已 finalize 草稿时才可成功结束。
 
 未启用 Run 或旧客户端仍可能使用完整的 `zenvis:report-document-config` 围栏。该路径受模型输出 Token 上限约束，检测到 `finish_reason=length` 或围栏未闭合时会丢弃不完整报表，避免半份内容覆盖正式文档。长报表应优先使用持久化 Run 的章节化写入。
+
+### 存储、修订与导出
+
+- `ReportDocument.content` 是当前可编辑正文的权威副本，继续保存在 MySQL，支持并发修订检查和文档工作区读取。
+- 正式修订写入 `zenvis-reports` 的固定对象键 `documents/{documentId}/revisions/{revision}/content.{md|html}`。`ReportRevision` 和 `ReportArtifact` 只保存元信息，新记录正文为 `NULL`；归档产物复用同一修订对象，不复制第二份正文。
+- 保存修订时先写对象再提交数据库。写入前记录对象是否已存在，事务回滚时只删除本次新建的对象，避免误删可复用修订。
+- 归档、恢复、素材摘要和工作区读取从 MinIO 读取修订正文。对象缺失时返回明确业务错误，不回退读取 MySQL 正文字段。
+- DOCX/PDF 导出按 `documentId + revision + sourceFormat + title + contentHash + exporterVersion` 计算 `exportHash`，并以目标格式区分对象键 `documents/{documentId}/revisions/{revision}/exports/v1/{format}/{exportHash}.{docx|pdf}`；对象已存在时直接复用。
+- 导出接口保持原 URL 和下载行为，由后端鉴权后返回 MinIO 流式响应；不签发 presigned URL。
+
+本次迁移不回填历史修订。旧修订没有对应对象时不能恢复或导出，应在新的修订流程下重新生成。
 
 ## 资源上限
 

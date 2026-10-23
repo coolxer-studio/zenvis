@@ -25,6 +25,8 @@ public class PluginSchemaInitializer {
     }
 
     public void ensureUpgradeSchema() {
+        ensurePathColumnLength("plugin_path");
+        ensurePathColumnLength("pending_upgrade_path");
         List<String> clauses = jdbcTemplate.query("""
                 SELECT cc.CHECK_CLAUSE
                 FROM information_schema.TABLE_CONSTRAINTS tc
@@ -46,5 +48,21 @@ public class PluginSchemaInitializer {
         jdbcTemplate.execute("ALTER TABLE " + MysqlFinalTableName.T_SYS_PLUGIN
                 + " ADD CONSTRAINT " + CONSTRAINT_NAME + " CHECK (" + Plugin.STATUS_CHECK_CONSTRAINT + ")");
         log.info("插件状态约束已包含升级状态");
+    }
+
+    private void ensurePathColumnLength(String columnName) {
+        List<Long> lengths = jdbcTemplate.query("""
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                """, (rs, rowNum) -> rs.getLong(1), MysqlFinalTableName.T_SYS_PLUGIN, columnName);
+        if (lengths.isEmpty() || (lengths.get(0) != null && lengths.get(0) >= 512)) {
+            return;
+        }
+        jdbcTemplate.execute("ALTER TABLE " + MysqlFinalTableName.T_SYS_PLUGIN
+                + " MODIFY COLUMN " + columnName + " VARCHAR(512) NULL");
+        log.info("插件表 {} 列已扩展到 512", columnName);
     }
 }

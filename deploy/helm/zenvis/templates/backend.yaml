@@ -69,6 +69,18 @@ spec:
           env:
             - name: TZ
               value: {{ .Values.global.timezone | quote }}
+            - name: MINIO_ENDPOINT
+              value: {{ required "external.minio.endpoint is required" .Values.external.minio.endpoint | quote }}
+            - name: MINIO_BUCKET
+              value: zenvis-attachments
+            - name: MINIO_RAG_BUCKET
+              value: {{ .Values.external.minio.buckets.rag | quote }}
+            - name: MINIO_CHAT_BUCKET
+              value: {{ .Values.external.minio.buckets.chat | quote }}
+            - name: MINIO_PLUGINS_BUCKET
+              value: {{ .Values.external.minio.buckets.plugins | quote }}
+            - name: MINIO_REPORTS_BUCKET
+              value: {{ .Values.external.minio.buckets.reports | quote }}
             - name: MYSQL_JDBC_URL
               value: {{ printf "jdbc:mysql://%s:%v/%s?serverTimezone=Asia/Shanghai&characterEncoding=utf8&useSSL=true&createDatabaseIfNotExist=true" (include "zenvis.mysqlHost" .) .Values.external.mysql.port .Values.external.mysql.database | quote }}
             - name: MYSQL_USER

@@ -2,6 +2,8 @@ package com.coolxer.service.dih;
 
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.ReportArtifact;
 import com.coolxer.dao.mysql.entity.ReportDocument;
@@ -19,12 +21,20 @@ import com.coolxer.model.dih.dto.ReportArchiveDto;
 import com.coolxer.model.dih.dto.ReportArtifactRenameDto;
 import com.coolxer.model.dih.dto.ReportDocumentSaveDto;
 import com.coolxer.model.dih.vo.ReportWorkspaceVo;
+import com.coolxer.service.core.MinioService;
 import com.coolxer.utils.JacksonUtil;
+import com.coolxer.utils.StorageObjectKey;
 import com.fasterxml.jackson.core.type.TypeReference;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
@@ -41,6 +51,7 @@ import java.util.UUID;
  * 报表专用原子存储。会话 extraData 仅保存工作区摘要，正文和修订由独立表负责。
  */
 @Service
+@Slf4j
 public class ReportDocumentService {
 
     public static final int MAX_REPORT_CONTENT_CHARS = 2_000_000;
@@ -49,16 +60,32 @@ public class ReportDocumentService {
     private final ReportDocumentRepository documentRepository;
     private final ReportRevisionRepository revisionRepository;
     private final ReportArtifactRepository artifactRepository;
+    private final MinioService minioService;
+    private final MinioProperties minioProperties;
 
     public ReportDocumentService(
             ChatSessionRepository chatSessionRepository,
             ReportDocumentRepository documentRepository,
             ReportRevisionRepository revisionRepository,
             ReportArtifactRepository artifactRepository) {
+        this(chatSessionRepository, documentRepository, revisionRepository, artifactRepository,
+                null, new MinioProperties());
+    }
+
+    @Autowired
+    public ReportDocumentService(
+            ChatSessionRepository chatSessionRepository,
+            ReportDocumentRepository documentRepository,
+            ReportRevisionRepository revisionRepository,
+            ReportArtifactRepository artifactRepository,
+            MinioService minioService,
+            MinioProperties minioProperties) {
         this.chatSessionRepository = chatSessionRepository;
         this.documentRepository = documentRepository;
         this.revisionRepository = revisionRepository;
         this.artifactRepository = artifactRepository;
+        this.minioService = minioService;
+        this.minioProperties = minioProperties;
     }
 
     @Transactional(transactionManager = "mysqlTransactionManager")
@@ -181,7 +208,8 @@ public class ReportDocumentService {
             ref.put("documentId", artifact.getDocumentId());
             ref.put("revision", artifact.getRevision());
             ref.put("contentHash", artifact.getContentHash());
-            ref.put("contentExcerpt", excerpt(artifact.getContent(), 2_000));
+            ref.put("contentExcerpt", excerpt(readRevisionContent(
+                    artifact.getDocumentId(), artifact.getRevision(), artifact.getFormat()), 2_000));
             addSessionMetadata(ref, sessionsById.get(artifact.getChatSessionId()));
             putMaterial(materials, ref);
         }
@@ -210,7 +238,8 @@ public class ReportDocumentService {
         artifact.setTitle(document.getTitle());
         artifact.setFormat(document.getFormat());
         artifact.setContentHash(document.getContentHash());
-        artifact.setContent(document.getContent());
+        requireRevisionObject(document.getDocumentId(), document.getCurrentRevision(), document.getFormat());
+        artifact.setContent(null);
         artifact.setOutline(document.getOutline());
         artifact.setSourceRefs(document.getSourceRefs());
         artifact.setCreateBy(currentUser.getId());
@@ -238,7 +267,8 @@ public class ReportDocumentService {
         save.setBaseRevision(document.getCurrentRevision());
         save.setTitle(artifact.getTitle());
         save.setFormat(artifact.getFormat());
-        save.setContent(artifact.getContent());
+        save.setContent(readRevisionContent(
+                artifact.getDocumentId(), artifact.getRevision(), artifact.getFormat()));
         save.setOutline(parseList(artifact.getOutline()));
         save.setSourceRefs(parseList(artifact.getSourceRefs()));
         return saveLocked(session, save, currentUser, true);
@@ -312,6 +342,9 @@ public class ReportDocumentService {
         String sourceRefs = JacksonUtil.toJson(
                 acceptedSourceRefs == null ? List.of() : acceptedSourceRefs);
         String contentHash = sha256(content);
+        String documentId = document.getDocumentId();
+        String revisionObjectKey = StorageObjectKey.reportRevision(documentId, nextRevision, format);
+        storeRevisionContent(revisionObjectKey, content);
 
         document.setTitle(title);
         document.setFormat(format);
@@ -330,7 +363,7 @@ public class ReportDocumentService {
         revision.setTitle(title);
         revision.setFormat(format);
         revision.setContentHash(contentHash);
-        revision.setContent(content);
+        revision.setContent(null);
         revision.setOutline(outline);
         revision.setSourceRefs(sourceRefs);
         revision.setCreateBy(currentUser.getId());
@@ -712,7 +745,8 @@ public class ReportDocumentService {
         result.put("createdAt", artifact.getCreateTime());
         result.put("sourceRefs", parseList(artifact.getSourceRefs()));
         if (includeContent) {
-            result.put("content", artifact.getContent());
+            result.put("content", readRevisionContent(
+                    artifact.getDocumentId(), artifact.getRevision(), artifact.getFormat()));
             result.put("outline", parseList(artifact.getOutline()));
         }
         return result;
@@ -771,6 +805,65 @@ public class ReportDocumentService {
             }
         }
         return new ArrayList<>(unique.values());
+    }
+
+    private void storeRevisionContent(String objectKey, String content) {
+        if (minioService == null) {
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "报表对象存储未配置");
+        }
+        byte[] bytes = StringUtils.defaultString(content).getBytes(StandardCharsets.UTF_8);
+        boolean existed = minioService.isFile(objectKey, reportsBucket());
+        try (InputStream inputStream = new ByteArrayInputStream(bytes)) {
+            minioService.uploadStream(objectKey, inputStream, bytes.length,
+                    objectKey.endsWith(".html") ? "text/html; charset=utf-8" : "text/markdown; charset=utf-8",
+                    reportsBucket());
+        } catch (Exception e) {
+            throw new ApiException(ResultCodeEnum.FILE_WRITE_FAIL.getCode(), "报表修订正文写入失败：" + e.getMessage());
+        }
+        if (!existed && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_ROLLED_BACK) {
+                        return;
+                    }
+                    try {
+                        minioService.deleteFile(objectKey, reportsBucket());
+                    } catch (Exception cleanupError) {
+                        log.warn("回滚报表对象失败: object={}", objectKey, cleanupError);
+                    }
+                }
+            });
+        }
+    }
+
+    private void requireRevisionObject(String documentId, long revision, String format) {
+        String objectKey = StorageObjectKey.reportRevision(documentId, revision, format);
+        try {
+            minioService.getObjectInfo(objectKey, reportsBucket());
+        } catch (Exception e) {
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(),
+                    "报表修订正文不存在或不可读取，请重新生成报表。");
+        }
+    }
+
+    private String readRevisionContent(String documentId, long revision, String format) {
+        if (minioService == null) {
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "报表对象存储未配置");
+        }
+        String objectKey = StorageObjectKey.reportRevision(documentId, revision, format);
+        try (InputStream inputStream = minioService.downloadFile(objectKey, reportsBucket())) {
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(),
+                    "报表修订正文不存在或不可读取，请重新生成报表。");
+        }
+    }
+
+    private String reportsBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_REPORTS_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.REPORTS);
     }
 
     private String sha256(String value) {

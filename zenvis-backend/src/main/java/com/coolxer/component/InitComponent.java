@@ -55,6 +55,9 @@ public class InitComponent implements CommandLineRunner {
     @Autowired
     private PluginSchemaInitializer pluginSchemaInitializer;
 
+    @Autowired
+    private ReportSchemaInitializer reportSchemaInitializer;
+
     @Override
     public void run(String... args) throws Exception {
         // 输出关键信息
@@ -66,6 +69,7 @@ public class InitComponent implements CommandLineRunner {
 
         dataInitiator.initData();
         pluginSchemaInitializer.ensureUpgradeSchema();
+        reportSchemaInitializer.ensureObjectStorageSchema();
         // mysql初始化，固定/init/mysql-init.sql，仅首次启动执行
         Path mysqlInitFlag = Paths.get(customWebConfig.getSystemConfigPath(), "init", ".mysql-init.flag");
         if (!Files.exists(mysqlInitFlag)) {
@@ -81,6 +85,8 @@ public class InitComponent implements CommandLineRunner {
         
         // 在全局 Meta 和插件 API 加载前恢复中断的升级。
         pluginService.recoverInterruptedUpgrades();
+        // 本地安装目录只是缓存，缺失时从对象存储重建后再加载 API 和 Meta。
+        pluginService.restoreInstalledPluginCaches();
 
         // 初始化加载meta
         MetaData metaData = metaDataService.loadMetaData();

@@ -218,7 +218,7 @@ class PluginRagServiceTest {
             savedKnowledgeBase.get().setStatus(RagKnowledgeBaseStatus.BUILT);
             return RagKnowledgeBaseStatus.BUILT;
         });
-        when(minioService.uploadStream(anyString(), any(), anyLong(), anyString(), eq(null)))
+        when(minioService.uploadStream(anyString(), any(), anyLong(), anyString(), eq("zenvis-rag")))
                 .thenAnswer(invocation -> {
                     uploadedDirectory.set(invocation.getArgument(0));
                     return invocation.getArgument(0);
@@ -452,7 +452,7 @@ class PluginRagServiceTest {
                 """));
         AtomicInteger uploads = new AtomicInteger();
         AtomicReference<String> firstObject = new AtomicReference<>();
-        when(serviceMinioService(service).uploadStream(anyString(), any(), anyLong(), anyString(), eq(null)))
+        when(serviceMinioService(service).uploadStream(anyString(), any(), anyLong(), anyString(), eq("zenvis-rag")))
                 .thenAnswer(invocation -> {
                     if (uploads.incrementAndGet() == 1) {
                         firstObject.set(invocation.getArgument(0));
@@ -460,7 +460,7 @@ class PluginRagServiceTest {
                     }
                     throw new IllegalStateException("upload failed");
                 });
-        when(serviceMinioService(service).listObjects(anyString(), eq(null)))
+        when(serviceMinioService(service).listObjects(anyString(), eq("zenvis-rag")))
                 .thenAnswer(invocation -> firstObject.get() == null
                         ? List.of() : List.of(firstObject.get()));
 
@@ -468,7 +468,7 @@ class PluginRagServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("upload failed");
 
-        verify(serviceMinioService(service)).deleteFile(firstObject.get(), null);
+        verify(serviceMinioService(service)).deleteFile(firstObject.get(), "zenvis-rag");
     }
 
     @Test
@@ -560,9 +560,9 @@ class PluginRagServiceTest {
         when(serviceRepository(service).findAllManaged("com.acme.demo")).thenReturn(List.of(dataset));
         when(serviceKnowledgeBaseRepository(service).findAllManaged("com.acme.demo")).thenReturn(List.of(knowledgeBase));
         when(serviceRelationRepository(service).findByKnowledgeBaseId(22)).thenReturn(List.of(relation));
-        when(serviceMinioService(service).listObjects("rag/plugins/com.acme.demo/docs/op", null))
+        when(serviceMinioService(service).listObjects("rag/plugins/com.acme.demo/docs/op", "zenvis-rag"))
                 .thenReturn(List.of("rag/plugins/com.acme.demo/docs/op/sub/a.md"));
-        when(serviceMinioService(service).downloadFile("rag/plugins/com.acme.demo/docs/op/sub/a.md", null))
+        when(serviceMinioService(service).downloadFile("rag/plugins/com.acme.demo/docs/op/sub/a.md", "zenvis-rag"))
                 .thenReturn(new ByteArrayInputStream("# A".getBytes(StandardCharsets.UTF_8)));
         Path target = pluginRoot.resolve("export/08_rag");
         Files.createDirectories(target.resolve("datasets/removed"));

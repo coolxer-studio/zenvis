@@ -38,7 +38,7 @@ public class ReportRevision extends BaseEntity {
     @Column(name = "content_hash", nullable = false, length = 64)
     private String contentHash;
 
-    @Column(columnDefinition = "LONGTEXT", nullable = false)
+    @Column(columnDefinition = "LONGTEXT")
     private String content;
 
     @Column(columnDefinition = "LONGTEXT")

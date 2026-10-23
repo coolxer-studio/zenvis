@@ -8,6 +8,8 @@ import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.configuration.extend.ExtendJarManager;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.Dashboard;
 import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.dao.mysql.entity.Menu;
@@ -22,6 +24,7 @@ import com.coolxer.model.dih.dto.McpServerDto;
 import com.coolxer.model.dih.vo.McpServerVo;
 import com.coolxer.model.base.vo.FileTreeNodeVo;
 import com.coolxer.model.base.vo.PageRowsVo;
+import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.model.retrieval.meta.MetaData;
 import com.coolxer.model.system.dto.DashboardDto;
 import com.coolxer.model.system.dto.MenuDto;
@@ -33,6 +36,7 @@ import com.coolxer.model.system.vo.MenuVo;
 import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.core.ClickhouseSchemeService;
+import com.coolxer.service.core.MinioService;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.rag.PluginRagService;
@@ -67,6 +71,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -92,6 +97,11 @@ public class PluginServiceImpl implements PluginService {
     private static final String UI_HTML_PAGE_DIR_NAME = "html-page";
     private static final String PLUGIN_UPGRADE_DIR_NAME = "upgrade";
     private static final String UPGRADE_SNAPSHOT_FILE_NAME = "snapshot.json";
+    private static final String PLUGIN_CACHE_DIR_NAME = ".cache";
+    private static final String PLUGIN_PACKAGE_CACHE_DIR_NAME = "packages";
+    private static final String PLUGIN_TEMP_CACHE_DIR_NAME = "temp";
+    private static final String PLUGIN_PACKAGE_CONTENT_TYPE = "application/gzip";
+    private static final String LEGACY_PLUGIN_PATH_MESSAGE = "插件包已迁移至对象存储，请重新上传并安装";
     private static final String BOOTSTRAP_FLAG_FILE_NAME = ".bootstrap-install.flag";
     private static final long MAX_PLUGIN_PACKAGE_BYTES = 300L * 1024L * 1024L;
     private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$");
@@ -148,6 +158,12 @@ public class PluginServiceImpl implements PluginService {
     @Autowired
     private PluginOperationExecutor pluginOperationExecutor;
 
+    @Autowired
+    private MinioService minioService;
+
+    @Autowired
+    private MinioProperties minioProperties;
+
     private static final ConcurrentHashMap<Long, PluginLogBuffer> LOG_CACHE = new ConcurrentHashMap<>();
 
     @Override
@@ -176,6 +192,9 @@ public class PluginServiceImpl implements PluginService {
         checkCreateOrUpdate(pluginDto);
         Plugin plugin = new Plugin();
         plugin.updateFromDto(pluginDto);
+        if (StringUtils.isNotBlank(plugin.getPluginPath())) {
+            requirePluginPackageObjectKey(plugin.getPluginPath());
+        }
         plugin.setStatus(PluginStatusType.UN_INSTALL);
         plugin.setOperationMessage("插件已创建");
         plugin.setOperationError(null);
@@ -197,15 +216,8 @@ public class PluginServiceImpl implements PluginService {
             // 已经加载的不支持删除
             throw new ApiException(ResultCodeEnum.PLUGIN_IS_INSTALLED);
         }
-        try {
-            if (StringUtils.isNotBlank(plugin.getPluginPath())) {
-                Path pluginPath = safePluginPath(plugin.getPluginPath());
-                if (Files.exists(pluginPath) && Files.isRegularFile(pluginPath)) {
-                    WalkFileUtil.delete(pluginPath);
-                }
-            }
-        } catch (IOException e) {
-            log.warn("删除插件包文件失败: id={}", id, e);
+        if (StringUtils.isNotBlank(plugin.getPluginPath())) {
+            deletePluginPackageObject(plugin.getPluginPath());
         }
         pluginRepository.deleteById(id);
     }
@@ -232,25 +244,16 @@ public class PluginServiceImpl implements PluginService {
     @Override
     public PluginVo uploadFile(MultipartFile file) {
         validateUploadFile(file);
+        Path tempFile = null;
         try {
-            Path directory = pluginRoot();
-            if (!Files.exists(directory)) {
-                Files.createDirectories(directory);
-            }
-
-            Path tempDir = directory.resolve("temp").resolve(DateUtil.getCurrentDateTime().replace(" ", "/"));
-            if (!Files.exists(tempDir)) {
-                Files.createDirectories(tempDir);
-            }
             String originalFilename = Objects.requireNonNull(file.getOriginalFilename(), "插件包文件名不能为空");
-            String fileName = Paths.get(originalFilename).getFileName().toString();
-            Path path = requireChildPath(tempDir.resolve(fileName), directory);
+            tempFile = pluginTempFile(originalFilename);
             try (InputStream inputStream = file.getInputStream()) {
-                Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
             }
-            TarGzUtil.validateTarGz(path);
+            TarGzUtil.validateTarGz(tempFile);
             // 解析插件包，提取信息
-            String pluginJsonString = TarGzUtil.readRootFile(path, "index.json");
+            String pluginJsonString = TarGzUtil.readRootFile(tempFile, "index.json");
             if (StringUtils.isBlank(pluginJsonString)) {
                 throw invalidPluginPackage("插件包缺少 index.json");
             }
@@ -261,16 +264,18 @@ public class PluginServiceImpl implements PluginService {
             validatePackageName(pluginVo.getPackageName());
             // icon转化
             if (StringUtils.isNotBlank(pluginVo.getIcon()) && !ImageDataUriUtil.isDataUrl(pluginVo.getIcon())) {
-                String iconBase64 = TarGzUtil.readBase64File(path, pluginVo.getIcon());
+                String iconBase64 = TarGzUtil.readBase64File(tempFile, pluginVo.getIcon());
                 if (iconBase64 == null) {
                     throw invalidPluginPackage("插件图标文件不存在");
                 }
                 pluginVo.setIcon(ImageDataUriUtil.toDataUri(pluginVo.getIcon(), iconBase64));
             }
-            pluginVo.setPluginPath(path.toString());
+            pluginVo.setPluginPath(storePluginPackage(tempFile, pluginVo.getPackageName()));
             return pluginVo;
         } catch (IOException e) {
             throw invalidPluginPackage(e.getMessage());
+        } finally {
+            deleteQuietly(tempFile);
         }
     }
 
@@ -293,31 +298,26 @@ public class PluginServiceImpl implements PluginService {
 
     @Override
     public String downloadPackage(String downloadUrl, String packageName) {
+        Path tempFile = null;
         try {
-            Path directory = pluginRoot();
-            if (!Files.exists(directory)) {
-                Files.createDirectories(directory);
-            }
-            Path tempDir = directory.resolve("temp").resolve(DateUtil.getCurrentDateTime().replace(" ", "/"));
-            if (!Files.exists(tempDir)) {
-                Files.createDirectories(tempDir);
-            }
             // 从URL中提取文件名
             String fileName = Paths.get(new URL(downloadUrl).getPath()).getFileName().toString();
             if (StringUtils.isBlank(fileName) || !fileName.endsWith(".tar.gz")) {
                 fileName = packageName.replace(".", "-") + ".tar.gz";
             }
-            Path filePath = requireChildPath(tempDir.resolve(fileName), directory);
+            tempFile = pluginTempFile(fileName);
 
             // 下载文件（手动处理重定向，兼容Gitee）
-            downloadFileWithRedirects(downloadUrl, filePath);
+            downloadFileWithRedirects(downloadUrl, tempFile);
 
             // 验证tar.gz格式
-            TarGzUtil.validateTarGz(filePath);
+            TarGzUtil.validateTarGz(tempFile);
 
-            return filePath.toString();
+            return storePluginPackage(tempFile, packageName);
         } catch (IOException e) {
             throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "下载插件失败: " + e.getMessage());
+        } finally {
+            deleteQuietly(tempFile);
         }
     }
 
@@ -386,7 +386,7 @@ public class PluginServiceImpl implements PluginService {
         Path pluginTarGzPath = null;
         if (normalizeStatus(plugin.getStatus()) != PluginStatusType.INSTALLED && StringUtils.isNotEmpty(plugin.getPluginPath())) {
             // 未安装状态，存在默认插件包，直接输出
-            pluginTarGzPath = safePluginPackagePath(plugin.getPluginPath());
+            pluginTarGzPath = materializePluginPackage(plugin.getPluginPath());
         } else {
             // 已安装状态，或者没有默认包，以加载内容输出插件包.构建打包属性包装类
             Path installedRoot = installedPluginRoot(plugin);
@@ -520,7 +520,7 @@ public class PluginServiceImpl implements PluginService {
     private Plugin startInstall(Long id) {
         Plugin plugin = getPluginOrThrow(id);
         validatePackageName(plugin.getPackageName());
-        safePluginPackagePath(plugin.getPluginPath());
+        requirePluginPackageObject(plugin.getPluginPath());
         resetLogs(id);
         updateOperationState(plugin, PluginStatusType.INSTALLING, "安装已开始", null, true);
         return pluginRepository.save(plugin);
@@ -568,17 +568,7 @@ public class PluginServiceImpl implements PluginService {
                     }
                     pluginVo.setIcon(ImageDataUriUtil.toDataUri(pluginVo.getIcon(), iconBase64));
                 }
-                // 复制到插件包运行目录后注册，Bootstrap 目录保持只读，界面删除不会误删源包
-                Path directory = pluginRoot();
-                if (!Files.exists(directory)) {
-                    Files.createDirectories(directory);
-                }
-                Path tempDir = directory.resolve("temp").resolve(DateUtil.getCurrentDateTime().replace(" ", "/"));
-                if (!Files.exists(tempDir)) {
-                    Files.createDirectories(tempDir);
-                }
-                Path packageCopy = requireChildPath(tempDir.resolve(packagePath.getFileName().toString()), directory);
-                Files.copy(packagePath, packageCopy, StandardCopyOption.REPLACE_EXISTING);
+                String packageObjectKey = storePluginPackage(packagePath, pluginVo.getPackageName());
 
                 PluginDto pluginDto = new PluginDto();
                 pluginDto.setName(pluginVo.getName());
@@ -587,7 +577,7 @@ public class PluginServiceImpl implements PluginService {
                 pluginDto.setDescription(pluginVo.getDescription());
                 pluginDto.setAuthor(pluginVo.getAuthor());
                 pluginDto.setIcon(pluginVo.getIcon());
-                pluginDto.setPluginPath(packageCopy.toString());
+                pluginDto.setPluginPath(packageObjectKey);
                 Plugin saved = create(pluginDto);
                 pendingInstallIds.add(saved.getId().longValue());
                 log.info("Bootstrap 插件已注册，待自动安装: {} {} ({})",
@@ -659,9 +649,11 @@ public class PluginServiceImpl implements PluginService {
         }
 
         validatePackageName(plugin.getPackageName());
-        Path candidateArchive = safePluginPackagePath(upgradeDto.getPluginPath());
+        String sourcePackageKey = requirePluginPackageObject(upgradeDto.getPluginPath());
+        Path candidateArchive = materializePluginPackage(sourcePackageKey);
         String operationId = UUID.randomUUID().toString();
         Path operationRoot = upgradeOperationRoot(id, operationId);
+        String candidateObjectKey = StorageObjectKey.pluginCandidate(plugin.getPackageName(), operationId);
         try {
             Files.createDirectories(operationRoot);
             Path candidateRoot = requireChildPath(operationRoot.resolve("candidate"), operationRoot);
@@ -669,9 +661,13 @@ public class PluginServiceImpl implements PluginService {
             TarGzUtil.decompressTarGz(candidateArchive, candidateRoot);
             UpgradeCandidate candidate = preflightUpgrade(plugin, candidateRoot);
             createUpgradeSnapshot(plugin, operationId);
+            minioService.copyObject(
+                    pluginsBucket(), sourcePackageKey, pluginsBucket(), candidateObjectKey);
+            Files.copy(candidateArchive, operationRoot.resolve("candidate.tar.gz"),
+                    StandardCopyOption.REPLACE_EXISTING);
 
             resetLogs(id);
-            plugin.setPendingUpgradePath(candidateArchive.toString());
+            plugin.setPendingUpgradePath(candidateObjectKey);
             plugin.setPendingUpgradeVersion(candidate.descriptor().getVersion());
             plugin.setUpgradeOperationId(operationId);
             updateOperationState(plugin, PluginStatusType.UPGRADING,
@@ -688,14 +684,15 @@ public class PluginServiceImpl implements PluginService {
                         "升级任务提交失败", submitError.getMessage(), false);
                 pluginRepository.save(plugin);
                 deleteIfExists(operationRoot);
+                deletePluginUpgradeObjects(plugin.getPackageName(), operationId);
                 throw submitError;
             }
             return new PluginVo(saved);
         } catch (ApiException e) {
-            cleanupFailedPreparation(operationRoot);
+            cleanupFailedPreparation(plugin.getPackageName(), operationId, operationRoot);
             throw e;
         } catch (Exception e) {
-            cleanupFailedPreparation(operationRoot);
+            cleanupFailedPreparation(plugin.getPackageName(), operationId, operationRoot);
             throw invalidPluginPackage(StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()));
         }
     }
@@ -740,11 +737,48 @@ public class PluginServiceImpl implements PluginService {
                 });
     }
 
-    private void cleanupFailedPreparation(Path operationRoot) {
+    @Override
+    public void restoreInstalledPluginCaches() {
+        for (Plugin plugin : pluginRepository.findAll()) {
+            if (normalizeStatus(plugin.getStatus()) != PluginStatusType.INSTALLED) {
+                continue;
+            }
+            try {
+                Path installedRoot = installedPluginRoot(plugin);
+                if (Files.isDirectory(installedRoot) && hasDirectoryContent(installedRoot)) {
+                    continue;
+                }
+                String packageObjectKey = requirePluginPackageObject(plugin.getPluginPath());
+                Path archive = materializePluginPackage(packageObjectKey);
+                Path restoreRoot = requireChildPath(
+                        pluginCacheRoot().resolve("restore").resolve(UUID.randomUUID().toString()),
+                        pluginCacheRoot());
+                try {
+                    TarGzUtil.decompressTarGz(archive, restoreRoot);
+                    deleteIfExists(installedRoot);
+                    moveAtomically(restoreRoot, installedRoot);
+                } finally {
+                    deleteQuietly(restoreRoot);
+                }
+                log.info("已从对象存储重建插件本地缓存: package={}, object={}",
+                        plugin.getPackageName(), packageObjectKey);
+            } catch (Exception e) {
+                log.error("重建插件本地缓存失败，插件将跳过 API 加载: package={}, object={}",
+                        plugin.getPackageName(), plugin.getPluginPath(), e);
+            }
+        }
+    }
+
+    private void cleanupFailedPreparation(String packageName, String operationId, Path operationRoot) {
         try {
             deleteIfExists(operationRoot);
         } catch (IOException cleanupError) {
             log.warn("清理升级预检目录失败: {}", operationRoot, cleanupError);
+        }
+        try {
+            deletePluginUpgradeObjects(packageName, operationId);
+        } catch (Exception cleanupError) {
+            log.warn("清理升级预检对象失败: package={}, operation={}", packageName, operationId, cleanupError);
         }
     }
 
@@ -1145,13 +1179,36 @@ public class PluginServiceImpl implements PluginService {
         if (StringUtils.isBlank(plugin.getUpgradeOperationId())) {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "插件没有可恢复的升级快照");
         }
-        Path snapshotRoot = upgradeOperationRoot(plugin.getId().longValue(), plugin.getUpgradeOperationId())
-                .resolve("snapshot");
-        if (!Files.isRegularFile(snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME))
-                || !Files.isDirectory(snapshotRoot.resolve("installed"))) {
+        Path operationRoot = upgradeOperationRoot(plugin.getId().longValue(), plugin.getUpgradeOperationId());
+        Path snapshotRoot = operationRoot.resolve("snapshot");
+        if (!isCompleteUpgradeSnapshot(snapshotRoot)) {
+            restoreSnapshotObject(plugin, operationRoot, snapshotRoot);
+        }
+        if (!isCompleteUpgradeSnapshot(snapshotRoot)) {
             throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(), "插件升级快照不完整");
         }
         return snapshotRoot;
+    }
+
+    private boolean isCompleteUpgradeSnapshot(Path snapshotRoot) {
+        return Files.isRegularFile(snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME))
+                && Files.isDirectory(snapshotRoot.resolve("installed"));
+    }
+
+    private void restoreSnapshotObject(Plugin plugin, Path operationRoot, Path snapshotRoot) {
+        String objectKey = StorageObjectKey.pluginSnapshot(
+                plugin.getPackageName(), plugin.getUpgradeOperationId());
+        Path archive = operationRoot.resolve("snapshot.tar.gz");
+        try {
+            Files.createDirectories(operationRoot);
+            downloadObject(objectKey, archive);
+            deleteIfExists(snapshotRoot);
+            TarGzUtil.decompressTarGz(archive, snapshotRoot);
+        } catch (Exception e) {
+            log.warn("从对象存储恢复插件升级快照失败: object={}", objectKey, e);
+            throw new ApiException(ResultCodeEnum.NO_SUPPORTED.getCode(),
+                    "插件升级快照不存在或不可读取: " + objectKey);
+        }
     }
 
     private void createUpgradeSnapshot(Plugin plugin, String operationId) throws IOException {
@@ -1216,6 +1273,10 @@ public class PluginServiceImpl implements PluginService {
         );
         JacksonConfig.OBJECT_MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(snapshotRoot.resolve(UPGRADE_SNAPSHOT_FILE_NAME).toFile(), snapshot);
+        Path snapshotArchive = operationRoot.resolve("snapshot.tar.gz");
+        TarGzUtil.compressDirToTarGz(snapshotRoot, snapshotArchive);
+        uploadPath(StorageObjectKey.pluginSnapshot(plugin.getPackageName(), operationId),
+                snapshotArchive, PLUGIN_PACKAGE_CONTENT_TYPE);
     }
 
     private UpgradeSnapshot readUpgradeSnapshot(Plugin plugin) {
@@ -1233,7 +1294,8 @@ public class PluginServiceImpl implements PluginService {
         try {
             Plugin plugin = getPluginOrThrow(id);
             Path operationRoot = upgradeOperationRoot(id, plugin.getUpgradeOperationId());
-            Path candidateRoot = requireChildPath(operationRoot.resolve("candidate"), operationRoot);
+            Path candidateRoot = materializeUpgradeCandidate(plugin);
+            Path candidateArchive = operationRoot.resolve("candidate.tar.gz");
             UpgradeCandidate candidate = preflightUpgrade(plugin, candidateRoot);
             UpgradeSnapshot snapshot = readUpgradeSnapshot(plugin);
             List<String> warnings = new ArrayList<>();
@@ -1287,7 +1349,9 @@ public class PluginServiceImpl implements PluginService {
             plugin.setVersion(descriptor.getVersion());
             plugin.setDescription(descriptor.getDescription());
             plugin.setAuthor(descriptor.getAuthor());
-            plugin.setPluginPath(plugin.getPendingUpgradePath());
+            String canonicalPackageKey = promoteCandidateToPackage(
+                    plugin.getPackageName(), plugin.getPendingUpgradePath(), candidateArchive);
+            plugin.setPluginPath(canonicalPackageKey);
             clearUpgradePending(plugin);
             String message = warnings.isEmpty() ? "升级完成" : "升级完成（" + String.join("，", warnings) + "）";
             updateOperationState(plugin, PluginStatusType.INSTALLED, message, null, false);
@@ -1311,7 +1375,8 @@ public class PluginServiceImpl implements PluginService {
                     log.warn("保存插件升级清理警告失败: id={}", id, messageError);
                 }
             }
-            cleanupSuccessfulUpgrade(operationRoot, oldPluginPath, plugin.getPluginPath());
+            cleanupSuccessfulUpgrade(plugin.getPackageName(), id, snapshot.operationId(),
+                    operationRoot, oldPluginPath, plugin.getPluginPath());
             writeLog(id, "完成......");
         } catch (Exception e) {
             upgradeError = StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName());
@@ -1418,16 +1483,23 @@ public class PluginServiceImpl implements PluginService {
         }
     }
 
-    private void cleanupSuccessfulUpgrade(Path operationRoot, String oldPluginPath, String newPluginPath) {
+    private void cleanupSuccessfulUpgrade(String packageName,
+                                          Long pluginId,
+                                          String operationId,
+                                          Path operationRoot,
+                                          String oldPluginPath,
+                                          String newPluginPath) {
         try {
             if (StringUtils.isNotBlank(oldPluginPath) && !Objects.equals(oldPluginPath, newPluginPath)) {
-                Path oldArchive = safePluginPath(oldPluginPath);
-                if (Files.isRegularFile(oldArchive)) {
-                    deleteIfExists(oldArchive);
-                }
+                deletePluginPackageObject(oldPluginPath);
             }
         } catch (Exception e) {
             log.warn("清理插件旧归档失败: {}", oldPluginPath, e);
+        }
+        try {
+            deletePluginUpgradeObjects(packageName, operationId);
+        } catch (Exception e) {
+            log.warn("清理插件升级对象失败: package={}, operation={}", packageName, operationId, e);
         }
         try {
             deleteIfExists(operationRoot);
@@ -1441,14 +1513,10 @@ public class PluginServiceImpl implements PluginService {
                                          String pendingPath,
                                          String restoredPluginPath) {
         try {
-            if (StringUtils.isNotBlank(pendingPath) && !Objects.equals(pendingPath, restoredPluginPath)) {
-                Path archive = safePluginPath(pendingPath);
-                if (Files.isRegularFile(archive)) {
-                    deleteIfExists(archive);
-                }
-            }
+            Plugin plugin = getPluginOrThrow(pluginId);
+            deletePluginUpgradeObjects(plugin.getPackageName(), operationId);
         } catch (Exception e) {
-            log.warn("清理已恢复的升级候选包失败: pluginId={}", pluginId, e);
+            log.warn("清理已恢复的升级对象失败: pluginId={}", pluginId, e);
         }
         try {
             deleteIfExists(upgradeOperationRoot(pluginId, operationId));
@@ -1846,7 +1914,7 @@ public class PluginServiceImpl implements PluginService {
         try {
             Plugin plugin = getPluginOrThrow(id);
             String packageName = plugin.getPackageName();
-            Path pluginTarGzPath = safePluginPackagePath(plugin.getPluginPath());
+            Path pluginTarGzPath = materializePluginPackage(plugin.getPluginPath());
             PluginPackTool pluginPackTool = new PluginPackTool()
                     .buildInstaller(pluginRoot().toString(), packageName, pluginTarGzPath.toString())
                     .init();
@@ -1939,25 +2007,12 @@ public class PluginServiceImpl implements PluginService {
         try {
             Plugin plugin = getPluginOrThrow(id);
             String upgradeOperationId = plugin.getUpgradeOperationId();
-            String pendingUpgradePath = plugin.getPendingUpgradePath();
             writeLog(id, "插件检查......");
             cleanupPluginCoreResources(id, plugin, true);
-            if (StringUtils.isNotBlank(pendingUpgradePath)) {
-                try {
-                    Path pendingArchive = safePluginPath(pendingUpgradePath);
-                    if (Files.isRegularFile(pendingArchive)) {
-                        deleteIfExists(pendingArchive);
-                    }
-                } catch (Exception cleanupError) {
-                    log.warn("卸载时清理升级候选包失败: id={}", id, cleanupError);
-                }
-            }
+            deletePluginPackageObject(plugin.getPluginPath());
             if (StringUtils.isNotBlank(upgradeOperationId)) {
-                try {
-                    deleteIfExists(upgradeOperationRoot(id, upgradeOperationId));
-                } catch (Exception cleanupError) {
-                    log.warn("卸载时清理升级快照失败: id={}", id, cleanupError);
-                }
+                deletePluginUpgradeObjects(plugin.getPackageName(), upgradeOperationId);
+                deleteIfExists(upgradeOperationRoot(id, upgradeOperationId));
             }
             plugin = getPluginOrThrow(id);
             clearUpgradePending(plugin);
@@ -1978,7 +2033,7 @@ public class PluginServiceImpl implements PluginService {
         Plugin plugin = getPluginOrThrow(id);
         try {
             if (StringUtils.isNotBlank(plugin.getPluginPath())) {
-                return TarGzUtil.readRootFile(safePluginPackagePath(plugin.getPluginPath()), "README.md");
+                return TarGzUtil.readRootFile(materializePluginPackage(plugin.getPluginPath()), "README.md");
             }
             return "# " + plugin.getName() + "\n\n" + "暂无";
         } catch (IOException e) {
@@ -2234,20 +2289,198 @@ public class PluginServiceImpl implements PluginService {
         return path.toString().replace('\\', '/');
     }
 
-    private Path safePluginPath(String pluginPath) {
-        if (StringUtils.isBlank(pluginPath)) {
-            throw invalidPluginPackage("插件包路径不能为空");
+    private String requirePluginPackageObjectKey(String objectKey) {
+        if (StringUtils.isBlank(objectKey)) {
+            throw invalidPluginPackage("插件包对象键不能为空");
         }
-        return requireChildPath(Paths.get(pluginPath), pluginRoot());
+        try {
+            StorageObjectKey.validate(objectKey);
+        } catch (IllegalArgumentException e) {
+            throw invalidPluginPackage(LEGACY_PLUGIN_PATH_MESSAGE);
+        }
+        if (!objectKey.startsWith("packages/") || !objectKey.endsWith(".tar.gz")) {
+            throw invalidPluginPackage(LEGACY_PLUGIN_PATH_MESSAGE);
+        }
+        return objectKey;
     }
 
-    private Path safePluginPackagePath(String pluginPath) {
-        Path path = safePluginPath(pluginPath);
-        if (!StringUtils.endsWithIgnoreCase(path.getFileName().toString(), ".tar.gz")
-                || !Files.exists(path) || !Files.isRegularFile(path)) {
-            throw invalidPluginPackage("插件包文件不存在或格式不正确");
+    private String requirePluginPackageObject(String objectKey) {
+        String validated = requirePluginPackageObjectKey(objectKey);
+        try {
+            minioService.getObjectInfo(validated, pluginsBucket());
+        } catch (Exception e) {
+            throw invalidPluginPackage("插件包对象不存在或不可读取: " + validated);
         }
-        return path;
+        return validated;
+    }
+
+    private String requireUpgradeObjectKey(String objectKey) {
+        if (StringUtils.isBlank(objectKey)) {
+            throw invalidPluginPackage("升级候选包对象键不能为空");
+        }
+        try {
+            StorageObjectKey.validate(objectKey);
+        } catch (IllegalArgumentException e) {
+            throw invalidPluginPackage(LEGACY_PLUGIN_PATH_MESSAGE);
+        }
+        if (!objectKey.startsWith("upgrades/") || !objectKey.endsWith("/candidate.tar.gz")) {
+            throw invalidPluginPackage("升级候选包对象键非法: " + objectKey);
+        }
+        return objectKey;
+    }
+
+    private Path pluginCacheRoot() {
+        return requireChildPath(pluginRoot().resolve(PLUGIN_CACHE_DIR_NAME), pluginRoot());
+    }
+
+    private Path pluginTempFile(String fileName) throws IOException {
+        Path tempRoot = requireChildPath(
+                pluginCacheRoot().resolve(PLUGIN_TEMP_CACHE_DIR_NAME), pluginCacheRoot());
+        Files.createDirectories(tempRoot);
+        String safeName = StorageObjectKey.sanitizeFileName(fileName);
+        return requireChildPath(tempRoot.resolve(UUID.randomUUID() + "-" + safeName), tempRoot);
+    }
+
+    private String storePluginPackage(Path packagePath, String packageName) throws IOException {
+        validatePackageName(packageName);
+        String objectKey = StorageObjectKey.pluginPackage(packageName, sha256(packagePath));
+        if (!minioService.isFile(objectKey, pluginsBucket())) {
+            uploadPath(objectKey, packagePath, PLUGIN_PACKAGE_CONTENT_TYPE);
+        }
+        return objectKey;
+    }
+
+    private Path materializePluginPackage(String objectKey) {
+        String validated = requirePluginPackageObject(objectKey);
+        String[] parts = validated.split("/");
+        Path packageCacheRoot = requireChildPath(
+                pluginCacheRoot().resolve(PLUGIN_PACKAGE_CACHE_DIR_NAME), pluginCacheRoot());
+        Path cacheDir = requireChildPath(packageCacheRoot.resolve(parts[1]), packageCacheRoot);
+        Path cacheFile = requireChildPath(cacheDir.resolve(parts[2]), cacheDir);
+        try {
+            MinioObjectInfo info = minioService.getObjectInfo(validated, pluginsBucket());
+            if (Files.isRegularFile(cacheFile) && Files.size(cacheFile) == info.size()) {
+                return cacheFile;
+            }
+            Files.createDirectories(cacheDir);
+            Path temp = requireChildPath(cacheDir.resolve(cacheFile.getFileName() + ".tmp-" + UUID.randomUUID()), cacheDir);
+            try {
+                downloadObject(validated, temp);
+                Files.move(temp, cacheFile, StandardCopyOption.REPLACE_EXISTING);
+            } finally {
+                deleteQuietly(temp);
+            }
+            return cacheFile;
+        } catch (IOException e) {
+            throw invalidPluginPackage("插件包下载失败: " + e.getMessage());
+        }
+    }
+
+    private Path materializeUpgradeCandidate(Plugin plugin) {
+        String objectKey = requireUpgradeObjectKey(plugin.getPendingUpgradePath());
+        Path operationRoot = upgradeOperationRoot(plugin.getId().longValue(), plugin.getUpgradeOperationId());
+        Path archive = operationRoot.resolve("candidate.tar.gz");
+        Path candidateRoot = requireChildPath(operationRoot.resolve("candidate"), operationRoot);
+        try {
+            minioService.getObjectInfo(objectKey, pluginsBucket());
+            Files.createDirectories(operationRoot);
+            if (!Files.isRegularFile(archive)) {
+                downloadObject(objectKey, archive);
+            }
+            if (!Files.isDirectory(candidateRoot) || !hasDirectoryContent(candidateRoot)) {
+                deleteIfExists(candidateRoot);
+                TarGzUtil.decompressTarGz(archive, candidateRoot);
+            }
+            return candidateRoot;
+        } catch (IOException e) {
+            throw new IllegalStateException("升级候选包不存在或不可读取: " + objectKey, e);
+        }
+    }
+
+    private String promoteCandidateToPackage(String packageName, String candidateObjectKey, Path archive) {
+        try {
+            String packageObjectKey = StorageObjectKey.pluginPackage(packageName, sha256(archive));
+            if (!Objects.equals(candidateObjectKey, packageObjectKey)
+                    && !minioService.isFile(packageObjectKey, pluginsBucket())) {
+                minioService.copyObject(pluginsBucket(), candidateObjectKey,
+                        pluginsBucket(), packageObjectKey);
+            }
+            if (!minioService.isFile(packageObjectKey, pluginsBucket())) {
+                throw new IllegalStateException("插件正式包对象写入失败: " + packageObjectKey);
+            }
+            return packageObjectKey;
+        } catch (IOException e) {
+            throw new IllegalStateException("无法计算插件包摘要", e);
+        }
+    }
+
+    private void deletePluginPackageObject(String objectKey) {
+        if (StringUtils.isBlank(objectKey)) {
+            return;
+        }
+        String validated;
+        try {
+            validated = requirePluginPackageObjectKey(objectKey);
+        } catch (ApiException e) {
+            log.warn("跳过旧本地插件包路径: {}", objectKey);
+            return;
+        }
+        minioService.deleteFile(validated, pluginsBucket());
+    }
+
+    private void deletePluginUpgradeObjects(String packageName, String operationId) {
+        if (StringUtils.isAnyBlank(packageName, operationId)) {
+            return;
+        }
+        String prefix = "upgrades/" + packageName + "/" + operationId;
+        minioService.deletePrefix(prefix, pluginsBucket());
+    }
+
+    private void uploadPath(String objectKey, Path path, String contentType) throws IOException {
+        long size = Files.size(path);
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            minioService.uploadStream(objectKey, inputStream, size, contentType, pluginsBucket());
+        }
+    }
+
+    private void downloadObject(String objectKey, Path destination) throws IOException {
+        Files.createDirectories(destination.getParent());
+        try (InputStream inputStream = minioService.downloadFile(objectKey, pluginsBucket())) {
+            Files.copy(inputStream, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private String pluginsBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_PLUGINS_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.PLUGINS);
+    }
+
+    private String sha256(Path path) throws IOException {
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) >= 0) {
+                if (read > 0) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("当前 JVM 不支持 SHA-256", e);
+        }
+    }
+
+    private void deleteQuietly(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("清理插件临时文件失败: {}", path, e);
+        }
     }
 
     private Path installedPluginRoot(Plugin plugin) {

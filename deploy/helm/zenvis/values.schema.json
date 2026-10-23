@@ -22,7 +22,30 @@
       "type": "object",
       "properties": { "existingSecret": { "type": "string", "minLength": 1 } },
       "required": ["existingSecret"]
+    },
+    "external": {
+      "type": "object",
+      "properties": {
+        "minio": {
+          "type": "object",
+          "properties": {
+            "endpoint": { "type": "string", "minLength": 1 },
+            "buckets": {
+              "type": "object",
+              "properties": {
+                "rag": { "type": "string", "minLength": 1 },
+                "chat": { "type": "string", "minLength": 1 },
+                "plugins": { "type": "string", "minLength": 1 },
+                "reports": { "type": "string", "minLength": 1 }
+              },
+              "required": ["rag", "chat", "plugins", "reports"]
+            }
+          },
+          "required": ["endpoint", "buckets"]
+        }
+      },
+      "required": ["minio"]
     }
   },
-  "required": ["global", "secrets", "backend", "vectum"]
+  "required": ["global", "secrets", "backend", "vectum", "external"]
 }

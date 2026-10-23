@@ -2,6 +2,8 @@ package com.coolxer.service.dih.rag;
 
 import com.coolxer.commons.enums.RagKnowledgeBaseStatus;
 import com.coolxer.configuration.JacksonConfig;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.RagDataset;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBase;
 import com.coolxer.dao.mysql.entity.RagKnowledgeBaseDataset;
@@ -10,6 +12,7 @@ import com.coolxer.dao.mysql.repository.RagKnowledgeBaseDatasetRepository;
 import com.coolxer.dao.mysql.repository.RagKnowledgeBaseRepository;
 import com.coolxer.model.dih.dto.PluginRagConfigDto;
 import com.coolxer.service.core.MinioService;
+import com.coolxer.utils.StorageObjectKey;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -73,6 +76,9 @@ public class PluginRagService {
 
     @Autowired
     private MinioService minioService;
+
+    @Autowired
+    private MinioProperties minioProperties;
 
     @Autowired
     private VectorStoreInitializerService vectorStoreInitializerService;
@@ -454,15 +460,15 @@ public class PluginRagService {
     private void stageDatasetFiles(String packageName, PluginRagPlan plan, Path root, String operationId,
                                    List<StagedDataset> stagedDatasets) throws IOException {
         for (DatasetPlan datasetPlan : plan.datasets()) {
-            String directory = MANAGED_DIRECTORY_ROOT + safePathSegment(packageName) + "/"
-                    + safePathSegment(datasetPlan.code()) + "/" + operationId;
+            String directory = StorageObjectKey.ragPluginDataset(
+                    safePathSegment(packageName), safePathSegment(datasetPlan.code()), operationId);
             stagedDatasets.add(new StagedDataset(datasetPlan, directory, null));
             Path source = root.resolve(datasetPlan.sourcePath());
             for (FilePlan file : datasetPlan.files()) {
                 String objectName = directory + "/" + file.relativePath();
                 Path filePath = source.resolve(file.relativePath());
                 try (InputStream inputStream = Files.newInputStream(filePath)) {
-                    minioService.uploadStream(objectName, inputStream, file.size(), "text/markdown", null);
+                    minioService.uploadStream(objectName, inputStream, file.size(), "text/markdown", ragBucket());
                 }
             }
         }
@@ -699,7 +705,7 @@ public class PluginRagService {
     }
 
     private void exportDatasetFiles(RagDataset dataset, Path targetDirectory) throws IOException {
-        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), null);
+        List<String> objectNames = minioService.listObjects(dataset.getDirectory(), ragBucket());
         String prefix = dataset.getDirectory() + "/";
         for (String objectName : objectNames) {
             if (StringUtils.isBlank(objectName) || !objectName.startsWith(prefix)
@@ -715,7 +721,7 @@ public class PluginRagService {
                 continue;
             }
             Files.createDirectories(target.getParent());
-            try (InputStream inputStream = minioService.downloadFile(objectName, null)) {
+            try (InputStream inputStream = minioService.downloadFile(objectName, ragBucket())) {
                 Files.copy(inputStream, target);
             }
         }
@@ -726,12 +732,18 @@ public class PluginRagService {
             return;
         }
         try {
-            for (String objectName : minioService.listObjects(directory, null)) {
-                minioService.deleteFile(objectName, null);
+            for (String objectName : minioService.listObjects(directory, ragBucket())) {
+                minioService.deleteFile(objectName, ragBucket());
             }
         } catch (Exception e) {
             log.warn("清理插件 RAG MinIO 目录失败: {}", directory, e);
         }
+    }
+
+    private String ragBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_RAG_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.RAG);
     }
 
     private void deleteDirectory(Path directory) throws IOException {

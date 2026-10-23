@@ -1,7 +1,14 @@
 package com.coolxer.service.dih;
 
+import com.coolxer.commons.enums.ResultCodeEnum;
+import com.coolxer.commons.exception.ApiException;
+import com.coolxer.configuration.minio.MinioBucketDomain;
+import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.dao.mysql.entity.User;
+import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.model.dih.vo.ReportWorkspaceVo;
+import com.coolxer.service.core.MinioService;
+import com.coolxer.utils.StorageObjectKey;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import org.apache.poi.util.Units;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
@@ -26,15 +33,19 @@ import org.jsoup.nodes.TextNode;
 import org.jsoup.safety.Safelist;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STPageOrientation;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -43,11 +54,23 @@ import java.util.Map;
 public class ReportExportService {
 
     private static final String DOCUMENT_FONT = "Microsoft YaHei";
+    private static final String EXPORTER_VERSION = "v1";
 
     private final ReportDocumentService reportDocumentService;
+    private final MinioService minioService;
+    private final MinioProperties minioProperties;
 
     public ReportExportService(ReportDocumentService reportDocumentService) {
+        this(reportDocumentService, null, new MinioProperties());
+    }
+
+    @Autowired
+    public ReportExportService(ReportDocumentService reportDocumentService,
+                               MinioService minioService,
+                               MinioProperties minioProperties) {
         this.reportDocumentService = reportDocumentService;
+        this.minioService = minioService;
+        this.minioProperties = minioProperties;
     }
 
     public ExportedReport export(Long sessionId, String targetFormat, User currentUser) {
@@ -61,18 +84,75 @@ public class ReportExportService {
         String sourceFormat = String.valueOf(document.getOrDefault("format", "markdown"));
         String content = String.valueOf(document.get("content"));
         String safeName = safeFileName(title);
-        return switch (StringUtils.hasText(targetFormat)
-                ? targetFormat.toLowerCase(Locale.ROOT) : "") {
-            case "docx" -> new ExportedReport(
-                    safeName + ".docx",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    exportDocx(title, toSafeHtml(content, sourceFormat)));
-            case "pdf" -> new ExportedReport(
-                    safeName + ".pdf",
-                    "application/pdf",
-                    exportPdf(title, toSafeHtml(content, sourceFormat)));
-            default -> throw new IllegalArgumentException("导出格式仅支持 docx 或 pdf。");
-        };
+        String format = StringUtils.hasText(targetFormat)
+                ? targetFormat.toLowerCase(Locale.ROOT) : "";
+        if (!"docx".equals(format) && !"pdf".equals(format)) {
+            throw new IllegalArgumentException("导出格式仅支持 docx 或 pdf。");
+        }
+        String documentId = String.valueOf(document.getOrDefault(
+                "documentId", document.getOrDefault("id", "")));
+        Object revisionValue = document.getOrDefault("revision", document.get("version"));
+        long revision = toRevision(revisionValue);
+        String contentHash = String.valueOf(document.getOrDefault("contentHash", ""));
+        String exportHash = sha256(String.join("\n",
+                documentId, String.valueOf(revision), sourceFormat, title, contentHash, EXPORTER_VERSION));
+        String objectKey = StorageObjectKey.reportExport(
+                documentId, revision, format, exportHash, EXPORTER_VERSION);
+        String contentType = "docx".equals(format)
+                ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                : "application/pdf";
+        String fileName = safeName + "." + format;
+        if (minioService == null) {
+            throw new ApiException(ResultCodeEnum.INNER_ERROR.getCode(), "报表对象存储未配置");
+        }
+        if (minioService.isFile(objectKey, reportsBucket())) {
+            MinioObjectInfo info = minioService.getObjectInfo(objectKey, reportsBucket());
+            return new ExportedReport(fileName, contentType,
+                    minioService.downloadFile(objectKey, reportsBucket()), info.size());
+        }
+        byte[] generated = "docx".equals(format)
+                ? exportDocx(title, toSafeHtml(content, sourceFormat))
+                : exportPdf(title, toSafeHtml(content, sourceFormat));
+        try (InputStream inputStream = new ByteArrayInputStream(generated)) {
+            minioService.uploadStream(objectKey, inputStream, generated.length, contentType, reportsBucket());
+        } catch (Exception e) {
+            throw new ApiException(ResultCodeEnum.FILE_WRITE_FAIL.getCode(), "报表导出文件写入失败：" + e.getMessage());
+        }
+        return new ExportedReport(fileName, contentType,
+                new ByteArrayInputStream(generated), generated.length);
+    }
+
+    private long toRevision(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null) {
+            throw new IllegalArgumentException("当前报表缺少修订号，无法导出。");
+        }
+        String text = String.valueOf(value);
+        if (text.startsWith("v")) {
+            text = text.substring(1);
+        }
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("当前报表修订号不合法，无法导出。", e);
+        }
+    }
+
+    private String reportsBucket() {
+        return minioProperties == null
+                ? MinioProperties.DEFAULT_REPORTS_BUCKET
+                : minioProperties.bucket(MinioBucketDomain.REPORTS);
+    }
+
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("无法计算报表导出摘要。", e);
+        }
     }
 
     private byte[] exportPdf(String title, String bodyHtml) {
@@ -401,6 +481,6 @@ public class ReportExportService {
         return StringUtils.hasText(safe) ? safe : "report";
     }
 
-    public record ExportedReport(String fileName, String contentType, byte[] content) {
+    public record ExportedReport(String fileName, String contentType, InputStream content, long size) {
     }
 }

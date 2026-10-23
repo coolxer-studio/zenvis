@@ -32,15 +32,18 @@
             </template>
           </el-input>
 
-          <div class="all-filter">筛选列</div>
+          <div class="all-filter" @click.stop>
+            <span>筛选列</span>
+            <el-checkbox
+              :model-value="visibleSelectionState === 'all'"
+              :indeterminate="visibleSelectionState === 'partial'"
+              :disabled="!visibleColumnDataIndices.length"
+              @change="toggleVisibleColumns"
+            >全选</el-checkbox>
+          </div>
           <el-checkbox-group v-model="state.selectedKeyCol" style="width: 100%" @click.stop @change="getSelect">
-            <div v-for="item in state.sourceColumns" :key="item.dataIndex" style="height: 35px;line-height: 35px">
-              <template v-if="moreSearch">
-                <el-checkbox v-show="item.title.includes(moreSearch)" :value="item.dataIndex">{{ item.title }}</el-checkbox>
-              </template>
-              <template v-else>
-                <el-checkbox :value="item.dataIndex">{{ item.title }}</el-checkbox>
-              </template>
+            <div v-for="item in visibleColumns" :key="item.dataIndex" style="height: 35px;line-height: 35px">
+              <el-checkbox :value="item.dataIndex">{{ item.title }}</el-checkbox>
             </div>
           </el-checkbox-group>
         </template>
@@ -130,7 +133,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus';
 import { ArrowDown, Search, Bottom, ArrowUp, DocumentCopy, Download } from '@element-plus/icons-vue';
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type {
   RetrievalTableChange,
   RetrievalTableColumn,
@@ -139,6 +142,11 @@ import type {
 } from '@/types/type-retrieval';
 import { resolveRetrievalLink } from '@/utils/retrieval-link';
 import { copyTextToClipboard } from '@/utils/clipboard';
+import {
+  columnsMatchingSearch,
+  getColumnSelectionState,
+  toggleColumnSelection,
+} from './column-selection';
 
 const props = withDefaults(defineProps<{
   state: RetrievalTableState;
@@ -158,6 +166,15 @@ const emit = defineEmits<{
 const tableKey = ref(0);
 const colShow = ref(false);
 const moreSearch = ref('');
+const visibleColumns = computed(() =>
+  columnsMatchingSearch(props.state.sourceColumns, moreSearch.value),
+);
+const visibleColumnDataIndices = computed(() =>
+  visibleColumns.value.map(column => column.dataIndex),
+);
+const visibleSelectionState = computed(() =>
+  getColumnSelectionState(visibleColumnDataIndices.value, props.state.selectedKeyCol),
+);
 
 async function copy(value: string) {
   const copied = await copyTextToClipboard(value);
@@ -212,6 +229,11 @@ function getSelect(value: string[]) {
   emit('on-display', { entity: props.state.entity, attributeList: displayColumns });
 }
 
+function toggleVisibleColumns() {
+  if (!visibleColumnDataIndices.value.length) return;
+  getSelect(toggleColumnSelection(props.state.selectedKeyCol, visibleColumnDataIndices.value));
+}
+
 function resolveLink(column: RetrievalTableColumn, row: Record<string, unknown>) {
   return resolveRetrievalLink(column.linkTemplate, row, column.linkCondition);
 }
@@ -250,12 +272,11 @@ onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick)
 
 <style lang="scss" scoped>
   .table-actions {
-    position: absolute;
-    top: -40px;
-    right: 0;
-    z-index: 1;
     display: flex;
+    min-height: 32px;
+    margin-bottom: 8px;
     align-items: center;
+    justify-content: flex-end;
     gap: 14px;
   }
   .column-trigger {
@@ -267,6 +288,13 @@ onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick)
     line-height: 35px;
     font-size: 16px;
     margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .all-filter :deep(.el-checkbox) {
+    height: 35px;
+    font-size: 14px;
   }
   .cell-style{
     display: flex;

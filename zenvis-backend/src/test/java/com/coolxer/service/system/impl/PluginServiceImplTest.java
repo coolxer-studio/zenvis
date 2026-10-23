@@ -6,6 +6,8 @@ import com.coolxer.commons.enums.MenuType;
 import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
+import com.coolxer.configuration.minio.MinioProperties;
+import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.dao.mysql.entity.Dashboard;
 import com.coolxer.dao.mysql.entity.McpServerConfig;
 import com.coolxer.dao.mysql.entity.Menu;
@@ -25,6 +27,7 @@ import com.coolxer.dao.mysql.repository.RolePermissionRepository;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.rag.PluginRagService;
+import com.coolxer.service.core.MinioService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.model.system.vo.PluginVo;
@@ -38,7 +41,10 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,7 +57,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -129,7 +137,7 @@ class PluginServiceImplTest {
     }
 
     @Test
-    void uploadFileStoresValidPackageUnderPluginRoot() throws Exception {
+    void uploadFileStoresValidPackageInObjectStorage() throws Exception {
         PluginServiceImpl service = newService();
         byte[] packageBytes = tarGz(Map.of(
                 "index.json", """
@@ -146,7 +154,7 @@ class PluginServiceImplTest {
 
         String pluginPath = service.uploadFile(packageFile("demo.tar.gz", packageBytes)).getPluginPath();
 
-        assertThat(Path.of(pluginPath).toAbsolutePath().normalize()).startsWith(pluginRoot.toAbsolutePath().normalize());
+        assertThat(pluginPath).startsWith("packages/com.acme.demo/").endsWith(".tar.gz");
     }
 
     @Test
@@ -172,7 +180,147 @@ class PluginServiceImplTest {
 
         String pluginPath = service.uploadFile(packageFile("renumbered-capabilities.tar.gz", packageBytes)).getPluginPath();
 
-        assertThat(Path.of(pluginPath).toAbsolutePath().normalize()).startsWith(pluginRoot.toAbsolutePath().normalize());
+        assertThat(pluginPath).startsWith("packages/com.acme.dashboardmcp/").endsWith(".tar.gz");
+    }
+
+    @Test
+    void installRejectsLegacyLocalPluginPath() {
+        PluginServiceImpl service = newService();
+        PluginRepository repository = mock(PluginRepository.class);
+        ReflectionTestUtils.setField(service, "pluginRepository", repository);
+        Plugin plugin = new Plugin();
+        plugin.setId(9);
+        plugin.setPackageName("com.acme.demo");
+        plugin.setStatus(PluginStatusType.UN_INSTALL);
+        plugin.setPluginPath(pluginRoot.resolve("legacy/demo.tar.gz").toString());
+        when(repository.findById(9L)).thenReturn(Optional.of(plugin));
+
+        assertThatThrownBy(() -> service.install(9L))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("请重新上传并安装");
+    }
+
+    @Test
+    void startupRestoresMissingInstalledPluginDirectoryFromObjectStorage() throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository repository = mock(PluginRepository.class);
+        ReflectionTestUtils.setField(service, "pluginRepository", repository);
+        String packageName = "com.acme.demo";
+        String objectKey = "packages/" + packageName + "/abcdef.tar.gz";
+        Plugin plugin = new Plugin();
+        plugin.setId(9);
+        plugin.setPackageName(packageName);
+        plugin.setPluginPath(objectKey);
+        plugin.setStatus(PluginStatusType.INSTALLED);
+        byte[] packageBytes = bootstrapPackageBytes();
+        when(repository.findAll()).thenReturn(List.of(plugin));
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        when(minioService.getObjectInfo(objectKey, "zenvis-plugins"))
+                .thenReturn(new MinioObjectInfo(packageBytes.length, "application/gzip", "etag", Instant.now()));
+        when(minioService.downloadFile(objectKey, "zenvis-plugins"))
+                .thenReturn(new ByteArrayInputStream(packageBytes));
+
+        service.restoreInstalledPluginCaches();
+
+        assertThat(pluginRoot.resolve(packageName).resolve("index.json")).isRegularFile();
+    }
+
+    @Test
+    void upgradeSnapshotReloadsFromObjectStorageWhenLocalCacheIsMissing() throws Exception {
+        PluginServiceImpl service = newService();
+        MenuService menuService = mock(MenuService.class);
+        DashboardRepository dashboardRepository = mock(DashboardRepository.class);
+        McpServerConfigRepository mcpRepository = mock(McpServerConfigRepository.class);
+        PushTaskService pushTaskService = mock(PushTaskService.class);
+        SkillService skillService = mock(SkillService.class);
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+        ReflectionTestUtils.setField(service, "dashboardRepository", dashboardRepository);
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", mcpRepository);
+        ReflectionTestUtils.setField(service, "pushTaskService", pushTaskService);
+        ReflectionTestUtils.setField(service, "skillService", skillService);
+
+        String packageName = "com.acme.snapshot.reload";
+        String operationId = "operation-reload";
+        String snapshotKey = "upgrades/" + packageName + "/" + operationId + "/snapshot.tar.gz";
+        Plugin plugin = new Plugin();
+        plugin.setId(7);
+        plugin.setName("Snapshot Reload");
+        plugin.setPackageName(packageName);
+        plugin.setVersion("1.0.0");
+        plugin.setPluginPath("packages/" + packageName + "/old.tar.gz");
+        plugin.setUpgradeOperationId(operationId);
+        Path installed = pluginRoot.resolve(packageName);
+        Files.createDirectories(installed);
+        Files.writeString(installed.resolve("index.json"), "{}");
+        when(menuService.findBySource(packageName)).thenReturn(List.of());
+        when(dashboardRepository.findBySource(packageName)).thenReturn(List.of());
+        when(mcpRepository.findBySource(packageName)).thenReturn(List.of());
+        when(pushTaskService.findBySourceMark(packageName)).thenReturn(List.of());
+        when(skillService.getInstalledPluginSkillPath(packageName))
+                .thenReturn(pluginRoot.resolve("no-installed-skill"));
+
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        AtomicReference<byte[]> snapshotBytes = new AtomicReference<>();
+        doAnswer(invocation -> {
+            if (snapshotKey.equals(invocation.getArgument(0))) {
+                snapshotBytes.set(invocation.<InputStream>getArgument(1).readAllBytes());
+            }
+            return invocation.getArgument(0);
+        }).when(minioService).uploadStream(
+                anyString(), any(InputStream.class), anyLong(), anyString(), anyString());
+
+        ReflectionTestUtils.invokeMethod(service, "createUpgradeSnapshot", plugin, operationId);
+        assertThat(snapshotBytes.get()).isNotNull().isNotEmpty();
+        Path operationRoot = pluginRoot.resolve("upgrade/7").resolve(operationId);
+        ReflectionTestUtils.invokeMethod(service, "deleteIfExists", operationRoot);
+        when(minioService.getObjectInfo(snapshotKey, "zenvis-plugins"))
+                .thenReturn(new MinioObjectInfo(
+                        snapshotBytes.get().length, "application/gzip", "etag", Instant.now()));
+        when(minioService.downloadFile(snapshotKey, "zenvis-plugins"))
+                .thenReturn(new ByteArrayInputStream(snapshotBytes.get()));
+
+        Object snapshot = ReflectionTestUtils.invokeMethod(service, "readUpgradeSnapshot", plugin);
+
+        assertThat(snapshot).isNotNull();
+        assertThat(pluginRoot.resolve("upgrade/7").resolve(operationId)
+                .resolve("snapshot/snapshot.json")).isRegularFile();
+        verify(minioService).downloadFile(snapshotKey, "zenvis-plugins");
+    }
+
+    @Test
+    void interruptedUpgradeMaterializesCandidateFromObjectStorage() throws Exception {
+        PluginServiceImpl service = newService();
+        String packageName = "com.acme.resume";
+        String operationId = "operation-resume";
+        String candidateKey = "upgrades/" + packageName + "/" + operationId + "/candidate.tar.gz";
+        byte[] candidate = tarGz(Map.of("index.json", """
+                {
+                  "name": "Resume",
+                  "package_name": "com.acme.resume",
+                  "version": "1.1.0",
+                  "description": "resume",
+                  "author": "tester"
+                }
+                """));
+        Plugin plugin = new Plugin();
+        plugin.setId(8);
+        plugin.setPackageName(packageName);
+        plugin.setPendingUpgradePath(candidateKey);
+        plugin.setUpgradeOperationId(operationId);
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        when(minioService.getObjectInfo(candidateKey, "zenvis-plugins"))
+                .thenReturn(new MinioObjectInfo(
+                        candidate.length, "application/gzip", "etag", Instant.now()));
+        when(minioService.downloadFile(candidateKey, "zenvis-plugins"))
+                .thenReturn(new ByteArrayInputStream(candidate));
+
+        Path candidateRoot = ReflectionTestUtils.invokeMethod(
+                service, "materializeUpgradeCandidate", plugin);
+
+        assertThat(candidateRoot.resolve("index.json")).isRegularFile();
+        assertThat(pluginRoot.resolve("upgrade/8").resolve(operationId)
+                .resolve("candidate.tar.gz")).isRegularFile();
+        verify(minioService).downloadFile(candidateKey, "zenvis-plugins");
     }
 
     @Test
@@ -643,6 +791,10 @@ class PluginServiceImplTest {
                 .doesNotThrowAnyException();
         assertThat(pluginRoot.resolve("upgrade/7/operation-1/snapshot/snapshot.json")).isRegularFile();
         assertThat(pluginRoot.resolve("upgrade/7/operation-1/snapshot/installed/index.json")).exists();
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        verify(minioService).uploadStream(
+                eq("upgrades/com.acme.snapshot/operation-1/snapshot.tar.gz"),
+                any(), anyLong(), eq("application/gzip"), eq("zenvis-plugins"));
     }
 
     @Test
@@ -870,7 +1022,7 @@ class PluginServiceImplTest {
     }
 
     @Test
-    void bootstrapRegistersNewPackageUnderPluginRootAndDefersFlag() throws Exception {
+    void bootstrapRegistersNewPackageObjectAndDefersFlag() throws Exception {
         PluginServiceImpl service = newService();
         PluginRepository pluginRepository = mock(PluginRepository.class);
         PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
@@ -899,9 +1051,9 @@ class PluginServiceImplTest {
         assertThat(registered.getStatus()).isEqualTo(PluginStatusType.UN_INSTALL);
         assertThat(registered.getPackageName()).isEqualTo("com.acme.demo");
         assertThat(registered.getName()).isEqualTo("Demo");
-        assertThat(Path.of(registered.getPluginPath()).toAbsolutePath().normalize())
-                .startsWith(pluginRoot.toAbsolutePath().normalize())
-                .isRegularFile();
+        assertThat(registered.getPluginPath())
+                .startsWith("packages/com.acme.demo/")
+                .endsWith(".tar.gz");
         // 安装任务异步执行，flag 在任务结束后才写入
         assertThat(taskRef.get()).isNotNull();
         assertThat(bootstrapDir.resolve(".bootstrap-install.flag")).doesNotExist();
@@ -974,6 +1126,12 @@ class PluginServiceImplTest {
         PluginServiceImpl service = new PluginServiceImpl();
         ReflectionTestUtils.setField(service, "customWebConfig", customWebConfig);
         ReflectionTestUtils.setField(service, "pluginRagService", mock(PluginRagService.class));
+        MinioService minioService = mock(MinioService.class);
+        when(minioService.isFile(anyString(), anyString())).thenReturn(false);
+        when(minioService.uploadStream(anyString(), any(), anyLong(), anyString(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "minioService", minioService);
+        ReflectionTestUtils.setField(service, "minioProperties", new MinioProperties());
         return service;
     }
 

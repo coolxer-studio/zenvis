@@ -191,7 +191,8 @@
                         { "type": "input-number", "name": "max_tool_calls", "label": "最大工具调用次数", "min": 1 },
                         { "type": "input-number", "name": "max_repeated_failures", "label": "最大重复失败次数", "min": 1 },
                         { "type": "input-number", "name": "max_tool_result_chars", "label": "单次工具结果字符上限", "min": 100 },
-                        { "type": "input-number", "name": "max_accumulated_tool_result_chars", "label": "累计工具结果字符上限", "min": 100 }
+                        { "type": "input-number", "name": "max_accumulated_tool_result_chars", "label": "累计工具结果字符上限", "min": 100 },
+                        { "type": "input-number", "name": "max_output_tokens", "label": "最大输出 Token", "min": 256, "step": 256 }
                       ]
                     }
                   ]
@@ -613,7 +614,7 @@
                 "initApi": {
                   "method": "get",
                   "url": "/zenvis/api/v1/dih/skills/${id}/view",
-                  "adaptor": "var d = payload.data || {}; var rt = d.runtime || {}; var tools = rt.tools || {}; var limits = rt.limits || {}; var chat = d.chat || {}; var toRows = function (m, keyName) { return Object.keys(m || {}).map(function (k) { var row = {tools: m[k]}; row[keyName] = k; return row; }); }; d.local_tools = toRows(tools.local, 'service'); d.mcp_tools = toRows(tools.mcp, 'server'); d.prompt_mode = rt.prompt_mode; d.max_tool_calls = limits.max_tool_calls; d.max_repeated_failures = limits.max_repeated_failures; d.max_tool_result_chars = limits.max_tool_result_chars; d.max_accumulated_tool_result_chars = limits.max_accumulated_tool_result_chars; d.chat_enabled = chat.enabled === true; d.chat_label = chat.label; d.chat_icon = chat.icon; d.chat_order = chat.order; d.chat_agent_type = chat.agent_type; d.chat_prologue = chat.prologue; return payload;"
+                  "adaptor": "var d = payload.data || {}; var rt = d.runtime || {}; var tools = rt.tools || {}; var limits = rt.limits || {}; var chat = d.chat || {}; var toRows = function (m, keyName) { return Object.keys(m || {}).map(function (k) { var row = {tools: m[k]}; row[keyName] = k; return row; }); }; d.local_tools = toRows(tools.local, 'service'); d.mcp_tools = toRows(tools.mcp, 'server'); d.prompt_mode = rt.prompt_mode; d.max_tool_calls = limits.max_tool_calls; d.max_repeated_failures = limits.max_repeated_failures; d.max_tool_result_chars = limits.max_tool_result_chars; d.max_accumulated_tool_result_chars = limits.max_accumulated_tool_result_chars; d.max_output_tokens = limits.max_output_tokens; d.chat_enabled = chat.enabled === true; d.chat_label = chat.label; d.chat_icon = chat.icon; d.chat_order = chat.order; d.chat_agent_type = chat.agent_type; d.chat_prologue = chat.prologue; return payload;"
                 },
                 "reload": "skill_list",
                 "mode": "horizontal",
@@ -788,7 +789,8 @@
                               { "type": "input-number", "name": "max_tool_calls", "label": "最大工具调用次数", "min": 1 },
                               { "type": "input-number", "name": "max_repeated_failures", "label": "最大重复失败次数", "min": 1 },
                               { "type": "input-number", "name": "max_tool_result_chars", "label": "单次工具结果字符上限", "min": 100 },
-                              { "type": "input-number", "name": "max_accumulated_tool_result_chars", "label": "累计工具结果字符上限", "min": 100 }
+                              { "type": "input-number", "name": "max_accumulated_tool_result_chars", "label": "累计工具结果字符上限", "min": 100 },
+                              { "type": "input-number", "name": "max_output_tokens", "label": "最大输出 Token", "min": 256, "step": 256 }
                             ]
                           }
                         ]

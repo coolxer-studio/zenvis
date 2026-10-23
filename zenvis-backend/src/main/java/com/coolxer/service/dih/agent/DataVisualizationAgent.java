@@ -2,6 +2,7 @@ package com.coolxer.service.dih.agent;
 
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.service.dih.ContextCompactionObserver;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -45,6 +46,18 @@ public class DataVisualizationAgent {
                              User user,
                              List<String> skillIds,
                              McpToolContext mcpToolContext) {
+        return chat(chatId, model, prompt, attachments, user, skillIds, mcpToolContext,
+                ContextCompactionObserver.NOOP);
+    }
+
+    public Flux<String> chat(String chatId,
+                             String model,
+                             String prompt,
+                             List<ChatAttachment> attachments,
+                             User user,
+                             List<String> skillIds,
+                             McpToolContext mcpToolContext,
+                             ContextCompactionObserver compactionObserver) {
         return agentRuntime.chat(
                 AGENT_TYPE,
                 skillIds,
@@ -54,7 +67,8 @@ public class DataVisualizationAgent {
                 prompt,
                 attachments,
                 user,
-                mcpToolContext
+                mcpToolContext,
+                compactionObserver
         );
     }
 }

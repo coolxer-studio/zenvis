@@ -50,6 +50,7 @@ type UseChatStreamOptions = {
   scrollToBottom: () => Promise<void>;
   processMessageFormat: (message: ChatMessage) => void;
   refreshChatSessionExtraData: () => Promise<void>;
+  reloadChatSessionMessages: () => Promise<void>;
   ensureChatSessionId: () => Promise<string>;
   isMcpApprovalPart: (part: ChatMessagePart) => boolean;
   upsertMcpApprovalPart: (message: ChatMessage, data: McpApprovalData, accumulatedContent: string) => void;
@@ -72,6 +73,7 @@ export const useChatStream = ({
   scrollToBottom,
   processMessageFormat,
   refreshChatSessionExtraData,
+  reloadChatSessionMessages,
   ensureChatSessionId,
   isMcpApprovalPart,
   upsertMcpApprovalPart,
@@ -374,9 +376,11 @@ export const useChatStream = ({
   const ensureAgentRunMessage = (
     run: AgentRun,
     currentTool: Record<string, unknown> | null = null,
+    activityEvents: AgentRunEvent[] = [],
   ) => {
     const index = upsertAgentRunMessage(messages.value, run, {
       currentTool,
+      activityEvents,
       time: getCurrentFormattedDate(),
     });
     if (index >= 0) activeAgentRunMessageId.value = run.runId;
@@ -386,12 +390,18 @@ export const useChatStream = ({
   const syncAgentRunMessage = (runId: string) => {
     const run = agentRun.run.value;
     if (!run || run.runId !== runId) return;
-    ensureAgentRunMessage(run, agentRun.currentTool.value);
+    ensureAgentRunMessage(run, agentRun.currentTool.value, agentRun.activityEvents.value);
   };
 
   const handleAgentRunEvent = async (event: AgentRunEvent) => {
     syncAgentRunMessage(event.run_id);
+    if (event.type === 'run.waiting_user' || event.type === 'run.succeeded') {
+      await reloadChatSessionMessages();
+      await restoreActiveAgentRun();
+      syncAgentRunMessage(event.run_id);
+    }
     if (event.type === 'artifact.updated'
+      || event.type === 'run.waiting_user'
       || event.type === 'run.succeeded') {
       await refreshChatSessionExtraData();
     }
@@ -417,16 +427,41 @@ export const useChatStream = ({
   const isAgentRunActive = computed(() => isAgentChat.value && agentRun.isActive.value);
   const canStopCurrent = computed(() => isStreamingResponse.value || isAgentRunActive.value);
 
-  const restoreActiveAgentRun = async () => {
-    if (!isAgentChat.value || !chatSessionId.value) return;
-    try {
+  let restoreRunGeneration = 0;
+
+  const listChatAgentRuns = async (chatId: string) => {
+    const runs: AgentRun[] = [];
+    let pageNumber = 1;
+    let total = 0;
+    while (true) {
       const page = await DihService.listAgentRuns({
-        chatId: chatSessionId.value,
-        page: 1,
+        chatId,
+        page: pageNumber,
         perPage: 50,
       });
-      [...page.rows].reverse().forEach(run => ensureAgentRunMessage(run));
-      const active = page.rows.find(run => run.status
+      total = page.total;
+      runs.push(...page.rows);
+      if (!page.rows.length || runs.length >= total) break;
+      pageNumber += 1;
+    }
+    return [...new Map(runs.map(run => [run.runId, run])).values()]
+      .sort((left, right) => String(left.createTime || left.updateTime || '')
+        .localeCompare(String(right.createTime || right.updateTime || '')));
+  };
+
+  const restoreActiveAgentRun = async () => {
+    if (!isAgentChat.value || !chatSessionId.value) return;
+    const generation = ++restoreRunGeneration;
+    try {
+      const runs = await listChatAgentRuns(chatSessionId.value);
+      if (generation !== restoreRunGeneration) return;
+      const runIdsInMessages = new Set(messages.value
+        .map(message => String(message.runId || ''))
+        .filter(Boolean));
+      runs.forEach(run => {
+        if (runIdsInMessages.has(run.runId)) ensureAgentRunMessage(run);
+      });
+      const active = runs.find(run => run.status
         && ['QUEUED', 'RUNNING', 'WAITING_APPROVAL', 'WAITING_USER', 'PAUSED', 'CANCELING']
           .includes(run.status));
       if (!active) return;
@@ -544,6 +579,26 @@ export const useChatStream = ({
     return updated;
   };
 
+  const replyToWaitingAgentRun = async (runId: string, rawMessage: string) => {
+    const message = rawMessage.trim();
+    if (!runId || !message) return null;
+    const steered = await agentRun.steer(runId, {
+      message,
+      clientMessageId: generateUUID(),
+    });
+    messages.value.push({
+      sender: 'user',
+      content: message,
+      time: getCurrentFormattedDate(),
+    });
+    ensureAgentRunMessage(steered, agentRun.currentTool.value, agentRun.activityEvents.value);
+    await agentRun.attach(steered, { after: agentRun.lastSequence.value });
+    await nextTick();
+    void scrollToBottom();
+    ElMessage.success('补充信息已提交，任务将继续执行');
+    return steered;
+  };
+
   const sendMessage = async (options: SendMessageOptions = {}) => {
     if (isChatUnavailable.value) {
       ElMessage.warning('当前 Skill 已停用或不存在，请选择其他可用技能');
@@ -607,6 +662,7 @@ export const useChatStream = ({
     sendMessage,
     stopCurrentChat,
     resumeAgentRun,
+    replyToWaitingAgentRun,
     restoreActiveAgentRun,
   };
 };

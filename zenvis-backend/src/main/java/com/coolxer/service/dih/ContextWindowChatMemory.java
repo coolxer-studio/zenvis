@@ -1,5 +1,6 @@
 package com.coolxer.service.dih;
 
+import com.coolxer.model.dih.ContextCompactionEventData;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.Message;
@@ -13,6 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -34,6 +36,8 @@ final class ContextWindowChatMemory implements ChatMemory {
     private final int recentTurns;
     private final Map<String, Integer> perConversationBudgets = new ConcurrentHashMap<>();
     private final Map<String, PromptReplacement> promptReplacements = new ConcurrentHashMap<>();
+    private final Map<String, ContextCompactionObserver> compactionObservers =
+            new ConcurrentHashMap<>();
 
     ContextWindowChatMemory(ChatMemory delegate,
                             ChatMemoryRepository repository,
@@ -76,6 +80,10 @@ final class ContextWindowChatMemory implements ChatMemory {
 
     @Override
     public List<Message> get(String conversationId) {
+        return get(conversationId, true);
+    }
+
+    private List<Message> get(String conversationId, boolean notifyCompaction) {
         List<Message> messages = delegate.get(conversationId);
         if (messages == null || messages.isEmpty()) {
             return List.of();
@@ -132,6 +140,10 @@ final class ContextWindowChatMemory implements ChatMemory {
             }
         }
         selectedReversed.forEach(result::addAll);
+        if (notifyCompaction && !dropped.isEmpty()) {
+            notifyCompaction(conversationId, messages, dropped, selectedReversed,
+                    compactSummary, result, budget);
+        }
         return result;
     }
 
@@ -151,6 +163,24 @@ final class ContextWindowChatMemory implements ChatMemory {
     void clearHistoryTokenBudget(String conversationId) {
         if (StringUtils.hasText(conversationId)) {
             perConversationBudgets.remove(conversationId);
+        }
+    }
+
+    void setCompactionObserver(String conversationId,
+                               ContextCompactionObserver observer) {
+        if (!StringUtils.hasText(conversationId)) {
+            return;
+        }
+        if (observer == null || !observer.enabled()) {
+            compactionObservers.remove(conversationId);
+        } else {
+            compactionObservers.put(conversationId, observer);
+        }
+    }
+
+    void clearCompactionObserver(String conversationId) {
+        if (StringUtils.hasText(conversationId)) {
+            compactionObservers.remove(conversationId);
         }
     }
 
@@ -201,7 +231,53 @@ final class ContextWindowChatMemory implements ChatMemory {
     }
 
     int estimateHistoryTokens(String conversationId) {
-        return estimateMessages(get(conversationId));
+        return estimateMessages(get(conversationId, false));
+    }
+
+    private void notifyCompaction(String conversationId,
+                                  List<Message> original,
+                                  List<Message> dropped,
+                                  List<List<Message>> selectedTurns,
+                                  SystemMessage summary,
+                                  List<Message> result,
+                                  int budget) {
+        ContextCompactionObserver observer = compactionObservers.get(conversationId);
+        if (observer == null || !observer.enabled()) {
+            return;
+        }
+        int beforeTokens = estimateMessages(original);
+        int afterTokens = estimateMessages(result);
+        int retainedMessages = selectedTurns.stream().mapToInt(List::size).sum();
+        int truncatedMessages = (int) dropped.stream()
+                .filter(message -> message != null
+                        && tokenEstimator.estimate(message.getText()) > 240)
+                .count();
+        String summaryText = summary == null ? null : summary.getText();
+        ContextCompactionEventData event = ContextCompactionEventData.builder()
+                .compactionId(UUID.randomUUID().toString())
+                .stage(ContextCompactionEventData.STAGE_HISTORY_WINDOW)
+                .reason(summary == null ? "history_window_budget" : "history_window_summary")
+                .beforeTokens(beforeTokens)
+                .afterTokens(afterTokens)
+                .savedTokens(Math.max(beforeTokens - afterTokens, 0))
+                .beforeChars(original.stream()
+                        .mapToInt(message -> message == null ? 0 : message.getText().length())
+                        .sum())
+                .afterChars(result.stream()
+                        .mapToInt(message -> message == null ? 0 : message.getText().length())
+                        .sum())
+                .budgetTokens(budget)
+                .omittedMessages(dropped.size())
+                .retainedMessages(retainedMessages)
+                .truncatedMessages(truncatedMessages)
+                .summaryPreview(summaryText == null ? null
+                        : summaryText.substring(0, Math.min(summaryText.length(), 500)))
+                .build();
+        try {
+            observer.onCompacted(event);
+        } catch (RuntimeException ignored) {
+            // Compaction diagnostics must never fail the model call.
+        }
     }
 
     private List<List<Message>> splitIntoTurns(List<Message> messages, List<Message> systemMessages) {

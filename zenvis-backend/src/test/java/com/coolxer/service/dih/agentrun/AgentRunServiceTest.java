@@ -1,9 +1,11 @@
 package com.coolxer.service.dih.agentrun;
 
 import com.coolxer.commons.enums.AgentRunStatus;
+import com.coolxer.commons.exception.ApiException;
 import com.coolxer.dao.mysql.entity.AgentRun;
 import com.coolxer.dao.mysql.entity.AgentRunEvent;
 import com.coolxer.dao.mysql.entity.AgentRunInput;
+import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.dao.mysql.repository.AgentRunEventRepository;
 import com.coolxer.dao.mysql.repository.AgentRunInputRepository;
@@ -11,9 +13,12 @@ import com.coolxer.dao.mysql.repository.AgentRunRepository;
 import com.coolxer.dao.mysql.repository.ChatSessionRepository;
 import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
 import com.coolxer.model.dih.dto.AgentRunSteerDto;
+import com.coolxer.model.dih.dto.AgentRunRequestDto;
 import com.coolxer.model.dih.vo.AgentRunVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.DihChatExecutionPolicy;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.demo.BuiltinDemoRequestDetector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -26,11 +31,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +51,8 @@ class AgentRunServiceTest {
     private final ChatSessionRepository chatSessionRepository = mock(ChatSessionRepository.class);
     private final ChatSessionService chatSessionService = mock(ChatSessionService.class);
     private final SkillService skillService = mock(SkillService.class);
+    private final BuiltinDemoRequestDetector builtinDemoRequestDetector =
+            mock(BuiltinDemoRequestDetector.class);
     private final McpToolInvocationRepository invocationRepository =
             mock(McpToolInvocationRepository.class);
     private final DataSource mysqlDataSource = mock(DataSource.class);
@@ -57,10 +66,12 @@ class AgentRunServiceTest {
     @BeforeEach
     void setUp() {
         service = new AgentRunService(runRepository, eventRepository, inputRepository,
-                chatSessionRepository, chatSessionService, skillService, invocationRepository,
-                mysqlDataSource, mysqlTransactionManager);
+                chatSessionRepository, chatSessionService, skillService,
+                builtinDemoRequestDetector, invocationRepository, mysqlDataSource,
+                mysqlTransactionManager);
         ReflectionTestUtils.setField(service, "enabled", true);
-        ReflectionTestUtils.setField(service, "enabledTypes", "agent_report");
+        ReflectionTestUtils.setField(service, "enabledTypes", "*");
+        ReflectionTestUtils.setField(service, "disabledTypes", "");
         ReflectionTestUtils.setField(service, "defaultMaxSteps", 30);
         ReflectionTestUtils.setField(service, "defaultMaxDurationSeconds", 1800);
         ReflectionTestUtils.setField(service, "defaultMaxToolCalls", 80);
@@ -114,6 +125,34 @@ class AgentRunServiceTest {
         assertThat(appendedEvents).isEmpty();
         verify(chatSessionService, never()).appendMessage(any(), any(), any());
         verify(inputRepository, never()).save(any());
+    }
+
+    @Test
+    void steerWaitingUserClearsPendingQuestionAndRequeuesRun() {
+        AgentRun run = run("run-1", AgentRunStatus.WAITING_USER);
+        run.setPausedReason("请补充配置值");
+        run.setPendingAction("{\"type\":\"user\",\"question\":\"请补充配置值\"}");
+        User user = user(7);
+        ChatSession session = new ChatSession();
+        session.setId(11);
+        session.setSessionId("chat-1");
+        when(runRepository.findByRunIdForUpdate("run-1")).thenReturn(Optional.of(run));
+        when(inputRepository.findByRunIdAndClientMessageId(anyString(), anyString()))
+                .thenReturn(Optional.empty());
+        when(chatSessionRepository.findBySessionIdAndCreateByForUpdate("chat-1", 7))
+                .thenReturn(Optional.of(session));
+        when(chatSessionService.appendMessage(any(ChatSession.class), any(), any(User.class)))
+                .thenReturn(session);
+
+        AgentRunSteerDto dto = new AgentRunSteerDto();
+        dto.setMessage("Source=example; Topic=demo");
+        dto.setClientMessageId("client-waiting");
+        AgentRunVo result = service.steer("run-1", dto, user);
+
+        assertThat(result.getStatus()).isEqualTo(AgentRunStatus.QUEUED);
+        assertThat(result.getPausedReason()).isNull();
+        assertThat(result.getPendingAction()).isNull();
+        assertThat(appendedEvents).extracting(AgentRunEvent::getType).containsExactly("steer.queued");
     }
 
     @Test
@@ -248,11 +287,120 @@ class AgentRunServiceTest {
     }
 
     @Test
-    void enabledTypesDefaultCanBeRolledOutOneAgentAtATime() {
+    void allAgentTypesAreEnabledByDefaultAndCanBeRestrictedForRollback() {
+        assertThat(service.isEnabledFor("agent_report")).isTrue();
+        assertThat(service.isEnabledFor("agent_data_access")).isTrue();
+        assertThat(service.isEnabledFor("agent_data_visualization")).isTrue();
+        assertThat(service.isEnabledFor("agent_skill")).isTrue();
+
+        ReflectionTestUtils.setField(service, "enabledTypes", "agent_report");
         assertThat(service.isEnabledFor("agent_report")).isTrue();
         assertThat(service.isEnabledFor("agent_data_access")).isFalse();
+
+        ReflectionTestUtils.setField(service, "enabledTypes", "*");
+        ReflectionTestUtils.setField(service, "disabledTypes", "agent_data_access");
+        assertThat(service.isEnabledFor("agent_report")).isTrue();
+        assertThat(service.isEnabledFor("agent_data_access")).isFalse();
+
         ReflectionTestUtils.setField(service, "enabledTypes", "agent_report,agent_data_access");
+        ReflectionTestUtils.setField(service, "disabledTypes", "");
         assertThat(service.isEnabledFor("agent_data_access")).isTrue();
+    }
+
+    @Test
+    void builtinDemoPromptsNeverCreatePersistentRuns() {
+        User user = user(7);
+        ChatSession session = new ChatSession();
+        session.setId(11);
+        session.setSessionId("chat-1");
+        AgentRunRequestDto request = new AgentRunRequestDto();
+        request.setChatId("chat-1");
+        request.setType("agent_report");
+        String message = "请基于用户事件数据生成一份分析报告，包含摘要、数据概览、关键发现、图表占位、结论与建议。";
+        request.setMessage(message);
+        DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve("agent_report").orElseThrow();
+        when(chatSessionRepository.findBySessionIdAndCreateByForUpdate("chat-1", 7))
+                .thenReturn(Optional.of(session));
+        when(builtinDemoRequestDetector.isBuiltinDemoRequest(
+                "agent_report", "chat-1", message, user, session))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "createLocked", request, message, policy, user))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("内置演示");
+        verify(runRepository, never()).save(any(AgentRun.class));
+        verify(chatSessionService, never()).appendMessage(any(), any(), any());
+    }
+
+    @Test
+    void activityEventQueryFiltersTypesAndContinuesFromLastSequence() {
+        AgentRun run = run("run-1", AgentRunStatus.RUNNING);
+        User user = user(7);
+        when(runRepository.findByRunIdAndCreateBy("run-1", 7)).thenReturn(Optional.of(run));
+        List<AgentRunEvent> firstPage = IntStream.rangeClosed(1, 500)
+                .mapToObj(sequence -> event("run-1", sequence, "rag.search"))
+                .toList();
+        List<AgentRunEvent> secondPage = List.of(
+                event("run-1", 501, "tool.started"),
+                event("run-1", 502, "context.compacted"));
+        List<String> expectedTypes = List.of("rag.search", "tool.started", "context.compacted");
+        when(eventRepository.findTop500ByRunIdAndTypeInAndSequenceGreaterThanOrderBySequenceAsc(
+                "run-1", expectedTypes, 0L)).thenReturn(firstPage);
+        when(eventRepository.findTop500ByRunIdAndTypeInAndSequenceGreaterThanOrderBySequenceAsc(
+                "run-1", expectedTypes, 500L)).thenReturn(secondPage);
+
+        var first = service.events("run-1", 0,
+                List.of(" rag.search ", "", "tool.started", "rag.search", "context.compacted"),
+                user);
+        var second = service.events("run-1", first.get(first.size() - 1).getSequence(),
+                expectedTypes, user);
+
+        assertThat(first).hasSize(500);
+        assertThat(second).extracting(event -> event.getType())
+                .containsExactly("tool.started", "context.compacted");
+        verify(eventRepository)
+                .findTop500ByRunIdAndTypeInAndSequenceGreaterThanOrderBySequenceAsc(
+                        "run-1", expectedTypes, 500L);
+    }
+
+    @Test
+    void eventQueryWithoutTypesKeepsLegacyFullReplayBehavior() {
+        AgentRun run = run("run-1", AgentRunStatus.SUCCEEDED);
+        User user = user(7);
+        when(runRepository.findByRunIdAndCreateBy("run-1", 7)).thenReturn(Optional.of(run));
+        when(eventRepository.findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(
+                "run-1", 12L)).thenReturn(List.of(event("run-1", 13, "assistant.delta")));
+
+        var events = service.events("run-1", 12L, user);
+
+        assertThat(events).singleElement()
+                .satisfies(event -> assertThat(event.getType()).isEqualTo("assistant.delta"));
+        verify(eventRepository).findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(
+                "run-1", 12L);
+    }
+
+    @Test
+    void eventQueryRejectsRunsOwnedByAnotherUserBeforeReadingEvents() {
+        User user = user(7);
+        when(runRepository.findByRunIdAndCreateBy("run-1", 7)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.events("run-1", 0,
+                List.of("rag.search"), user))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("任务不存在");
+        verify(eventRepository, never())
+                .findTop500ByRunIdAndTypeInAndSequenceGreaterThanOrderBySequenceAsc(
+                        anyString(), any(), eq(0L));
+    }
+
+    private AgentRunEvent event(String runId, long sequence, String type) {
+        return new AgentRunEvent()
+                .setRunId(runId)
+                .setSequence(sequence)
+                .setType(type)
+                .setStepId("1")
+                .setPayload("{}");
     }
 
     private AgentRun run(String runId, AgentRunStatus status) {

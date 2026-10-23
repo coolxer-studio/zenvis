@@ -6,17 +6,17 @@
 
 ```text
 DIH 前端
-  → ChatController
-  → DihChatApplicationService
-      ├── 普通问答 → AIChatService → 全库 RAG → OpenAI 兼容模型
-      ├── 深度思考 → 推理模型 + 全库 RAG + reasoning 消息
-      ├── 数据接入 → DataAccessAgent → Workflow Orchestrator
-      ├── 数据可视化 → DataVisualizationAgent → 受控 MCP Tool
-      ├── 专项 Skill → PromptDrivenAgentRuntime → 绑定范围 RAG
-      └── 报表制作 → ReportAgent → Report Document / Export
-                              │
-                              ▼
-                   Skill · MCP · Approval · Audit
+  ├── 普通问答 / 兼容单轮 → ChatController → DihChatApplicationService
+  │     ├── 普通问答 → AIChatService → 全库 RAG → OpenAI 兼容模型
+  │     ├── 深度思考 → 推理模型 + 全库 RAG + reasoning 消息
+  │     ├── 数据接入 → DataAccessAgent → Workflow Orchestrator
+  │     ├── 数据可视化 → DataVisualizationAgent → 受控 MCP Tool
+  │     └── 专项 Skill → PromptDrivenAgentRuntime → 绑定范围 RAG
+  │
+  └── 持久化业务 Agent → AgentRunController
+        → AgentRunService / AgentRunScheduler / AgentRunExecutor
+        → Plan · Steer · Checkpoint · Event · Approval
+        → Skill · MCP · RAG · ReportDraft · Report Revision
 ```
 
 DIH 是应用编排层，不是单一模型代理。它先确定会话分支，再为该分支配置上下文、模型、Skill、工具和输出协议。
@@ -43,6 +43,18 @@ DIH 是应用编排层，不是单一模型代理。它先确定会话分支，�
   → 前端增量合并
   → 会话消息持久化
 ```
+
+工具和 RAG 不进入正文 Markdown 日志：
+
+- MCP 调用使用 `tool_call` 事件，同一 `callId` 的 `running`、`succeeded`、`failed` 更新同一条 `tool-call` 部件；
+- 自动 RAG 使用 `rag_search` 事件，每轮每次检索生成一条 `rag-search` 部件；
+- `done` 携带最终消息，正文只保留模型回答，工具和检索记录作为独立结构化部件持久化。
+
+这样前端可以按状态渲染折叠卡、限制长结果高度并支持复制，同时避免模型输出被工具 JSON 污染。历史会话中的旧 Markdown 工具日志只在展示层折叠转换，不执行数据库回填。
+
+普通问答和未启用持久化运行的 Agent 使用 Chat NDJSON；Agent Run 使用独立的 Run 事件流。Run 的 `assistant.delta`、`tool.*`、`approval.*` 和 `artifact.updated` 由运行卡消费，最终答复和报表产物再写回会话消息与工作台。两套事件都要求客户端按稳定 ID 合并，但 Run 额外要求按 `sequence` 去重和断线重放。
+
+Run 消息保存 `runId`，前端据此把每轮任务卡挂回对应 AI 消息。会话重载时不能只恢复当前活动 Run，而要先读取消息引用的全部 Run，再为活动 Run 建立实时订阅；否则历史轮次会在 `run.succeeded` 触发重载后消失。
 
 确认、审批和执行结果必须写回消息状态，刷新页面后不能重新出现已完成动作。
 
@@ -86,6 +98,70 @@ DIH 是应用编排层，不是单一模型代理。它先确定会话分支，�
 ```
 
 没有工具声明的 Skill 不会自动获得全部工具。显式空列表表示对应范围不允许任何工具。
+
+## 持久化 Agent Run
+
+Agent Run 把一个业务目标从 HTTP 请求生命周期中拆出来，保存为可恢复的执行实体。除普通问答外，所有业务 Agent 类型默认统一使用该执行模型；`enabled-types=*`，并可通过显式白名单或 `disabled-types` 做灰度与应急回滚。业务工作流卡片需要用户操作时，Run 保存结构化消息并进入 `WAITING_USER`，用户动作通过 steer 恢复同一任务。
+
+```text
+创建或 steer
+  → AgentRunService 锁定会话并保存 Run / Input
+  → AgentRunScheduler CAS 认领并获取租约
+  → AgentRunExecutor 执行一次模型决策
+  → 保存计划、步骤、检查点、工具计数和事件
+  → QUEUED / WAITING_APPROVAL / WAITING_USER / PAUSED / SUCCEEDED
+```
+
+### 核心组件
+
+| 组件 | 职责 |
+| --- | --- |
+| `AgentRunService` | 创建、steer、暂停、继续、取消、状态迁移、事件追加和快照查询 |
+| `AgentRunScheduler` | 数据库 CAS 认领、并发槽、租约、心跳和启动恢复 |
+| `AgentRunExecutor` | 单次模型决策、工具执行、审批恢复、结构化卡片等待、截断重试和完成判定 |
+| `AgentRunContextAssembler` | 组装目标、计划、摘要、近期对话、steer、证据和附件，并在真实裁剪时产生 `context.compacted` 诊断 |
+| `AgentRunInternalToolProvider` | 提供计划、步骤、用户提问和报表草稿控制工具 |
+| `ReportDraftService` | 保存章节草稿，校验后生成不可变报表修订 |
+| `AgentRunMetrics` | 记录队列、步骤、审批、恢复、截断、终态和失败指标 |
+
+### 持久化数据
+
+| 数据 | 用途 |
+| --- | --- |
+| `t_ai_agent_run` | 目标、计划、状态、预算计数、检查点、租约和最终答复 |
+| `t_ai_agent_run_event` | 按 `(run_id, sequence)` 唯一的只追加事件日志 |
+| `t_ai_agent_run_input` | steer 和附件，按 `(run_id, client_message_id)` 幂等 |
+| `t_ai_report_draft` | 报表章节、顺序、来源引用、哈希和完成状态 |
+| `t_ai_mcp_invocation.agent_run_id` | 把工具审批与审计绑定到具体 Run |
+
+Run 的创建在会话行锁和 MySQL 命名锁内完成，确保同一用户、同一会话不会并发创建两个活动 Run。`ChatSession` 和报表草稿使用乐观锁版本，消息追加在事务内完成，避免后台执行、steer 和多端恢复互相覆盖。
+
+### 执行可观测性
+
+运行卡通过独立的可观测层展示检索、工具调用和上下文压缩，不把工具 JSON 或检索正文混入最终答复，也不重复持久化事件明细。
+
+| 数据源 | 归并方式 | 展示信息 |
+| --- | --- | --- |
+| `rag.search` | `searchId` | 查询范围、状态、命中数、耗时 |
+| `tool.started` / `tool.succeeded` / `tool.failed` | `callId` | 工具名、生命周期、参数、结果、错误和耗时 |
+| `tool.approval_*` | `requestId` | 审批状态及关联工具 |
+| `context.compacted` | `compactionId` | 阶段、原因、前后 Token/字符、预算、省略消息和附件数、摘要预览 |
+
+归并器按 `sequence` 去重并按首次发生顺序排列。活动事件可通过 `types` 查询，避免 `assistant.delta` 占满历史窗口；达到 500 条时以最后序号继续分页。任务卡和任务中心复用同一视图，详细数据默认折叠。
+
+上下文压缩只在 `run-context`、`model-input`、`history-window` 或 `attachment-memory` 阶段真实发生裁剪、摘要或附件正文移除时记录。历史 Run 不回填事件；缺少记录时明确标记为旧任务未采集诊断。
+
+### 状态与恢复
+
+活动状态为 `QUEUED`、`RUNNING`、`WAITING_APPROVAL`、`WAITING_USER`、`PAUSED` 和 `CANCELING`；终态为 `SUCCEEDED`、`FAILED` 和 `CANCELLED`。等待状态释放租约和并发槽，终态不会阻止会话创建下一个 Run。
+
+调度器默认 1 秒扫描一次、单实例并发 4、租约 60 秒。worker 定期续租；租约过期后其他实例可重新认领，连续恢复 3 次仍无法稳定执行时标记失败。服务启动会把心跳超时的中断 Run 重新入队，同时保留等待中的 Run 审批，服务重启前已发出但未记录结果的工具调用则标记为 `UNKNOWN` 并暂停 Run。
+
+### 计划、完成与预算
+
+模型通过 `run_update_plan`、`run_update_step`、`run_request_user` 和 `run_finish` 维护显式计划。控制器只在计划全部 `DONE/SKIPPED`、无等待动作、报表已生成正式修订并存在最终答复时判定成功。模型只输出文本但没有推进计划时自动重新入队；连续 3 次无进展则暂停。
+
+Run 默认最多 30 个决策步、30 分钟有效执行和 80 次工具调用。Skill 的 `maxToolCalls` 作为单步上限，Run 总预算跨步骤累计。等待审批和等待用户不消耗有效执行时间。`finish_reason=length` 视为当前步骤未完成，最多自动重试 2 次，之后以 `OUTPUT_TRUNCATED` 暂停。
 
 ## Workflow Orchestrator
 
@@ -170,7 +246,7 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
   → 执行状态与审计
 ```
 
-审批支持会话内联决策和后台分析任务决策。请求、批准、拒绝、超时、取消、执行中、成功和失败都需要形成可查询状态。
+审批支持会话内联决策、持久化 Agent Run 决策和后台分析任务决策。Run 中的只读工具在未被 `DENY` 时自动执行；外部写入等 `ASK` 工具进入持久化审批，默认等待 24 小时，不持有 worker。`approved_run` 允许当前 Run 内同一精确工具复用授权。请求、批准、拒绝、超时、取消、执行中、成功和失败都需要形成可查询状态。
 
 ## AI 分析任务
 
@@ -197,9 +273,13 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
 - 导出服务根据当前文档生成目标格式。
 - 报表工具范围独立于数据接入和数据可视化 Agent。
 
+启用 Agent Run 时，报表 Agent 先创建草稿，再通过受控工具逐章节写入，最后由 `report_finalize` 生成正式修订。单章目标约 1,200 字、硬上限 2,400 字符；已写入章节独立保存，当前章节失败不会删除其他成果。Run 只有在存在已 finalize 草稿时才可成功结束。
+
+未启用 Run 或旧客户端仍可能使用完整的 `zenvis:report-document-config` 围栏。该路径受模型输出 Token 上限约束，检测到 `finish_reason=length` 或围栏未闭合时会丢弃不完整报表，避免半份内容覆盖正式文档。长报表应优先使用持久化 Run 的章节化写入。
+
 ## 资源上限
 
-平台为单轮 Agent 执行限制：
+平台分别限制单次模型步骤和整个 Agent Run：
 
 - 工具调用次数。
 - 单次与累计工具结果字符数。
@@ -208,12 +288,17 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
 - 上下文窗口、附件和历史消息预算。
 - 审批等待时间和后台任务并发数。
 
+Run 额外限制决策步数、有效执行时间、全 Run 工具调用总数和租约恢复次数。等待审批、等待用户和用户暂停不占 worker，也不计入有效执行时间。
+
 Skill 可以在允许范围内提供正整数覆盖；缺失或非法值回退平台默认。达到上限后应基于已有证据作答或说明限制，不能通过递归和工具改名绕过。
+
+工具调用预算只统计通过参数 Schema 校验并进入工具执行阶段的调用。模型返回非法参数时，平台先请求一次修正；未执行的非法调用不扣预算，因此“界面显示的实际调用数”和“模型尝试数”可能不同。审批拒绝和策略拒绝发生在参数校验之后，仍可能占用一次预算，但不会产生底层工具的业务结果。
 
 ## 关联文档
 
 - [AI 与数据智能](/04-AI与数据智能/README.md)
 - [AI 问答与会话](/04-AI与数据智能/AI问答与会话.md)
+- [智能体任务与持久化运行](/04-AI与数据智能/智能体任务与持久化运行.md)
 - [业务智能体与工作流](/04-AI与数据智能/业务智能体与工作流.md)
 - [MCP 服务与工具审批](/04-AI与数据智能/MCP服务与工具审批.md)
 - [AI 分析任务与 Skill](/04-AI与数据智能/AI分析任务与Skill.md)

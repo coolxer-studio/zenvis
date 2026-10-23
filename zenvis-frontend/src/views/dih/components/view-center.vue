@@ -28,7 +28,7 @@
         </el-button>
 
         <el-button class="agent-run-button" :icon="Tickets" @click="emit('openAgentRuns')">
-          <span class="agent-run-label">智能体任务</span>
+          <span class="agent-run-label">智能体运行</span>
         </el-button>
 
         <el-skeleton-item
@@ -47,13 +47,14 @@
             :aria-label="taskQueueAriaLabel"
             @click="emit('openAnalysisTasks')"
           >
+            <span class="task-status-caption">队列状态</span>
             <template v-if="!taskQueueAvailable">
               <el-icon class="task-status-unavailable-icon"><WarningFilled /></el-icon>
-              <span>状态暂不可用</span>
+              <span>暂不可用</span>
             </template>
             <template v-else-if="taskQueueIdle">
               <el-icon class="task-status-idle-icon"><CircleCheckFilled /></el-icon>
-              <span>队列空闲</span>
+              <span>空闲</span>
             </template>
             <template v-else>
               <span
@@ -125,6 +126,7 @@
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
                 @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
                 @resume-agent-run="handleResumeAgentRun"
+                @reply-agent-run="handleReplyAgentRun"
                 @select-prompt-suggestion="fillPromptSuggestion"
               />
               <div class="message-time">{{ message.time }}</div>
@@ -517,14 +519,14 @@ const taskQueueIdle = computed(
   () => props.taskQueueAvailable && !props.taskQueueLoading && taskQueueTotal.value === 0,
 );
 const taskQueueAriaLabel = computed(() => {
-  if (!props.taskQueueAvailable) return '分析任务状态暂不可用，打开分析任务面板';
-  if (taskQueueIdle.value) return '分析任务队列空闲，打开分析任务面板';
+  if (!props.taskQueueAvailable) return '队列状态暂不可用，打开分析任务面板';
+  if (taskQueueIdle.value) return '队列状态空闲，打开分析任务面板';
   return `${taskQueueItems.value
     .map(item => `${item.label}${item.value}项`)
     .join('，')}，打开分析任务面板`;
 });
 const taskQueueTooltip = computed(() => {
-  if (!props.taskQueueAvailable) return '暂时无法获取分析任务状态，点击打开任务面板';
+  if (!props.taskQueueAvailable) return '暂时无法获取队列状态，点击打开任务面板';
   const runningTaskName = props.taskQueueStatus?.runningTask?.name;
   if (runningTaskName) return `当前任务：${runningTaskName}`;
   if (taskQueueIdle.value) return '当前没有等待或执行中的分析任务';
@@ -554,6 +556,7 @@ const {
   chatSessionExtraData,
   ensureChatSessionRecordId,
   refreshChatSessionExtraData,
+  loadChatSession,
   ensureChatSessionId,
 } = useChatSession({
   props,
@@ -827,6 +830,7 @@ const {
   sendMessage,
   stopCurrentChat,
   resumeAgentRun,
+  replyToWaitingAgentRun,
   restoreActiveAgentRun,
 } = useChatStream({
   router,
@@ -843,6 +847,7 @@ const {
   scrollToBottom,
   processMessageFormat,
   refreshChatSessionExtraData,
+  reloadChatSessionMessages: loadChatSession,
   ensureChatSessionId,
   isMcpApprovalPart,
   upsertMcpApprovalPart,
@@ -892,6 +897,14 @@ const handleResumeAgentRun = async (runId: string) => {
     ElMessage.success('任务已继续');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '继续任务失败');
+  }
+};
+
+const handleReplyAgentRun = async (payload: { runId: string; message: string }) => {
+  try {
+    await replyToWaitingAgentRun(payload.runId, payload.message);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
   }
 };
 
@@ -1187,6 +1200,21 @@ const dislikeMessage = (index: number) => {};
   gap: var(--zv-space-2);
   font-size: var(--zv-font-size-xs);
   font-weight: var(--zv-font-weight-medium);
+}
+
+.task-status-caption {
+  padding-left: 10px;
+  color: var(--zv-text-secondary);
+  font-weight: var(--zv-font-weight-medium);
+}
+
+.task-status-caption::after {
+  content: '：';
+}
+
+.task-status-summary.is-idle .task-status-caption,
+.task-status-summary.is-unavailable .task-status-caption {
+  padding-left: 0;
 }
 
 .task-status-summary.is-idle {

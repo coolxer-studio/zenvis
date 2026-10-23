@@ -48,12 +48,54 @@
         </div>
       </div>
 
+      <div class="run-activity">
+        <button
+          type="button"
+          class="run-activity-toggle"
+          :aria-expanded="activityExpanded"
+          :aria-controls="activityDetailsId"
+          @click.stop="toggleActivity"
+        >
+          <span class="run-activity-title">
+            <el-icon><Operation /></el-icon>
+            <strong>执行过程</strong>
+          </span>
+          <span class="run-activity-summary">
+            检索 {{ activitySummary.ragCount }} · 工具 {{ activitySummary.toolCount }} · 压缩 {{ activitySummary.compactionCount }}
+          </span>
+          <el-icon class="run-activity-chevron">
+            <ArrowUp v-if="activityExpanded" />
+            <ArrowDown v-else />
+          </el-icon>
+        </button>
+        <div v-if="activityExpanded" :id="activityDetailsId" class="run-activity-body">
+          <div v-if="activityLoading" class="run-activity-state">正在加载执行过程…</div>
+          <button
+            v-else-if="activityError"
+            type="button"
+            class="run-activity-state is-error"
+            @click.stop="loadActivityEvents"
+          >{{ activityError }}，点击重试</button>
+          <AgentRunActivity v-else :activities="activities" />
+        </div>
+      </div>
+
       <div v-if="currentToolText" class="run-current-tool">
         <el-icon><Tools /></el-icon>
         <span>{{ currentToolText }}</span>
       </div>
 
-      <div v-if="run?.pausedReason" class="run-paused-reason">
+      <div v-if="run?.status === 'WAITING_USER'" class="run-user-input-callout">
+        <span class="run-user-input-copy">
+          <strong>需要补充信息</strong>
+          <small>{{ waitingQuestion || '当前任务正在等待你补充继续执行所需的信息。' }}</small>
+        </span>
+        <el-button size="small" type="primary" plain @click.stop="openUserInput">
+          补充信息
+        </el-button>
+      </div>
+
+      <div v-else-if="run?.pausedReason" class="run-paused-reason">
         <el-icon><Warning /></el-icon>
         <span>{{ run.pausedReason }}</span>
       </div>
@@ -72,11 +114,19 @@
         <span v-if="run?.recoveryCount">恢复 {{ run.recoveryCount }} 次</span>
       </div>
     </template>
+
+    <AgentRunUserInputDialog
+      v-model="userInputVisible"
+      :question="waitingQuestion"
+      :submitting="userInputSubmitting"
+      @submit="submitUserInput"
+      @closed="handleUserInputClosed"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   ArrowDown,
   ArrowUp,
@@ -84,26 +134,51 @@ import {
   CircleCheck,
   Clock,
   Loading,
+  Operation,
   Tools,
   Warning,
   WarningFilled,
 } from '@element-plus/icons-vue';
-import type { AgentRun, AgentRunPlanStep } from '@/types/type-dih';
-import { isAgentRunLive, resolveAgentRunStepStatus } from '@/views/dih/composables/agent-run-message';
+import { DihService } from '@/service/api';
+import type {
+  AgentRun,
+  AgentRunEvent,
+  AgentRunPlanStep,
+} from '@/types/type-dih';
+import {
+  isAgentRunLive,
+  resolveAgentRunStepStatus,
+  resolveAgentRunWaitingQuestion,
+} from '@/views/dih/composables/agent-run-message';
+import {
+  AGENT_RUN_ACTIVITY_EVENT_TYPES,
+  buildAgentRunActivities,
+  summarizeAgentRunActivities,
+} from '@/views/dih/composables/agent-run-activity';
+import AgentRunActivity from './agent-run-activity.vue';
+import AgentRunUserInputDialog from './agent-run-user-input-dialog.vue';
 
 const props = withDefaults(defineProps<{
   run?: AgentRun | null;
   currentTool?: Record<string, unknown> | null;
+  activityEvents?: AgentRunEvent[];
 }>(), {
   run: null,
   currentTool: null,
+  activityEvents: () => [],
 });
 
 const emit = defineEmits<{
   (e: 'resume', runId: string): void;
+  (e: 'reply', payload: { runId: string; message: string }): void;
 }>();
 
 const expanded = ref(true);
+const activityExpanded = ref(false);
+const activityLoading = ref(false);
+const activityError = ref('');
+const loadedRunId = ref('');
+const fetchedActivityEvents = ref<AgentRunEvent[]>([]);
 const steps = computed<AgentRunPlanStep[]>(() => props.run?.plan?.steps || []);
 const isActive = computed(() => isAgentRunLive(props.run?.status));
 const isWaiting = computed(() => props.run?.status === 'WAITING_APPROVAL'
@@ -115,6 +190,108 @@ const completedSteps = computed(() => steps.value.filter(step =>
 const stepProgressText = computed(() => {
   if (!steps.value.length) return props.run?.statusLabel || '准备执行';
   return `${completedSteps.value}/${steps.value.length} 个步骤完成`;
+});
+const activityDetailsId = computed(() => `agent-run-activity-${props.run?.runId || 'unknown'}`);
+const allActivityEvents = computed(() => {
+  const runId = props.run?.runId || '';
+  return [...fetchedActivityEvents.value, ...props.activityEvents]
+    .filter(event => !runId || !event.run_id || event.run_id === runId);
+});
+const activities = computed(() => buildAgentRunActivities(allActivityEvents.value));
+const activitySummary = computed(() => summarizeAgentRunActivities(activities.value));
+const waitingQuestion = computed(() => resolveAgentRunWaitingQuestion(props.run));
+const waitingPromptKey = computed(() => {
+  if (props.run?.status !== 'WAITING_USER') return '';
+  return `${props.run.runId}:${waitingQuestion.value}`;
+});
+const userInputVisible = ref(false);
+const userInputSubmitting = ref(false);
+let dismissedPromptKey = '';
+let promptedKey = '';
+let submitResetTimer: number | null = null;
+
+const openUserInput = () => {
+  userInputVisible.value = true;
+};
+
+const submitUserInput = (message: string) => {
+  const runId = props.run?.runId || '';
+  const answer = message.trim();
+  if (!runId || !answer) return;
+  userInputSubmitting.value = true;
+  emit('reply', { runId, message: answer });
+  if (submitResetTimer !== null) window.clearTimeout(submitResetTimer);
+  submitResetTimer = window.setTimeout(() => {
+    userInputSubmitting.value = false;
+    submitResetTimer = null;
+  }, 5_000);
+};
+
+const handleUserInputClosed = () => {
+  if (props.run?.status === 'WAITING_USER') {
+    dismissedPromptKey = waitingPromptKey.value;
+  }
+};
+
+watch(waitingPromptKey, key => {
+  if (!key) {
+    userInputVisible.value = false;
+    userInputSubmitting.value = false;
+    dismissedPromptKey = '';
+    promptedKey = '';
+    return;
+  }
+  if (key !== dismissedPromptKey && key !== promptedKey) {
+    promptedKey = key;
+    userInputVisible.value = true;
+  }
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (submitResetTimer !== null) window.clearTimeout(submitResetTimer);
+});
+
+const loadActivityEvents = async () => {
+  const runId = props.run?.runId || '';
+  if (!runId || activityLoading.value) return;
+  activityLoading.value = true;
+  activityError.value = '';
+  try {
+    const events: AgentRunEvent[] = [];
+    let after = 0;
+    for (let page = 0; page < 20; page += 1) {
+      const batch = await DihService.listAgentRunEvents(
+        runId,
+        after,
+        AGENT_RUN_ACTIVITY_EVENT_TYPES,
+      );
+      events.push(...batch);
+      if (batch.length < 500) break;
+      after = batch[batch.length - 1].sequence;
+    }
+    fetchedActivityEvents.value = events;
+    loadedRunId.value = runId;
+  } catch (error) {
+    console.error('加载智能体执行过程失败:', error);
+    activityError.value = '执行过程加载失败';
+  } finally {
+    activityLoading.value = false;
+  }
+};
+
+const toggleActivity = async () => {
+  activityExpanded.value = !activityExpanded.value;
+  if (activityExpanded.value && loadedRunId.value !== (props.run?.runId || '')) {
+    await loadActivityEvents();
+  }
+};
+
+watch(() => props.run?.runId, () => {
+  activityExpanded.value = false;
+  activityLoading.value = false;
+  activityError.value = '';
+  loadedRunId.value = '';
+  fetchedActivityEvents.value = [];
 });
 
 const statusText = computed(() => {
@@ -347,6 +524,75 @@ const displayStepStatus = (status?: string) =>
   border-radius: var(--zv-radius-md);
 }
 
+.run-activity {
+  margin: 10px 14px 0;
+}
+
+.run-activity-toggle {
+  display: flex;
+  width: 100%;
+  padding: 8px 10px;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--zv-bg-card);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-md);
+}
+
+.run-activity-toggle:hover {
+  border-color: var(--zv-primary-border);
+}
+
+.run-activity-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--zv-text-secondary);
+  font-size: var(--zv-font-size-xs);
+}
+
+.run-activity-summary {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--zv-text-muted);
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-activity-chevron {
+  flex: 0 0 auto;
+  color: var(--zv-text-muted);
+}
+
+.run-activity-body {
+  padding-top: 9px;
+}
+
+.run-activity-state {
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
+  text-align: left;
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-md);
+}
+
+button.run-activity-state {
+  cursor: pointer;
+}
+
+.run-activity-state.is-error {
+  color: var(--el-color-danger);
+}
+
 .run-actions {
   display: flex;
   padding: 0 14px 12px;
@@ -362,6 +608,40 @@ const displayStepStatus = (status?: string) =>
 .run-paused-reason {
   color: var(--el-color-warning-dark-2);
   background: color-mix(in srgb, var(--el-color-warning) 10%, var(--zv-bg-card));
+}
+
+.run-user-input-callout {
+  display: flex;
+  margin: 8px 14px 0;
+  padding: 10px 12px;
+  align-items: center;
+  gap: 12px;
+  background: color-mix(in srgb, var(--el-color-warning) 10%, var(--zv-bg-card));
+  border: 1px solid color-mix(in srgb, var(--el-color-warning) 28%, var(--zv-border));
+  border-radius: var(--zv-radius-md);
+}
+
+.run-user-input-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.run-user-input-copy strong {
+  color: var(--el-color-warning-dark-2);
+  font-size: var(--zv-font-size-xs);
+}
+
+.run-user-input-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--zv-text-secondary);
+  font-size: var(--zv-font-size-xs);
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .run-metrics {

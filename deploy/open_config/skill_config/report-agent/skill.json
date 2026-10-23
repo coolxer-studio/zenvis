@@ -51,10 +51,11 @@
       "mcp": {}
     },
     "limits": {
-      "maxToolCalls": 8,
+      "maxToolCalls": 60,
       "maxRepeatedFailures": 2,
       "maxToolResultChars": 8000,
-      "maxAccumulatedToolResultChars": 24000
+      "maxAccumulatedToolResultChars": 48000,
+      "maxOutputTokens": 4096
     }
   },
   "enabled": true,

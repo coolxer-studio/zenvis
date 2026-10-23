@@ -244,6 +244,11 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 - 数据可视化 Agent 只使用只读 retrieval MCP 工具，不生成或执行任意 SQL。
 - 写工具必须保留审批、审计、参数校验和风险策略。
 - 普通问答和深度问答在全部未删除知识库中自动执行 RAG；业务 Agent / Skill 在所选启用 Skill 绑定知识库的并集内自动执行 RAG，未绑定时不检索也不回退全库。
+- 持久化执行由 `AgentRunService` 管理状态和事件，`AgentRunScheduler` 负责租约认领，`AgentRunExecutor` 执行单步决策；修改状态迁移时必须同步释放租约、等待动作和事件序号。
+- `AgentRunContextAssembler`、`AIChatService` 和 `ContextWindowChatMemory` 在真实发生窗口裁剪、消息截断、Token 预算压缩或附件正文移除时，通过 `ContextCompactionObserver` 写入 `context.compacted`；普通聊天链路使用空实现，不产生 Run 事件。
+- `context.compacted` 的 `stage` 只能是 `run-context`、`model-input`、`history-window` 或 `attachment-memory`，字段使用 camelCase 的 `compactionId`、`beforeTokens`、`savedTokens` 等命名。不要把未发生裁剪的常规上下文组装记录成压缩事件。
+- Run 的 `events` 和 `events/list` 查询都保留可选 `types` 过滤；省略时维持全量行为。新增活动事件时必须同步过滤白名单、500 条分页约定和前端归并器。
+- `AgentRunService.steer` 对 `PAUSED` / `WAITING_USER` 重新排队时必须清空 `pendingAction`，避免客户端继续展示已过期的补充信息问题。
 
 修改流式协议时必须保持文本、审批、完成、错误和富消息事件兼容，并同步前端类型和渲染逻辑。
 

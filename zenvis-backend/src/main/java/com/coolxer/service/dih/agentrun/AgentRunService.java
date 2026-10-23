@@ -27,6 +27,7 @@ import com.coolxer.model.dih.vo.AgentRunVo;
 import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.DihChatExecutionPolicy;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.demo.BuiltinDemoRequestDetector;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -83,6 +84,7 @@ public class AgentRunService {
     private final ChatSessionRepository chatSessionRepository;
     private final ChatSessionService chatSessionService;
     private final SkillService skillService;
+    private final BuiltinDemoRequestDetector builtinDemoRequestDetector;
     private final McpToolInvocationRepository invocationRepository;
     private final DataSource mysqlDataSource;
     private final TransactionTemplate mysqlTransactionTemplate;
@@ -90,8 +92,11 @@ public class AgentRunService {
     @Value("${app.ai.agent-run.enabled:true}")
     private boolean enabled;
 
-    @Value("${app.ai.agent-run.enabled-types:agent_report}")
+    @Value("${app.ai.agent-run.enabled-types:*}")
     private String enabledTypes;
+
+    @Value("${app.ai.agent-run.disabled-types:}")
+    private String disabledTypes;
 
     @Value("${app.ai.agent-run.max-steps:30}")
     private int defaultMaxSteps;
@@ -114,6 +119,7 @@ public class AgentRunService {
                            ChatSessionRepository chatSessionRepository,
                            ChatSessionService chatSessionService,
                            SkillService skillService,
+                           BuiltinDemoRequestDetector builtinDemoRequestDetector,
                            McpToolInvocationRepository invocationRepository,
                            @Qualifier("mysqlDataSource") DataSource mysqlDataSource,
                            @Qualifier("mysqlTransactionManager")
@@ -124,6 +130,7 @@ public class AgentRunService {
         this.chatSessionRepository = chatSessionRepository;
         this.chatSessionService = chatSessionService;
         this.skillService = skillService;
+        this.builtinDemoRequestDetector = builtinDemoRequestDetector;
         this.invocationRepository = invocationRepository;
         this.mysqlDataSource = mysqlDataSource;
         this.mysqlTransactionTemplate = new TransactionTemplate(mysqlTransactionManager);
@@ -142,8 +149,17 @@ public class AgentRunService {
         if (StringUtils.isBlank(agentType)) {
             return false;
         }
-        return java.util.Arrays.stream(StringUtils.split(enabledTypes, ','))
+        if (matchesType(disabledTypes, agentType)) {
+            return false;
+        }
+        return StringUtils.equals(StringUtils.trim(enabledTypes), "*")
+                || matchesType(enabledTypes, agentType);
+    }
+
+    private boolean matchesType(String configuredTypes, String agentType) {
+        return java.util.Arrays.stream(StringUtils.split(configuredTypes, ','))
                 .map(StringUtils::trim)
+                .filter(StringUtils::isNotBlank)
                 .anyMatch(agentType::equals);
     }
 
@@ -185,6 +201,10 @@ public class AgentRunService {
         ChatSession session = chatSessionRepository
                 .findBySessionIdAndCreateByForUpdate(request.getChatId(), currentUser.getId())
                 .orElse(null);
+        if (builtinDemoRequestDetector.isBuiltinDemoRequest(
+                policy.agentType(), request.getChatId(), message, currentUser, session)) {
+            throw new ApiException(503, "内置演示使用聊天示例链路，不创建持久化任务");
+        }
         AgentRun active = runRepository
                 .findFirstByChatIdAndCreateByAndStatusInOrderByCreateTimeDesc(
                         request.getChatId(), currentUser.getId(), ACTIVE_STATUSES)
@@ -315,6 +335,7 @@ public class AgentRunService {
                 || run.getStatus() == AgentRunStatus.WAITING_USER) {
             run.setStatus(AgentRunStatus.QUEUED)
                     .setPausedReason(null)
+                    .setPendingAction(null)
                     .setLeaseId(null)
                     .setLeaseUntil(null);
         }
@@ -354,14 +375,28 @@ public class AgentRunService {
     }
 
     public List<AgentRunEventVo> events(String runId, long after, User currentUser) {
+        return events(runId, after, List.of(), currentUser);
+    }
+
+    public List<AgentRunEventVo> events(String runId,
+                                        long after,
+                                        List<String> types,
+                                        User currentUser) {
         requireOwnedRun(runId, currentUser);
-        return eventRepository
-                .findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(runId, Math.max(after, 0))
+        return findEvents(runId, Math.max(after, 0), normalizeEventTypes(types))
                 .stream().map(AgentRunEventVo::from).toList();
     }
 
     public Flux<String> eventStream(String runId, long after, User currentUser) {
+        return eventStream(runId, after, List.of(), currentUser);
+    }
+
+    public Flux<String> eventStream(String runId,
+                                    long after,
+                                    List<String> types,
+                                    User currentUser) {
         requireOwnedRun(runId, currentUser);
+        List<String> normalizedTypes = normalizeEventTypes(types);
         return Flux.create(sink -> {
             AtomicLong cursor = new AtomicLong(Math.max(after, 0));
             AtomicBoolean stopped = new AtomicBoolean();
@@ -371,13 +406,16 @@ public class AgentRunService {
                 }
                 try {
                     while (true) {
-                        List<AgentRunEventVo> batch = eventRepository
-                                .findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(
-                                        runId, cursor.get())
+                        List<AgentRunEventVo> batch = findEvents(
+                                runId, cursor.get(), normalizedTypes)
                                 .stream().map(AgentRunEventVo::from).toList();
                         for (AgentRunEventVo event : batch) {
                             sink.next(JacksonUtil.toJson(event) + "\n");
                             cursor.accumulateAndGet(event.getSequence(), Math::max);
+                        }
+                        if (!batch.isEmpty()) {
+                            cursor.accumulateAndGet(
+                                    batch.get(batch.size() - 1).getSequence(), Math::max);
                         }
                         if (batch.size() < 500) {
                             break;
@@ -387,9 +425,9 @@ public class AgentRunService {
                             .map(run -> run.getStatus().isTerminal())
                             .orElse(true);
                     if (terminal) {
-                        List<AgentRunEventVo> remaining = eventRepository
-                                .findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(
-                                        runId, cursor.get())
+                        List<AgentRunEvent> remainingRows = findEvents(
+                                runId, cursor.get(), normalizedTypes);
+                        List<AgentRunEventVo> remaining = remainingRows
                                 .stream().map(AgentRunEventVo::from).toList();
                         remaining.forEach(event -> {
                             sink.next(JacksonUtil.toJson(event) + "\n");
@@ -410,6 +448,25 @@ public class AgentRunService {
                 task.dispose();
             });
         });
+    }
+
+    private List<AgentRunEvent> findEvents(String runId, long after, List<String> types) {
+        return types.isEmpty()
+                ? eventRepository.findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(
+                        runId, after)
+                : eventRepository.findTop500ByRunIdAndTypeInAndSequenceGreaterThanOrderBySequenceAsc(
+                        runId, types, after);
+    }
+
+    private List<String> normalizeEventTypes(List<String> types) {
+        if (types == null || types.isEmpty()) {
+            return List.of();
+        }
+        return types.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .toList();
     }
 
     @Transactional(transactionManager = "mysqlTransactionManager")

@@ -12,6 +12,9 @@ public interface AgentRunEventRepository extends BaseRepository<AgentRunEvent, I
     List<AgentRunEvent> findTop500ByRunIdAndSequenceGreaterThanOrderBySequenceAsc(
             String runId, long afterSequence);
 
+    List<AgentRunEvent> findTop500ByRunIdAndTypeInAndSequenceGreaterThanOrderBySequenceAsc(
+            String runId, List<String> types, long afterSequence);
+
     Optional<AgentRunEvent> findFirstByRunIdAndTypeOrderBySequenceDesc(
             String runId, String type);
 

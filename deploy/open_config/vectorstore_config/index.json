@@ -82,6 +82,14 @@
                     "value": "no_match"
                   },
                   {
+                    "label": "无知识库",
+                    "value": "no_knowledge_base"
+                  },
+                  {
+                    "label": "未绑定知识库",
+                    "value": "no_bound_knowledge_base"
+                  },
+                  {
                     "label": "空查询",
                     "value": "empty_query"
                   },
@@ -167,8 +175,8 @@
               "name": "status",
               "label": "状态",
               "type": "tpl",
-              "tpl": "<% if (data.status === 'ok') { %><span class='label label-success'>成功</span><% } else if (data.status === 'no_match') { %><span class='label label-warning'>无命中</span><% } else if (data.status === 'empty_query') { %><span class='label label-default'>空查询</span><% } else if (data.status === 'embedding_disabled') { %><span class='label label-warning'>Embedding未启用</span><% } else { %><span class='label label-danger'>异常</span><% } %>",
-              "width": 120,
+              "tpl": "<% if (data.status === 'ok') { %><span class='label label-success'>成功</span><% } else if (data.status === 'no_match') { %><span class='label label-warning'>无命中</span><% } else if (data.status === 'no_knowledge_base') { %><span class='label label-warning'>无知识库</span><% } else if (data.status === 'no_bound_knowledge_base') { %><span class='label label-warning'>未绑定知识库</span><% } else if (data.status === 'empty_query') { %><span class='label label-default'>空查询</span><% } else if (data.status === 'embedding_disabled') { %><span class='label label-warning'>Embedding未启用</span><% } else if (data.status === 'retrieval_error') { %><span class='label label-danger'>检索异常</span><% } else { %><span class='label label-danger'>异常</span><% } %>",
+              "width": 140,
               "toggled": true
             },
             {

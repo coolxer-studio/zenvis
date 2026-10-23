@@ -3,6 +3,7 @@ package com.coolxer.service.dih;
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.model.dih.ContextCompactionEventData;
 import com.coolxer.model.dih.RagSearchEventData;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.coolxer.service.dih.advisor.ReasoningContentAdvisor;
@@ -50,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -353,6 +355,19 @@ public class AIChatService {
                                   User user,
                                   List<Integer> knowledgeBaseIds,
                                   McpToolContext mcpToolContext) {
+        return agentChat(chatId, model, systemPrompt, prompt, attachments, user,
+                knowledgeBaseIds, mcpToolContext, ContextCompactionObserver.NOOP);
+    }
+
+    public Flux<String> agentChat(String chatId,
+                                  String model,
+                                  String systemPrompt,
+                                  String prompt,
+                                  List<ChatAttachment> attachments,
+                                  User user,
+                                  List<Integer> knowledgeBaseIds,
+                                  McpToolContext mcpToolContext,
+                                  ContextCompactionObserver compactionObserver) {
         if (!StringUtils.hasText(systemPrompt)) {
             return Flux.error(new AgentCapabilityUnavailableException("智能体系统提示词不能为空。"));
         }
@@ -375,7 +390,8 @@ public class AIChatService {
                 resolvedMcpToolContext.hasTools()
                         ? resolvedMcpToolContext.toolRuntimeContext()
                         : null,
-                outputTokenBudget
+                outputTokenBudget,
+                compactionObserver
         );
         if (!resolvedMcpToolContext.hasTools()
                 && chatAttachmentService.hasImageAttachment(attachments)
@@ -390,7 +406,7 @@ public class AIChatService {
                     effectiveSystemPrompt,
                     "AIChatService.agentChat.native",
                     ragContext
-            ), chatId, preparedInput.prompt(), attachments), ragContext);
+            ), chatId, preparedInput.prompt(), attachments, compactionObserver), ragContext);
         }
 
         String scene = "AIChatService.agentChat";
@@ -444,7 +460,8 @@ public class AIChatService {
                         startedAtNanos),
                 chatId,
                 preparedInput.prompt(),
-                attachments
+                attachments,
+                compactionObserver
         ), ragContext);
     }
 
@@ -958,6 +975,17 @@ public class AIChatService {
                                                ToolCallbackProvider toolCallbackProvider,
                                                ToolRuntimeContext toolRuntimeContext,
                                                int outputTokenBudget) {
+        return prepareChatInput(chatId, systemPrompt, prompt, toolCallbackProvider,
+                toolRuntimeContext, outputTokenBudget, ContextCompactionObserver.NOOP);
+    }
+
+    private PreparedChatInput prepareChatInput(String chatId,
+                                               String systemPrompt,
+                                               String prompt,
+                                               ToolCallbackProvider toolCallbackProvider,
+                                               ToolRuntimeContext toolRuntimeContext,
+                                               int outputTokenBudget,
+                                               ContextCompactionObserver compactionObserver) {
         int maxInputTokens = Math.max(
                 contextWindowTokens - outputTokenBudget - contextSafetyMarginTokens,
                 MIN_CURRENT_PROMPT_TOKENS
@@ -997,11 +1025,26 @@ public class AIChatService {
 
         String boundedPrompt = tokenEstimator.truncate(prompt, promptBudget);
         int promptTokens = tokenEstimator.estimate(boundedPrompt);
+        if (!boundedPrompt.equals(prompt)) {
+            emitCompaction(compactionObserver, ContextCompactionEventData.builder()
+                    .compactionId(UUID.randomUUID().toString())
+                    .stage(ContextCompactionEventData.STAGE_MODEL_INPUT)
+                    .reason("prompt_token_budget")
+                    .beforeTokens(tokenEstimator.estimate(prompt))
+                    .afterTokens(promptTokens)
+                    .savedTokens(Math.max(tokenEstimator.estimate(prompt) - promptTokens, 0))
+                    .beforeChars(prompt.length())
+                    .afterChars(boundedPrompt.length())
+                    .budgetTokens(promptBudget)
+                    .summaryPreview("当前步骤提示词按模型输入预算截断")
+                    .build());
+        }
         int historyBudget = Math.min(
                 maxHistoryTokens,
                 Math.max(maxInputTokens - fixedTokens - promptTokens, 0)
         );
         chatMemory.setHistoryTokenBudget(chatId, historyBudget);
+        chatMemory.setCompactionObserver(chatId, compactionObserver);
 
         int historyTokens = StringUtils.hasText(chatId)
                 ? chatMemory.estimateHistoryTokens(chatId)
@@ -1062,11 +1105,39 @@ public class AIChatService {
                                              String chatId,
                                              String sentPrompt,
                                              List<ChatAttachment> attachments) {
+        return finalizeModelMemory(source, chatId, sentPrompt, attachments,
+                ContextCompactionObserver.NOOP);
+    }
+
+    private Flux<String> finalizeModelMemory(Flux<String> source,
+                                             String chatId,
+                                             String sentPrompt,
+                                             List<ChatAttachment> attachments,
+                                             ContextCompactionObserver compactionObserver) {
         String compactPrompt = chatAttachmentService.compactPromptForMemory(
                 sentPrompt, attachments);
         compactPrompt = tokenEstimator.truncate(
                 compactPrompt, Math.max(Math.min(maxHistoryTokens / 2, 4_000), 512));
         String finalCompactPrompt = compactPrompt;
+        if (!finalCompactPrompt.equals(sentPrompt)) {
+            int beforeTokens = tokenEstimator.estimate(sentPrompt);
+            int afterTokens = tokenEstimator.estimate(finalCompactPrompt);
+            int attachmentCount = attachments == null ? 0 : attachments.size();
+            emitCompaction(compactionObserver, ContextCompactionEventData.builder()
+                    .compactionId(UUID.randomUUID().toString())
+                    .stage(ContextCompactionEventData.STAGE_ATTACHMENT_MEMORY)
+                    .reason("attachment_body_removed")
+                    .beforeTokens(beforeTokens)
+                    .afterTokens(afterTokens)
+                    .savedTokens(Math.max(beforeTokens - afterTokens, 0))
+                    .beforeChars(sentPrompt.length())
+                    .afterChars(finalCompactPrompt.length())
+                    .omittedAttachments(attachmentCount)
+                    .includedAttachments(attachmentCount)
+                    .summaryPreview(finalCompactPrompt.substring(
+                            0, Math.min(finalCompactPrompt.length(), 500)))
+                    .build());
+        }
         chatMemory.registerPromptReplacement(chatId, sentPrompt, finalCompactPrompt);
         return source.doFinally(signalType -> {
             try {
@@ -1076,8 +1147,22 @@ public class AIChatService {
             } finally {
                 chatMemory.clearPromptReplacement(chatId);
                 chatMemory.clearHistoryTokenBudget(chatId);
+                chatMemory.clearCompactionObserver(chatId);
             }
         });
+    }
+
+    private void emitCompaction(ContextCompactionObserver observer,
+                                ContextCompactionEventData event) {
+        if (observer == null || !observer.enabled() || event == null) {
+            return;
+        }
+        try {
+            observer.onCompacted(event);
+        } catch (RuntimeException e) {
+            log.warn("记录上下文压缩诊断失败: stage={}, reason={}, error={}",
+                    event.getStage(), event.getReason(), e.getMessage());
+        }
     }
 
     private int positiveOrDefault(int value, int fallback) {

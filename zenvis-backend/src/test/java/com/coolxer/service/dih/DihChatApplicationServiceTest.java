@@ -23,6 +23,7 @@ import com.coolxer.service.dih.agent.DataAccessAgent;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.agentrun.AgentRunService;
 import com.coolxer.service.dih.demo.AgentDemoStateStore;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -54,13 +55,53 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DihChatApplicationServiceTest {
 
     private static final String CONTEXT_LENGTH_EXCEEDED_MESSAGE =
             "当前对话内容过长，已超过模型可处理的上下文长度。请新建对话，或减少历史消息、附件及输入内容后重试。";
+
+    @Test
+    void interactiveWorkflowCardsPauseAPersistentRunForUserInput() {
+        DihChatApplicationService service = streamingService();
+        String confirm = """
+                ```zenvis:confirm
+                {"title":"确认执行","content":"准备写入系统","action":"data_visualization.apply_config"}
+                ```
+                """;
+        String notice = """
+                ```zenvis:notice
+                {"title":"说明","content":"只是提示","level":"info"}
+                ```
+                """;
+
+        assertThat(service.requiresUserDecision(confirm)).isTrue();
+        assertThat(service.requiresUserDecision(notice)).isFalse();
+        assertThat(service.requiresUserDecision("普通文本回答")).isFalse();
+    }
+
+    @Test
+    void persistentRunResponseKeepsRunIdAndStructuredParts() {
+        DihChatApplicationService service = streamingService();
+        String content = """
+                ```zenvis:data-access-decision
+                {"title":"元数据配置已生成","content":"请选择后续处理","actions":["apply_config","abandon"]}
+                ```
+                """;
+
+        Message message = service.saveAgentRunResponse(
+                null, null, content, MessageType.TEXT, null, "run-1");
+
+        assertThat(message.getRunId()).isEqualTo("run-1");
+        assertThat(message.getParts()).singleElement()
+                .satisfies(part -> assertThat(part.getType())
+                        .isEqualTo("data-access-decision"));
+    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -1514,6 +1555,48 @@ class DihChatApplicationServiceTest {
         assertThat(titleModel.calls.get()).isZero();
         assertThat(sessionService.session.getTitle())
                 .isEqualTo(DataAccessDemoResponseService.USER_EVENT_DEMO_TITLE);
+    }
+
+    @Test
+    void builtinDemoStillWinsWhenPersistentRunsAreEnabledForAllAgentTypes() {
+        FakeChatSessionService sessionService = new FakeChatSessionService();
+        ThrowingAIBaseService baseService = new ThrowingAIBaseService();
+        ThrowingChatModel titleModel = new ThrowingChatModel();
+        AgentRunService agentRunService = mock(AgentRunService.class);
+        when(agentRunService.isEnabledFor(DataAccessAgent.AGENT_TYPE)).thenReturn(true);
+        DihChatApplicationService service = new DihChatApplicationService(
+                null,
+                baseService,
+                sessionService,
+                new DataAccessDemoResponseService(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                new ChatMessagePartParser(),
+                null,
+                new ChatTitleService(titleModel),
+                null,
+                new EnabledSkillService(),
+                null,
+                null,
+                null,
+                null
+        );
+        ReflectionTestUtils.setField(service, "agentRunService", agentRunService);
+        ChatDto chatDto = new ChatDto();
+        chatDto.setType(DataAccessAgent.AGENT_TYPE);
+        chatDto.setChatId("data-access-demo-chat");
+        chatDto.setModel("unsupported-model-should-not-be-checked");
+        chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+        chatDto.setMessage(DataAccessDemoResponseService.USER_EVENT_EXAMPLE_PROMPT);
+
+        String response = String.join("", service.chat(chatDto, null).collectList().block());
+
+        assertThat(response).contains("zenvis:info-steps", "用户事件数据接入元数据确认");
+        assertThat(baseService.isModelSupportedCalls.get()).isZero();
+        verify(agentRunService, never()).create(any(), any());
     }
 
     @Test

@@ -15,8 +15,7 @@ import com.coolxer.dao.mysql.repository.ChatSessionRepository;
 import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
 import com.coolxer.dao.mysql.repository.UserRepository;
 import com.coolxer.model.dih.ChatAttachment;
-import com.coolxer.model.dih.ChatMessagePart;
-import com.coolxer.model.dih.Message;
+import com.coolxer.model.dih.ContextCompactionEventData;
 import com.coolxer.model.dih.RagSearchEventData;
 import com.coolxer.model.dih.agentrun.AgentRunPlan;
 import com.coolxer.model.dih.agentrun.AgentRunPlanStep;
@@ -26,7 +25,7 @@ import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
 import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.ChatAttachmentService;
-import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.ContextCompactionObserver;
 import com.coolxer.service.dih.DihChatApplicationService;
 import com.coolxer.service.dih.DihChatExecutionPolicy;
 import com.coolxer.service.dih.agent.skill.SkillService;
@@ -60,7 +59,6 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -108,7 +106,6 @@ public class AgentRunExecutor {
     private final AgentRunInputRepository inputRepository;
     private final McpToolInvocationRepository invocationRepository;
     private final ChatSessionRepository chatSessionRepository;
-    private final ChatSessionService chatSessionService;
     private final UserRepository userRepository;
     private final SkillService skillService;
     private final AgentMcpToolService agentMcpToolService;
@@ -128,7 +125,6 @@ public class AgentRunExecutor {
                             AgentRunInputRepository inputRepository,
                             McpToolInvocationRepository invocationRepository,
                             ChatSessionRepository chatSessionRepository,
-                            ChatSessionService chatSessionService,
                             UserRepository userRepository,
                             SkillService skillService,
                             AgentMcpToolService agentMcpToolService,
@@ -143,7 +139,6 @@ public class AgentRunExecutor {
         this.inputRepository = inputRepository;
         this.invocationRepository = invocationRepository;
         this.chatSessionRepository = chatSessionRepository;
-        this.chatSessionService = chatSessionService;
         this.userRepository = userRepository;
         this.skillService = skillService;
         this.agentMcpToolService = agentMcpToolService;
@@ -214,7 +209,8 @@ public class AgentRunExecutor {
         AtomicBoolean truncated = new AtomicBoolean(false);
 
         McpToolContext toolContext = buildToolContext(run, policy, user, state, stepId, toolCalls);
-        AgentRunPrompt preparedPrompt = buildPrompt(run, stepId, user);
+        ContextCompactionObserver compactionObserver = compactionObserver(run, stepId);
+        AgentRunPrompt preparedPrompt = buildPrompt(run, stepId, user, compactionObserver);
         ChatDto chatDto = buildChatDto(run, preparedPrompt.text(), preparedPrompt.attachments());
         long startedAt = System.nanoTime();
         try {
@@ -232,7 +228,8 @@ public class AgentRunExecutor {
                             toolContext,
                             policy,
                             false,
-                            new java.util.concurrent.atomic.AtomicReference<>(MessageType.TEXT));
+                            new java.util.concurrent.atomic.AtomicReference<>(MessageType.TEXT),
+                            compactionObserver);
             List<String> values = stopWhenCancellationRequested(modelStream, runId, cancellationRequested)
                     .collectList()
                     .block(Duration.ofMinutes(35));
@@ -326,6 +323,24 @@ public class AgentRunExecutor {
             }
             return;
         }
+        String assistantAnswer = assistantText.toString();
+        if (chatApplicationService.requiresUserDecision(assistantAnswer)) {
+            chatApplicationService.saveAgentRunResponse(
+                    session,
+                    user,
+                    assistantAnswer,
+                    MessageType.TEXT,
+                    null,
+                    runId);
+            runService.checkpointStep(runId, elapsedMillis, toolCalls.get(), true, null, stepId);
+            runService.saveCheckpoint(runId, StringUtils.left(assistantAnswer, 24_000));
+            runService.markWaitingUser(runId,
+                    state.isWaitingUser()
+                            ? state.getUserQuestion()
+                            : "请处理当前智能体工作流卡片后继续",
+                    stepId);
+            return;
+        }
         boolean progressed = state.hasProgress();
         runService.checkpointStep(runId, elapsedMillis, toolCalls.get(), progressed,
                 state.isWaitingUser() ? "user" : null, stepId);
@@ -350,7 +365,7 @@ public class AgentRunExecutor {
             return;
         }
         String answer = StringUtils.defaultIfBlank(
-                assistantText.toString(), state.getFinalSummary());
+                assistantAnswer, state.getFinalSummary());
         boolean reportReady = !"agent_report".equals(policy.agentType())
                 || reportDraftService.hasFinalizedDraft(runId);
         if (planComplete(plan) && reportReady
@@ -501,16 +516,37 @@ public class AgentRunExecutor {
         runService.recordEvent(runId, "assistant.delta", stepId, Map.of("content", value));
     }
 
-    private AgentRunPrompt buildPrompt(AgentRun run, String stepId, User user) {
+    private AgentRunPrompt buildPrompt(AgentRun run,
+                                       String stepId,
+                                       User user,
+                                       ContextCompactionObserver compactionObserver) {
         ChatSession session = chatSessionRepository.findById(run.getChatSessionId()).orElse(null);
         AgentRunContextAssembler.PromptContext context = contextAssembler.assemble(
-                run, session, user, stepId);
+                run, session, user, stepId, compactionObserver);
         String text = context.text();
         if ("agent_report".equals(run.getAgentType()) && planComplete(parsePlan(run.getPlanJson()))
                 && !reportDraftService.hasFinalizedDraft(run.getRunId())) {
             text += "\n计划已完成但报表草稿尚未 finalize，请先调用 report_finalize。";
         }
         return new AgentRunPrompt(text, context.attachments(), context.pendingInputIds());
+    }
+
+    private ContextCompactionObserver compactionObserver(AgentRun run, String stepId) {
+        return event -> recordCompactionEvent(run.getRunId(), stepId, event);
+    }
+
+    private void recordCompactionEvent(String runId,
+                                       String stepId,
+                                       ContextCompactionEventData event) {
+        if (event == null) {
+            return;
+        }
+        try {
+            runService.recordEvent(runId, "context.compacted", stepId, event);
+        } catch (RuntimeException e) {
+            log.warn("记录 Run 上下文压缩事件失败: runId={}, stepId={}, reason={}",
+                    runId, stepId, event.getReason(), e);
+        }
     }
 
     private ChatDto buildChatDto(AgentRun run, String prompt, List<ChatAttachment> attachments) {
@@ -682,20 +718,15 @@ public class AgentRunExecutor {
         }
     }
 
-    private void saveFinalMessage(ChatSession session, User user, String runId, String answer) {
+    private void saveFinalMessage(ChatSession session,
+                                  User user,
+                                  String runId,
+                                  String answer) {
         if (StringUtils.isBlank(answer)) {
             return;
         }
-        Message message = new Message("ai", answer);
-        message.setRunId(runId);
-        message.setInternal(false);
-        message.setType(MessageType.TEXT);
-        message.setParts(List.of(ChatMessagePart.builder()
-                .id(UUID.randomUUID().toString())
-                .type("markdown")
-                .content(answer)
-                .build()));
-        chatSessionService.appendMessage(session, message, user);
+        chatApplicationService.saveAgentRunResponse(
+                session, user, answer, MessageType.TEXT, null, runId);
     }
 
     private void heartbeat(String runId, String leaseId) {

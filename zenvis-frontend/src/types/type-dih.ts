@@ -1,4 +1,4 @@
-export type ChatMessagePartType = 'markdown' | 'rag-search' | 'code' | 'config' | 'report-document' | 'report-fragment' | 'notice' | 'confirm' | 'mcp-approval' | 'tool-call' | 'agent-run' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
+export type ChatMessagePartType = 'markdown' | 'rag-search' | 'code' | 'config' | 'report-document' | 'report-fragment' | 'notice' | 'confirm' | 'mcp-approval' | 'tool-call' | 'agent-run' | 'context-compaction' | 'info-steps' | 'data-analysis-record' | 'data-access-decision' | 'metadata-config-record' | 'data-push-service-record' | 'visualization-chart-preview' | 'visualization-chart-record' | 'visualization-config-record' | 'dashboard-config-record' | 'menu-config-record' | 'config-record' | 'prompt-suggestions' | 'chart' | 'thinking';
 
 export type ChatMessagePartStatus = 'pending' | 'approved' | 'rejected' | string;
 
@@ -166,6 +166,46 @@ export type AgentRunEvent = {
   step_id?: string;
   created_at?: string;
   data?: Record<string, unknown>;
+};
+
+export type ContextCompactionStage =
+  | 'run-context'
+  | 'model-input'
+  | 'history-window'
+  | 'attachment-memory'
+  | string;
+
+export type ContextCompactionEventData = {
+  compactionId?: string;
+  stage?: ContextCompactionStage;
+  reason?: string;
+  beforeTokens?: number;
+  afterTokens?: number;
+  savedTokens?: number;
+  beforeChars?: number;
+  afterChars?: number;
+  budgetTokens?: number;
+  budgetChars?: number;
+  omittedMessages?: number;
+  retainedMessages?: number;
+  truncatedMessages?: number;
+  omittedAttachments?: number;
+  includedAttachments?: number;
+  summaryPreview?: string;
+};
+
+export type AgentRunActivityKind = 'rag' | 'tool' | 'compaction';
+
+export type AgentRunActivity = {
+  id: string;
+  kind: AgentRunActivityKind;
+  firstSequence: number;
+  lastSequence: number;
+  stepId?: string;
+  createdAt?: string;
+  status: string;
+  eventTypes: string[];
+  data: Record<string, unknown>;
 };
 
 export type AgentRunCreateParams = {

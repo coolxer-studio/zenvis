@@ -14,6 +14,7 @@ import {
   shouldAcceptAgentRunEvent,
   writeAgentRunCursor,
 } from './agent-run-replay';
+import { isAgentRunActivityEvent } from './agent-run-activity';
 import {
   isAgentRunLive,
   isAgentRunRestorable,
@@ -50,6 +51,7 @@ const approvalFromEvent = (data: Record<string, unknown>): McpApprovalData | nul
 export const useAgentRun = (options: UseAgentRunOptions = {}) => {
   const run = ref<AgentRun | null>(null);
   const events = ref<AgentRunEvent[]>([]);
+  const activityEvents = ref<AgentRunEvent[]>([]);
   const lastSequence = ref(0);
   const subscribed = ref(false);
   const currentTool = ref<Record<string, unknown> | null>(null);
@@ -81,6 +83,15 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
 
   const mergeSnapshot = (snapshot: AgentRun) => {
     if (!snapshot?.runId) return;
+    if (currentRunId.value && currentRunId.value !== snapshot.runId) {
+      events.value = [];
+      activityEvents.value = [];
+      currentTool.value = null;
+      pendingApproval.value = null;
+      lastArtifact.value = null;
+      liveAnswer.value = '';
+      lastSequence.value = 0;
+    }
     run.value = snapshot;
     currentRunId.value = snapshot.runId;
     lastSequence.value = Math.max(lastSequence.value, snapshot.lastEventSequence || 0);
@@ -249,6 +260,9 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
     lastSequence.value = event.sequence;
     writeAgentRunCursor(event.run_id || currentRunId.value, event.sequence);
     events.value = [...events.value.slice(-499), event];
+    if (isAgentRunActivityEvent(event)) {
+      activityEvents.value = [...activityEvents.value.slice(-499), event];
+    }
     await applyEvent(event);
     await options.onEvent?.(event);
   };
@@ -282,7 +296,10 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
     if (!runId) return;
     currentRunId.value = runId;
     const generation = subscriptionGeneration;
-    if (subscribeOptions.resetEvents) events.value = [];
+    if (subscribeOptions.resetEvents) {
+      events.value = [];
+      activityEvents.value = [];
+    }
     lastSequence.value = resolveAgentRunReplayCursor(
       run.value,
       runId,
@@ -369,6 +386,7 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
   return {
     run,
     events,
+    activityEvents,
     subscribed,
     isActive,
     isTerminal,

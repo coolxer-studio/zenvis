@@ -18,6 +18,7 @@
 - 普通问答和深度思考检索全部未删除知识库。
 - 业务 Agent / Skill 只检索当前所选启用 Skill 绑定知识库的并集；未绑定知识库时不执行向量检索，也不回退到全库。
 - RAG 参考资料每轮自动注入，不作为 MCP 工具暴露，不占用工具调用预算或审批流程。
+- 每次同步检索同时生成一条会话内“知识库检索”记录，包含查询摘要、范围、状态、原因、耗时和命中来源；该记录独立于 MCP 工具活动，以 `searchId` 幂等更新。
 - RAG 文档被明确标记为参考资料，不是系统指令。
 - 普通问答不会因为文档内容获得 MCP 工具。
 - 业务会话不会因为 RAG 绑定获得 MCP 工具之外的权限；实时事实仍必须来自受控 MCP 工具。
@@ -108,12 +109,14 @@ app.ai.vectorstore.management.enabled=true
 
 每次检索（管理端相似度搜索 `MANUAL`、问答或业务 Skill 触发的自动 RAG 检索 `CHAT`）都会写入 `t_rag_retrieval_log` 表（`ddl-auto=update` 自动建表），字段包括请求类型、检索文本、TopK、来源筛选、`knowledge_base_id`、命中数、状态、耗时、命中结果摘要 JSON 和错误信息。
 
+自动检索还会通过 NDJSON `rag_search` 事件和最终消息的 `rag-search` 部件展示同一份内存快照。事件与审计记录复用同一查询、命中摘要和状态，但展示内容中查询与单条命中摘要最多 500 字。历史会话没有关联快照时不回填该记录。
+
 运维要点：
 
 - 日志保存为 best-effort：写库失败仅打 `保存RAG检索日志失败` 警告，不影响检索主流程；若审计无数据，先检查该表是否建表成功。
 - 请求未指定知识库时，`knowledge_base_id` 取命中文档 metadata 中出现次数最多的知识库 ID；无命中或旧文档缺少元数据时归属为空。
 - `result_json` 中每条命中的正文截断 500 字符，防止大字段膨胀。
-- 排障搜索无结果时，先查审计记录的状态：`no_match` 指向索引数据问题，`retrieval_error` 指向 embedding/Redis 异常，`empty_query` 为空查询；`no_knowledge_base` 与 `no_bound_knowledge_base` 表示该轮没有向量查询范围。
+- 审计 `status` 只包含 `ok`、`no_match`、`empty_query`、`embedding_disabled`、`retrieval_error`。`no_knowledge_base`、`no_bound_knowledge_base`、`knowledge_base_lookup_error` 等细分原因会归并为 `retrieval_error`，需要结合会话 `rag_search.reason` 或后端 RAG 日志判断具体原因。
 
 完整路径和字段见[DIH 与 AI API](/08-API参考/RestfulAPI/DIH与AI.md#vectorstorequerycontroller)。
 
@@ -125,7 +128,7 @@ app.ai.vectorstore.management.enabled=true
 - embedding 关闭时记录 `embedding_disabled`；
 - 普通问答没有未删除知识库时记录 `no_knowledge_base`，不查询向量库；
 - 业务会话没有绑定知识库时记录 `no_bound_knowledge_base`，不查询向量库，也不回退全库；
-- 知识库 ID 查询失败时记录 `retrieval_error`，日志标记 `knowledge_base_lookup_error`；
+- 知识库 ID 查询失败时审计状态为 `retrieval_error`、细分原因为 `knowledge_base_lookup_error`，会话检索卡显示为跳过并附错误信息；
 - 没有结果时记录 `no_match`；
 - embedding 或 Redis 异常时记录 `retrieval_error`；
 - 只有非空文档才进入 Prompt；

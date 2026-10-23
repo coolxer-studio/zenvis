@@ -230,10 +230,6 @@ public class DihChatApplicationService {
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
         }
-        if (executionPolicy.isAgent() && agentRunService != null
-                && agentRunService.isEnabledFor(executionPolicy.agentType())) {
-            return compatibilityRunChat(chatDto, currentUser, eventStream);
-        }
         ChatSession existingChatSession = chatSessionService.getChatSessionBySessionId(chatId, currentUser);
         McpToolLogStream builtinDemoToolStream = McpToolLogStream.disabled();
         String builtinDemoTurnId = null;
@@ -344,6 +340,10 @@ public class DihChatApplicationService {
                     builtinDemoId,
                     chatDto.getReportAction()
             );
+        }
+        if (executionPolicy.isAgent() && agentRunService != null
+                && agentRunService.isEnabledFor(executionPolicy.agentType())) {
+            return compatibilityRunChat(chatDto, currentUser, eventStream);
         }
         if (!baseService.isModelSupported(model)) {
             return errorResponse(eventStream, "Input model not support.");
@@ -1747,6 +1747,22 @@ public class DihChatApplicationService {
                                       DihChatExecutionPolicy executionPolicy,
                                       boolean effectiveDeepThink,
                                       AtomicReference<MessageType> messageType) {
+        return dispatchChat(chatType, chatId, model, prompt, chatDto, currentUser,
+                mcpToolContext, executionPolicy, effectiveDeepThink, messageType,
+                ContextCompactionObserver.NOOP);
+    }
+
+    public Flux<String> dispatchChat(String chatType,
+                                      String chatId,
+                                      String model,
+                                      String prompt,
+                                      ChatDto chatDto,
+                                      User currentUser,
+                                      McpToolContext mcpToolContext,
+                                      DihChatExecutionPolicy executionPolicy,
+                                      boolean effectiveDeepThink,
+                                      AtomicReference<MessageType> messageType,
+                                      ContextCompactionObserver compactionObserver) {
         model = resolveDispatchModel(model, effectiveDeepThink, chatDto);
         if (!StringUtils.hasText(model)) {
             return Flux.error(new AgentCapabilityUnavailableException(
@@ -1762,7 +1778,8 @@ public class DihChatApplicationService {
                     chatDto.getAttachments(),
                     currentUser,
                     executionPolicy.skillIds(),
-                    mcpToolContext
+                    mcpToolContext,
+                    compactionObserver
             );
         }
         if (ReportAgent.AGENT_TYPE.equals(agentType)) {
@@ -1774,7 +1791,8 @@ public class DihChatApplicationService {
                     chatDto.getAttachments(),
                     currentUser,
                     executionPolicy.skillIds(),
-                    mcpToolContext
+                    mcpToolContext,
+                    compactionObserver
             );
         }
         if (DataVisualizationAgent.AGENT_TYPE.equals(agentType)) {
@@ -1786,7 +1804,8 @@ public class DihChatApplicationService {
                     chatDto.getAttachments(),
                     currentUser,
                     executionPolicy.skillIds(),
-                    mcpToolContext
+                    mcpToolContext,
+                    compactionObserver
             );
         }
         if (SkillService.GENERIC_SKILL_AGENT_TYPE.equals(agentType)) {
@@ -1805,7 +1824,8 @@ public class DihChatApplicationService {
                         chatDto.getAttachments(),
                         currentUser,
                         skillService.resolveKnowledgeBaseIds(executionPolicy.skillIds()),
-                        mcpToolContext
+                        mcpToolContext,
+                        compactionObserver
                 );
             } catch (IllegalArgumentException e) {
                 return Flux.error(new AgentCapabilityUnavailableException(
@@ -2360,6 +2380,53 @@ public class DihChatApplicationService {
         return message;
     }
 
+    /**
+     * Persists a persistent Agent Run response with the same structured-part and
+     * workflow-decoration pipeline used by the legacy streaming path.
+     */
+    public Message saveAgentRunResponse(ChatSession chatSession,
+                                        User currentUser,
+                                        String content,
+                                        MessageType type,
+                                        ReportActionDto reportAction,
+                                        String runId) {
+        return saveAiResponse(
+                chatSession,
+                currentUser,
+                content,
+                type,
+                true,
+                false,
+                List.of(),
+                null,
+                null,
+                reportAction,
+                false,
+                runId);
+    }
+
+    /**
+     * Returns true when a model step produced an interactive workflow card that
+     * must be handled by the user before the Run should continue.
+     */
+    public boolean requiresUserDecision(String content) {
+        if (!StringUtils.hasText(content)) {
+            return false;
+        }
+        return chatMessagePartParser.parse(content, MessageType.TEXT).stream()
+                .anyMatch(this::isInteractiveDecisionPart);
+    }
+
+    private boolean isInteractiveDecisionPart(ChatMessagePart part) {
+        if (part == null || !Set.of("confirm", "info-steps", "data-access-decision")
+                .contains(part.getType())) {
+            return false;
+        }
+        return !Set.of("approved", "rejected", "cancelled", "completed", "saved")
+                .contains(StringUtils.trimWhitespace(
+                        part.getStatus() == null ? "" : part.getStatus()).toLowerCase());
+    }
+
     private Message saveAiResponse(ChatSession chatSession, User currentUser, String content, MessageType type, boolean withParts, boolean deepThinkRequested) {
         return saveAiResponse(chatSession, currentUser, content, type, withParts,
                 deepThinkRequested, List.of(), McpToolLogStream.disabled());
@@ -2443,7 +2510,35 @@ public class DihChatApplicationService {
                                    String demoId,
                                    ReportActionDto reportAction,
                                    boolean outputTruncated) {
+        return saveAiResponse(
+                chatSession,
+                currentUser,
+                content,
+                type,
+                withParts,
+                deepThinkRequested,
+                supplementalParts,
+                toolActivityStream,
+                demoId,
+                reportAction,
+                outputTruncated,
+                null);
+    }
+
+    private Message saveAiResponse(ChatSession chatSession,
+                                   User currentUser,
+                                   String content,
+                                   MessageType type,
+                                   boolean withParts,
+                                   boolean deepThinkRequested,
+                                   List<ChatMessagePart> supplementalParts,
+                                   McpToolLogStream toolActivityStream,
+                                   String demoId,
+                                   ReportActionDto reportAction,
+                                   boolean outputTruncated,
+                                   String runId) {
         Message aiMessage = new Message("ai", content, type);
+        aiMessage.setRunId(runId);
         List<ChatMessagePart> parts = List.of();
         List<Map<String, Object>> reportEvidenceRefs = List.of();
         if (withParts) {

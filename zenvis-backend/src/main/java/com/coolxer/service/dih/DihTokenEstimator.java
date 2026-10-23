@@ -1,6 +1,7 @@
 package com.coolxer.service.dih;
 
 import org.springframework.util.StringUtils;
+import org.springframework.stereotype.Component;
 
 /**
  * Conservative tokenizer-independent estimate for OpenAI-compatible chat input.
@@ -9,6 +10,7 @@ import org.springframework.util.StringUtils;
  * content is estimated at four characters per token. The estimate deliberately
  * leaves model-specific variance to the configured safety margin.</p>
  */
+@Component
 public final class DihTokenEstimator {
 
     private static final String TRUNCATION_MARKER =

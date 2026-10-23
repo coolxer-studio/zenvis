@@ -11,7 +11,9 @@
           v-if="part.type === 'agent-run'"
           :run="agentRunFromPart(part)"
           :current-tool="agentRunToolFromPart(part)"
+          :activity-events="agentRunEventsFromPart(part)"
           @resume="emit('resumeAgentRun', $event)"
+          @reply="emit('replyAgentRun', $event)"
         />
         <TextMessagePart
           v-else-if="isTextPart(part)"
@@ -88,6 +90,7 @@ import { createMarkdownRenderer, markdownRendererKey } from './message-parts/mes
 import { collapseLegacyToolCallParts, isToolCallPart } from './tool-call-parts';
 import { isRagSearchPart } from './rag-search-parts';
 import type { AgentRun } from '@/types/type-dih';
+import type { AgentRunEvent } from '@/types/type-dih';
 
 type InfoStepAnswer = {
   id: string;
@@ -130,6 +133,7 @@ const emit = defineEmits<{
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
   (e: 'resumeAgentRun', runId: string): void;
+  (e: 'replyAgentRun', payload: { runId: string; message: string }): void;
   (
     e: 'chooseDataAccessDecision',
     payload: {
@@ -283,6 +287,11 @@ const agentRunFromPart = (part: ChatMessagePart): AgentRun | null => {
 const agentRunToolFromPart = (part: ChatMessagePart): Record<string, unknown> | null => {
   const tool = part.metadata?.currentTool;
   return tool && typeof tool === 'object' ? (tool as Record<string, unknown>) : null;
+};
+
+const agentRunEventsFromPart = (part: ChatMessagePart): AgentRunEvent[] => {
+  const events = part.metadata?.activityEvents;
+  return Array.isArray(events) ? events as AgentRunEvent[] : [];
 };
 
 onBeforeUnmount(() => {

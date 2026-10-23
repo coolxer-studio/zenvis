@@ -2,7 +2,7 @@
   <div class="agent-run-center">
     <header class="run-center-header">
       <div>
-        <h2>智能体任务</h2>
+        <h2>智能体运行</h2>
         <p>持久化任务、审批与事件记录</p>
       </div>
       <div class="run-center-actions">
@@ -18,7 +18,7 @@
       :data="runs"
       class="run-table"
       height="calc(100vh - 230px)"
-      empty-text="暂无智能体任务"
+      empty-text="暂无智能体运行"
       @row-click="openRun"
     >
       <el-table-column label="任务" min-width="250">
@@ -54,7 +54,14 @@
           <div class="row-actions" @click.stop>
             <el-button size="small" text type="primary" @click="openChat(row)">会话</el-button>
             <el-button
-              v-if="['PAUSED', 'WAITING_USER'].includes(row.status)"
+              v-if="row.status === 'WAITING_USER'"
+              size="small"
+              text
+              type="primary"
+              @click="openSupplement(row)"
+            >补充信息</el-button>
+            <el-button
+              v-else-if="row.status === 'PAUSED'"
               size="small"
               text
               type="primary"
@@ -142,12 +149,34 @@
           </div>
         </section>
 
+        <section v-if="detail.status === 'WAITING_USER'" class="detail-section supplement-section">
+          <h3>需要补充信息</h3>
+          <p>{{ resolveAgentRunWaitingQuestion(detail) || '任务正在等待你补充继续执行所需的信息。' }}</p>
+          <el-button type="primary" size="small" @click="openSupplement(detail)">补充信息</el-button>
+        </section>
+
         <section class="detail-section">
           <div class="section-title-row">
-            <h3>事件记录</h3>
+            <h3>执行过程</h3>
             <el-button text size="small" :icon="Refresh" @click="loadEvents(detail.runId)">刷新</el-button>
           </div>
-          <div class="event-list">
+          <AgentRunActivity :activities="activities" />
+        </section>
+
+        <section class="detail-section raw-events-section">
+          <button
+            type="button"
+            class="raw-events-toggle"
+            :aria-expanded="rawEventsExpanded"
+            @click="rawEventsExpanded = !rawEventsExpanded"
+          >
+            <span>原始事件（{{ runEvents.length }}）</span>
+            <el-icon>
+              <ArrowUp v-if="rawEventsExpanded" />
+              <ArrowDown v-else />
+            </el-icon>
+          </button>
+          <div v-if="rawEventsExpanded" class="event-list">
             <div v-for="event in runEvents" :key="event.sequence" class="event-row">
               <span class="event-seq">#{{ event.sequence }}</span>
               <el-tag size="small" effect="plain">{{ event.type }}</el-tag>
@@ -159,20 +188,35 @@
         </section>
       </div>
     </el-dialog>
+
+    <AgentRunUserInputDialog
+      v-model="supplementVisible"
+      :question="supplementQuestion"
+      :submitting="supplementSubmitting"
+      @submit="submitSupplement"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Refresh } from '@element-plus/icons-vue';
+import { ArrowDown, ArrowUp, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { DihService } from '@/service/api';
+import AgentRunUserInputDialog from '@/components/dih-message/message-parts/agent-run-user-input-dialog.vue';
+import AgentRunActivity from '@/components/dih-message/message-parts/agent-run-activity.vue';
+import {
+  AGENT_RUN_ACTIVITY_EVENT_TYPES,
+  buildAgentRunActivities,
+} from '@/views/dih/composables/agent-run-activity';
+import { resolveAgentRunWaitingQuestion } from '@/views/dih/composables/agent-run-message';
 import type {
   AgentRun,
   AgentRunEvent,
   AgentRunStatus,
   McpApprovalData,
 } from '@/types/type-dih';
+import { generateUUID } from '@/utils/util-common';
 
 const emit = defineEmits<{
   (event: 'open-chat', run: AgentRun): void;
@@ -187,9 +231,16 @@ const statusFilter = ref<AgentRunStatus | ''>('');
 const detailVisible = ref(false);
 const detail = ref<AgentRun | null>(null);
 const runEvents = ref<AgentRunEvent[]>([]);
+const activityEvents = ref<AgentRunEvent[]>([]);
+const rawEventsExpanded = ref(false);
+const activities = computed(() => buildAgentRunActivities(activityEvents.value));
 const approval = ref<McpApprovalData | null>(null);
 const approvalDeciding = ref('');
 const runAction = ref<{ id: string; action: string }>({ id: '', action: '' });
+const supplementVisible = ref(false);
+const supplementQuestion = ref('');
+const supplementSubmitting = ref(false);
+const supplementRunId = ref('');
 let refreshTimer: number | null = null;
 
 const statusOptions = [
@@ -267,10 +318,31 @@ const loadRuns = async () => {
 
 const loadEvents = async (runId: string) => {
   try {
-    runEvents.value = await DihService.listAgentRunEvents(runId, 0);
+    const [rawEvents, activityRows] = await Promise.all([
+      DihService.listAgentRunEvents(runId, 0),
+      loadAllActivityEvents(runId),
+    ]);
+    runEvents.value = rawEvents;
+    activityEvents.value = activityRows;
   } catch (error) {
     console.error('加载任务事件失败:', error);
   }
+};
+
+const loadAllActivityEvents = async (runId: string) => {
+  const events: AgentRunEvent[] = [];
+  let after = 0;
+  for (let page = 0; page < 20; page += 1) {
+    const batch = await DihService.listAgentRunEvents(
+      runId,
+      after,
+      AGENT_RUN_ACTIVITY_EVENT_TYPES,
+    );
+    events.push(...batch);
+    if (batch.length < 500) break;
+    after = batch[batch.length - 1].sequence;
+  }
+  return events;
 };
 
 const loadApproval = async (run: AgentRun) => {
@@ -290,15 +362,43 @@ const openRun = async (run: AgentRun) => {
   detail.value = run;
   detailVisible.value = true;
   await Promise.all([loadEvents(run.runId), loadApproval(run)]);
+  if (run.status === 'WAITING_USER') openSupplement(run);
 };
 
 const openChat = (run: AgentRun) => {
   emit('open-chat', run);
 };
 
+const openSupplement = (run: AgentRun) => {
+  supplementRunId.value = run.runId;
+  supplementQuestion.value = resolveAgentRunWaitingQuestion(run);
+  supplementVisible.value = true;
+};
+
 const setRun = (updated: AgentRun) => {
   runs.value = runs.value.map(item => item.runId === updated.runId ? updated : item);
   if (detail.value?.runId === updated.runId) detail.value = updated;
+};
+
+const submitSupplement = async (message: string) => {
+  const runId = supplementRunId.value;
+  const answer = message.trim();
+  if (!runId || !answer) return;
+  supplementSubmitting.value = true;
+  try {
+    const updated = await DihService.steerAgentRun(runId, {
+      message: answer,
+      clientMessageId: generateUUID(),
+    });
+    setRun(updated);
+    supplementVisible.value = false;
+    ElMessage.success('补充信息已提交，任务将继续执行');
+    if (detail.value?.runId === runId) await loadEvents(runId);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
+  } finally {
+    supplementSubmitting.value = false;
+  }
 };
 
 const pauseRun = async (run: AgentRun) => {
@@ -512,6 +612,29 @@ onUnmounted(() => {
   gap: 9px;
 }
 
+.raw-events-section {
+  padding-top: 2px;
+}
+
+.raw-events-toggle {
+  display: flex;
+  width: 100%;
+  padding: 9px 10px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--zv-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-md);
+}
+
+.raw-events-toggle + .event-list {
+  margin-top: 10px;
+}
+
 .detail-step-copy {
   display: flex;
   min-width: 0;
@@ -529,10 +652,13 @@ onUnmounted(() => {
   font-size: 11px;
 }
 
-.approval-section p {
+.approval-section p,
+.supplement-section p {
   margin: 0 0 10px;
   color: var(--zv-text-secondary);
   line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .approval-actions {

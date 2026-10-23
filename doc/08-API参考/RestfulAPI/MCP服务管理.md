@@ -102,9 +102,12 @@
 | --- | --- |
 | `approved` | 仅当前请求 |
 | `approved_session` | 当前用户、会话和精确工具 |
+| `approved_run` | 当前持久化 Agent Run 和精确工具 |
 | `rejected` | 拒绝当前请求 |
 
 AI 分析任务的 `approved_task` 必须通过任务自己的审批接口提交，见 [DIH 与 AI](/08-API参考/RestfulAPI/DIH与AI.md#analysistaskcontroller)。
+
+`approved_run` 只对调用记录中的 `agent_run_id` 和精确 `tool_key` 生效，不能跨 Run 或覆盖全局 `DENY`。Run 审批等待默认 24 小时；审批通过后 Run 重新入队，拒绝或超时则由 Run 控制器继续规划或暂停。
 
 审计查询支持：
 

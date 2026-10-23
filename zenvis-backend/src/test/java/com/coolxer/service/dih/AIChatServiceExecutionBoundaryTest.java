@@ -2,6 +2,7 @@ package com.coolxer.service.dih;
 
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.dih.ChatAttachment;
+import com.coolxer.model.dih.ContextCompactionEventData;
 import com.coolxer.model.dih.RagSearchEventData;
 import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
@@ -25,6 +26,7 @@ import org.springframework.ai.tool.ToolCallbackProvider;
 import reactor.core.publisher.Flux;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -288,6 +290,35 @@ class AIChatServiceExecutionBoundaryTest {
     }
 
     @Test
+    void preflightEmitsModelInputCompactionOnlyWhenPromptIsActuallyTruncated() throws Exception {
+        AIChatService service = service(mock(RagContextService.class));
+        Method method = AIChatService.class.getDeclaredMethod(
+                "prepareChatInput",
+                String.class,
+                String.class,
+                String.class,
+                ToolCallbackProvider.class,
+                ToolRuntimeContext.class,
+                int.class,
+                ContextCompactionObserver.class
+        );
+        method.setAccessible(true);
+        List<ContextCompactionEventData> events = new ArrayList<>();
+
+        method.invoke(service, "chat-diagnostic", "系统提示", "数".repeat(98_305),
+                null, null, 4_096, (ContextCompactionObserver) events::add);
+
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.getStage()).isEqualTo(ContextCompactionEventData.STAGE_MODEL_INPUT);
+            assertThat(event.getReason()).isEqualTo("prompt_token_budget");
+            assertThat(event.getBeforeChars()).isEqualTo(98_305);
+            assertThat(event.getAfterChars()).isLessThan(98_305);
+            assertThat(event.getSavedTokens()).isPositive();
+            assertThat(event.getBudgetTokens()).isPositive();
+        });
+    }
+
+    @Test
     void preflightUsesDedicatedToolResultTokenBudgetInsteadOfCharacterBudget() throws Exception {
         AIChatService service = service(mock(RagContextService.class));
         Method method = prepareChatInputMethod();
@@ -369,6 +400,63 @@ class AIChatServiceExecutionBoundaryTest {
                 .extracting(Message::getText)
                 .anyMatch(text -> text.contains("evidence.log"))
                 .noneMatch(text -> text.contains("RAW_ATTACHMENT_BODY"));
+    }
+
+    @Test
+    void attachmentMemoryCompactionIsReportedThroughTheRunObserver() {
+        InMemoryChatMemoryRepository memoryRepository = new InMemoryChatMemoryRepository();
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(
+                new ChatResponse(List.of(new Generation(new AssistantMessage("分析完成"))))
+        ));
+        ChatAttachmentService attachmentService =
+                new ChatAttachmentService(new CustomWebConfig());
+        RagContextService ragContextService = mock(RagContextService.class);
+        AIChatService service = new AIChatService(
+                memoryRepository,
+                chatModel,
+                new PromptTemplate("普通问答系统提示"),
+                new PromptTemplate("深度思考系统提示"),
+                ragContextService,
+                attachmentService,
+                "",
+                "",
+                "model-1"
+        );
+        ChatAttachment attachment = ChatAttachment.builder()
+                .fileId("e59f426f-ed24-4bf7-8930-643eb3ed38c7")
+                .fileName("evidence.log")
+                .fileSize(1024L)
+                .build();
+        String expandedPrompt =
+                "分析附件\n\n---\n以下是用户本轮消息上传的附件内容，请结合这些附件回答。"
+                        + "\nRAW_ATTACHMENT_BODY";
+        when(ragContextService.retrieve(expandedPrompt, "agent", List.of()))
+                .thenReturn(new RagContextService.RagContext(
+                        "", true, false, 0, 0, "no_bound_knowledge_base"));
+        List<ContextCompactionEventData> events = new ArrayList<>();
+
+        service.agentChat(
+                "chat-attachment-diagnostic",
+                "model-1",
+                "Agent系统提示",
+                expandedPrompt,
+                List.of(attachment),
+                null,
+                List.of(),
+                McpToolContext.empty(),
+                events::add
+        ).collectList().block();
+
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.getStage())
+                    .isEqualTo(ContextCompactionEventData.STAGE_ATTACHMENT_MEMORY);
+            assertThat(event.getReason()).isEqualTo("attachment_body_removed");
+            assertThat(event.getOmittedAttachments()).isEqualTo(1);
+            assertThat(event.getIncludedAttachments()).isEqualTo(1);
+            assertThat(event.getSummaryPreview()).contains("evidence.log")
+                    .hasSizeLessThanOrEqualTo(500);
+        });
     }
 
     private RagSearchEventData ragSearch(String searchId, String query, String mode, String scopeType) {

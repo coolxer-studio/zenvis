@@ -5,6 +5,7 @@ import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.service.dih.AgentCapabilityUnavailableException;
 import com.coolxer.service.dih.AIChatService;
+import com.coolxer.service.dih.ContextCompactionObserver;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -56,6 +57,20 @@ public class PromptDrivenAgentRuntime {
                              List<ChatAttachment> attachments,
                              User user,
                              McpToolContext mcpToolContext) {
+        return chat(agentType, skillIds, systemPromptTemplate, chatId, model, prompt,
+                attachments, user, mcpToolContext, ContextCompactionObserver.NOOP);
+    }
+
+    public Flux<String> chat(String agentType,
+                             List<String> skillIds,
+                             PromptTemplate systemPromptTemplate,
+                             String chatId,
+                             String model,
+                             String prompt,
+                             List<ChatAttachment> attachments,
+                             User user,
+                             McpToolContext mcpToolContext,
+                             ContextCompactionObserver compactionObserver) {
         try {
             String systemPrompt = buildSystemPrompt(agentType, skillIds, systemPromptTemplate, mcpToolContext);
             List<Integer> knowledgeBaseIds = skillService.resolveKnowledgeBaseIds(skillIds);
@@ -67,7 +82,8 @@ public class PromptDrivenAgentRuntime {
                     attachments,
                     user,
                     knowledgeBaseIds,
-                    mcpToolContext
+                    mcpToolContext,
+                    compactionObserver
             );
         } catch (IllegalArgumentException e) {
             return Flux.error(new AgentCapabilityUnavailableException(

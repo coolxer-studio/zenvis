@@ -1,5 +1,6 @@
 package com.coolxer.service.dih;
 
+import com.coolxer.model.dih.ContextCompactionEventData;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
@@ -74,5 +75,42 @@ class ContextWindowChatMemoryTest {
         assertThat(repository.findByConversationId("chat-2"))
                 .extracting(Message::getText)
                 .containsExactly(compact, "完成");
+    }
+
+    @Test
+    void emitsOneDiagnosticForARealHistoryWindowCompactionOnly() {
+        InMemoryChatMemoryRepository repository = new InMemoryChatMemoryRepository();
+        ChatMemory delegate = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(repository)
+                .maxMessages(40)
+                .build();
+        ContextWindowChatMemory memory = new ContextWindowChatMemory(
+                delegate, repository, new DihTokenEstimator(), 1_000, 220, 2);
+        List<Message> messages = new ArrayList<>();
+        for (int turn = 1; turn <= 6; turn++) {
+            messages.add(new UserMessage("用户问题" + turn + "：" + "数".repeat(180)));
+            messages.add(new AssistantMessage("助手回答" + turn + "：" + "据".repeat(180)));
+        }
+        memory.add("chat-diagnostic", messages);
+        memory.setHistoryTokenBudget("chat-diagnostic", 900);
+        List<ContextCompactionEventData> events = new ArrayList<>();
+        memory.setCompactionObserver("chat-diagnostic", events::add);
+
+        int estimated = memory.estimateHistoryTokens("chat-diagnostic");
+        assertThat(events).isEmpty();
+
+        memory.get("chat-diagnostic");
+
+        assertThat(estimated).isPositive();
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.getStage())
+                    .isEqualTo(ContextCompactionEventData.STAGE_HISTORY_WINDOW);
+            assertThat(event.getReason()).isEqualTo("history_window_summary");
+            assertThat(event.getSavedTokens()).isPositive();
+            assertThat(event.getOmittedMessages()).isPositive();
+            assertThat(event.getRetainedMessages()).isPositive();
+            assertThat(event.getBudgetTokens()).isEqualTo(900);
+            assertThat(event.getSummaryPreview()).hasSizeLessThanOrEqualTo(500);
+        });
     }
 }

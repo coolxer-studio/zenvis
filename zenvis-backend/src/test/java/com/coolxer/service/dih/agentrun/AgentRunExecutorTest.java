@@ -7,11 +7,11 @@ import com.coolxer.dao.mysql.repository.AgentRunRepository;
 import com.coolxer.dao.mysql.repository.ChatSessionRepository;
 import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
 import com.coolxer.dao.mysql.repository.UserRepository;
+import com.coolxer.model.dih.ContextCompactionEventData;
 import com.coolxer.model.dih.agentrun.AgentRunPlan;
 import com.coolxer.model.dih.agentrun.AgentRunPlanStep;
 import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.ChatAttachmentService;
-import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.service.dih.DihChatApplicationService;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -49,7 +49,6 @@ class AgentRunExecutorTest {
                 mock(AgentRunInputRepository.class),
                 mock(McpToolInvocationRepository.class),
                 mock(ChatSessionRepository.class),
-                mock(ChatSessionService.class),
                 mock(UserRepository.class),
                 mock(SkillService.class),
                 mock(AgentMcpToolService.class),
@@ -130,6 +129,21 @@ class AgentRunExecutorTest {
                 "isRetryableModelFailure",
                 new IllegalStateException("connection timed out")))
                 .isTrue();
+    }
+
+    @Test
+    void contextCompactionObserverWritesTheUnifiedRunEvent() {
+        ContextCompactionEventData data = ContextCompactionEventData.builder()
+                .compactionId("compact-1")
+                .stage(ContextCompactionEventData.STAGE_MODEL_INPUT)
+                .reason("prompt_token_budget")
+                .savedTokens(120)
+                .build();
+
+        ReflectionTestUtils.invokeMethod(
+                executor, "recordCompactionEvent", "run-1", "2", data);
+
+        verify(runService).recordEvent("run-1", "context.compacted", "2", data);
     }
 
     private AgentRunPlanStep step(String id, String status) {

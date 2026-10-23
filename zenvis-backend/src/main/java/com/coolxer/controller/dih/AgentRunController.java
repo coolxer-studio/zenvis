@@ -62,18 +62,21 @@ public class AgentRunController extends BaseController {
     @Operation(summary = "回放并订阅智能体任务事件")
     public Flux<String> events(HttpServletResponse response,
                                @PathVariable("runId") String runId,
-                               @RequestParam(value = "after", defaultValue = "0") long after) {
+                               @RequestParam(value = "after", defaultValue = "0") long after,
+                               @RequestParam(value = "types", required = false) List<String> types) {
         response.setCharacterEncoding("UTF-8");
         response.setContentType("application/x-ndjson;charset=UTF-8");
-        return agentRunService.eventStream(runId, after, getSessionUser());
+        return agentRunService.eventStream(runId, after, types, getSessionUser());
     }
 
     @GetMapping("/{runId}/events/list")
     @Operation(summary = "分页读取智能体任务事件")
     public ResponseWrap<List<AgentRunEventVo>> eventList(
             @PathVariable("runId") String runId,
-            @RequestParam(value = "after", defaultValue = "0") long after) {
-        return ResponseWrap.success(agentRunService.events(runId, after, getSessionUser()));
+            @RequestParam(value = "after", defaultValue = "0") long after,
+            @RequestParam(value = "types", required = false) List<String> types) {
+        return ResponseWrap.success(agentRunService.events(
+                runId, after, types, getSessionUser()));
     }
 
     @PostMapping("/{runId}/steer")

@@ -284,6 +284,34 @@ DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、数�
 - HTML/Markdown 清理和 iframe 安全；
 - 工作流卡片的精确 action 定位。
 
+### 智能体任务入口与恢复
+
+| 文件 | 职责 |
+| --- | --- |
+| `src/views/dih/components/view-center.vue` | 对话头部操作区，提供“智能体运行”入口并触发 `openAgentRuns` |
+| `src/views/dih/components/view-left.vue` | 会话侧栏，只保留新建会话、置顶和最近会话，不再放置任务入口 |
+| `src/views/dih/components/agent-run-center.vue` | 任务中心：状态筛选、详情、计划、事件、审批、暂停、继续和取消 |
+| `src/views/dih/composables/use-agent-run.ts` | 创建、订阅、steer、暂停、继续、取消和活动 Run 恢复 |
+| `src/views/dih/composables/agent-run-replay.ts` | 本地事件游标读写和 `sequence` 去重判定 |
+| `src/views/dih/composables/agent-run-message.ts` | 把 Run 快照映射为聊天区 `agent-run` 部件和最终答复 |
+| `src/views/dih/composables/agent-run-activity.ts` | 把 Run 事件按 `searchId`、`callId`、`compactionId` 归并为检索、工具和压缩时间线 |
+| `src/components/dih-message/message-parts/agent-run-card.vue` | 可折叠运行卡 |
+| `src/components/dih-message/message-parts/agent-run-activity.vue` | 默认收起的执行过程、三类摘要和活动详情 |
+| `src/components/dih-message/message-parts/agent-run-user-input-dialog.vue` | `WAITING_USER` 补充信息弹窗和多行输入 |
+
+交互约束：
+
+- 组件卸载只关闭 NDJSON 事件连接，不能调用取消接口；停止按钮才表示用户主动取消。
+- 新建消息时先查找会话活动 Run；存在则调用 steer，不存在才创建新 Run。
+- 订阅前从 `lastEventSequence` 和 `localStorage` 游标取较大值，使用 `after` 续订。
+- 事件按 `sequence` 严格递增应用，最终状态以 Run 快照为准。
+- 会话消息必须保留接口返回的 `runId`。刷新或重载消息后，分页读取会话全部 Run，只把消息实际引用的 Run 恢复到对应 AI 消息；不能用当前 Run 覆盖历史卡，也不能把卡片挂到用户消息。
+- 收到 `run.waiting_user` 或 `run.succeeded` 时，先重新加载消息，再恢复全部已引用 Run，最后同步当前活动 Run 的事件。
+- `WAITING_USER` 的问题优先取 `pendingAction.question`，不要直接使用可能被截断的 `pausedReason`。首次进入等待状态自动弹窗；关闭后记录已提示的 Run/问题组合，避免轮询重复弹出。
+- 补充信息提交统一走 `steerAgentRun`，成功后刷新 Run、追加用户消息并重新订阅事件；任务中心和运行卡共用同一弹窗组件。
+- 执行过程只请求 `rag.search`、工具生命周期、`tool.approval_*` 和 `context.compacted`。按 `sequence` 去重，按稳定 ID 合并；查询满 500 条时以最后一条 `sequence` 继续分页。
+- 对话头部入口与桌面的响应式规则一致，窄屏只显示图标和可访问名称。
+
 ### 富消息手工测试
 
 以下提示词可在 `/service/dih` 或右下角 AI 浮窗验证渲染。

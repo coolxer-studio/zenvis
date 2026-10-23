@@ -127,11 +127,33 @@ Agent 请求工具
 | --- | --- |
 | `approved` | 仅当前请求 |
 | `approved_session` | 当前用户、当前会话、精确工具 |
+| `approved_run` | 当前持久化 Agent Run、精确工具 |
 | `rejected` | 拒绝当前请求 |
 
 会话授权不会允许同一服务的其他工具，也不能覆盖全局 `DENY`。停止生成、断开本轮流或删除会话会清理相关等待状态；已完成的外部副作用不会自动回滚。
 
 内置数据接入和数据可视化演示会对默认 `ASK` 写工具强制逐次审批，不使用会话授权，详见[业务智能体与工作流](/04-AI与数据智能/业务智能体与工作流.md)。
+
+### 持久化 Agent Run 审批
+
+启用 Agent Run 的业务智能体使用非阻塞审批：
+
+```text
+Run 请求 ASK 工具
+  → 创建 PENDING 调用并写入 agent_run_id
+  → Run 进入 WAITING_APPROVAL，释放 worker 租约
+  → 用户从运行卡或任务中心提交决定
+  → approval.updated / tool.approval_updated
+  → Run 重新入队并执行已批准调用
+```
+
+- Run 中的只读工具在未被全局 `DENY` 时自动执行，不弹出审批。
+- 外部写入、发布、删除等工具仍按有效策略决定是否询问。
+- Agent Run 的审批等待默认为 24 小时，不占 worker，也不计入 Run 有效执行时间；超时后 Run 进入 `PAUSED`。
+- `approved_run` 只允许当前 Run 内同一精确 `tool_key` 复用授权，不跨 Run、不跨会话，也不能覆盖 `DENY`。
+- 审批决定必须幂等。重复提交同一决定不能产生第二次执行；终态请求不能重新获得执行权。
+- 关闭页面不会取消等待或运行中的任务。重新打开会话会恢复 Run 快照、待审批动作和事件游标。
+- 服务重启时，Run 的 `PENDING`/`APPROVED` 审批继续保留；已经进入 `RUNNING` 但结果未落库的工具调用标记为 `UNKNOWN`，Run 暂停，禁止盲目重放可能已生效的写操作。
 
 ## 6. 后台任务审批
 

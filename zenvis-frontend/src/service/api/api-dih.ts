@@ -73,6 +73,8 @@ type RawMessage = {
   content?: string;
   time?: string;
   type?: string;
+  run_id?: string;
+  runId?: string;
   parts?: RawChatMessagePart[];
   attachments?: RawAttachment[];
   loading?: boolean;
@@ -293,6 +295,7 @@ const normalizeMessage = (item: RawMessage): ChatMessage => ({
   content: item?.content || '',
   time: item?.time || '',
   type: item?.type || 'text',
+  runId: item?.run_id || item?.runId || undefined,
   parts: Array.isArray(item?.parts) ? item.parts.map(normalizeChatMessagePart) : undefined,
   attachments: Array.isArray(item?.attachments)
     ? item.attachments.map(normalizeAttachment)
@@ -758,10 +761,15 @@ export class DihService {
     };
   }
 
-  static async listAgentRunEvents(runId: string, after = 0): Promise<AgentRunEvent[]> {
+  static async listAgentRunEvents(
+    runId: string,
+    after = 0,
+    types?: readonly string[],
+  ): Promise<AgentRunEvent[]> {
+    const typeFilter = types?.filter(Boolean).join(',') || undefined;
     const response = await request<RawAgentRunEvent[]>(
       `${prefix}/chat/runs/${encodeURIComponent(runId)}/events/list`,
-      { after },
+      { after, types: typeFilter },
       'GET',
       { silent: true },
     );

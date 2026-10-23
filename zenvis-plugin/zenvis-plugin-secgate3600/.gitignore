@@ -1,0 +1,13 @@
+.DS_Store
+._*
+.idea/
+*.iml
+target/
+build.log
+*.log
+node_modules/
+npm-debug.log*
+*.tar
+*.tar.gz
+plugin-*/03_api/*.jar
+!plugin-*/03_api/.gitkeep

@@ -1,0 +1,316 @@
+---
+# 演示用途：默认每 5 秒随机生成一条 SecGate 3600 NSG 合成 Syslog 事件。
+# 写入与正式接入相同的原始 Topic，由 kafka-to-clickhouse.yaml 复用正式校验和入库链路。
+# 正式设备接入后请在推送任务页面手动停用本服务。
+sources:
+  secgate3600_nsg_demo_logs:
+    type: "demo_logs"
+    format: "shuffle"
+    interval: ${SECGATE3600_NSG_DEMO_INTERVAL_SECONDS:-5}
+    lines:
+      - "{\"kind\":\"self-end/flow\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" vsys=\\\"root-vsys\\\" time=\\\"__DEMO_TIME__\\\" type=\\\"self-end\\\" session_id=\\\"__DEMO_SESSION__\\\" module=\\\"flow\\\" severity=\\\"info\\\" duration=\\\"0\\\" addr_src=\\\"198.51.100.10\\\" addr_dst=\\\"192.0.2.10\\\" nataddr_src=\\\"::\\\" nataddr_dst=\\\"::\\\" port_src=\\\"8779\\\" port_dst=\\\"2048\\\" natport_src=\\\"0\\\" natport_dst=\\\"0\\\" action=\\\"deny\\\" appname=\\\"ICMP\\\" rule=\\\"__to_self__\\\" proto=\\\"ICMP\\\" session_time=\\\"__DEMO_DURATION__\\\" sess_dev_id=\\\"0\\\" sess_nth=\\\"0\\\" zone_src=\\\"\\\" zone_dst=\\\"\\\" locale_src=\\\"内网\\\" locale_dst=\\\"内网\\\" user_src=\\\"\\\" user_dst=\\\"\\\" app_category=\\\"APP_NETWORK\\\" app_risk=\\\"1\\\" asset_os_src=\\\"\\\" asset_os_dst=\\\"\\\" asset_name_src=\\\"\\\" asset_name_dst=\\\"\\\" asset_type_src=\\\"\\\" asset_type_dst=\\\"\\\" focus_type=\\\"NO\\\" non_standard_port=\\\"NO\\\" interface_src=\\\"ge2\\\" interface_dst=\\\"\\\" bytes_sent=\\\"0\\\" bytes_received=\\\"0\\\" pkts_sent=\\\"0\\\" pkts_received=\\\"0\\\" total_sess=\\\"0\\\" from_tunnel=\\\"\\\" to_tunnel=\\\"\\\" deny_type=\\\"Security Policy\\\" sess_limit_profile=\\\"\\\" decrypt_rule=\\\"\\\" honeypot_rule_name=\\\"\\\" honeypot_drainage_type=\\\"\\\" sfc_rule_name=\\\"\\\" sfc_name=\\\"\\\" sfc_mode=\\\"\\\" sfc_online=\\\"\\\" sfc_sniffer=\\\"\\\" sess_del_reason=\\\"\\\"\"}"
+      - "{\"kind\":\"threat/blacklist\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" vsys=\\\"root-vsys\\\" time=\\\"__DEMO_TIME__\\\" type=\\\"threat\\\" session_id=\\\"__DEMO_SESSION__\\\" module=\\\"blacklist\\\" severity=\\\"warning\\\" duration=\\\"0\\\" addr_src=\\\"198.51.100.11\\\" addr_dst=\\\"198.51.100.12\\\" nataddr_src=\\\"::\\\" nataddr_dst=\\\"::\\\" port_src=\\\"57374\\\" port_dst=\\\"53\\\" natport_src=\\\"0\\\" natport_dst=\\\"0\\\" action=\\\"drop\\\" appname=\\\"DNS\\\" rule=\\\"__fast_disposal__\\\" proto=\\\"UDP\\\" session_time=\\\"__DEMO_DURATION__\\\" sess_dev_id=\\\"0\\\" sess_nth=\\\"1\\\" zone_src=\\\"l2untrust\\\" zone_dst=\\\"l2trust\\\" locale_src=\\\"内网\\\" locale_dst=\\\"内网\\\" user_src=\\\"\\\" user_dst=\\\"\\\" app_category=\\\"APP_NETWORK\\\" app_risk=\\\"4\\\" asset_os_src=\\\"\\\" asset_os_dst=\\\"\\\" asset_name_src=\\\"\\\" asset_name_dst=\\\"\\\" asset_type_src=\\\"\\\" asset_type_dst=\\\"\\\" focus_type=\\\"NO\\\" non_standard_port=\\\"NO\\\" direction=\\\"\\\" attacker_ip=\\\"::\\\" victim_ip=\\\"198.51.100.11\\\" attack_name=\\\"\\\" victim_name=\\\"\\\" sample_name=\\\"\\\" threat_name=\\\"Malicious Domain Request\\\" threat_type=\\\"Domain_black_list\\\" last_hit_num=\\\"0\\\" filepath=\\\"\\\" threat_id=\\\"80041\\\" threat_severity=\\\"high\\\" hit_num=\\\"1\\\" filename=\\\"\\\" url=\\\"\\\" dns_domain=\\\"blocked.example.com\\\" detail=\\\"\\\" detail_zh=\\\"\\\" sample_type=\\\"\\\" sample_md5=\\\"\\\" threat_class=\\\"other\\\" detect_method=\\\"\\\" malicious_type=\\\"\\\" ioc_id=\\\"\\\" disposal_id=\\\"\\\" cve_id=\\\"\\\" popularity=\\\"\\\" confidence=\\\"\\\"\"}"
+      - "{\"kind\":\"threat/ips\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" vsys=\\\"root-vsys\\\" time=\\\"__DEMO_TIME__\\\" type=\\\"threat\\\" session_id=\\\"__DEMO_SESSION__\\\" module=\\\"ips\\\" severity=\\\"warning\\\" duration=\\\"0\\\" addr_src=\\\"198.51.100.13\\\" addr_dst=\\\"198.51.100.14\\\" nataddr_src=\\\"::\\\" nataddr_dst=\\\"::\\\" port_src=\\\"14146\\\" port_dst=\\\"991\\\" natport_src=\\\"0\\\" natport_dst=\\\"0\\\" action=\\\"block\\\" appname=\\\"DownloadHTTPDynamicPage\\\" rule=\\\"允许测试区访问受控区\\\" proto=\\\"TCP\\\" session_time=\\\"__DEMO_DURATION__\\\" sess_dev_id=\\\"0\\\" sess_nth=\\\"0\\\" zone_src=\\\"l2untrust\\\" zone_dst=\\\"l2trust\\\" locale_src=\\\"内网\\\" locale_dst=\\\"内网\\\" user_src=\\\"\\\" user_dst=\\\"\\\" app_category=\\\"APP_INTERACTION\\\" app_risk=\\\"1\\\" asset_os_src=\\\"\\\" asset_os_dst=\\\"\\\" asset_name_src=\\\"\\\" asset_name_dst=\\\"\\\" asset_type_src=\\\"\\\" asset_type_dst=\\\"\\\" focus_type=\\\"NO\\\" non_standard_port=\\\"YES\\\" direction=\\\"\\\" attacker_ip=\\\"198.51.100.13\\\" victim_ip=\\\"198.51.100.14\\\" attack_name=\\\"\\\" victim_name=\\\"\\\" sample_name=\\\"\\\" threat_name=\\\"ThinkPHP Code Execution Vulnerability\\\" threat_type=\\\"vulner\\\" last_hit_num=\\\"0\\\" filepath=\\\"\\\" threat_id=\\\"4472201\\\" threat_severity=\\\"high\\\" hit_num=\\\"1\\\" filename=\\\"\\\" url=\\\"203.0.113.21:991/index.php?lang=../../../../../../../../usr/local/lib/php/pearcmd& config-create /&/<?echo(md5(\\\"hi\\\"));?> /tmp/index1.php\\\" dns_domain=\\\"\\\" detail=\\\"\\\" detail_zh=\\\"\\\" sample_type=\\\"\\\" sample_md5=\\\"\\\" threat_class=\\\"code_execution\\\" detect_method=\\\"\\\" malicious_type=\\\"\\\" ioc_id=\\\"\\\" disposal_id=\\\"\\\" cve_id=\\\"\\\" popularity=\\\"\\\" confidence=\\\"\\\"\"}"
+      - "{\"kind\":\"system/alert\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" type=\\\"system\\\" vsys=\\\"root-vsys\\\" severity=\\\"alert\\\" module=\\\"alert\\\" time=\\\"__DEMO_TIME__\\\" msg_cn=\\\"NSG 的s2ge1物理接口的发送流量带宽占比目前为：82%，您所设置的阈值为：80%\\\" msg=\\\"NSG Physical interface to send traffic bandwidth utilization of s2ge1 is currently: 82%, the threshold you set is: 80%\\\"\"}"
+      - "{\"kind\":\"system/upgrade\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" module=\\\"upgrade\\\" severity=\\\"info\\\" vsys=\\\"root-vsys\\\" type=\\\"system\\\" time=\\\"__DEMO_TIME__\\\" msg=\\\"[upgrade from auto], Auto upgrade download finish:[No need to upgrade], name:[ips signature]\\\" msg_cn=\\\"[自动升级]，库升级完成：[服务器不存在可更新的库文件]，名称：[入侵防御特征库]\\\"\"}"
+      - "{\"kind\":\"system/restore\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" type=\\\"system\\\" vsys=\\\"root-vsys\\\" severity=\\\"notice\\\" module=\\\"restore\\\" time=\\\"__DEMO_TIME__\\\" msg_cn=\\\"导出加密最后保存配置到ftp服务器，服务器:[203.0.113.20]，状态：[失败]\\\" msg=\\\"export encryption current config to ftp server, server:[203.0.113.20], status:[Fail]\\\"\"}"
+      - "{\"kind\":\"system/admin\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" module=\\\"admin\\\" severity=\\\"info\\\" vsys=\\\"root-vsys\\\" type=\\\"system\\\" time=\\\"__DEMO_TIME__\\\" msg=\\\"Admin login success, name:[testadmin], from-ip:[192.0.2.20], mode:[HTTPS]\\\" msg_cn=\\\"管理员登录成功，名称：[testadmin]，地址：[192.0.2.20]，登录方式：[HTTPS]\\\"\"}"
+      - "{\"kind\":\"traffic-end/flow\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" vsys=\\\"root-vsys\\\" time=\\\"__DEMO_TIME__\\\" type=\\\"traffic-end\\\" session_id=\\\"__DEMO_SESSION__\\\" module=\\\"flow\\\" severity=\\\"info\\\" duration=\\\"1\\\" addr_src=\\\"203.0.113.10\\\" addr_dst=\\\"203.0.113.11\\\" nataddr_src=\\\"::\\\" nataddr_dst=\\\"::\\\" port_src=\\\"61955\\\" port_dst=\\\"11883\\\" natport_src=\\\"0\\\" natport_dst=\\\"0\\\" action=\\\"permit\\\" appname=\\\"Unidentified\\\" rule=\\\"允许测试区访问服务区\\\" proto=\\\"TCP\\\" session_time=\\\"__DEMO_DURATION__\\\" sess_dev_id=\\\"0\\\" sess_nth=\\\"0\\\" zone_src=\\\"l2untrust\\\" zone_dst=\\\"l2trust\\\" locale_src=\\\"内网\\\" locale_dst=\\\"内网\\\" user_src=\\\"\\\" user_dst=\\\"\\\" app_category=\\\"CATEGORY-NONE\\\" app_risk=\\\"5\\\" asset_os_src=\\\"\\\" asset_os_dst=\\\"\\\" asset_name_src=\\\"\\\" asset_name_dst=\\\"\\\" asset_type_src=\\\"\\\" asset_type_dst=\\\"\\\" focus_type=\\\"NO\\\" non_standard_port=\\\"NO\\\" interface_src=\\\"xg1\\\" interface_dst=\\\"xg2\\\" bytes_sent=\\\"52\\\" bytes_received=\\\"40\\\" pkts_sent=\\\"1\\\" pkts_received=\\\"1\\\" total_sess=\\\"0\\\" from_tunnel=\\\"\\\" to_tunnel=\\\"\\\" deny_type=\\\"\\\" sess_limit_profile=\\\"\\\" decrypt_rule=\\\"\\\" honeypot_rule_name=\\\"\\\" honeypot_drainage_type=\\\"\\\" sfc_rule_name=\\\"\\\" sfc_name=\\\"\\\" sfc_mode=\\\"\\\" sfc_online=\\\"\\\" sfc_sniffer=\\\"\\\" sess_del_reason=\\\"closed normally\\\"\"}"
+      - "{\"kind\":\"dns/dns\",\"message\":\"﻿devid=\\\"demo-6300\\\" dname=\\\"NSG-DEMO\\\" serial=\\\"__DEMO_SERIAL__\\\" vsys=\\\"root-vsys\\\" time=\\\"__DEMO_TIME__\\\" type=\\\"dns\\\" session_id=\\\"__DEMO_SESSION__\\\" module=\\\"dns\\\" severity=\\\"info\\\" duration=\\\"0\\\" addr_src=\\\"203.0.113.12\\\" addr_dst=\\\"198.51.100.12\\\" nataddr_src=\\\"::\\\" nataddr_dst=\\\"::\\\" port_src=\\\"53349\\\" port_dst=\\\"53\\\" natport_src=\\\"0\\\" natport_dst=\\\"0\\\" action=\\\"permit\\\" appname=\\\"DNS\\\" rule=\\\"访问测试DNS\\\" proto=\\\"UDP\\\" session_time=\\\"__DEMO_DURATION__\\\" sess_dev_id=\\\"0\\\" sess_nth=\\\"0\\\" zone_src=\\\"l2trust\\\" zone_dst=\\\"l2untrust\\\" locale_src=\\\"内网\\\" locale_dst=\\\"内网\\\" user_src=\\\"\\\" user_dst=\\\"\\\" app_category=\\\"APP_NETWORK\\\" app_risk=\\\"4\\\" asset_os_src=\\\"\\\" asset_os_dst=\\\"\\\" asset_name_src=\\\"\\\" asset_name_dst=\\\"\\\" asset_type_src=\\\"\\\" asset_type_dst=\\\"\\\" focus_type=\\\"NO\\\" non_standard_port=\\\"NO\\\" dns_domain=\\\"www.example.com\\\" dns_host=\\\"0.0.0.0\\\" dns_type=\\\"A\\\" dns_cname=\\\"\\\" dns_ttl=\\\"0\\\" dns_rcode=\\\"0\\\" dns_mx=\\\"\\\" dns_txt=\\\"\\\" dns_resp=\\\"query\\\" dns_trans_id=\\\"53045\\\" timestamp=\\\"__DEMO_TIME_MS__\\\" dns_rr_code=\\\"1\\\" dns_rr_value=\\\"\\\" dns_len=\\\"31\\\"\"}"
+
+transforms:
+  refresh_secgate3600_nsg_demo:
+    type: "remap"
+    inputs:
+      - "secgate3600_nsg_demo_logs"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      seed = parse_json!(to_string!(.message))
+      inner = to_string!(seed.message)
+      unix_now = to_unix_timestamp(now())
+      inner = replace(inner, "__DEMO_TIME__", to_string(unix_now))
+      inner = replace(inner, "__DEMO_TIME_MS__", to_string(unix_now * 1000))
+      inner = replace(inner, "__DEMO_DURATION__", to_string(random_int(0, 3600)))
+      inner = replace(inner, "__DEMO_SESSION__", to_string(random_int(100000000, 999999999)))
+      inner = replace(inner, "__DEMO_SERIAL__", "demo" + replace(uuid_v4(), "-", ""))
+      . = {
+        "appname": "NSG",
+        "facility": "local0",
+        "host": "NSG-DEMO",
+        "hostname": "NSG-DEMO",
+        "message": inner,
+        "procid": random_int(1000, 65000),
+        "severity": "info",
+        "source_ip": "${SECGATE3600_NSG_DEMO_SOURCE_IP:-192.0.2.10}",
+        "source_type": "demo",
+        "timestamp": format_timestamp!(now(), format: "%+", timezone: "UTC"),
+        "version": 1
+      }
+
+sinks:
+  secgate3600_nsg_demo_invalid_console:
+    type: "console"
+    inputs:
+      - "refresh_secgate3600_nsg_demo.dropped"
+    target: "stdout"
+    encoding:
+      codec: "json"
+
+  secgate3600_nsg_demo_kafka:
+    type: "kafka"
+    inputs:
+      - "refresh_secgate3600_nsg_demo"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${SECGATE3600_NSG_RAW_TOPIC:-secgate3600-nsg-syslog-raw}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+tests:
+  - name: "演示数据 self-end/flow 1 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"self-end/flow","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" vsys=\"root-vsys\" time=\"__DEMO_TIME__\" type=\"self-end\" session_id=\"__DEMO_SESSION__\" module=\"flow\" severity=\"info\" duration=\"0\" addr_src=\"198.51.100.10\" addr_dst=\"192.0.2.10\" nataddr_src=\"::\" nataddr_dst=\"::\" port_src=\"8779\" port_dst=\"2048\" natport_src=\"0\" natport_dst=\"0\" action=\"deny\" appname=\"ICMP\" rule=\"__to_self__\" proto=\"ICMP\" session_time=\"__DEMO_DURATION__\" sess_dev_id=\"0\" sess_nth=\"0\" zone_src=\"\" zone_dst=\"\" locale_src=\"内网\" locale_dst=\"内网\" user_src=\"\" user_dst=\"\" app_category=\"APP_NETWORK\" app_risk=\"1\" asset_os_src=\"\" asset_os_dst=\"\" asset_name_src=\"\" asset_name_dst=\"\" asset_type_src=\"\" asset_type_dst=\"\" focus_type=\"NO\" non_standard_port=\"NO\" interface_src=\"ge2\" interface_dst=\"\" bytes_sent=\"0\" bytes_received=\"0\" pkts_sent=\"0\" pkts_received=\"0\" total_sess=\"0\" from_tunnel=\"\" to_tunnel=\"\" deny_type=\"Security Policy\" sess_limit_profile=\"\" decrypt_rule=\"\" honeypot_rule_name=\"\" honeypot_drainage_type=\"\" sfc_rule_name=\"\" sfc_name=\"\" sfc_mode=\"\" sfc_online=\"\" sfc_sniffer=\"\" sess_del_reason=\"\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "self-end")
+              assert_eq!(parsed.module, "flow")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 threat/blacklist 2 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"threat/blacklist","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" vsys=\"root-vsys\" time=\"__DEMO_TIME__\" type=\"threat\" session_id=\"__DEMO_SESSION__\" module=\"blacklist\" severity=\"warning\" duration=\"0\" addr_src=\"198.51.100.11\" addr_dst=\"198.51.100.12\" nataddr_src=\"::\" nataddr_dst=\"::\" port_src=\"57374\" port_dst=\"53\" natport_src=\"0\" natport_dst=\"0\" action=\"drop\" appname=\"DNS\" rule=\"__fast_disposal__\" proto=\"UDP\" session_time=\"__DEMO_DURATION__\" sess_dev_id=\"0\" sess_nth=\"1\" zone_src=\"l2untrust\" zone_dst=\"l2trust\" locale_src=\"内网\" locale_dst=\"内网\" user_src=\"\" user_dst=\"\" app_category=\"APP_NETWORK\" app_risk=\"4\" asset_os_src=\"\" asset_os_dst=\"\" asset_name_src=\"\" asset_name_dst=\"\" asset_type_src=\"\" asset_type_dst=\"\" focus_type=\"NO\" non_standard_port=\"NO\" direction=\"\" attacker_ip=\"::\" victim_ip=\"198.51.100.11\" attack_name=\"\" victim_name=\"\" sample_name=\"\" threat_name=\"Malicious Domain Request\" threat_type=\"Domain_black_list\" last_hit_num=\"0\" filepath=\"\" threat_id=\"80041\" threat_severity=\"high\" hit_num=\"1\" filename=\"\" url=\"\" dns_domain=\"blocked.example.com\" detail=\"\" detail_zh=\"\" sample_type=\"\" sample_md5=\"\" threat_class=\"other\" detect_method=\"\" malicious_type=\"\" ioc_id=\"\" disposal_id=\"\" cve_id=\"\" popularity=\"\" confidence=\"\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "threat")
+              assert_eq!(parsed.module, "blacklist")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 threat/ips 3 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"threat/ips","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" vsys=\"root-vsys\" time=\"__DEMO_TIME__\" type=\"threat\" session_id=\"__DEMO_SESSION__\" module=\"ips\" severity=\"warning\" duration=\"0\" addr_src=\"198.51.100.13\" addr_dst=\"198.51.100.14\" nataddr_src=\"::\" nataddr_dst=\"::\" port_src=\"14146\" port_dst=\"991\" natport_src=\"0\" natport_dst=\"0\" action=\"block\" appname=\"DownloadHTTPDynamicPage\" rule=\"允许测试区访问受控区\" proto=\"TCP\" session_time=\"__DEMO_DURATION__\" sess_dev_id=\"0\" sess_nth=\"0\" zone_src=\"l2untrust\" zone_dst=\"l2trust\" locale_src=\"内网\" locale_dst=\"内网\" user_src=\"\" user_dst=\"\" app_category=\"APP_INTERACTION\" app_risk=\"1\" asset_os_src=\"\" asset_os_dst=\"\" asset_name_src=\"\" asset_name_dst=\"\" asset_type_src=\"\" asset_type_dst=\"\" focus_type=\"NO\" non_standard_port=\"YES\" direction=\"\" attacker_ip=\"198.51.100.13\" victim_ip=\"198.51.100.14\" attack_name=\"\" victim_name=\"\" sample_name=\"\" threat_name=\"ThinkPHP Code Execution Vulnerability\" threat_type=\"vulner\" last_hit_num=\"0\" filepath=\"\" threat_id=\"4472201\" threat_severity=\"high\" hit_num=\"1\" filename=\"\" url=\"203.0.113.21:991/index.php?lang=../../../../../../../../usr/local/lib/php/pearcmd& config-create /&/<?echo(md5(\"hi\"));?> /tmp/index1.php\" dns_domain=\"\" detail=\"\" detail_zh=\"\" sample_type=\"\" sample_md5=\"\" threat_class=\"code_execution\" detect_method=\"\" malicious_type=\"\" ioc_id=\"\" disposal_id=\"\" cve_id=\"\" popularity=\"\" confidence=\"\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "threat")
+              assert_eq!(parsed.module, "ips")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 system/alert 4 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"system/alert","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" type=\"system\" vsys=\"root-vsys\" severity=\"alert\" module=\"alert\" time=\"__DEMO_TIME__\" msg_cn=\"NSG 的s2ge1物理接口的发送流量带宽占比目前为：82%，您所设置的阈值为：80%\" msg=\"NSG Physical interface to send traffic bandwidth utilization of s2ge1 is currently: 82%, the threshold you set is: 80%\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "system")
+              assert_eq!(parsed.module, "alert")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 system/upgrade 5 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"system/upgrade","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" module=\"upgrade\" severity=\"info\" vsys=\"root-vsys\" type=\"system\" time=\"__DEMO_TIME__\" msg=\"[upgrade from auto], Auto upgrade download finish:[No need to upgrade], name:[ips signature]\" msg_cn=\"[自动升级]，库升级完成：[服务器不存在可更新的库文件]，名称：[入侵防御特征库]\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "system")
+              assert_eq!(parsed.module, "upgrade")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 system/restore 6 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"system/restore","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" type=\"system\" vsys=\"root-vsys\" severity=\"notice\" module=\"restore\" time=\"__DEMO_TIME__\" msg_cn=\"导出加密最后保存配置到ftp服务器，服务器:[203.0.113.20]，状态：[失败]\" msg=\"export encryption current config to ftp server, server:[203.0.113.20], status:[Fail]\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "system")
+              assert_eq!(parsed.module, "restore")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 system/admin 7 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"system/admin","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" module=\"admin\" severity=\"info\" vsys=\"root-vsys\" type=\"system\" time=\"__DEMO_TIME__\" msg=\"Admin login success, name:[testadmin], from-ip:[192.0.2.20], mode:[HTTPS]\" msg_cn=\"管理员登录成功，名称：[testadmin]，地址：[192.0.2.20]，登录方式：[HTTPS]\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "system")
+              assert_eq!(parsed.module, "admin")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 traffic-end/flow 8 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"traffic-end/flow","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" vsys=\"root-vsys\" time=\"__DEMO_TIME__\" type=\"traffic-end\" session_id=\"__DEMO_SESSION__\" module=\"flow\" severity=\"info\" duration=\"1\" addr_src=\"203.0.113.10\" addr_dst=\"203.0.113.11\" nataddr_src=\"::\" nataddr_dst=\"::\" port_src=\"61955\" port_dst=\"11883\" natport_src=\"0\" natport_dst=\"0\" action=\"permit\" appname=\"Unidentified\" rule=\"允许测试区访问服务区\" proto=\"TCP\" session_time=\"__DEMO_DURATION__\" sess_dev_id=\"0\" sess_nth=\"0\" zone_src=\"l2untrust\" zone_dst=\"l2trust\" locale_src=\"内网\" locale_dst=\"内网\" user_src=\"\" user_dst=\"\" app_category=\"CATEGORY-NONE\" app_risk=\"5\" asset_os_src=\"\" asset_os_dst=\"\" asset_name_src=\"\" asset_name_dst=\"\" asset_type_src=\"\" asset_type_dst=\"\" focus_type=\"NO\" non_standard_port=\"NO\" interface_src=\"xg1\" interface_dst=\"xg2\" bytes_sent=\"52\" bytes_received=\"40\" pkts_sent=\"1\" pkts_received=\"1\" total_sess=\"0\" from_tunnel=\"\" to_tunnel=\"\" deny_type=\"\" sess_limit_profile=\"\" decrypt_rule=\"\" honeypot_rule_name=\"\" honeypot_drainage_type=\"\" sfc_rule_name=\"\" sfc_name=\"\" sfc_mode=\"\" sfc_online=\"\" sfc_sniffer=\"\" sess_del_reason=\"closed normally\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "traffic-end")
+              assert_eq!(parsed.module, "flow")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true
+
+  - name: "演示数据 dns/dns 9 应生成合法原始事件"
+    inputs:
+      - insert_at: "refresh_secgate3600_nsg_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"kind":"dns/dns","message":"﻿devid=\"demo-6300\" dname=\"NSG-DEMO\" serial=\"__DEMO_SERIAL__\" vsys=\"root-vsys\" time=\"__DEMO_TIME__\" type=\"dns\" session_id=\"__DEMO_SESSION__\" module=\"dns\" severity=\"info\" duration=\"0\" addr_src=\"203.0.113.12\" addr_dst=\"198.51.100.12\" nataddr_src=\"::\" nataddr_dst=\"::\" port_src=\"53349\" port_dst=\"53\" natport_src=\"0\" natport_dst=\"0\" action=\"permit\" appname=\"DNS\" rule=\"访问测试DNS\" proto=\"UDP\" session_time=\"__DEMO_DURATION__\" sess_dev_id=\"0\" sess_nth=\"0\" zone_src=\"l2trust\" zone_dst=\"l2untrust\" locale_src=\"内网\" locale_dst=\"内网\" user_src=\"\" user_dst=\"\" app_category=\"APP_NETWORK\" app_risk=\"4\" asset_os_src=\"\" asset_os_dst=\"\" asset_name_src=\"\" asset_name_dst=\"\" asset_type_src=\"\" asset_type_dst=\"\" focus_type=\"NO\" non_standard_port=\"NO\" dns_domain=\"www.example.com\" dns_host=\"0.0.0.0\" dns_type=\"A\" dns_cname=\"\" dns_ttl=\"0\" dns_rcode=\"0\" dns_mx=\"\" dns_txt=\"\" dns_resp=\"query\" dns_trans_id=\"53045\" timestamp=\"__DEMO_TIME_MS__\" dns_rr_code=\"1\" dns_rr_value=\"\" dns_len=\"31\""}
+    outputs:
+      - extract_from: "refresh_secgate3600_nsg_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.appname, "NSG")
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.source_ip, "192.0.2.10")
+              assert_eq!(contains(to_string!(.message), "__DEMO_"), false)
+              normalized = replace(to_string!(.message), r'^\x{FEFF}', "")
+              parsed, parse_error = parse_key_value(normalized, whitespace: "strict")
+              assert_eq!(parse_error, null)
+              assert_eq!(parsed.type, "dns")
+              assert_eq!(parsed.module, "dns")
+              raw_time, time_error = to_int(to_string!(parsed.time))
+              assert_eq!(time_error, null)
+              assert!(raw_time > 0)
+              true

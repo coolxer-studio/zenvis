@@ -1,0 +1,67 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/nsg-traffic"
+      },
+      {
+        "label": "SecGate 3600 NSG",
+        "icon": "fa-solid fa-shield-halved",
+        "children": [
+          {
+            "label": "流量会话",
+            "url": "nsg-traffic",
+            "icon": "fa-solid fa-network-wired",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-traffic.json"
+          },
+          {
+            "label": "DNS 解析",
+            "url": "nsg-dns",
+            "icon": "fa-solid fa-globe",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-dns.json"
+          },
+          {
+            "label": "本机终结会话",
+            "url": "nsg-self-end",
+            "icon": "fa-solid fa-right-to-bracket",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-self-end.json"
+          },
+          {
+            "label": "威胁事件",
+            "url": "nsg-threat",
+            "icon": "fa-solid fa-shield-virus",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-threat.json"
+          },
+          {
+            "label": "系统告警",
+            "url": "nsg-system-alert",
+            "icon": "fa-solid fa-triangle-exclamation",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-system-alert.json"
+          },
+          {
+            "label": "系统升级",
+            "url": "nsg-system-upgrade",
+            "icon": "fa-solid fa-arrow-up-from-bracket",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-system-upgrade.json"
+          },
+          {
+            "label": "配置恢复",
+            "url": "nsg-system-restore",
+            "icon": "fa-solid fa-clock-rotate-left",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-system-restore.json"
+          },
+          {
+            "label": "管理员事件",
+            "url": "nsg-system-admin",
+            "icon": "fa-solid fa-user-shield",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.secgate3600.app/get?file_name=nsg-system-admin.json"
+          }
+        ]
+      }
+    ]
+  }
+}

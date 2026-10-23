@@ -1,0 +1,381 @@
+{
+  "type": "page",
+  "title": "SecGate 3600 NSG 本机终结会话详情",
+  "subTitle": "按 Zenvis 内置记录 ID 展示单条 self-end 会话的完整信息",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 Zenvis 内置记录 ID，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/secgate3600_nsg_self_end_flow_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "NSG 本机终结会话 ${session_id || '-'}，平台记录 ID：${record_id}"
+        },
+        {
+          "type": "property",
+          "title": "记录标识与会话概况",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}",
+              "span": 2
+            },
+            {
+              "label": "入库时间",
+              "content": "${zenvis_insert_time | default:'-'}"
+            },
+            {
+              "label": "会话 ID",
+              "content": "${session_id | default:'-'}"
+            },
+            {
+              "label": "事件时间",
+              "content": "${time | default:'-'}"
+            },
+            {
+              "label": "事件类型",
+              "content": "${type | default:'-'}"
+            },
+            {
+              "label": "功能模块",
+              "content": "${module | default:'-'}"
+            },
+            {
+              "label": "处置动作",
+              "content": "${action | default:'-'}"
+            },
+            {
+              "label": "事件级别",
+              "content": "${severity | default:'-'}"
+            },
+            {
+              "label": "日志持续时长（秒）",
+              "content": "${duration | default:'-'}"
+            },
+            {
+              "label": "会话持续时长（秒）",
+              "content": "${session_time | default:'-'}"
+            },
+            {
+              "label": "关联会话总数",
+              "content": "${total_sess | default:'-'}"
+            },
+            {
+              "label": "会话结束原因",
+              "content": "${sess_del_reason | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "地址、端口与策略",
+          "column": 3,
+          "items": [
+            {
+              "label": "源 IP",
+              "content": "${addr_src | default:'-'}"
+            },
+            {
+              "label": "源端口",
+              "content": "${port_src | default:'-'}"
+            },
+            {
+              "label": "源安全域",
+              "content": "${zone_src | default:'-'}"
+            },
+            {
+              "label": "目的 IP",
+              "content": "${addr_dst | default:'-'}"
+            },
+            {
+              "label": "目的端口",
+              "content": "${port_dst | default:'-'}"
+            },
+            {
+              "label": "目的安全域",
+              "content": "${zone_dst | default:'-'}"
+            },
+            {
+              "label": "NAT 源 IP",
+              "content": "${nataddr_src | default:'-'}"
+            },
+            {
+              "label": "NAT 源端口",
+              "content": "${natport_src | default:'-'}"
+            },
+            {
+              "label": "源位置",
+              "content": "${locale_src | default:'-'}"
+            },
+            {
+              "label": "NAT 目的 IP",
+              "content": "${nataddr_dst | default:'-'}"
+            },
+            {
+              "label": "NAT 目的端口",
+              "content": "${natport_dst | default:'-'}"
+            },
+            {
+              "label": "目的位置",
+              "content": "${locale_dst | default:'-'}"
+            },
+            {
+              "label": "传输层协议",
+              "content": "${proto | default:'-'}"
+            },
+            {
+              "label": "应用名称",
+              "content": "${appname | default:'-'}"
+            },
+            {
+              "label": "应用分类",
+              "content": "${app_category | default:'-'}"
+            },
+            {
+              "label": "命中规则",
+              "content": "${rule | default:'-'}",
+              "span": 2
+            },
+            {
+              "label": "应用风险等级",
+              "content": "${app_risk | default:'-'}"
+            },
+            {
+              "label": "重点关注流量",
+              "content": "${focus_type ? '是' : '否'}"
+            },
+            {
+              "label": "非标准端口",
+              "content": "${non_standard_port ? '是' : '否'}"
+            },
+            {
+              "label": "拒绝类型",
+              "content": "${deny_type | default:'-'}"
+            },
+            {
+              "label": "会话限制配置",
+              "content": "${sess_limit_profile | default:'-'}"
+            },
+            {
+              "label": "解密规则",
+              "content": "${decrypt_rule | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "流量计数",
+          "column": 3,
+          "items": [
+            {
+              "label": "发送字节数",
+              "content": "${bytes_sent | default:'-'}"
+            },
+            {
+              "label": "接收字节数",
+              "content": "${bytes_received | default:'-'}"
+            },
+            {
+              "label": "发送报文数",
+              "content": "${pkts_sent | default:'-'}"
+            },
+            {
+              "label": "接收报文数",
+              "content": "${pkts_received | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "设备与网络",
+          "column": 3,
+          "items": [
+            {
+              "label": "设备 ID",
+              "content": "${devid | default:'-'}"
+            },
+            {
+              "label": "设备名称",
+              "content": "${dname | default:'-'}"
+            },
+            {
+              "label": "设备序列号",
+              "content": "${serial | default:'-'}"
+            },
+            {
+              "label": "虚拟系统",
+              "content": "${vsys | default:'-'}"
+            },
+            {
+              "label": "会话设备 ID",
+              "content": "${sess_dev_id | default:'-'}"
+            },
+            {
+              "label": "会话序号",
+              "content": "${sess_nth | default:'-'}"
+            },
+            {
+              "label": "源接口",
+              "content": "${interface_src | default:'-'}"
+            },
+            {
+              "label": "目的接口",
+              "content": "${interface_dst | default:'-'}"
+            },
+            {
+              "label": "源用户",
+              "content": "${user_src | default:'-'}"
+            },
+            {
+              "label": "目的用户",
+              "content": "${user_dst | default:'-'}"
+            },
+            {
+              "label": "来源隧道",
+              "content": "${from_tunnel | default:'-'}"
+            },
+            {
+              "label": "去向隧道",
+              "content": "${to_tunnel | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "资产识别",
+          "column": 3,
+          "items": [
+            {
+              "label": "源资产操作系统",
+              "content": "${asset_os_src | default:'-'}"
+            },
+            {
+              "label": "源资产名称",
+              "content": "${asset_name_src | default:'-'}"
+            },
+            {
+              "label": "源资产类型",
+              "content": "${asset_type_src | default:'-'}"
+            },
+            {
+              "label": "目的资产操作系统",
+              "content": "${asset_os_dst | default:'-'}"
+            },
+            {
+              "label": "目的资产名称",
+              "content": "${asset_name_dst | default:'-'}"
+            },
+            {
+              "label": "目的资产类型",
+              "content": "${asset_type_dst | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "蜜罐与服务功能链",
+          "column": 3,
+          "items": [
+            {
+              "label": "蜜罐规则",
+              "content": "${honeypot_rule_name | default:'-'}"
+            },
+            {
+              "label": "蜜罐引流类型",
+              "content": "${honeypot_drainage_type | default:'-'}"
+            },
+            {
+              "label": "SFC 规则",
+              "content": "${sfc_rule_name | default:'-'}"
+            },
+            {
+              "label": "SFC 名称",
+              "content": "${sfc_name | default:'-'}"
+            },
+            {
+              "label": "SFC 模式",
+              "content": "${sfc_mode | default:'-'}"
+            },
+            {
+              "label": "SFC 在线状态",
+              "content": "${sfc_online | default:'-'}"
+            },
+            {
+              "label": "SFC 镜像状态",
+              "content": "${sfc_sniffer | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "Syslog 外层信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "Syslog 应用名",
+              "content": "${syslog_appname | default:'-'}"
+            },
+            {
+              "label": "Syslog Facility",
+              "content": "${syslog_facility | default:'-'}"
+            },
+            {
+              "label": "Syslog Host",
+              "content": "${syslog_host | default:'-'}"
+            },
+            {
+              "label": "Syslog 主机名",
+              "content": "${syslog_hostname | default:'-'}"
+            },
+            {
+              "label": "Syslog 进程 ID",
+              "content": "${syslog_procid | default:'-'}"
+            },
+            {
+              "label": "Syslog 级别",
+              "content": "${syslog_severity | default:'-'}"
+            },
+            {
+              "label": "Syslog 来源 IP",
+              "content": "${syslog_source_ip | default:'-'}"
+            },
+            {
+              "label": "Syslog 来源类型",
+              "content": "${syslog_source_type | default:'-'}"
+            },
+            {
+              "label": "Syslog 接收时间",
+              "content": "${syslog_timestamp | default:'-'}"
+            },
+            {
+              "label": "Syslog 版本",
+              "content": "${syslog_version | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "Syslog 原始消息",
+          "body": {
+            "type": "tpl",
+            "tpl": "<pre style='margin:0;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:8px;background:#101828;color:#e4e7ec'>${syslog_message || '-'}</pre>"
+          }
+        }
+      ]
+    }
+  ]
+}

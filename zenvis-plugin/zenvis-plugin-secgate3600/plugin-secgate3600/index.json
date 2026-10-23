@@ -1,0 +1,8 @@
+{
+  "name": "奇安信网神 SecGate 3600 NSG 防火墙",
+  "package_name": "com.coolxer.plugin.secgate3600",
+  "version": "1.0.0",
+  "description": "独立对接奇安信网神 SecGate 3600 NSG 防火墙 Syslog，提供流量会话、DNS、本机终结、威胁与系统事件的严格转换、检索、详情、IP 关联统计和态势看板；内置可手动停用的演示数据推送服务。",
+  "author": "CoolXer",
+  "icon": "icon.png"
+}

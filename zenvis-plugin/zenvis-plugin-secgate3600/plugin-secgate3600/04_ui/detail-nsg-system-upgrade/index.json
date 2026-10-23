@@ -1,0 +1,142 @@
+{
+  "type": "page",
+  "title": "SecGate 3600 NSG 系统升级事件详情",
+  "subTitle": "按 Zenvis 内置记录 ID 展示一条 system/upgrade 事件的完整信息",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 Zenvis 内置记录 ID，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/secgate3600_nsg_system_upgrade_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "${time || '-'} · ${severity || '-'} · ${module || '-'} · ${dname || '-'}"
+        },
+        {
+          "type": "property",
+          "title": "事件信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "平台记录 ID",
+              "content": "${zenvis_id | default:'-'}"
+            },
+            {
+              "label": "入库时间",
+              "content": "${zenvis_insert_time | default:'-'}"
+            },
+            {
+              "label": "事件时间",
+              "content": "${time | default:'-'}"
+            },
+            {
+              "label": "事件级别",
+              "content": "${severity | default:'-'}"
+            },
+            {
+              "label": "事件类型",
+              "content": "${type | default:'-'}"
+            },
+            {
+              "label": "功能模块",
+              "content": "${module | default:'-'}"
+            },
+            {
+              "label": "中文消息",
+              "content": "${msg_cn | default:'-'}",
+              "span": 3
+            },
+            {
+              "label": "英文消息",
+              "content": "${msg | default:'-'}",
+              "span": 3
+            }
+          ]
+        },
+        {
+          "type": "property",
+          "title": "设备与 Syslog 外层信息",
+          "column": 3,
+          "items": [
+            {
+              "label": "设备 ID",
+              "content": "${devid | default:'-'}"
+            },
+            {
+              "label": "设备名称",
+              "content": "${dname | default:'-'}"
+            },
+            {
+              "label": "设备序列号",
+              "content": "${serial | default:'-'}"
+            },
+            {
+              "label": "虚拟系统",
+              "content": "${vsys | default:'-'}"
+            },
+            {
+              "label": "Syslog 应用名",
+              "content": "${syslog_appname | default:'-'}"
+            },
+            {
+              "label": "Syslog Facility",
+              "content": "${syslog_facility | default:'-'}"
+            },
+            {
+              "label": "Syslog Host",
+              "content": "${syslog_host | default:'-'}"
+            },
+            {
+              "label": "Syslog 主机名",
+              "content": "${syslog_hostname | default:'-'}"
+            },
+            {
+              "label": "Syslog 进程 ID",
+              "content": "${syslog_procid | default:'-'}"
+            },
+            {
+              "label": "Syslog 级别",
+              "content": "${syslog_severity | default:'-'}"
+            },
+            {
+              "label": "Syslog 来源 IP",
+              "content": "${syslog_source_ip | default:'-'}"
+            },
+            {
+              "label": "Syslog 接收时间",
+              "content": "${syslog_timestamp | default:'-'}"
+            },
+            {
+              "label": "Syslog 来源类型",
+              "content": "${syslog_source_type | default:'-'}"
+            },
+            {
+              "label": "Syslog 版本",
+              "content": "${syslog_version | default:'-'}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "Syslog 原始消息",
+          "body": {
+            "type": "tpl",
+            "tpl": "<pre style='margin:0;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:8px;background:#101828;color:#e4e7ec'>${syslog_message || '-'}</pre>"
+          }
+        }
+      ]
+    }
+  ]
+}

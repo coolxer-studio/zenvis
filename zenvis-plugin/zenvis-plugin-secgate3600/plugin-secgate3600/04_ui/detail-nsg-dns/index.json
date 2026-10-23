@@ -1,0 +1,140 @@
+{
+  "type": "page",
+  "title": "SecGate 3600 NSG DNS 事件详情",
+  "subTitle": "按 Zenvis 内置记录 ID 展示一条 dns/dns 事件的完整信息",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 Zenvis 内置记录 ID，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/secgate3600_nsg_dns_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "DNS ${dns_resp || '-'} · ${dns_domain || '-'} · ${dns_type || '-'}，会话 ${session_id || '-'}"
+        },
+        {
+          "type": "property",
+          "title": "记录标识与时间",
+          "column": 3,
+          "items": [
+            {"label": "平台记录 ID", "content": "${zenvis_id | default:'-'}", "span": 2},
+            {"label": "入库时间", "content": "${zenvis_insert_time | default:'-'}"},
+            {"label": "会话 ID", "content": "${session_id | default:'-'}"},
+            {"label": "设备事件时间", "content": "${time | default:'-'}"},
+            {"label": "DNS 报文时间", "content": "${timestamp | default:'-'}"},
+            {"label": "事件类型", "content": "${type | default:'-'}"},
+            {"label": "功能模块", "content": "${module | default:'-'}"},
+            {"label": "会话内序号", "content": "${sess_nth | default:'-'}"},
+            {"label": "DNS 事务 ID", "content": "${dns_trans_id | default:'-'}"}
+          ]
+        },
+        {
+          "type": "property",
+          "title": "DNS 解析信息",
+          "column": 3,
+          "items": [
+            {"label": "查询域名", "content": "${dns_domain | default:'-'}", "span": 2},
+            {"label": "DNS 主机值", "content": "${dns_host | default:'-'}"},
+            {"label": "记录类型", "content": "${dns_type | default:'-'}"},
+            {"label": "查询/响应", "content": "${dns_resp | default:'-'}"},
+            {"label": "响应码", "content": "${dns_rcode | default:'-'}"},
+            {"label": "资源记录代码", "content": "${dns_rr_code | default:'-'}"},
+            {"label": "资源记录值", "content": "${dns_rr_value | default:'-'}", "span": 2},
+            {"label": "CNAME", "content": "${dns_cname | default:'-'}", "span": 2},
+            {"label": "TTL（秒）", "content": "${dns_ttl | default:'-'}"},
+            {"label": "MX", "content": "${dns_mx | default:'-'}", "span": 2},
+            {"label": "TXT", "content": "${dns_txt | default:'-'}", "span": 2},
+            {"label": "报文长度（字节）", "content": "${dns_len | default:'-'}"}
+          ]
+        },
+        {
+          "type": "property",
+          "title": "地址、应用与策略",
+          "column": 3,
+          "items": [
+            {"label": "源 IP", "content": "${addr_src | default:'-'}"},
+            {"label": "源端口", "content": "${port_src | default:'-'}"},
+            {"label": "源安全域", "content": "${zone_src | default:'-'}"},
+            {"label": "目的 IP", "content": "${addr_dst | default:'-'}"},
+            {"label": "目的端口", "content": "${port_dst | default:'-'}"},
+            {"label": "目的安全域", "content": "${zone_dst | default:'-'}"},
+            {"label": "NAT 源 IP", "content": "${nataddr_src | default:'-'}"},
+            {"label": "NAT 源端口", "content": "${natport_src | default:'-'}"},
+            {"label": "源位置", "content": "${locale_src | default:'-'}"},
+            {"label": "NAT 目的 IP", "content": "${nataddr_dst | default:'-'}"},
+            {"label": "NAT 目的端口", "content": "${natport_dst | default:'-'}"},
+            {"label": "目的位置", "content": "${locale_dst | default:'-'}"},
+            {"label": "传输层协议", "content": "${proto | default:'-'}"},
+            {"label": "应用名称", "content": "${appname | default:'-'}"},
+            {"label": "应用分类", "content": "${app_category | default:'-'}"},
+            {"label": "命中规则", "content": "${rule | default:'-'}", "span": 2},
+            {"label": "处置动作", "content": "${action | default:'-'}"},
+            {"label": "应用风险等级", "content": "${app_risk | default:'-'}"},
+            {"label": "重点关注", "content": "${focus_type ? '是' : '否'}"},
+            {"label": "非标准端口", "content": "${non_standard_port ? '是' : '否'}"}
+          ]
+        },
+        {
+          "type": "property",
+          "title": "设备、会话与资产",
+          "column": 3,
+          "items": [
+            {"label": "设备 ID", "content": "${devid | default:'-'}"},
+            {"label": "设备名称", "content": "${dname | default:'-'}"},
+            {"label": "设备序列号", "content": "${serial | default:'-'}"},
+            {"label": "虚拟系统", "content": "${vsys | default:'-'}"},
+            {"label": "会话设备 ID", "content": "${sess_dev_id | default:'-'}"},
+            {"label": "会话持续时长（秒）", "content": "${session_time | default:'-'}"},
+            {"label": "日志持续时长（秒）", "content": "${duration | default:'-'}"},
+            {"label": "事件级别", "content": "${severity | default:'-'}"},
+            {"label": "源用户", "content": "${user_src | default:'-'}"},
+            {"label": "目的用户", "content": "${user_dst | default:'-'}"},
+            {"label": "源资产操作系统", "content": "${asset_os_src | default:'-'}"},
+            {"label": "目的资产操作系统", "content": "${asset_os_dst | default:'-'}"},
+            {"label": "源资产名称", "content": "${asset_name_src | default:'-'}"},
+            {"label": "目的资产名称", "content": "${asset_name_dst | default:'-'}"},
+            {"label": "源资产类型", "content": "${asset_type_src | default:'-'}"},
+            {"label": "目的资产类型", "content": "${asset_type_dst | default:'-'}"}
+          ]
+        },
+        {
+          "type": "property",
+          "title": "Syslog 外层信息",
+          "column": 3,
+          "items": [
+            {"label": "Syslog 应用名", "content": "${syslog_appname | default:'-'}"},
+            {"label": "Syslog Facility", "content": "${syslog_facility | default:'-'}"},
+            {"label": "Syslog Host", "content": "${syslog_host | default:'-'}"},
+            {"label": "Syslog 主机名", "content": "${syslog_hostname | default:'-'}"},
+            {"label": "Syslog 进程 ID", "content": "${syslog_procid | default:'-'}"},
+            {"label": "Syslog 级别", "content": "${syslog_severity | default:'-'}"},
+            {"label": "Syslog 来源 IP", "content": "${syslog_source_ip | default:'-'}"},
+            {"label": "Syslog 来源类型", "content": "${syslog_source_type | default:'-'}"},
+            {"label": "Syslog 接收时间", "content": "${syslog_timestamp | default:'-'}"},
+            {"label": "Syslog 版本", "content": "${syslog_version | default:'-'}"}
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "Syslog 原始消息",
+          "body": {
+            "type": "tpl",
+            "tpl": "<pre style='margin:0;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:8px;background:#101828;color:#e4e7ec'>${syslog_message || '-'}</pre>"
+          }
+        }
+      ]
+    }
+  ]
+}

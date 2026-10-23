@@ -1,0 +1,17 @@
+[
+  {
+    "name": "SecGate 3600 NSG Syslog 原始接入",
+    "description": "通过可配置的 UDP/TCP Syslog 监听地址接收 SecGate 3600 NSG 日志，将完整原始事件写入独立 Kafka 原始主题；本阶段不解析、不改写业务字段。",
+    "config": "syslog-to-kafka.yaml"
+  },
+  {
+    "name": "SecGate 3600 NSG Kafka 校验入库",
+    "description": "消费 SecGate 3600 NSG 原始主题，按 type/module 分流八类日志，严格校验来源、字段数量、时间、端口、数值与布尔值后写入八张 ClickHouse 表；已识别类型的转换异常写入插件专属死信主题。",
+    "config": "kafka-to-clickhouse.yaml"
+  },
+  {
+    "name": "SecGate 3600 NSG 演示数据生成",
+    "description": "测试与演示用途：默认每 5 秒随机生成一条覆盖八类日志的合成 SecGate 3600 NSG Syslog 事件，写入与正式接入相同的原始 Kafka 主题，再经正式校验入库服务落库；正式设备接入后可在推送任务页面手动停用。",
+    "config": "demo-data-to-kafka.yaml"
+  }
+]

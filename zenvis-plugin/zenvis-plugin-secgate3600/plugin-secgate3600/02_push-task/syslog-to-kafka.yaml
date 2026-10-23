@@ -1,0 +1,31 @@
+---
+sources:
+  secgate3600_nsg_syslog_input:
+    type: "syslog"
+    address: "${SECGATE3600_NSG_SYSLOG_ADDRESS:-0.0.0.0:12001}"
+    mode: "${SECGATE3600_NSG_SYSLOG_MODE:-udp}"
+    max_length: 102400
+
+sinks:
+  secgate3600_nsg_raw_kafka:
+    type: "kafka"
+    inputs:
+      - "secgate3600_nsg_syslog_input"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${SECGATE3600_NSG_RAW_TOPIC:-secgate3600-nsg-syslog-raw}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"

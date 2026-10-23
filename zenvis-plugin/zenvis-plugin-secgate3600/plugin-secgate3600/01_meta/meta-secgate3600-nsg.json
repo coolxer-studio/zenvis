@@ -1,0 +1,7161 @@
+{
+  "entity": [
+    {
+      "id": 6301,
+      "name": "secgate3600_nsg_traffic_event",
+      "label": "SecGate 3600 NSG 流量会话事件",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 traffic-end/flow 会话结束事件，每条记录对应一个已结束的转发会话。",
+      "table_name": "secgate3600_nsg_traffic_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "serial",
+          "session_id"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    },
+    {
+      "id": 6302,
+      "name": "secgate3600_nsg_dns_event",
+      "label": "SecGate 3600 NSG DNS 解析事件",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 dns/dns 域名解析事件，每条记录对应一次 DNS 查询或响应报文。",
+      "table_name": "secgate3600_nsg_dns_event",
+      "data_source": "clickhouse",
+      "sort_column": "timestamp",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "timestamp",
+          "serial",
+          "session_id",
+          "dns_trans_id"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    },
+    {
+      "id": 6303,
+      "name": "secgate3600_nsg_self_end_flow_event",
+      "label": "SecGate 3600 NSG 本机终结会话",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 self-end/flow 事件，记录访问防火墙本机并由本机策略终结或拒绝的会话。",
+      "table_name": "secgate3600_nsg_self_end_flow_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "serial",
+          "session_id"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    },
+    {
+      "id": 6304,
+      "name": "secgate3600_nsg_threat_event",
+      "label": "SecGate 3600 NSG 威胁事件",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 threat 日志，保存 blacklist、threat-disposal、ips、wp-scan 等兼容 67/69 字段结构的威胁事件。",
+      "table_name": "secgate3600_nsg_threat_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "threat_id",
+          "serial",
+          "session_id"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)"
+      }
+    },
+    {
+      "id": 6305,
+      "name": "secgate3600_nsg_system_alert_event",
+      "label": "SecGate 3600 NSG 系统告警",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 system/alert 事件，记录接口带宽等设备运行阈值告警。",
+      "table_name": "secgate3600_nsg_system_alert_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "serial",
+          "module"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    },
+    {
+      "id": 6306,
+      "name": "secgate3600_nsg_system_upgrade_event",
+      "label": "SecGate 3600 NSG 系统升级事件",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 system/upgrade 事件，记录特征库升级、无需升级或许可证异常等结果。",
+      "table_name": "secgate3600_nsg_system_upgrade_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "serial",
+          "module"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    },
+    {
+      "id": 6307,
+      "name": "secgate3600_nsg_system_restore_event",
+      "label": "SecGate 3600 NSG 配置恢复事件",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 system/restore 事件，记录配置导出、恢复或备份到远端服务器的执行结果。",
+      "table_name": "secgate3600_nsg_system_restore_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "serial",
+          "module"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    },
+    {
+      "id": 6308,
+      "name": "secgate3600_nsg_system_admin_event",
+      "label": "SecGate 3600 NSG 管理员事件",
+      "description": "由 SecGate 3600 NSG Syslog 接入的 system/admin 事件，记录管理员登录、会话超时等管理操作。",
+      "table_name": "secgate3600_nsg_system_admin_event",
+      "data_source": "clickhouse",
+      "sort_column": "time",
+      "auto_create": {
+        "engine": "MergeTree()",
+        "order_by": [
+          "time",
+          "serial",
+          "module"
+        ],
+        "partition_by": "toYYYYMM(zenvis_insert_time)",
+        "ttl": {
+          "column": "zenvis_insert_time",
+          "expire_after": 1,
+          "unit": "DAY"
+        }
+      }
+    }
+  ],
+  "attribute": [
+    {
+      "id": 63000001,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "session_id",
+      "label": "会话 ID",
+      "description": "SecGate 3600 NSG 为当前网络会话分配的编号；应结合设备序列号和事件时间定位唯一会话。",
+      "column_name": "session_id",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-traffic?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000002,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 记录会话结束事件的 Unix 秒时间戳，入库时转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000003,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "NSG 日志类型；本实体固定接收 traffic-end，表示网络会话结束。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000004,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "action",
+      "label": "处置动作",
+      "description": "安全策略对当前会话执行的动作，例如 permit 表示允许通过。",
+      "column_name": "action",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000005,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "addr_src",
+      "label": "源 IP",
+      "description": "执行网络地址转换前的会话源 IP 地址，支持 IPv4 或 IPv6。",
+      "column_name": "addr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_src}"
+    },
+    {
+      "id": 63000006,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "port_src",
+      "label": "源端口",
+      "description": "执行网络地址转换前的传输层源端口，取值范围为 0～65535。",
+      "column_name": "port_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000007,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "addr_dst",
+      "label": "目的 IP",
+      "description": "执行网络地址转换前的会话目的 IP 地址，支持 IPv4 或 IPv6。",
+      "column_name": "addr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_dst}"
+    },
+    {
+      "id": 63000008,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "port_dst",
+      "label": "目的端口",
+      "description": "执行网络地址转换前的传输层目的端口，取值范围为 0～65535。",
+      "column_name": "port_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000009,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "nataddr_src",
+      "label": "NAT 源 IP",
+      "description": "网络地址转换后的源 IP；未发生转换时设备可能上报 IPv6 未指定地址 ::。",
+      "column_name": "nataddr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_src}"
+    },
+    {
+      "id": 63000010,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "natport_src",
+      "label": "NAT 源端口",
+      "description": "网络地址转换后的源端口；0 通常表示未发生端口转换。",
+      "column_name": "natport_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000011,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "nataddr_dst",
+      "label": "NAT 目的 IP",
+      "description": "网络地址转换后的目的 IP；未发生转换时设备可能上报 IPv6 未指定地址 ::。",
+      "column_name": "nataddr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_dst}"
+    },
+    {
+      "id": 63000012,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "natport_dst",
+      "label": "NAT 目的端口",
+      "description": "网络地址转换后的目的端口；0 通常表示未发生端口转换。",
+      "column_name": "natport_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000013,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "proto",
+      "label": "传输层协议",
+      "description": "会话使用的传输层协议名称，例如 TCP 或 UDP。",
+      "column_name": "proto",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000014,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "appname",
+      "label": "应用名称",
+      "description": "NSG 应用识别结果，例如 eMule；不同于外层 Syslog 应用名。",
+      "column_name": "appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000015,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "rule",
+      "label": "命中规则",
+      "description": "允许、阻断或审计当前会话的 NSG 安全策略名称。",
+      "column_name": "rule",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000016,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 业务消息中的事件严重级别，例如 info；不同于外层 Syslog 级别。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000017,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "app_risk",
+      "label": "应用风险等级",
+      "description": "NSG 对识别应用给出的非负风险等级；示例值 5 表示较高风险。",
+      "column_name": "app_risk",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000018,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "duration",
+      "label": "日志持续时长",
+      "description": "设备上报的流量日志持续时间，单位为秒。",
+      "column_name": "duration",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000019,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "session_time",
+      "label": "会话持续时长",
+      "description": "NSG 记录的完整会话持续时间，单位为秒。",
+      "column_name": "session_time",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000020,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "bytes_sent",
+      "label": "发送字节数",
+      "description": "当前会话从源端发送到目的端的流量大小，单位为字节。",
+      "column_name": "bytes_sent",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000021,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "bytes_received",
+      "label": "接收字节数",
+      "description": "当前会话从目的端返回到源端的流量大小，单位为字节。",
+      "column_name": "bytes_received",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000022,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "pkts_sent",
+      "label": "发送报文数",
+      "description": "当前会话从源端发送到目的端的网络报文数量。",
+      "column_name": "pkts_sent",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000023,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "pkts_received",
+      "label": "接收报文数",
+      "description": "当前会话从目的端返回到源端的网络报文数量。",
+      "column_name": "pkts_received",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000024,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "total_sess",
+      "label": "关联会话总数",
+      "description": "设备为当前日志统计的关联会话数量；0 表示没有额外聚合会话。",
+      "column_name": "total_sess",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000025,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "NSG 在业务消息中上报的设备标识，按不透明字符串保存以避免丢失格式。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000026,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "产生当前会话日志的 NSG 设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000027,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生当前日志的 NSG 设备序列号或唯一指纹。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000028,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "处理当前会话的 NSG 虚拟系统名称，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000029,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "生成业务消息的 NSG 功能模块；本实体要求值为 flow。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000030,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sess_dev_id",
+      "label": "会话设备 ID",
+      "description": "NSG 会话处理设备标识，按字符串保存；0 表示未关联其他会话设备。",
+      "column_name": "sess_dev_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000031,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sess_nth",
+      "label": "会话序号",
+      "description": "当前会话在关联会话集合中的非负序号。",
+      "column_name": "sess_nth",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000032,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "zone_src",
+      "label": "源安全域",
+      "description": "源流量进入 NSG 时所属的安全域，例如 l2untrust。",
+      "column_name": "zone_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000033,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "zone_dst",
+      "label": "目的安全域",
+      "description": "流量离开 NSG 时目的网络所属的安全域，例如 l2trust。",
+      "column_name": "zone_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000034,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "locale_src",
+      "label": "源位置",
+      "description": "NSG 根据地址或配置识别出的源网络位置，例如内网。",
+      "column_name": "locale_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000035,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "locale_dst",
+      "label": "目的位置",
+      "description": "NSG 根据地址或配置识别出的目的网络位置，例如内网。",
+      "column_name": "locale_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000036,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "interface_src",
+      "label": "源接口",
+      "description": "源流量进入 NSG 的物理或逻辑接口名称，例如 xg1。",
+      "column_name": "interface_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000037,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "interface_dst",
+      "label": "目的接口",
+      "description": "会话流量离开 NSG 的物理或逻辑接口名称，例如 xg2。",
+      "column_name": "interface_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000038,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "user_src",
+      "label": "源用户",
+      "description": "与源地址关联的认证用户；设备无法识别时为空字符串。",
+      "column_name": "user_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000039,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "user_dst",
+      "label": "目的用户",
+      "description": "与目的地址关联的认证用户；设备无法识别时为空字符串。",
+      "column_name": "user_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000040,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "app_category",
+      "label": "应用分类",
+      "description": "NSG 应用识别库给出的应用类别代码，例如 APP_GENERAL_INTERNET。",
+      "column_name": "app_category",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000041,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "asset_os_src",
+      "label": "源资产操作系统",
+      "description": "设备识别出的源资产操作系统；未识别时为空字符串。",
+      "column_name": "asset_os_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000042,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "asset_os_dst",
+      "label": "目的资产操作系统",
+      "description": "设备识别出的目的资产操作系统；未识别时为空字符串。",
+      "column_name": "asset_os_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000043,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "asset_name_src",
+      "label": "源资产名称",
+      "description": "设备资产库中与源地址关联的资产名称；未关联时为空字符串。",
+      "column_name": "asset_name_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000044,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "asset_name_dst",
+      "label": "目的资产名称",
+      "description": "设备资产库中与目的地址关联的资产名称；未关联时为空字符串。",
+      "column_name": "asset_name_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000045,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "asset_type_src",
+      "label": "源资产类型",
+      "description": "设备识别出的源资产类别；未识别时为空字符串。",
+      "column_name": "asset_type_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000046,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "asset_type_dst",
+      "label": "目的资产类型",
+      "description": "设备识别出的目的资产类别；未识别时为空字符串。",
+      "column_name": "asset_type_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000047,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "focus_type",
+      "label": "重点关注流量",
+      "description": "设备原始值 YES/NO；入库时转换为布尔值，表示是否属于重点关注流量。",
+      "column_name": "focus_type",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "mapping": {
+        "true": "是",
+        "false": "否"
+      }
+    },
+    {
+      "id": 63000048,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "non_standard_port",
+      "label": "非标准端口",
+      "description": "设备原始值 YES/NO；入库时转换为布尔值，表示应用是否使用非标准端口。",
+      "column_name": "non_standard_port",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "mapping": {
+        "true": "是",
+        "false": "否"
+      }
+    },
+    {
+      "id": 63000049,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "from_tunnel",
+      "label": "来源隧道",
+      "description": "会话进入设备时关联的隧道名称；未经过隧道时为空字符串。",
+      "column_name": "from_tunnel",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000050,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "to_tunnel",
+      "label": "去向隧道",
+      "description": "会话离开设备时关联的隧道名称；未经过隧道时为空字符串。",
+      "column_name": "to_tunnel",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000051,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "deny_type",
+      "label": "拒绝类型",
+      "description": "会话被拒绝时设备给出的拒绝原因类别；允许会话通常为空。",
+      "column_name": "deny_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000052,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sess_limit_profile",
+      "label": "会话限制配置",
+      "description": "命中的会话数量或速率限制配置名称；未命中时为空。",
+      "column_name": "sess_limit_profile",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000053,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "decrypt_rule",
+      "label": "解密规则",
+      "description": "当前会话命中的流量解密规则名称；未执行解密时为空。",
+      "column_name": "decrypt_rule",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000054,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "honeypot_rule_name",
+      "label": "蜜罐规则",
+      "description": "当前会话命中的蜜罐引流规则名称；未命中时为空。",
+      "column_name": "honeypot_rule_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000055,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "honeypot_drainage_type",
+      "label": "蜜罐引流类型",
+      "description": "蜜罐策略采用的引流方式；未启用蜜罐引流时为空。",
+      "column_name": "honeypot_drainage_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000056,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sfc_rule_name",
+      "label": "SFC 规则",
+      "description": "当前会话命中的服务功能链规则名称；未命中时为空。",
+      "column_name": "sfc_rule_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000057,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sfc_name",
+      "label": "SFC 名称",
+      "description": "处理当前会话的服务功能链名称；未使用 SFC 时为空。",
+      "column_name": "sfc_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000058,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sfc_mode",
+      "label": "SFC 模式",
+      "description": "服务功能链处理模式；未使用 SFC 时为空。",
+      "column_name": "sfc_mode",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000059,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sfc_online",
+      "label": "SFC 在线状态",
+      "description": "设备上报的服务功能链在线状态原值；没有明确布尔规范，因此按字符串保存。",
+      "column_name": "sfc_online",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000060,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sfc_sniffer",
+      "label": "SFC 镜像状态",
+      "description": "设备上报的服务功能链流量镜像或嗅探状态原值；未使用时为空。",
+      "column_name": "sfc_sniffer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000061,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "sess_del_reason",
+      "label": "会话结束原因",
+      "description": "NSG 删除或结束当前会话的原因，例如 session timeout。",
+      "column_name": "sess_del_reason",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000062,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "Vector Syslog source 解析出的 RFC 5424 APP-NAME；目标数据要求值为 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000063,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility 名称，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000064,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "Vector 为外层事件提供的 host 字段原值，用于追踪日志来源主机。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000065,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "Syslog 报文中声明的 RFC 主机名，例如 NSG。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000066,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "Syslog 报文中的非负进程编号 PROCID。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000067,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_severity",
+      "label": "Syslog 级别",
+      "description": "外层 Syslog severity 名称，例如 info；不同于 NSG 业务消息内的 severity。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000068,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "Vector 接收 Syslog 报文时记录的发送端 IP 地址。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000069,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "Vector 标记的接入来源类型；通过 Syslog source 接收时通常为 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000070,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 Syslog RFC3339 时间，入库时统一转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000071,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 RFC 5424 Syslog 协议版本号，例如 1。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000072,
+      "entity": "secgate3600_nsg_traffic_event",
+      "name": "syslog_message",
+      "label": "Syslog 原始消息",
+      "description": "外层 message 的完整原始文本，保留开头 BOM、引号、空字段和所有 NSG key-value 内容，便于审计与重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000073,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "session_id",
+      "label": "会话 ID",
+      "description": "NSG 为承载本次 DNS 报文的网络会话分配的编号；应结合设备序列号和事件时间定位记录。",
+      "column_name": "session_id",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-dns?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000074,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "time",
+      "label": "设备事件时间",
+      "description": "NSG 业务日志中的 Unix 秒时间戳，入库时转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000075,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "timestamp",
+      "label": "DNS 报文时间",
+      "description": "DNS 业务字段中的 Unix 毫秒时间戳，用于区分同一秒内的查询与响应，入库时转换为 UTC DateTime64(3)。",
+      "column_name": "timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000076,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "NSG 日志类型；本实体固定接收 dns。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000077,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "生成日志的 NSG 功能模块；本实体固定接收 dns。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000078,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_domain",
+      "label": "查询域名",
+      "description": "DNS 查询或响应关联的完整域名，例如 inputl1.xfinfr.com。",
+      "column_name": "dns_domain",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000079,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_host",
+      "label": "DNS 主机值",
+      "description": "设备解析出的 DNS 主机地址或占位值；示例中为 0.0.0.0。",
+      "column_name": "dns_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={dns_host}"
+    },
+    {
+      "id": 63000080,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_type",
+      "label": "DNS 记录类型",
+      "description": "DNS 查询的资源记录类型，例如 A、AAAA、CNAME 或 MX。",
+      "column_name": "dns_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000081,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_resp",
+      "label": "DNS 报文方向",
+      "description": "DNS 报文角色；query 表示查询，response 表示响应。",
+      "column_name": "dns_resp",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000082,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_rcode",
+      "label": "DNS 响应码",
+      "description": "DNS 响应状态码；0 通常表示无错误，其他值表示名称、服务器或格式等异常。",
+      "column_name": "dns_rcode",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000083,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_rr_code",
+      "label": "资源记录代码",
+      "description": "DNS 资源记录的数字代码，例如 1 表示 A 记录。",
+      "column_name": "dns_rr_code",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000084,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_rr_value",
+      "label": "资源记录值",
+      "description": "DNS 响应中资源记录的值；查询报文或无回答时可以为空。",
+      "column_name": "dns_rr_value",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000085,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_cname",
+      "label": "CNAME 值",
+      "description": "DNS 响应中的规范名称；非 CNAME 记录或无对应值时为空。",
+      "column_name": "dns_cname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000086,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_ttl",
+      "label": "DNS TTL",
+      "description": "DNS 资源记录可缓存时间，单位为秒；查询或无回答时可能为 0。",
+      "column_name": "dns_ttl",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000087,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_mx",
+      "label": "MX 值",
+      "description": "DNS 响应中的邮件交换记录值；非 MX 记录或无对应值时为空。",
+      "column_name": "dns_mx",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000088,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_txt",
+      "label": "TXT 值",
+      "description": "DNS 响应中的文本记录内容；非 TXT 记录或无对应值时为空。",
+      "column_name": "dns_txt",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000089,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_trans_id",
+      "label": "DNS 事务 ID",
+      "description": "DNS 报文头中的 16 位事务编号，用于关联查询与响应。",
+      "column_name": "dns_trans_id",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000090,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dns_len",
+      "label": "DNS 报文长度",
+      "description": "设备记录的 DNS 报文长度，单位为字节。",
+      "column_name": "dns_len",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000091,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "action",
+      "label": "处置动作",
+      "description": "安全策略对承载 DNS 报文的会话执行的动作，例如 permit 表示允许通过。",
+      "column_name": "action",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000092,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "addr_src",
+      "label": "源 IP",
+      "description": "发起当前 DNS 报文的源地址，可为 IPv4 或 IPv6 文本。",
+      "column_name": "addr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_src}"
+    },
+    {
+      "id": 63000093,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "port_src",
+      "label": "源端口",
+      "description": "当前 DNS 报文的源传输层端口，范围为 0 至 65535。",
+      "column_name": "port_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000094,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "addr_dst",
+      "label": "目的 IP",
+      "description": "当前 DNS 报文的目的地址，可为 IPv4 或 IPv6 文本。",
+      "column_name": "addr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_dst}"
+    },
+    {
+      "id": 63000095,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "port_dst",
+      "label": "目的端口",
+      "description": "当前 DNS 报文的目的传输层端口，通常为 53，范围为 0 至 65535。",
+      "column_name": "port_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000096,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "nataddr_src",
+      "label": "NAT 源 IP",
+      "description": "地址转换后的源地址；未发生地址转换时设备可能填写 :: 等占位值。",
+      "column_name": "nataddr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_src}"
+    },
+    {
+      "id": 63000097,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "natport_src",
+      "label": "NAT 源端口",
+      "description": "地址转换后的源端口；未转换时通常为 0。",
+      "column_name": "natport_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000098,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "nataddr_dst",
+      "label": "NAT 目的 IP",
+      "description": "地址转换后的目的地址；未发生地址转换时设备可能填写 :: 等占位值。",
+      "column_name": "nataddr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_dst}"
+    },
+    {
+      "id": 63000099,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "natport_dst",
+      "label": "NAT 目的端口",
+      "description": "地址转换后的目的端口；未转换时通常为 0。",
+      "column_name": "natport_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000100,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "proto",
+      "label": "传输层协议",
+      "description": "承载 DNS 报文的传输层协议，例如 UDP 或 TCP。",
+      "column_name": "proto",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000101,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "appname",
+      "label": "应用名称",
+      "description": "NSG 对当前流量识别出的应用名称，例如 DNS。",
+      "column_name": "appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000102,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "rule",
+      "label": "命中规则",
+      "description": "放行或阻断当前 DNS 流量的安全策略名称。",
+      "column_name": "rule",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000103,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 业务消息中的严重级别，例如 info。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000104,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "app_risk",
+      "label": "应用风险等级",
+      "description": "设备给应用评定的非负风险等级；示例值 4 表示较高风险。",
+      "column_name": "app_risk",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000105,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "duration",
+      "label": "日志持续时长",
+      "description": "设备记录的事件持续时间，单位为秒；单个 DNS 报文通常为 0。",
+      "column_name": "duration",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000106,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "session_time",
+      "label": "会话持续时长",
+      "description": "设备记录的关联网络会话持续时间，单位为秒。",
+      "column_name": "session_time",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000107,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "生成该 DNS 日志的 NSG 设备编号。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000108,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "生成该日志的 NSG 设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000109,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "生成该日志的 NSG 设备唯一序列号。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000110,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "产生该日志的 NSG 虚拟系统名称，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000111,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "sess_dev_id",
+      "label": "会话设备 ID",
+      "description": "设备记录的会话关联设备编号；0 或空值表示没有额外关联设备。",
+      "column_name": "sess_dev_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000112,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "sess_nth",
+      "label": "会话内序号",
+      "description": "同一会话中 DNS 日志的非负顺序号，可用于区分查询及后续响应。",
+      "column_name": "sess_nth",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000113,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "zone_src",
+      "label": "源安全域",
+      "description": "源流量所在的 NSG 安全域名称。",
+      "column_name": "zone_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000114,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "zone_dst",
+      "label": "目的安全域",
+      "description": "目的流量所在的 NSG 安全域名称。",
+      "column_name": "zone_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000115,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "locale_src",
+      "label": "源位置",
+      "description": "设备识别的源地址地域或网络位置，例如内网、国家或地区。",
+      "column_name": "locale_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000116,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "locale_dst",
+      "label": "目的位置",
+      "description": "设备识别的目的地址地域或网络位置，例如内网、国家或地区。",
+      "column_name": "locale_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000117,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "user_src",
+      "label": "源用户",
+      "description": "设备识别的源端用户；未识别用户时为空。",
+      "column_name": "user_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000118,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "user_dst",
+      "label": "目的用户",
+      "description": "设备识别的目的端用户；未识别用户时为空。",
+      "column_name": "user_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000119,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "app_category",
+      "label": "应用分类",
+      "description": "NSG 对应用归属的分类编码，例如 APP_NETWORK。",
+      "column_name": "app_category",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000120,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "asset_os_src",
+      "label": "源资产操作系统",
+      "description": "设备识别的源资产操作系统；未识别时为空。",
+      "column_name": "asset_os_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000121,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "asset_os_dst",
+      "label": "目的资产操作系统",
+      "description": "设备识别的目的资产操作系统；未识别时为空。",
+      "column_name": "asset_os_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000122,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "asset_name_src",
+      "label": "源资产名称",
+      "description": "设备识别的源资产名称；未识别时为空。",
+      "column_name": "asset_name_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000123,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "asset_name_dst",
+      "label": "目的资产名称",
+      "description": "设备识别的目的资产名称；未识别时为空。",
+      "column_name": "asset_name_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000124,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "asset_type_src",
+      "label": "源资产类型",
+      "description": "设备识别的源资产类型；未识别时为空。",
+      "column_name": "asset_type_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000125,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "asset_type_dst",
+      "label": "目的资产类型",
+      "description": "设备识别的目的资产类型；未识别时为空。",
+      "column_name": "asset_type_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000126,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "focus_type",
+      "label": "重点关注",
+      "description": "设备是否把当前 DNS 流量标记为重点关注；原始 YES/NO 严格转换为布尔值。",
+      "column_name": "focus_type",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000127,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "non_standard_port",
+      "label": "非标准端口",
+      "description": "设备是否判断应用使用了非标准端口；原始 YES/NO 严格转换为布尔值。",
+      "column_name": "non_standard_port",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000128,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "外层 Syslog appname 字段，用于标识发送应用；NSG 设备通常填写 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000129,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility 名称，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000130,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "Vector Syslog 事件中的外层 host 字段。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000131,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "Syslog 报文中声明的 RFC 主机名，例如 NSG。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000132,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "Syslog 报文中的非负进程编号 PROCID。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000133,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_severity",
+      "label": "Syslog 级别",
+      "description": "外层 Syslog severity 名称，例如 info；不同于 NSG 业务消息内的 severity。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000134,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "Vector 接收 Syslog 报文时记录的发送端 IP 地址，本实体默认要求为专网防火墙地址。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000135,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "Vector 标记的接入来源类型；通过 Syslog source 接收时通常为 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000136,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 Syslog RFC3339 时间，入库时统一转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000137,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 RFC 5424 Syslog 协议版本号，例如 1。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000138,
+      "entity": "secgate3600_nsg_dns_event",
+      "name": "syslog_message",
+      "label": "Syslog 原始消息",
+      "description": "外层 message 的完整原始文本，保留开头 BOM、引号、空字段和全部 DNS key-value 内容，便于审计与重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000139,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "session_id",
+      "label": "会话 ID",
+      "description": "SecGate 3600 NSG 为当前网络会话分配的编号；应结合设备序列号和事件时间定位唯一会话。",
+      "column_name": "session_id",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-self-end?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000140,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 记录会话结束事件的 Unix 秒时间戳，入库时转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000141,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "NSG 日志类型；本实体固定接收 self-end，表示网络会话结束。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000142,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "action",
+      "label": "处置动作",
+      "description": "安全策略对当前会话执行的动作，例如 permit 表示允许通过。",
+      "column_name": "action",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000143,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "addr_src",
+      "label": "源 IP",
+      "description": "执行网络地址转换前的会话源 IP 地址，支持 IPv4 或 IPv6。",
+      "column_name": "addr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_src}"
+    },
+    {
+      "id": 63000144,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "port_src",
+      "label": "源端口",
+      "description": "执行网络地址转换前的传输层源端口，取值范围为 0～65535。",
+      "column_name": "port_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000145,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "addr_dst",
+      "label": "目的 IP",
+      "description": "执行网络地址转换前的会话目的 IP 地址，支持 IPv4 或 IPv6。",
+      "column_name": "addr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_dst}"
+    },
+    {
+      "id": 63000146,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "port_dst",
+      "label": "目的端口",
+      "description": "执行网络地址转换前的传输层目的端口，取值范围为 0～65535。",
+      "column_name": "port_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000147,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "nataddr_src",
+      "label": "NAT 源 IP",
+      "description": "网络地址转换后的源 IP；未发生转换时设备可能上报 IPv6 未指定地址 ::。",
+      "column_name": "nataddr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_src}"
+    },
+    {
+      "id": 63000148,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "natport_src",
+      "label": "NAT 源端口",
+      "description": "网络地址转换后的源端口；0 通常表示未发生端口转换。",
+      "column_name": "natport_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000149,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "nataddr_dst",
+      "label": "NAT 目的 IP",
+      "description": "网络地址转换后的目的 IP；未发生转换时设备可能上报 IPv6 未指定地址 ::。",
+      "column_name": "nataddr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_dst}"
+    },
+    {
+      "id": 63000150,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "natport_dst",
+      "label": "NAT 目的端口",
+      "description": "网络地址转换后的目的端口；0 通常表示未发生端口转换。",
+      "column_name": "natport_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000151,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "proto",
+      "label": "传输层协议",
+      "description": "会话使用的传输层协议名称，例如 TCP 或 UDP。",
+      "column_name": "proto",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000152,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "appname",
+      "label": "应用名称",
+      "description": "NSG 应用识别结果，例如 eMule；不同于外层 Syslog 应用名。",
+      "column_name": "appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000153,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "rule",
+      "label": "命中规则",
+      "description": "允许、阻断或审计当前会话的 NSG 安全策略名称。",
+      "column_name": "rule",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000154,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 业务消息中的事件严重级别，例如 info；不同于外层 Syslog 级别。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000155,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "app_risk",
+      "label": "应用风险等级",
+      "description": "NSG 对识别应用给出的非负风险等级；示例值 5 表示较高风险。",
+      "column_name": "app_risk",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000156,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "duration",
+      "label": "日志持续时长",
+      "description": "设备上报的流量日志持续时间，单位为秒。",
+      "column_name": "duration",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000157,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "session_time",
+      "label": "会话持续时长",
+      "description": "NSG 记录的完整会话持续时间，单位为秒。",
+      "column_name": "session_time",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000158,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "bytes_sent",
+      "label": "发送字节数",
+      "description": "当前会话从源端发送到目的端的流量大小，单位为字节。",
+      "column_name": "bytes_sent",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000159,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "bytes_received",
+      "label": "接收字节数",
+      "description": "当前会话从目的端返回到源端的流量大小，单位为字节。",
+      "column_name": "bytes_received",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000160,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "pkts_sent",
+      "label": "发送报文数",
+      "description": "当前会话从源端发送到目的端的网络报文数量。",
+      "column_name": "pkts_sent",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000161,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "pkts_received",
+      "label": "接收报文数",
+      "description": "当前会话从目的端返回到源端的网络报文数量。",
+      "column_name": "pkts_received",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000162,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "total_sess",
+      "label": "关联会话总数",
+      "description": "设备为当前日志统计的关联会话数量；0 表示没有额外聚合会话。",
+      "column_name": "total_sess",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000163,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "NSG 在业务消息中上报的设备标识，按不透明字符串保存以避免丢失格式。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000164,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "产生当前会话日志的 NSG 设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000165,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生当前日志的 NSG 设备序列号或唯一指纹。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000166,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "处理当前会话的 NSG 虚拟系统名称，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000167,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "生成业务消息的 NSG 功能模块；本实体要求值为 flow。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000168,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sess_dev_id",
+      "label": "会话设备 ID",
+      "description": "NSG 会话处理设备标识，按字符串保存；0 表示未关联其他会话设备。",
+      "column_name": "sess_dev_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000169,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sess_nth",
+      "label": "会话序号",
+      "description": "当前会话在关联会话集合中的非负序号。",
+      "column_name": "sess_nth",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000170,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "zone_src",
+      "label": "源安全域",
+      "description": "源流量进入 NSG 时所属的安全域，例如 l2untrust。",
+      "column_name": "zone_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000171,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "zone_dst",
+      "label": "目的安全域",
+      "description": "流量离开 NSG 时目的网络所属的安全域，例如 l2trust。",
+      "column_name": "zone_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000172,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "locale_src",
+      "label": "源位置",
+      "description": "NSG 根据地址或配置识别出的源网络位置，例如内网。",
+      "column_name": "locale_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000173,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "locale_dst",
+      "label": "目的位置",
+      "description": "NSG 根据地址或配置识别出的目的网络位置，例如内网。",
+      "column_name": "locale_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000174,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "interface_src",
+      "label": "源接口",
+      "description": "源流量进入 NSG 的物理或逻辑接口名称，例如 xg1。",
+      "column_name": "interface_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000175,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "interface_dst",
+      "label": "目的接口",
+      "description": "本机终结会话离开 NSG 的物理或逻辑接口名称，例如 xg2。",
+      "column_name": "interface_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000176,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "user_src",
+      "label": "源用户",
+      "description": "与源地址关联的认证用户；设备无法识别时为空字符串。",
+      "column_name": "user_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000177,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "user_dst",
+      "label": "目的用户",
+      "description": "与目的地址关联的认证用户；设备无法识别时为空字符串。",
+      "column_name": "user_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000178,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "app_category",
+      "label": "应用分类",
+      "description": "NSG 应用识别库给出的应用类别代码，例如 APP_GENERAL_INTERNET。",
+      "column_name": "app_category",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000179,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "asset_os_src",
+      "label": "源资产操作系统",
+      "description": "设备识别出的源资产操作系统；未识别时为空字符串。",
+      "column_name": "asset_os_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000180,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "asset_os_dst",
+      "label": "目的资产操作系统",
+      "description": "设备识别出的目的资产操作系统；未识别时为空字符串。",
+      "column_name": "asset_os_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000181,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "asset_name_src",
+      "label": "源资产名称",
+      "description": "设备资产库中与源地址关联的资产名称；未关联时为空字符串。",
+      "column_name": "asset_name_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000182,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "asset_name_dst",
+      "label": "目的资产名称",
+      "description": "设备资产库中与目的地址关联的资产名称；未关联时为空字符串。",
+      "column_name": "asset_name_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000183,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "asset_type_src",
+      "label": "源资产类型",
+      "description": "设备识别出的源资产类别；未识别时为空字符串。",
+      "column_name": "asset_type_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000184,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "asset_type_dst",
+      "label": "目的资产类型",
+      "description": "设备识别出的目的资产类别；未识别时为空字符串。",
+      "column_name": "asset_type_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000185,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "focus_type",
+      "label": "重点关注流量",
+      "description": "设备原始值 YES/NO；入库时转换为布尔值，表示是否属于重点关注流量。",
+      "column_name": "focus_type",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "mapping": {
+        "true": "是",
+        "false": "否"
+      }
+    },
+    {
+      "id": 63000186,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "non_standard_port",
+      "label": "非标准端口",
+      "description": "设备原始值 YES/NO；入库时转换为布尔值，表示应用是否使用非标准端口。",
+      "column_name": "non_standard_port",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "mapping": {
+        "true": "是",
+        "false": "否"
+      }
+    },
+    {
+      "id": 63000187,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "from_tunnel",
+      "label": "来源隧道",
+      "description": "会话进入设备时关联的隧道名称；未经过隧道时为空字符串。",
+      "column_name": "from_tunnel",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000188,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "to_tunnel",
+      "label": "去向隧道",
+      "description": "会话离开设备时关联的隧道名称；未经过隧道时为空字符串。",
+      "column_name": "to_tunnel",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000189,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "deny_type",
+      "label": "拒绝类型",
+      "description": "会话被拒绝时设备给出的拒绝原因类别；允许会话通常为空。",
+      "column_name": "deny_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000190,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sess_limit_profile",
+      "label": "会话限制配置",
+      "description": "命中的会话数量或速率限制配置名称；未命中时为空。",
+      "column_name": "sess_limit_profile",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000191,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "decrypt_rule",
+      "label": "解密规则",
+      "description": "当前会话命中的流量解密规则名称；未执行解密时为空。",
+      "column_name": "decrypt_rule",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000192,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "honeypot_rule_name",
+      "label": "蜜罐规则",
+      "description": "当前会话命中的蜜罐引流规则名称；未命中时为空。",
+      "column_name": "honeypot_rule_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000193,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "honeypot_drainage_type",
+      "label": "蜜罐引流类型",
+      "description": "蜜罐策略采用的引流方式；未启用蜜罐引流时为空。",
+      "column_name": "honeypot_drainage_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000194,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sfc_rule_name",
+      "label": "SFC 规则",
+      "description": "当前会话命中的服务功能链规则名称；未命中时为空。",
+      "column_name": "sfc_rule_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000195,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sfc_name",
+      "label": "SFC 名称",
+      "description": "处理当前会话的服务功能链名称；未使用 SFC 时为空。",
+      "column_name": "sfc_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000196,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sfc_mode",
+      "label": "SFC 模式",
+      "description": "服务功能链处理模式；未使用 SFC 时为空。",
+      "column_name": "sfc_mode",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000197,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sfc_online",
+      "label": "SFC 在线状态",
+      "description": "设备上报的服务功能链在线状态原值；没有明确布尔规范，因此按字符串保存。",
+      "column_name": "sfc_online",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000198,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sfc_sniffer",
+      "label": "SFC 镜像状态",
+      "description": "设备上报的服务功能链流量镜像或嗅探状态原值；未使用时为空。",
+      "column_name": "sfc_sniffer",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000199,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "sess_del_reason",
+      "label": "会话结束原因",
+      "description": "NSG 删除或结束当前会话的原因，例如 session timeout。",
+      "column_name": "sess_del_reason",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000200,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "Vector Syslog source 解析出的 RFC 5424 APP-NAME；目标数据要求值为 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000201,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility 名称，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000202,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "Vector 为外层事件提供的 host 字段原值，用于追踪日志来源主机。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000203,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "Syslog 报文中声明的 RFC 主机名，例如 NSG。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000204,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "Syslog 报文中的非负进程编号 PROCID。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000205,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_severity",
+      "label": "Syslog 级别",
+      "description": "外层 Syslog severity 名称，例如 info；不同于 NSG 业务消息内的 severity。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000206,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "Vector 接收 Syslog 报文时记录的发送端 IP 地址。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000207,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "Vector 标记的接入来源类型；通过 Syslog source 接收时通常为 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000208,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 Syslog RFC3339 时间，入库时统一转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000209,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 RFC 5424 Syslog 协议版本号，例如 1。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000210,
+      "entity": "secgate3600_nsg_self_end_flow_event",
+      "name": "syslog_message",
+      "label": "Syslog 原始消息",
+      "description": "外层 message 的完整原始文本，保留开头 BOM、引号、空字段和所有 NSG key-value 内容，便于审计与重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000211,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "threat_id",
+      "label": "威胁 ID",
+      "description": "NSG 威胁检测规则或特征编号，例如 80043；用于识别威胁类型，按不透明字符串保存。",
+      "column_name": "threat_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-threat?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000212,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 业务日志中的 Unix 秒时间戳，入库时转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000213,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "threat_name",
+      "label": "威胁名称",
+      "description": "NSG 对命中威胁的英文名称，例如 Malicious Connection Request 或 Database Brute Force Attack。",
+      "column_name": "threat_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000214,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "threat_severity",
+      "label": "威胁等级",
+      "description": "威胁检测结果的业务严重等级，例如 high 或 medium；不同于业务消息和外层 Syslog 的 severity。",
+      "column_name": "threat_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000215,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "type",
+      "label": "日志类型",
+      "description": "NSG 日志类型；本实体固定接收 threat。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000216,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "module",
+      "label": "检测模块",
+      "description": "产生威胁事件的 NSG 模块，例如 blacklist、threat-disposal 或 wp-scan，用于区分检测与处置场景。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000217,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "action",
+      "label": "处置动作",
+      "description": "NSG 对威胁流量执行的动作，例如 drop 或 block。",
+      "column_name": "action",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000218,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "direction",
+      "label": "攻击方向",
+      "description": "威胁流量方向，例如 C2S 表示客户端到服务端；部分检测模块不提供该字段时允许为空。",
+      "column_name": "direction",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000219,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "attacker_ip",
+      "label": "攻击者 IP",
+      "description": "NSG 威胁分析得到的攻击方 IP；无法确定时设备可能上报 IPv6 未指定地址 ::。",
+      "column_name": "attacker_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={attacker_ip}"
+    },
+    {
+      "id": 63000220,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "victim_ip",
+      "label": "受害者 IP",
+      "description": "NSG 威胁分析得到的受害方 IP；无法确定时设备可能上报 IPv6 未指定地址 ::。",
+      "column_name": "victim_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={victim_ip}"
+    },
+    {
+      "id": 63000221,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "attack_name",
+      "label": "攻击对象名称",
+      "description": "设备识别的攻击方名称；未识别时为空字符串。",
+      "column_name": "attack_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000222,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "victim_name",
+      "label": "受害对象名称",
+      "description": "设备识别的受害方名称；未识别时为空字符串。",
+      "column_name": "victim_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000223,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "session_id",
+      "label": "会话 ID",
+      "description": "NSG 为关联网络会话分配的非负编号；0 表示威胁事件没有可关联的普通会话。",
+      "column_name": "session_id",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000224,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "addr_src",
+      "label": "源 IP",
+      "description": "网络地址转换前的原始流量源 IP，支持 IPv4 或 IPv6。",
+      "column_name": "addr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_src}"
+    },
+    {
+      "id": 63000225,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "port_src",
+      "label": "源端口",
+      "description": "网络地址转换前的传输层源端口，范围为0至65535。",
+      "column_name": "port_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000226,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "addr_dst",
+      "label": "目的 IP",
+      "description": "网络地址转换前的原始流量目的 IP，支持 IPv4 或 IPv6。",
+      "column_name": "addr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={addr_dst}"
+    },
+    {
+      "id": 63000227,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "port_dst",
+      "label": "目的端口",
+      "description": "网络地址转换前的传输层目的端口，范围为0至65535。",
+      "column_name": "port_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000228,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "nataddr_src",
+      "label": "NAT 后源 IP",
+      "description": "网络地址转换后的源 IP；未转换时设备可能上报 ::。",
+      "column_name": "nataddr_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_src}"
+    },
+    {
+      "id": 63000229,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "natport_src",
+      "label": "NAT 后源端口",
+      "description": "网络地址转换后的源端口；0通常表示未发生端口转换。",
+      "column_name": "natport_src",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000230,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "nataddr_dst",
+      "label": "NAT 后目的 IP",
+      "description": "网络地址转换后的目的 IP；未转换时设备可能上报 ::。",
+      "column_name": "nataddr_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.ip-statistics?ip={nataddr_dst}"
+    },
+    {
+      "id": 63000231,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "natport_dst",
+      "label": "NAT 后目的端口",
+      "description": "网络地址转换后的目的端口；0通常表示未发生端口转换。",
+      "column_name": "natport_dst",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000232,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "proto",
+      "label": "传输协议",
+      "description": "承载威胁流量的传输层协议，例如 TCP。",
+      "column_name": "proto",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000233,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "appname",
+      "label": "应用名称",
+      "description": "NSG 应用识别结果，例如 Oracle 或 Unidentified。",
+      "column_name": "appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000234,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "rule",
+      "label": "安全策略",
+      "description": "与威胁事件关联的 NSG 安全策略名称，例如 __fast_disposal__。",
+      "column_name": "rule",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000235,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "severity",
+      "label": "业务日志级别",
+      "description": "NSG 业务消息内的日志级别，例如 emerg；不同于 threat_severity 和外层 Syslog severity。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000236,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "app_risk",
+      "label": "应用风险等级",
+      "description": "NSG 对识别应用给出的非负风险等级，范围按UInt8保存。",
+      "column_name": "app_risk",
+      "column_type": "UInt8",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000237,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "duration",
+      "label": "持续时间",
+      "description": "设备记录的威胁日志持续时间，单位为秒。",
+      "column_name": "duration",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000238,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "session_time",
+      "label": "会话持续时间",
+      "description": "关联网络会话的持续时间，单位为秒。",
+      "column_name": "session_time",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000239,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "hit_num",
+      "label": "本次命中次数",
+      "description": "当前威胁事件记录的非负命中次数。",
+      "column_name": "hit_num",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000240,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "last_hit_num",
+      "label": "历史命中次数",
+      "description": "设备记录的此前命中次数；0表示没有历史累计命中。",
+      "column_name": "last_hit_num",
+      "column_type": "UInt64",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000241,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "devid",
+      "label": "设备编号",
+      "description": "NSG 在业务消息中上报的设备编号，按不透明字符串保存。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000242,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "产生威胁日志的 NSG 设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000243,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生威胁日志的 NSG 设备唯一序列号或指纹。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000244,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "处理威胁事件的 NSG 虚拟系统名称，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000245,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "sess_dev_id",
+      "label": "会话设备 ID",
+      "description": "设备记录的关联会话设备标识；0表示未关联其他会话设备。",
+      "column_name": "sess_dev_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000246,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "sess_nth",
+      "label": "会话序号",
+      "description": "当前事件在关联会话集合中的非负序号。",
+      "column_name": "sess_nth",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000247,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "zone_src",
+      "label": "源安全域",
+      "description": "威胁流量进入设备时所属的源安全域；设备未提供时为空。",
+      "column_name": "zone_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000248,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "zone_dst",
+      "label": "目的安全域",
+      "description": "威胁流量离开设备时所属的目的安全域；设备未提供时为空。",
+      "column_name": "zone_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000249,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "locale_src",
+      "label": "源位置",
+      "description": "NSG 根据地址或配置识别的源地域或网络位置，例如日本、西班牙或内网。",
+      "column_name": "locale_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000250,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "locale_dst",
+      "label": "目的位置",
+      "description": "NSG 根据地址或配置识别的目的地域或网络位置，例如湖南省湘潭市或内网。",
+      "column_name": "locale_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000251,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "user_src",
+      "label": "源用户",
+      "description": "与源地址关联的认证用户；设备无法识别时为空字符串。",
+      "column_name": "user_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000252,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "user_dst",
+      "label": "目的用户",
+      "description": "与目的地址关联的认证用户；设备无法识别时为空字符串。",
+      "column_name": "user_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000253,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "app_category",
+      "label": "应用类别",
+      "description": "NSG 应用识别库给出的分类编码，例如 CATEGORY-NONE 或 APP_BUSSINESS。",
+      "column_name": "app_category",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000254,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "asset_os_src",
+      "label": "源资产操作系统",
+      "description": "设备识别的源资产操作系统；未识别时为空字符串。",
+      "column_name": "asset_os_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000255,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "asset_os_dst",
+      "label": "目的资产操作系统",
+      "description": "设备识别的目的资产操作系统；未识别时为空字符串。",
+      "column_name": "asset_os_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000256,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "asset_name_src",
+      "label": "源资产名称",
+      "description": "设备资产库中与源地址关联的资产名称；未关联时为空字符串。",
+      "column_name": "asset_name_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000257,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "asset_name_dst",
+      "label": "目的资产名称",
+      "description": "设备资产库中与目的地址关联的资产名称；未关联时为空字符串。",
+      "column_name": "asset_name_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000258,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "asset_type_src",
+      "label": "源资产类型",
+      "description": "设备识别的源资产类别；未识别时为空字符串。",
+      "column_name": "asset_type_src",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000259,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "asset_type_dst",
+      "label": "目的资产类型",
+      "description": "设备识别的目的资产类别；未识别时为空字符串。",
+      "column_name": "asset_type_dst",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000260,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "focus_type",
+      "label": "重点关注",
+      "description": "设备原始值YES/NO，入库时严格转换为布尔值，表示是否属于重点关注流量。",
+      "column_name": "focus_type",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000261,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "non_standard_port",
+      "label": "非标准端口",
+      "description": "设备原始值YES/NO，入库时严格转换为布尔值，表示应用是否使用非标准端口。",
+      "column_name": "non_standard_port",
+      "column_type": "Bool",
+      "operators": [
+        "equal",
+        "notequal"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000262,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "filename",
+      "label": "相关文件名",
+      "description": "威胁事件关联的文件名；不涉及文件或未识别时为空字符串。",
+      "column_name": "filename",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000263,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "url",
+      "label": "相关 URL",
+      "description": "威胁事件关联的URL；不涉及Web请求时为空字符串。",
+      "column_name": "url",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000264,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "dns_domain",
+      "label": "相关域名",
+      "description": "威胁事件关联的DNS域名；不涉及域名时为空字符串。",
+      "column_name": "dns_domain",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000265,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "detail",
+      "label": "英文详情",
+      "description": "设备提供的英文或结构化威胁详情，例如黑名单地址或快速处置条件。",
+      "column_name": "detail",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000266,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "detail_zh",
+      "label": "中文详情",
+      "description": "设备提供的中文威胁详情，例如地址黑名单或源地址、目的地址和协议条件。",
+      "column_name": "detail_zh",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000267,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "sample_name",
+      "label": "样本名称",
+      "description": "关联恶意样本名称；未关联样本时为空字符串。",
+      "column_name": "sample_name",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000268,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "sample_type",
+      "label": "样本类型",
+      "description": "关联恶意样本的类型；未关联样本时为空字符串。",
+      "column_name": "sample_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000269,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "sample_md5",
+      "label": "样本 MD5",
+      "description": "关联恶意样本的MD5摘要；未关联样本时为空字符串。",
+      "column_name": "sample_md5",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000270,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "threat_class",
+      "label": "威胁分类",
+      "description": "NSG 对威胁的分类，例如 other 或 scan。",
+      "column_name": "threat_class",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000271,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "detect_method",
+      "label": "检测方法",
+      "description": "设备上报的威胁检测方法；未提供时为空字符串。",
+      "column_name": "detect_method",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000272,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "malicious_type",
+      "label": "恶意类型",
+      "description": "设备上报的恶意行为类型；未提供时为空字符串。",
+      "column_name": "malicious_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000273,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "ioc_id",
+      "label": "IOC ID",
+      "description": "与威胁事件关联的威胁情报指标编号；未关联时为空字符串。",
+      "column_name": "ioc_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000274,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "disposal_id",
+      "label": "处置 ID",
+      "description": "快速处置任务或策略编号，例如10187902728318536；按不透明字符串保存。",
+      "column_name": "disposal_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000275,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "cve_id",
+      "label": "CVE ID",
+      "description": "设备上报的关联 CVE 编号；67字段日志或未关联 CVE 时为空。",
+      "column_name": "cve_id",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000276,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "popularity",
+      "label": "流行度",
+      "description": "设备上报的威胁流行度原值；67字段日志或未提供时为空，按字符串保存。",
+      "column_name": "popularity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000277,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "confidence",
+      "label": "置信度",
+      "description": "设备上报的威胁置信度原值；样本未明确数值规范，按字符串保存。",
+      "column_name": "confidence",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000278,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "threat_type",
+      "label": "威胁类型",
+      "description": "设备给出的威胁处置类别，例如 Addresses_black_list、dispose 或 vulner。",
+      "column_name": "threat_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000279,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "filepath",
+      "label": "相关文件路径",
+      "description": "威胁事件关联的文件路径；未涉及文件时为空字符串。",
+      "column_name": "filepath",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000280,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "Vector Syslog source解析出的外层APP-NAME；目标数据要求值为NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000281,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层Syslog facility名称，例如local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000282,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "Vector为外层事件提供的host字段原值，用于追踪日志来源主机。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000283,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "Syslog报文中声明的RFC主机名，例如NSG。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000284,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "Syslog报文中的非负进程编号PROCID。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000285,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_severity",
+      "label": "Syslog 级别",
+      "description": "外层Syslog severity名称，例如emerg；不同于业务severity和threat_severity。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000286,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "Vector接收Syslog报文时记录的发送端IP，本实体允许配置的已配置的 NSG 来源、已配置的 NSG 来源或已配置的 NSG 来源。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000287,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "Vector标记的接入来源类型；通过Syslog source接收时通常为syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000288,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层Syslog RFC3339时间，入库时统一转换为UTC毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000289,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层RFC5424 Syslog协议版本号，例如1。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000290,
+      "entity": "secgate3600_nsg_threat_event",
+      "name": "syslog_message",
+      "label": "Syslog 原始消息",
+      "description": "外层message的完整原始文本，保留开头BOM、引号、空字段和全部67或69个NSG key-value字段，便于审计与重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000291,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 系统告警内层 Unix 秒时间戳，转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-system-alert?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000292,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 系统告警内层严重等级文本。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000293,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "msg_cn",
+      "label": "中文消息",
+      "description": "NSG 系统告警设备提供的中文说明，可能为空。",
+      "column_name": "msg_cn",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000294,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "msg",
+      "label": "英文消息",
+      "description": "NSG 系统告警设备提供的英文说明。",
+      "column_name": "msg",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000295,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生该事件的 NSG 设备序列号。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000296,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "NSG 日志中的设备编号。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000297,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "NSG 日志中的设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000298,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "事件所属虚拟系统，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000299,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "固定为 system。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000300,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "NSG 系统告警功能模块。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000301,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "外层 Syslog appname，目标设备事件通常为 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000302,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000303,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "外层 Syslog host。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000304,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "外层 Syslog hostname。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000305,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "外层 Syslog procid，按非负整数保存。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000306,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_severity",
+      "label": "Syslog 严重等级",
+      "description": "外层 Syslog severity 文本，与内层事件级别分开保存。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000307,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "发送该事件的 NSG 来源 IP。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000308,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "外层来源类型，例如 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000309,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 RFC3339 时间，转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000310,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 Syslog 协议版本号。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000311,
+      "entity": "secgate3600_nsg_system_alert_event",
+      "name": "syslog_message",
+      "label": "原始 Syslog 消息",
+      "description": "未经修改的完整 NSG quoted key-value 原文，用于审计和重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000312,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 系统升级事件内层 Unix 秒时间戳，转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-system-upgrade?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000313,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 系统升级事件内层严重等级文本。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000314,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "msg_cn",
+      "label": "中文消息",
+      "description": "NSG 系统升级事件设备提供的中文说明，可能为空。",
+      "column_name": "msg_cn",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000315,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "msg",
+      "label": "英文消息",
+      "description": "NSG 系统升级事件设备提供的英文说明。",
+      "column_name": "msg",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000316,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生该事件的 NSG 设备序列号。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000317,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "NSG 日志中的设备编号。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000318,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "NSG 日志中的设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000319,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "事件所属虚拟系统，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000320,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "固定为 system。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000321,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "NSG 系统升级事件功能模块。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000322,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "外层 Syslog appname，目标设备事件通常为 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000323,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000324,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "外层 Syslog host。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000325,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "外层 Syslog hostname。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000326,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "外层 Syslog procid，按非负整数保存。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000327,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_severity",
+      "label": "Syslog 严重等级",
+      "description": "外层 Syslog severity 文本，与内层事件级别分开保存。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000328,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "发送该事件的 NSG 来源 IP。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000329,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "外层来源类型，例如 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000330,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 RFC3339 时间，转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000331,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 Syslog 协议版本号。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000332,
+      "entity": "secgate3600_nsg_system_upgrade_event",
+      "name": "syslog_message",
+      "label": "原始 Syslog 消息",
+      "description": "未经修改的完整 NSG quoted key-value 原文，用于审计和重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000333,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 配置恢复事件内层 Unix 秒时间戳，转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-system-restore?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000334,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 配置恢复事件内层严重等级文本。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000335,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "msg_cn",
+      "label": "中文消息",
+      "description": "NSG 配置恢复事件设备提供的中文说明，可能为空。",
+      "column_name": "msg_cn",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000336,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "msg",
+      "label": "英文消息",
+      "description": "NSG 配置恢复事件设备提供的英文说明。",
+      "column_name": "msg",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000337,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生该事件的 NSG 设备序列号。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000338,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "NSG 日志中的设备编号。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000339,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "NSG 日志中的设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000340,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "事件所属虚拟系统，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000341,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "固定为 system。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000342,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "固定为 restore，表示NSG 配置恢复事件。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000343,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "外层 Syslog appname，目标设备事件通常为 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000344,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000345,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "外层 Syslog host。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000346,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "外层 Syslog hostname。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000347,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "外层 Syslog procid，按非负整数保存。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000348,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_severity",
+      "label": "Syslog 严重等级",
+      "description": "外层 Syslog severity 文本，与内层事件级别分开保存。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000349,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "发送该事件的 NSG 来源 IP。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000350,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "外层来源类型，例如 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000351,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 RFC3339 时间，转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000352,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 Syslog 协议版本号。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000353,
+      "entity": "secgate3600_nsg_system_restore_event",
+      "name": "syslog_message",
+      "label": "原始 Syslog 消息",
+      "description": "未经修改的完整 NSG 配置恢复事件 quoted key-value 原文，用于审计和重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000354,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "time",
+      "label": "事件时间",
+      "description": "NSG 管理员事件内层 Unix 秒时间戳，转换为 UTC 毫秒时间。",
+      "column_name": "time",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "link_template": "/#/service/low-code-page/com.coolxer.plugin.secgate3600.detail-nsg-system-admin?record_id={zenvis_id}"
+    },
+    {
+      "id": 63000355,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "severity",
+      "label": "事件级别",
+      "description": "NSG 管理员事件内层严重等级文本。",
+      "column_name": "severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000356,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "msg_cn",
+      "label": "中文消息",
+      "description": "NSG 管理员事件设备提供的中文说明，可能为空。",
+      "column_name": "msg_cn",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000357,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "msg",
+      "label": "英文消息",
+      "description": "NSG 管理员事件设备提供的英文说明。",
+      "column_name": "msg",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000358,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "serial",
+      "label": "设备序列号",
+      "description": "产生该事件的 NSG 设备序列号。",
+      "column_name": "serial",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000359,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "devid",
+      "label": "设备 ID",
+      "description": "NSG 日志中的设备编号。",
+      "column_name": "devid",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000360,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "dname",
+      "label": "设备名称",
+      "description": "NSG 日志中的设备名称。",
+      "column_name": "dname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000361,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "vsys",
+      "label": "虚拟系统",
+      "description": "事件所属虚拟系统，例如 root-vsys。",
+      "column_name": "vsys",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000362,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "type",
+      "label": "事件类型",
+      "description": "固定为 system。",
+      "column_name": "type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000363,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "module",
+      "label": "功能模块",
+      "description": "固定为 admin，表示NSG 管理员事件。",
+      "column_name": "module",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000364,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_appname",
+      "label": "Syslog 应用名",
+      "description": "外层 Syslog appname，目标设备事件通常为 NSG。",
+      "column_name": "syslog_appname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000365,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_facility",
+      "label": "Syslog Facility",
+      "description": "外层 Syslog facility，例如 local0。",
+      "column_name": "syslog_facility",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000366,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_host",
+      "label": "Syslog Host",
+      "description": "外层 Syslog host。",
+      "column_name": "syslog_host",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000367,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_hostname",
+      "label": "Syslog 主机名",
+      "description": "外层 Syslog hostname。",
+      "column_name": "syslog_hostname",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "copyable": true
+    },
+    {
+      "id": 63000368,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_procid",
+      "label": "Syslog 进程 ID",
+      "description": "外层 Syslog procid，按非负整数保存。",
+      "column_name": "syslog_procid",
+      "column_type": "UInt32",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000369,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_severity",
+      "label": "Syslog 严重等级",
+      "description": "外层 Syslog severity 文本，与内层事件级别分开保存。",
+      "column_name": "syslog_severity",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000370,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_source_ip",
+      "label": "Syslog 来源 IP",
+      "description": "发送该事件的 NSG 来源 IP。",
+      "column_name": "syslog_source_ip",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": true,
+      "must_candidate": false,
+      "copyable": true,
+      "auto_complete": true
+    },
+    {
+      "id": 63000371,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_source_type",
+      "label": "Syslog 来源类型",
+      "description": "外层来源类型，例如 syslog。",
+      "column_name": "syslog_source_type",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false,
+      "auto_complete": true
+    },
+    {
+      "id": 63000372,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_timestamp",
+      "label": "Syslog 接收时间",
+      "description": "外层 RFC3339 时间，转换为 UTC 毫秒时间。",
+      "column_name": "syslog_timestamp",
+      "column_type": "DateTime64(3)",
+      "operators": [
+        "equal",
+        "notequal",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": true,
+      "must_candidate": false
+    },
+    {
+      "id": 63000373,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_version",
+      "label": "Syslog 版本",
+      "description": "外层 Syslog 协议版本号。",
+      "column_name": "syslog_version",
+      "column_type": "UInt16",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "greatthan",
+        "greatequalthan",
+        "lessthan",
+        "lessequalthan",
+        "between"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    },
+    {
+      "id": 63000374,
+      "entity": "secgate3600_nsg_system_admin_event",
+      "name": "syslog_message",
+      "label": "原始 Syslog 消息",
+      "description": "未经修改的完整 NSG 管理员事件 quoted key-value 原文，用于审计和重放。",
+      "column_name": "syslog_message",
+      "column_type": "String",
+      "operators": [
+        "equal",
+        "notequal",
+        "in",
+        "match"
+      ],
+      "display_selected": false,
+      "must_candidate": false
+    }
+  ],
+  "operator": [
+    {
+      "id": 1,
+      "name": "equal",
+      "label": "等于"
+    },
+    {
+      "id": 2,
+      "name": "notequal",
+      "label": "不等于"
+    },
+    {
+      "id": 3,
+      "name": "greatthan",
+      "label": "大于"
+    },
+    {
+      "id": 4,
+      "name": "lessthan",
+      "label": "小于"
+    },
+    {
+      "id": 5,
+      "name": "greatequalthan",
+      "label": "大于等于"
+    },
+    {
+      "id": 6,
+      "name": "lessequalthan",
+      "label": "小于等于"
+    },
+    {
+      "id": 7,
+      "name": "between",
+      "label": "介于"
+    },
+    {
+      "id": 8,
+      "name": "in",
+      "label": "包含"
+    },
+    {
+      "id": 9,
+      "name": "match",
+      "label": "模糊匹配"
+    }
+  ]
+}

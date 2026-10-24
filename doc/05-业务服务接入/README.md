@@ -17,7 +17,7 @@
 ## 接入流程
 
 1. 阅读[接入模型与运行机制](/05-业务服务接入/接入模型与运行机制.md)，确定服务、实例和状态模型。
-2. Spring Boot 应用按照[Spring Boot Starter 接入](/05-业务服务接入/Spring-Boot-Starter接入.md)配置；Go 应用使用 [Go SDK](../../zenvis-business-service-golang/README.md)；其他应用按照[REST API 直连接入](/05-业务服务接入/REST-API直连接入.md)实现。
+2. Spring Boot 应用按照[Spring Boot Starter 接入](/05-业务服务接入/Spring-Boot-Starter接入.md)配置；Go 应用使用 [Go SDK](https://gitee.com/coolxer-studio/zenvis-business-service-golang)；其他应用按照[REST API 直连接入](/05-业务服务接入/REST-API直连接入.md)实现。
 3. 在生产部署前完成[生产部署与验收](/05-业务服务接入/生产部署与验收.md)中的网络保护、可靠性和验收检查。
 4. 登录 ZenVis，在“服务管理 → 业务应用服务”查看实例状态和事件。
 
@@ -38,7 +38,7 @@
 | --- | --- |
 | [接入模型与运行机制](/05-业务服务接入/接入模型与运行机制.md) | 身份、心跳、状态、事件、时间、幂等与保留机制 |
 | [Spring Boot Starter 接入](/05-业务服务接入/Spring-Boot-Starter接入.md) | 依赖、配置、身份推导、生命周期和自定义事件 |
-| [Go SDK](../../zenvis-business-service-golang/README.md) | Go SDK 安装、配置、生命周期、事件上报和可靠性说明 |
+| [Go SDK](https://gitee.com/coolxer-studio/zenvis-business-service-golang) | Go SDK 安装、配置、生命周期、事件上报和可靠性说明 |
 | [REST API 直连接入](/05-业务服务接入/REST-API直连接入.md) | 非 Spring Boot 应用的最小请求、响应判断和重试边界 |
 | [生产部署与验收](/05-业务服务接入/生产部署与验收.md) | 网络安全、可靠性、服务端配置、验收和故障排查 |
 

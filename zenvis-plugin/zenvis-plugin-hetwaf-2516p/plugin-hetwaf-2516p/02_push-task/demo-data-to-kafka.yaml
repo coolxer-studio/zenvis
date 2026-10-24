@@ -1,0 +1,109 @@
+---
+# 惠尔特 HET-WAF-2516P 演示数据推送任务。
+# 仅在未接入真实设备或演示期间启用；数据写入正式原始主题，
+# 复用 waf-kafka-to-clickhouse.yaml 的校验、分流和入库链路。
+
+sources:
+  het_waf_2516p_demo_logs:
+    type: "demo_logs"
+    format: "shuffle"
+    interval: ${HET_WAF_2516P_DEMO_INTERVAL_SECONDS:-2}
+    lines:
+      - >-
+        {"message":"WAF: 203.0.113.45:51842->www.example.com dip=220.170.15.132 devicename=HET-WAF-DEMO url=/login method=GET args=next=/dashboard flag_field= block_time=0 http_type= attack_field=0 profile_id=4 rule_id=9 type=HTTP Conformity Rule severity=2 action=REJECT referer=https://demo.example.com/login useragent=Zenvis-Demo-Agent/1.0 post= equipment=1 os=1 browser=2 |"}
+      - >-
+        {"message":"WAF: 198.51.100.27:60211->admin.example.com dip=220.170.15.131 devicename=HET-WAF-DEMO url=/admin/config method=POST args=module=system flag_field=post_data block_time=3600 http_type=POST attack_field=32 profile_id=3 rule_id=21 type=Signature Rule severity=3 action=BLOCK referer=https://admin.example.com/login useragent=curl/8.5.0 post=module=system&enabled=true equipment=1 os=1 browser=1 |"}
+      - >-
+        {"message":"WAF: 192.0.2.88:40903->www.example.com dip=220.170.15.131 devicename=HET-WAF-DEMO url=/_ascnlink_k method=GET args= flag_field= block_time=7200 http_type= attack_field=0 profile_id=3 rule_id=2 type=ASCN Rule severity=1 action=BLOCK referer= useragent=Zenvis-Demo-Agent/1.0 post= equipment=1 os=0 browser=1 |"}
+      - >-
+        {"message":"WAF: 203.0.113.91:53320->files.example.com dip=220.170.15.132 devicename=HET-WAF-DEMO url=/upload/avatar.php method=POST args=type=image flag_field=file_content block_time=1800 http_type=POST attack_field=64 profile_id=5 rule_id=15 type=Upload Rule severity=4 action=REJECT referer=https://files.example.com/ useragent=Zenvis-Demo-Agent/1.0 post=filename=demo.php equipment=1 os=1 browser=2 |"}
+      - >-
+        {"message":"WAF: 198.51.100.64:38812->portal.example.com dip=220.170.15.131 devicename=HET-WAF-DEMO url=/api/export method=GET args=format=csv flag_field=response_body block_time=0 http_type=GET attack_field=128 profile_id=6 rule_id=31 type=Sensitive Data Rule severity=2 action=ALERT referer=https://portal.example.com/report useragent=Zenvis-Demo-Agent/1.0 post= equipment=1 os=1 browser=2 |"}
+      - >-
+        {"message":"WAF: 192.0.2.151:44771->catalog.example.com dip=220.170.15.132 devicename=HET-WAF-DEMO url=/search method=GET args=q=demo flag_field=user_agent block_time=600 http_type=GET attack_field=16 profile_id=4 rule_id=44 type=Crawler Rule severity=1 action=DROP referer= useragent=DemoScanner/2.4 post= equipment=1 os=2 browser=1 |"}
+      - >-
+        {"message":"DDoS:设备名称:HET-WAF-DEMO 入侵ip:123.160.223.74 入侵端口:13623 被攻击ip:220.170.15.132 被攻击端口:443 协议类型:TCP 攻击类型:TCP Syn Flood 被攻击url:/ 被攻击域名:www.example.com CDN ip:0.0.0.0 XFF ip:0.0.0.0 严重级别:高级 攻击次数:128"}
+      - >-
+        {"message":"DDoS:设备名称:HET-WAF-DEMO 入侵ip:198.51.100.203 入侵端口:51914 被攻击ip:220.170.15.131 被攻击端口:53 协议类型:UDP 攻击类型:UDP Flood 被攻击url: 被攻击域名:  CDN ip:0.0.0.0 XFF ip:0.0.0.0 严重级别:中级 攻击次数:64"}
+      - >-
+        {"message":"System:设备名称:HET-WAF-DEMO 系统负载:82% 会话数:1024 备注:演示系统事件"}
+
+transforms:
+  refresh_het_waf_2516p_demo:
+    type: "remap"
+    inputs:
+      - "het_waf_2516p_demo_logs"
+    source: |-
+      event = parse_json!(to_string!(.message))
+      generated_at = now()
+      event.appname = "HET-WAF-2516P-DEMO"
+      event.facility = "local7"
+      event.host = "HET-WAF-DEMO"
+      event.hostname = "HET-WAF-DEMO"
+      event.severity = "warning"
+      event.source_ip = "${HET_WAF_2516P_SOURCE_IP:-192.168.42.234}"
+      event.source_type = "demo"
+      event.timestamp = format_timestamp!(generated_at, format: "%Y-%m-%dT%H:%M:%SZ", timezone: "UTC")
+      event.message = format_timestamp!(generated_at, format: "%H:%M:%S", timezone: "Asia/Shanghai") + " " + to_string!(event.message)
+      . = event
+
+sinks:
+  het_waf_2516p_demo_kafka:
+    type: "kafka"
+    inputs:
+      - "refresh_het_waf_2516p_demo"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${HET_WAF_2516P_SYSLOG_TOPIC:-hetwaf2516p-syslog-raw}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+tests:
+  - name: "演示规则事件应带 demo 标记并生成当前时间"
+    inputs:
+      - insert_at: "refresh_het_waf_2516p_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"message":"WAF: 203.0.113.45:51842->www.example.com dip=220.170.15.132 devicename=HET-WAF-DEMO url=/login method=GET args=next=/dashboard flag_field= block_time=0 http_type= attack_field=0 profile_id=4 rule_id=9 type=HTTP Conformity Rule severity=2 action=REJECT referer=https://demo.example.com/login useragent=Zenvis-Demo-Agent/1.0 post= equipment=1 os=1 browser=2 |"}
+    outputs:
+      - extract_from: "refresh_het_waf_2516p_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.source_type, "demo")
+              assert_eq!(.host, "HET-WAF-DEMO")
+              assert_eq!(.hostname, "HET-WAF-DEMO")
+              assert!(match(to_string!(.message), r'^\d{2}:\d{2}:\d{2} WAF: 203\.0\.113\.45:'))
+              _, timestamp_error = parse_timestamp(to_string!(.timestamp), format: "%+")
+              assert_eq!(timestamp_error, null)
+              assert_eq!(.source_ip, "192.168.42.234")
+              true
+
+  - name: "演示 DDoS 事件应保留原文并带 demo 标记"
+    inputs:
+      - insert_at: "refresh_het_waf_2516p_demo"
+        type: "log"
+        log_fields:
+          message: |-
+            {"message":"DDoS:设备名称:HET-WAF-DEMO 入侵ip:123.160.223.74 入侵端口:13623 被攻击ip:220.170.15.132 被攻击端口:443 协议类型:TCP 攻击类型:TCP Syn Flood 被攻击url:/ 被攻击域名:www.example.com CDN ip:0.0.0.0 XFF ip:0.0.0.0 严重级别:高级 攻击次数:128"}
+    outputs:
+      - extract_from: "refresh_het_waf_2516p_demo"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.source_type, "demo")
+              assert!(match(to_string!(.message), r'^\d{2}:\d{2}:\d{2} DDoS:'))
+              assert!(contains(to_string!(.message), "TCP Syn Flood"))
+              true

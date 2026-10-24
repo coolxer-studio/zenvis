@@ -1,0 +1,100 @@
+{
+  "type": "page",
+  "title": "HET-WAF 规则事件详情",
+  "subTitle": "按 Zenvis 内置记录 ID 展示一条 WAF 规则事件的完整信息",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 Zenvis 内置记录 ID，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/het_waf_2516p_rule_event/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "WAF 规则 ${rule_id || '-'} · ${action || '-'} · ${client_ip || '-'} → ${request_host || '-'}"
+        },
+        {
+          "type": "property",
+          "title": "记录与规则",
+          "column": 3,
+          "items": [
+            {"label": "平台记录 ID", "content": "${zenvis_id | default:'-'}", "span": 2},
+            {"label": "入库时间", "content": "${zenvis_insert_time | default:'-'}"},
+            {"label": "规则 ID", "content": "${rule_id | default:'-'}"},
+            {"label": "事件时间", "content": "${syslog_timestamp | default:'-'}"},
+            {"label": "设备时间", "content": "${device_time | default:'-'}"},
+            {"label": "检测类型", "content": "${type | default:'-'}"},
+            {"label": "处置动作", "content": "${action | default:'-'}"},
+            {"label": "事件级别代码", "content": "${severity | default:'-'}"},
+            {"label": "防护配置 ID", "content": "${profile_id | default:'-'}"},
+            {"label": "攻击字段代码", "content": "${attack_field | default:'-'}"},
+            {"label": "阻断时长", "content": "${block_time | default:'-'}"}
+          ]
+        },
+        {
+          "type": "property",
+          "title": "请求与目标",
+          "column": 3,
+          "items": [
+            {"label": "客户端 IP", "content": "${client_ip | default:'-'}"},
+            {"label": "客户端端口", "content": "${client_port | default:'-'}"},
+            {"label": "目的 IP", "content": "${destination_ip | default:'-'}"},
+            {"label": "请求域名", "content": "${request_host | default:'-'}", "span": 2},
+            {"label": "HTTP 方法", "content": "${method | default:'-'}"},
+            {"label": "请求路径", "content": "${url | default:'-'}", "span": 2},
+            {"label": "HTTP 类型", "content": "${http_type | default:'-'}"},
+            {"label": "请求参数", "content": "${args | default:'-'}", "span": 2},
+            {"label": "命中字段", "content": "${flag_field | default:'-'}"},
+            {"label": "HTTP Referer", "content": "${referer | default:'-'}", "span": 3},
+            {"label": "User-Agent", "content": "${useragent | default:'-'}", "span": 3}
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "POST 数据",
+          "body": {
+            "type": "tpl",
+            "tpl": "<pre style='margin:0;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:8px;background:#f2f4f7;color:#101828'>${post || '-'}</pre>"
+          }
+        },
+        {
+          "type": "property",
+          "title": "设备识别与 Syslog 外层信息",
+          "column": 3,
+          "items": [
+            {"label": "WAF 设备名称", "content": "${devicename | default:'-'}"},
+            {"label": "设备类型代码", "content": "${equipment | default:'-'}"},
+            {"label": "操作系统代码", "content": "${os | default:'-'}"},
+            {"label": "浏览器代码", "content": "${browser | default:'-'}"},
+            {"label": "Syslog 应用名", "content": "${syslog_appname | default:'-'}"},
+            {"label": "Syslog Facility", "content": "${syslog_facility | default:'-'}"},
+            {"label": "Syslog Host", "content": "${syslog_host | default:'-'}"},
+            {"label": "Syslog 主机名", "content": "${syslog_hostname | default:'-'}"},
+            {"label": "Syslog 级别", "content": "${syslog_severity | default:'-'}"},
+            {"label": "Syslog 来源 IP", "content": "${syslog_source_ip | default:'-'}"},
+            {"label": "Syslog 来源类型", "content": "${syslog_source_type | default:'-'}"}
+          ]
+        },
+        {
+          "type": "panel",
+          "title": "Syslog 原始消息",
+          "body": {
+            "type": "tpl",
+            "tpl": "<pre style='margin:0;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:8px;background:#101828;color:#e4e7ec'>${syslog_message || '-'}</pre>"
+          }
+        }
+      ]
+    }
+  ]
+}

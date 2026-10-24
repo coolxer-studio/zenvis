@@ -1,0 +1,17 @@
+[
+  {
+    "name": "惠尔特 HET-WAF Syslog 接入",
+    "description": "默认监听 12516/UDP，仅接受来源 IP 为 192.168.42.234 的惠尔特 HET-WAF-2516P Syslog，保留完整外层事件并写入 hetwaf2516p-syslog-raw；来源或报文校验失败写入独立死信主题。",
+    "config": "syslog-to-kafka.yaml"
+  },
+  {
+    "name": "惠尔特 HET-WAF Kafka 转换入库",
+    "description": "消费 HET-WAF 原始主题；符合公共规则字段结构的任意 type 事件写入规则事件表，DDoS 与未知格式完整写入原始事件表，转换失败写入独立死信主题。",
+    "config": "waf-kafka-to-clickhouse.yaml"
+  },
+  {
+    "name": "惠尔特 HET-WAF 演示数据推送（正式上线后停止）",
+    "description": "独立生成带 HET-WAF-DEMO / source_type=demo 标记的合成规则事件、DDoS 和系统原文，默认每 2 秒写入正式原始主题并复用 Kafka 转换入库链路；用于未对接设备时预览页面和看板，正式上线后在数据推送服务中手动停止。",
+    "config": "demo-data-to-kafka.yaml"
+  }
+]

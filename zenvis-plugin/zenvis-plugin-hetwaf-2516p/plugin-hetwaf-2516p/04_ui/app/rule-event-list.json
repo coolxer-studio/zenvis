@@ -1,0 +1,235 @@
+{
+  "type": "page",
+  "title": "HET-WAF 规则事件",
+  "subTitle": "惠尔特 HET-WAF-2516P 任意规则类型的统计与明细",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "本页面展示默认来源 IP 为 192.168.42.234、且符合公共规则字段结构的全部 HET-WAF 事件，不限制 type 取值。DDoS 及未知格式日志进入原始事件页面。"
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 3,
+          "sm": 6,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/overview/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),r=d.result&&Array.isArray(d.result.rows)&&d.result.rows.length?d.result.rows[0]:{};return {status:0,msg:'',data:{total:Number(r.all_time_count||0),today:Number(r.current_value||0)}};",
+              "data": {
+                "entities": ["het_waf_2516p_rule_event"],
+                "time_range": {"preset": "TODAY"},
+                "comparison": "NONE"
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "规则事件总数",
+              "body": "<div style='font-size:30px;font-weight:700;color:#175cd3'>${total || 0}</div><div style='margin-top:8px;color:#667085'>今日新增 ${today || 0}</div>"
+            }
+          }
+        },
+        {
+          "md": 3,
+          "sm": 6,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],total=0,reject=0;rows.forEach(function(r){var v=Number(r.value||0);total+=v;if(String(r.bucket||'').toUpperCase()==='REJECT')reject+=v;});return {status:0,msg:'',data:{count:reject,rate:total?(reject*100/total).toFixed(2):'0.00'}};",
+              "data": {
+                "entity": "het_waf_2516p_rule_event",
+                "dimension": "action",
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 100,
+                "include_null": false
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "历史拒绝率",
+              "body": "<div style='font-size:30px;font-weight:700;color:#d92d20'>${rate || 0}%</div><div style='margin-top:8px;color:#667085'>REJECT 事件 ${count || 0}</div>"
+            }
+          }
+        },
+        {
+          "md": 3,
+          "sm": 6,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/summary/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],r=rows.length?rows[0]:{};return {status:0,msg:'',data:{value:Number(r.value||0)}};",
+              "data": {
+                "entity": "het_waf_2516p_rule_event",
+                "metrics": [{"name": "client_count", "operation": "DISTINCT_COUNT", "field": "client_ip", "label": "客户端 IP 数"}],
+                "time_range": {"preset": "TODAY"},
+                "comparison": "NONE"
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "今日客户端 IP",
+              "body": "<div style='font-size:30px;font-weight:700;color:#079455'>${value || 0}</div><div style='margin-top:8px;color:#667085'>按 client_ip 去重</div>"
+            }
+          }
+        },
+        {
+          "md": 3,
+          "sm": 6,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/summary/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],r=rows.length?rows[0]:{};return {status:0,msg:'',data:{value:Number(r.value||0)}};",
+              "data": {
+                "entity": "het_waf_2516p_rule_event",
+                "metrics": [{"name": "rule_count", "operation": "DISTINCT_COUNT", "field": "rule_id", "label": "规则数"}],
+                "time_range": {"preset": "ALL_TIME"},
+                "comparison": "NONE"
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "命中规则数",
+              "body": "<div style='font-size:30px;font-weight:700;color:#7f56d9'>${value || 0}</div><div style='margin-top:8px;color:#667085'>按 rule_id 去重</div>"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 4,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],top=rows.slice(0,10).sort(function(a,b){return Number(b.value||0)-Number(a.value||0);}),max=top.reduce(function(m,r){return Math.max(m,Number(r.value||0));},0)||1,esc=function(s){return String(s==null?'空值':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');},bars=top.map(function(r){var value=Number(r.value||0),name=esc(r.bucket),pct=Math.max(0,value*100/max);return '<div style=\"display:grid;grid-template-columns:minmax(84px,132px) minmax(80px,1fr) 44px;align-items:center;gap:10px;font-size:12px;line-height:18px\"><span title=\"'+name+'\" style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467\">'+name+'</span><span style=\"height:16px;border-radius:4px;background:#f2f4f7;overflow:hidden\"><span style=\"display:block;height:100%;width:'+pct.toFixed(2)+'%;border-radius:4px;background:#d92d20\"></span></span><span style=\"color:#344054;font-variant-numeric:tabular-nums;text-align:right\">'+value+'</span></div>';}).join(''),html=top.length?'<div style=\"display:flex;flex-direction:column;gap:9px;min-height:270px;padding:10px 4px 4px\">'+bars+'</div>':'<div style=\"display:grid;place-items:center;min-height:270px;color:#98a2b3;font-size:12px\">暂无数据</div>';return {status:0,msg:'',data:{chart_html:html}};",
+              "data": {
+                "entity": "het_waf_2516p_rule_event",
+                "dimension": "client_ip",
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 100,
+                "include_null": false
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "Top 10 客户端 IP",
+              "body": {
+                "type": "tpl",
+                "html": "${chart_html | raw}"
+              }
+            }
+          }
+        },
+        {
+          "md": 4,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],top=rows.slice(0,10).sort(function(a,b){return Number(b.value||0)-Number(a.value||0);}),max=top.reduce(function(m,r){return Math.max(m,Number(r.value||0));},0)||1,esc=function(s){return String(s==null?'空值':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');},bars=top.map(function(r){var value=Number(r.value||0),name=esc(r.bucket),pct=Math.max(0,value*100/max);return '<div style=\"display:grid;grid-template-columns:minmax(84px,132px) minmax(80px,1fr) 44px;align-items:center;gap:10px;font-size:12px;line-height:18px\"><span title=\"'+name+'\" style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467\">'+name+'</span><span style=\"height:16px;border-radius:4px;background:#f2f4f7;overflow:hidden\"><span style=\"display:block;height:100%;width:'+pct.toFixed(2)+'%;border-radius:4px;background:#175cd3\"></span></span><span style=\"color:#344054;font-variant-numeric:tabular-nums;text-align:right\">'+value+'</span></div>';}).join(''),html=top.length?'<div style=\"display:flex;flex-direction:column;gap:9px;min-height:270px;padding:10px 4px 4px\">'+bars+'</div>':'<div style=\"display:grid;place-items:center;min-height:270px;color:#98a2b3;font-size:12px\">暂无数据</div>';return {status:0,msg:'',data:{chart_html:html}};",
+              "data": {
+                "entity": "het_waf_2516p_rule_event",
+                "dimension": "request_host",
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 100,
+                "include_null": false
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "Top 10 请求域名",
+              "body": {
+                "type": "tpl",
+                "html": "${chart_html | raw}"
+              }
+            }
+          }
+        },
+        {
+          "md": 4,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],top=rows.slice(0,10).sort(function(a,b){return Number(b.value||0)-Number(a.value||0);}),max=top.reduce(function(m,r){return Math.max(m,Number(r.value||0));},0)||1,esc=function(s){return String(s==null?'空值':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');},bars=top.map(function(r){var value=Number(r.value||0),name=esc(r.bucket),pct=Math.max(0,value*100/max);return '<div style=\"display:grid;grid-template-columns:minmax(84px,132px) minmax(80px,1fr) 44px;align-items:center;gap:10px;font-size:12px;line-height:18px\"><span title=\"'+name+'\" style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467\">'+name+'</span><span style=\"height:16px;border-radius:4px;background:#f2f4f7;overflow:hidden\"><span style=\"display:block;height:100%;width:'+pct.toFixed(2)+'%;border-radius:4px;background:#7f56d9\"></span></span><span style=\"color:#344054;font-variant-numeric:tabular-nums;text-align:right\">'+value+'</span></div>';}).join(''),html=top.length?'<div style=\"display:flex;flex-direction:column;gap:9px;min-height:270px;padding:10px 4px 4px\">'+bars+'</div>':'<div style=\"display:grid;place-items:center;min-height:270px;color:#98a2b3;font-size:12px\">暂无数据</div>';return {status:0,msg:'',data:{chart_html:html}};",
+              "data": {
+                "entity": "het_waf_2516p_rule_event",
+                "dimension": "rule_id",
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 100,
+                "include_null": false
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "Top 10 规则",
+              "body": {
+                "type": "tpl",
+                "html": "${chart_html | raw}"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "crud",
+      "id": "het_waf_2516p_rule_event_crud",
+      "title": "HET-WAF 规则事件明细",
+      "api": "/zenvis/api/v1/entity/het_waf_2516p_rule_event/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {"orderBy": "syslog_timestamp", "orderDir": "desc"},
+      "syncLocation": false,
+      "perPage": 20,
+      "perPageAvailable": [10, 20, 50, 100],
+      "columns": [
+        {
+          "name": "rule_id",
+          "label": "规则 ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.hetwaf2516p.detail-rule-event?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {"type": "tpl", "tpl": "${rule_id}"}
+        },
+        {"name": "syslog_timestamp", "label": "事件时间", "sortable": true, "searchable": {"type": "input-datetime-range", "name": "syslog_timestamp"}},
+        {"name": "client_ip", "label": "客户端 IP", "searchable": true, "copyable": true},
+        {"name": "client_port", "label": "客户端端口", "searchable": true, "sortable": true},
+        {"name": "request_host", "label": "请求域名", "searchable": true, "copyable": true},
+        {"name": "destination_ip", "label": "目的 IP", "searchable": true, "copyable": true},
+        {"name": "url", "label": "请求路径", "searchable": true, "copyable": true},
+        {"name": "method", "label": "HTTP 方法", "searchable": true},
+        {"name": "action", "label": "处置动作", "searchable": true, "sortable": true},
+        {"name": "type", "label": "检测类型", "searchable": true},
+        {"name": "severity", "label": "事件级别", "searchable": true, "sortable": true},
+        {"name": "profile_id", "label": "配置 ID", "searchable": true, "copyable": true, "toggled": false},
+        {"name": "devicename", "label": "设备名称", "searchable": true, "copyable": true, "toggled": false},
+        {"name": "syslog_host", "label": "Syslog Host", "searchable": true, "toggled": false},
+        {"name": "syslog_source_ip", "label": "Syslog 来源 IP", "searchable": true, "copyable": true, "toggled": false}
+      ],
+      "headerToolbar": ["filter-toggler", "reload", "pagination"],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+      "placeholder": "暂无 HET-WAF 规则事件"
+    }
+  ]
+}

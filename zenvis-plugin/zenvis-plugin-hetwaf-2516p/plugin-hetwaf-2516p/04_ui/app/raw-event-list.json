@@ -1,0 +1,95 @@
+{
+  "type": "page",
+  "title": "HET-WAF 原始事件",
+  "subTitle": "DDoS、未知类型和未来新增格式的完整原文留存",
+  "body": [
+    {
+      "type": "alert",
+      "level": "info",
+      "showIcon": true,
+      "body": "本页面保存不符合当前规则事件公共字段结构的全部 HET-WAF 日志。event_type 仅从消息前缀提取，完整内容以 Syslog 原始消息为准。"
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 6,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/overview/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),r=d.result&&Array.isArray(d.result.rows)&&d.result.rows.length?d.result.rows[0]:{};return {status:0,msg:'',data:{total:Number(r.all_time_count||0),today:Number(r.current_value||0)}};",
+              "data": {
+                "entities": ["het_waf_2516p_raw_event"],
+                "time_range": {"preset": "TODAY"},
+                "comparison": "NONE"
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "原始事件总数",
+              "body": "<div style='font-size:30px;font-weight:700;color:#175cd3'>${total || 0}</div><div style='margin-top:8px;color:#667085'>今日新增 ${today || 0}</div>"
+            }
+          }
+        },
+        {
+          "md": 6,
+          "body": {
+            "type": "service",
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "adaptor": "var d=payload&&payload.data?payload.data:(payload||{}),rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],top=rows.slice(0,8).sort(function(a,b){return Number(b.value||0)-Number(a.value||0);}),max=top.reduce(function(m,r){return Math.max(m,Number(r.value||0));},0)||1,esc=function(s){return String(s==null?'UNKNOWN':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');},bars=top.map(function(r){var value=Number(r.value||0),name=esc(r.bucket),pct=Math.max(0,value*100/max);return '<div style=\"display:grid;grid-template-columns:minmax(84px,120px) minmax(80px,1fr) 44px;align-items:center;gap:10px;font-size:12px;line-height:18px\"><span title=\"'+name+'\" style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467\">'+name+'</span><span style=\"height:16px;border-radius:4px;background:#f2f4f7;overflow:hidden\"><span style=\"display:block;height:100%;width:'+pct.toFixed(2)+'%;border-radius:4px;background:#f79009\"></span></span><span style=\"color:#344054;font-variant-numeric:tabular-nums;text-align:right\">'+value+'</span></div>';}).join(''),html=top.length?'<div style=\"display:flex;flex-direction:column;gap:8px;min-height:172px;padding:8px 4px 4px\">'+bars+'</div>':'<div style=\"display:grid;place-items:center;min-height:172px;color:#98a2b3;font-size:12px\">暂无数据</div>';return {status:0,msg:'',data:{chart_html:html}};",
+              "data": {
+                "entity": "het_waf_2516p_raw_event",
+                "dimension": "event_type",
+                "time_range": {"preset": "ALL_TIME"},
+                "limit": 100,
+                "include_null": false
+              }
+            },
+            "body": {
+              "type": "panel",
+              "title": "原始事件类型分布",
+              "body": {
+                "type": "tpl",
+                "html": "${chart_html | raw}"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/het_waf_2516p_raw_event/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {"orderBy": "syslog_timestamp", "orderDir": "desc"},
+      "columns": [
+        {
+          "name": "syslog_timestamp",
+          "label": "事件时间",
+          "sortable": true,
+          "searchable": {"type": "input-datetime-range", "name": "syslog_timestamp"},
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.hetwaf2516p.detail-raw-event?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {"type": "tpl", "tpl": "${syslog_timestamp}"}
+        },
+        {"name": "event_type", "label": "事件类型", "searchable": true, "sortable": true},
+        {"name": "device_time", "label": "设备时间", "searchable": true},
+        {"name": "syslog_severity", "label": "Syslog 级别", "searchable": true},
+        {"name": "syslog_host", "label": "Syslog Host", "searchable": true, "copyable": true},
+        {"name": "syslog_source_ip", "label": "来源 IP", "searchable": true, "copyable": true},
+        {"name": "syslog_message", "label": "Syslog 原始消息", "searchable": true, "copyable": true}
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "headerToolbar": ["filter-toggler", "reload", "pagination"],
+      "footerToolbar": ["statistics", "switch-per-page", "pagination"],
+      "placeholder": "暂无 HET-WAF 原始事件数据"
+    }
+  ]
+}

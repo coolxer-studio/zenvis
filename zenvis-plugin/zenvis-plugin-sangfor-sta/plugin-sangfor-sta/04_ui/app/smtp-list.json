@@ -1,0 +1,292 @@
+{
+  "type": "page",
+  "title": "40 SMTP协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_smtp/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-smtp?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "user",
+          "label": "用户名",
+          "searchable": true
+        },
+        {
+          "name": "trans_depth",
+          "label": "消息传递的深度",
+          "searchable": true
+        },
+        {
+          "name": "helo",
+          "label": "Helo 头",
+          "searchable": true
+        },
+        {
+          "name": "helo_reply",
+          "label": "Helo 响应信息",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${helo_reply | join:'、' | truncate:60}"
+        },
+        {
+          "name": "mailfrom",
+          "label": "发件人",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "rcptto",
+          "label": "收件人",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${rcptto | join:'、' | truncate:60}"
+        },
+        {
+          "name": "date",
+          "label": "邮件内容里面的 Date",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "from",
+          "label": "邮件内容里面的 From",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "to",
+          "label": "邮件内容里面的 To",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cc",
+          "label": "邮件内容里面的 Cc",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "bcc",
+          "label": "邮件内容里面的 Bcc",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "reply_to",
+          "label": "邮件内容里面的 Reply-To",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "msg_id",
+          "label": "邮件内容里面的 Message-ID",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "in_reply_to",
+          "label": "in reply to",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "subject",
+          "label": "邮件内容里面的 Subject",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "x_originating_ip",
+          "label": "x originating ip",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${x_originating_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${x_originating_ip}"
+          }
+        },
+        {
+          "name": "mime_version",
+          "label": "mime version",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "receiveds",
+          "label": "邮件内容里面的 Received",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${receiveds | join:'、' | truncate:60}"
+        },
+        {
+          "name": "last_command",
+          "label": "last command",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "last_reply_code",
+          "label": "last reply code",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "last_reply_msg",
+          "label": "last reply msg",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "user_agent",
+          "label": "user agent",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "file_info",
+          "label": "文件信息",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "fuids",
+          "label": "fuids",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${fuids | join:'、' | truncate:60}"
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无SMTP协议审计数据"
+    }
+  ]
+}

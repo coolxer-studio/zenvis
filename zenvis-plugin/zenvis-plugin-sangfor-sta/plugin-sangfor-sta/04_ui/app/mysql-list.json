@@ -1,0 +1,184 @@
+{
+  "type": "page",
+  "title": "23 MYSQL协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_mysql/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-mysql?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "cmd",
+          "label": "命令",
+          "searchable": true
+        },
+        {
+          "name": "arg",
+          "label": "命令的参数",
+          "searchable": true
+        },
+        {
+          "name": "success",
+          "label": "是否成功",
+          "searchable": true
+        },
+        {
+          "name": "rows",
+          "label": "命令影响的行数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "query_rows",
+          "label": "查询行",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "response",
+          "label": "响应",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "user",
+          "label": "用户名",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "length",
+          "label": "长度",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "sequence_id",
+          "label": "序列id",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无MYSQL协议审计数据"
+    }
+  ]
+}

@@ -1,0 +1,197 @@
+{
+  "type": "page",
+  "title": "27 ONVIF协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_onvif/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-onvif?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "src_mac",
+          "label": "源MAC",
+          "searchable": true
+        },
+        {
+          "name": "dst_mac",
+          "label": "目的MAC",
+          "searchable": true
+        },
+        {
+          "name": "url",
+          "label": "URL",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "user_agent",
+          "label": "请求的User-Agent",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "req_body",
+          "label": "请求的body体",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "rsp_body",
+          "label": "响应的body体",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "rsp_status_code",
+          "label": "响应状态码",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "username",
+          "label": "用户名",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "namespace",
+          "label": "namespace",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "command",
+          "label": "command",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "args",
+          "label": "args",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无ONVIF协议审计数据"
+    }
+  ]
+}

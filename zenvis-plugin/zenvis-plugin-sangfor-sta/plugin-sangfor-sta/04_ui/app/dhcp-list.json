@@ -1,0 +1,222 @@
+{
+  "type": "page",
+  "title": "08 DHCP协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_dhcp/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-dhcp?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "op",
+          "label": "报文操作类型：1为请求报文",
+          "searchable": true
+        },
+        {
+          "name": "mac",
+          "label": "客户端硬件地址",
+          "searchable": true
+        },
+        {
+          "name": "trans_id",
+          "label": "事务ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "type",
+          "label": "报文类型：",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "assigned_ip",
+          "label": "DHCP服务器给客户端分配的IP地址",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${assigned_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${assigned_ip}"
+          }
+        },
+        {
+          "name": "host_name",
+          "label": "主机名",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "req_addr",
+          "label": "客户端请求IP",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "mask",
+          "label": "子网掩码",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "router_list",
+          "label": "默认网关",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${router_list | join:'、' | truncate:60}"
+        },
+        {
+          "name": "lease_time",
+          "label": "有效租约期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "serv_addr",
+          "label": "服务器标识",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "param_req_list",
+          "label": "请求参数列表",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${param_req_list | join:'、' | truncate:60}"
+        },
+        {
+          "name": "vendor_class_id",
+          "label": "厂商分类信息选项",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无DHCP协议审计数据"
+    }
+  ]
+}

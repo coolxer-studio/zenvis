@@ -1,0 +1,226 @@
+{
+  "type": "page",
+  "title": "SMTP文件审计记录详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询当前记录",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/sangfor_sta_smtp_file/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "SMTP文件审计详细信息",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的入库时间。",
+              "span": 2
+            },
+            {
+              "label": "日志ID",
+              "content": "${logid | default:'-'}",
+              "remark": "日志id；来自 STA SMTP文件审计上报字段“logid”。"
+            },
+            {
+              "label": "事件时间",
+              "content": "${ts | default:'-'}",
+              "remark": "时间戳；来自 STA SMTP文件审计上报字段“ts”。入库时按 Unix 秒时间戳转换为 Asia/Shanghai 时间。"
+            },
+            {
+              "label": "会话唯一ID",
+              "content": "${uid | default:'-'}",
+              "remark": "会话唯一ID；来自 STA SMTP文件审计上报字段“uid”。"
+            },
+            {
+              "label": "源IP",
+              "content": "${src_ip | default:'-'}",
+              "remark": "源IP；来自 STA SMTP文件审计上报字段“src_ip”。"
+            },
+            {
+              "label": "源端口",
+              "content": "${src_port | default:'-'}",
+              "remark": "源端口；来自 STA SMTP文件审计上报字段“src_port”。"
+            },
+            {
+              "label": "目的IP",
+              "content": "${dst_ip | default:'-'}",
+              "remark": "目的IP；来自 STA SMTP文件审计上报字段“dst_ip”。"
+            },
+            {
+              "label": "目的端口",
+              "content": "${dst_port | default:'-'}",
+              "remark": "目的端口；来自 STA SMTP文件审计上报字段“dst_port”。"
+            },
+            {
+              "label": "文件标识",
+              "content": "${fuid | default:'-'}",
+              "remark": "文件的一个标志；来自 STA SMTP文件审计上报字段“fuid”。"
+            },
+            {
+              "label": "文件在哪些连接上传输的",
+              "content": "${conn_uids | join:'、' | default:'-'}",
+              "remark": "文件在哪些连接上传输的，一般只有一个，多个用|号隔开。入库时按文档声明的分隔形式转换为字符串数组。",
+              "span": 2
+            },
+            {
+              "label": "文件传输的载体",
+              "content": "${source | default:'-'}",
+              "remark": "文件传输的载体（smtp）。"
+            },
+            {
+              "label": "表示文件的发送源",
+              "content": "${is_orig | default:'-'}",
+              "remark": "用来表示文件的发送源（如果为true，则表示源ip是文件传输方，如果为false，则源ip是文件接收方）。"
+            },
+            {
+              "label": "第几个文件",
+              "content": "${depth | default:'-'}",
+              "remark": "第几个文件；来自 STA SMTP文件审计上报字段“depth”。"
+            },
+            {
+              "label": "文件的类型",
+              "content": "${mime_type | default:'-'}",
+              "remark": "文件的类型；来自 STA SMTP文件审计上报字段“mime_type”。"
+            },
+            {
+              "label": "文件名",
+              "content": "${filename | default:'-'}",
+              "remark": "文件名；来自 STA SMTP文件审计上报字段“filename”。"
+            },
+            {
+              "label": "文件实际保存下来的字节数目大小",
+              "content": "${extract_bytes | default:'-'}",
+              "remark": "文件实际保存下来的字节数目大小；来自 STA SMTP文件审计上报字段“extract_bytes”。",
+              "span": 2
+            },
+            {
+              "label": "文件总的传输的字节数目大小",
+              "content": "${seen_bytes | default:'-'}",
+              "remark": "文件总的传输的字节数目大小；来自 STA SMTP文件审计上报字段“seen_bytes”。"
+            },
+            {
+              "label": "文件写入磁盘是否到达限制",
+              "content": "${tips | default:'-'}",
+              "remark": "文件写入磁盘是否到达限制；来自 STA SMTP文件审计上报字段“tips”。"
+            },
+            {
+              "label": "日志类型",
+              "content": "${logtype | default:'-'}",
+              "remark": "日志类型，smtp_file。"
+            },
+            {
+              "label": "设备名称",
+              "content": "${devname | default:'-'}",
+              "remark": "设备名称；来自 STA SMTP文件审计上报字段“devname”。"
+            },
+            {
+              "label": "日期",
+              "content": "${ds | default:'-'}",
+              "remark": "年月日；来自 STA SMTP文件审计上报字段“ds”。"
+            },
+            {
+              "label": "小时",
+              "content": "${hh | default:'-'}",
+              "remark": "小时；来自 STA SMTP文件审计上报字段“hh”。"
+            },
+            {
+              "label": "厂商",
+              "content": "${vendor | default:'-'}",
+              "remark": "厂商sangfor；来自 STA SMTP文件审计上报字段“vendor”。"
+            },
+            {
+              "label": "IP类型",
+              "content": "${iptype | default:'-'}",
+              "remark": "ip类型，4表示ipv4，6表示ipv6。"
+            },
+            {
+              "label": "应用层协议",
+              "content": "${appproto | default:'-'}",
+              "remark": "应用层协议；来自 STA SMTP文件审计上报字段“appproto”。"
+            },
+            {
+              "label": "传输层协议",
+              "content": "${transproto | default:'-'}",
+              "remark": "传输层协议；来自 STA SMTP文件审计上报字段“transproto”。"
+            },
+            {
+              "label": "file type",
+              "content": "${file_type | default:'-'}",
+              "remark": "文件是正文\"body\"还是附件\"attachment\"。"
+            },
+            {
+              "label": "发件人",
+              "content": "${mailfrom | default:'-'}",
+              "remark": "发件人；来自 STA SMTP文件审计上报字段“mailfrom”。"
+            },
+            {
+              "label": "收件人",
+              "content": "${rcptto | join:'、' | default:'-'}",
+              "remark": "收件人（多个用|分隔）；来自 STA SMTP文件审计上报字段“rcptto”。入库时按文档声明的分隔形式转换为字符串数组。",
+              "span": 2
+            },
+            {
+              "label": "user agent",
+              "content": "${user_agent | default:'-'}",
+              "remark": "邮件内容里面提取出的User-Agent客户。"
+            },
+            {
+              "label": "文本文件的编码方式",
+              "content": "${charset | default:'-'}",
+              "remark": "文本文件的编码方式(如utf-8,gb2312,gbk等)。"
+            },
+            {
+              "label": "邮件内容里面的 Subject",
+              "content": "${subject | default:'-'}",
+              "remark": "邮件内容里面的 Subject；来自 STA SMTP文件审计上报字段“subject”。"
+            },
+            {
+              "label": "邮件内容里面的 From",
+              "content": "${from | default:'-'}",
+              "remark": "邮件内容里面的 From；来自 STA SMTP文件审计上报字段“from”。"
+            },
+            {
+              "label": "邮件内容里面的 To",
+              "content": "${to | default:'-'}",
+              "remark": "邮件内容里面的 To；来自 STA SMTP文件审计上报字段“to”。"
+            },
+            {
+              "label": "邮件内容里面的 Cc",
+              "content": "${cc | default:'-'}",
+              "remark": "邮件内容里面的 Cc；来自 STA SMTP文件审计上报字段“cc”。"
+            },
+            {
+              "label": "邮件内容里面的 Bcc",
+              "content": "${bcc | default:'-'}",
+              "remark": "邮件内容里面的 Bcc（暂未使用，默认为\"\"）。"
+            },
+            {
+              "label": "MD5",
+              "content": "${md5 | default:'-'}",
+              "remark": "文件MD5（暂未使用，默认为\"\"）。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

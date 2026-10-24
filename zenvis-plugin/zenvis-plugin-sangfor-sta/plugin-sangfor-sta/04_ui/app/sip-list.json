@@ -1,0 +1,285 @@
+{
+  "type": "page",
+  "title": "36 SIP协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_sip/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-sip?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "src_mac",
+          "label": "源MAC",
+          "searchable": true
+        },
+        {
+          "name": "dst_mac",
+          "label": "目的MAC",
+          "searchable": true
+        },
+        {
+          "name": "method",
+          "label": "请求方法",
+          "searchable": true
+        },
+        {
+          "name": "uri",
+          "label": "URI",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "version",
+          "label": "版本号",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "status_msg",
+          "label": "原因短语",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "status_code",
+          "label": "状态码",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "request_from",
+          "label": "请求消息源地址",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "request_to",
+          "label": "请求消息目的地址",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "response_from",
+          "label": "响应消息源地址",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "response_to",
+          "label": "响应消息目的地址",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "call_id",
+          "label": "唯一标识两个UAC之间建立的呼叫",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "seq",
+          "label": "UAC用来标识标识不同的请求的响应",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "content_type",
+          "label": "消息的媒体类型",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "request_path",
+          "label": "请求位置",
+          "searchable": false,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "response_path",
+          "label": "响应位置",
+          "searchable": false,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "req_body_len",
+          "label": "请求体长度",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "rsp_body_len",
+          "label": "响应体长度",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "contact",
+          "label": "标识请求发起的地址",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "allow",
+          "label": "UA支持的方法列表",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${allow | join:'、' | truncate:60}"
+        },
+        {
+          "name": "expires",
+          "label": "消息的过期时间",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "max_forwards",
+          "label": "请求到目的地中间的跳转数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "user_agent",
+          "label": "发送消息的UAC信息",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "record_route",
+          "label": "proxy在请求中增加的",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "body",
+          "label": "sdp包体内容",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无SIP协议审计数据"
+    }
+  ]
+}

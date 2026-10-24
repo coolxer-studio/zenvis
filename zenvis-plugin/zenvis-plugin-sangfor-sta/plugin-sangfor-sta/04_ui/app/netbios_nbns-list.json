@@ -1,0 +1,264 @@
+{
+  "type": "page",
+  "title": "25 NETBIOS协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_netbios_nbns/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-netbios_nbns?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "id",
+          "label": "事务ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "qr",
+          "label": "标志位",
+          "searchable": true
+        },
+        {
+          "name": "opcode",
+          "label": "标志位",
+          "searchable": true
+        },
+        {
+          "name": "b",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ra",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "rd",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tc",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "aa",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "rcode",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "qdcount",
+          "label": "问题个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ancount",
+          "label": "回答个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "nscount",
+          "label": "授权资源个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "arcount",
+          "label": "额外信息个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "queries",
+          "label": "问题",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${queries | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${queries | json}"
+            }
+          }
+        },
+        {
+          "name": "answers",
+          "label": "回答",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${answers | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${answers | json}"
+            }
+          }
+        },
+        {
+          "name": "authorities",
+          "label": "权威资源",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${authorities | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${authorities | json}"
+            }
+          }
+        },
+        {
+          "name": "additions",
+          "label": "额外信息",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${additions | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${additions | json}"
+            }
+          }
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无NETBIOS协议审计数据"
+    }
+  ]
+}

@@ -1,0 +1,254 @@
+{
+  "type": "page",
+  "title": "SIP协议审计记录详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询当前记录",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/sangfor_sta_sip/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "SIP协议审计详细信息",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的入库时间。",
+              "span": 2
+            },
+            {
+              "label": "日志ID",
+              "content": "${logid | default:'-'}",
+              "remark": "日志id；来自 STA SIP协议审计上报字段“logid”。"
+            },
+            {
+              "label": "事件时间",
+              "content": "${ts | default:'-'}",
+              "remark": "时间戳；来自 STA SIP协议审计上报字段“ts”。入库时按 Unix 秒时间戳转换为 Asia/Shanghai 时间。"
+            },
+            {
+              "label": "会话唯一ID",
+              "content": "${uid | default:'-'}",
+              "remark": "会话唯一ID；来自 STA SIP协议审计上报字段“uid”。"
+            },
+            {
+              "label": "源IP",
+              "content": "${src_ip | default:'-'}",
+              "remark": "源IP地址；来自 STA SIP协议审计上报字段“src_ip”。"
+            },
+            {
+              "label": "源端口",
+              "content": "${src_port | default:'-'}",
+              "remark": "源端口；来自 STA SIP协议审计上报字段“src_port”。"
+            },
+            {
+              "label": "目的IP",
+              "content": "${dst_ip | default:'-'}",
+              "remark": "目的IP地址；来自 STA SIP协议审计上报字段“dst_ip”。"
+            },
+            {
+              "label": "目的端口",
+              "content": "${dst_port | default:'-'}",
+              "remark": "目的端口；来自 STA SIP协议审计上报字段“dst_port”。"
+            },
+            {
+              "label": "源MAC",
+              "content": "${src_mac | default:'-'}",
+              "remark": "源MAC地址；来自 STA SIP协议审计上报字段“src_mac”。"
+            },
+            {
+              "label": "目的MAC",
+              "content": "${dst_mac | default:'-'}",
+              "remark": "目的MAC地址；来自 STA SIP协议审计上报字段“dst_mac”。"
+            },
+            {
+              "label": "请求方法",
+              "content": "${method | default:'-'}",
+              "remark": "请求方法；来自 STA SIP协议审计上报字段“method”。"
+            },
+            {
+              "label": "URI",
+              "content": "${uri | default:'-'}",
+              "remark": "请求参数；来自 STA SIP协议审计上报字段“uri”。"
+            },
+            {
+              "label": "版本号",
+              "content": "${version | default:'-'}",
+              "remark": "版本号；来自 STA SIP协议审计上报字段“version”。"
+            },
+            {
+              "label": "原因短语",
+              "content": "${status_msg | default:'-'}",
+              "remark": "原因短语；来自 STA SIP协议审计上报字段“status_msg”。"
+            },
+            {
+              "label": "状态码",
+              "content": "${status_code | default:'-'}",
+              "remark": "状态码；来自 STA SIP协议审计上报字段“status_code”。"
+            },
+            {
+              "label": "请求消息源地址",
+              "content": "${request_from | default:'-'}",
+              "remark": "请求消息源地址；来自 STA SIP协议审计上报字段“request_from”。",
+              "span": 2
+            },
+            {
+              "label": "请求消息目的地址",
+              "content": "${request_to | default:'-'}",
+              "remark": "请求消息目的地址；来自 STA SIP协议审计上报字段“request_to”。",
+              "span": 2
+            },
+            {
+              "label": "响应消息源地址",
+              "content": "${response_from | default:'-'}",
+              "remark": "响应消息源地址；来自 STA SIP协议审计上报字段“response_from”。",
+              "span": 2
+            },
+            {
+              "label": "响应消息目的地址",
+              "content": "${response_to | default:'-'}",
+              "remark": "响应消息目的地址；来自 STA SIP协议审计上报字段“response_to”。",
+              "span": 2
+            },
+            {
+              "label": "唯一标识两个UAC之间建立的呼叫",
+              "content": "${call_id | default:'-'}",
+              "remark": "用来唯一标识两个UAC之间建立的呼叫。"
+            },
+            {
+              "label": "UAC用来标识标识不同的请求的响应",
+              "content": "${seq | default:'-'}",
+              "remark": "UAC用来标识标识不同的请求的响应，UAS用来区分收到的请求是新的请求还是重发的请求。"
+            },
+            {
+              "label": "消息的媒体类型",
+              "content": "${content_type | default:'-'}",
+              "remark": "消息的媒体类型；来自 STA SIP协议审计上报字段“content_type”。",
+              "span": 2
+            },
+            {
+              "label": "请求位置",
+              "content": "${request_path | default:'-'}",
+              "remark": "请求位置；来自 STA SIP协议审计上报字段“request_path”。",
+              "span": 2
+            },
+            {
+              "label": "响应位置",
+              "content": "${response_path | default:'-'}",
+              "remark": "响应位置；来自 STA SIP协议审计上报字段“response_path”。",
+              "span": 2
+            },
+            {
+              "label": "请求体长度",
+              "content": "${req_body_len | default:'-'}",
+              "remark": "请求体长度；来自 STA SIP协议审计上报字段“req_body_len”。",
+              "span": 2
+            },
+            {
+              "label": "响应体长度",
+              "content": "${rsp_body_len | default:'-'}",
+              "remark": "响应体长度；来自 STA SIP协议审计上报字段“rsp_body_len”。",
+              "span": 2
+            },
+            {
+              "label": "标识请求发起的地址",
+              "content": "${contact | default:'-'}",
+              "remark": "标识请求发起的地址；来自 STA SIP协议审计上报字段“contact”。"
+            },
+            {
+              "label": "UA支持的方法列表",
+              "content": "${allow | join:'、' | default:'-'}",
+              "remark": "UA支持的方法列表；来自 STA SIP协议审计上报字段“allow”。入库时按文档声明的分隔形式转换为字符串数组。",
+              "span": 2
+            },
+            {
+              "label": "消息的过期时间",
+              "content": "${expires | default:'-'}",
+              "remark": "消息的过期时间；来自 STA SIP协议审计上报字段“expires”。"
+            },
+            {
+              "label": "请求到目的地中间的跳转数",
+              "content": "${max_forwards | default:'-'}",
+              "remark": "请求到目的地中间的跳转数；来自 STA SIP协议审计上报字段“max_forwards”。"
+            },
+            {
+              "label": "发送消息的UAC信息",
+              "content": "${user_agent | default:'-'}",
+              "remark": "发送消息的UAC信息；来自 STA SIP协议审计上报字段“user_agent”。"
+            },
+            {
+              "label": "proxy在请求中增加的",
+              "content": "${record_route | default:'-'}",
+              "remark": "proxy在请求中增加的，用来强制会话中的后续请求经过本proxy的,一般值为代理服务器的地址。"
+            },
+            {
+              "label": "sdp包体内容",
+              "content": "${body | default:'-'}",
+              "remark": "sdp包体内容；来自 STA SIP协议审计上报字段“body”。",
+              "span": 2
+            },
+            {
+              "label": "日志类型",
+              "content": "${logtype | default:'-'}",
+              "remark": "日志类型，sip；来自 STA SIP协议审计上报字段“logtype”。"
+            },
+            {
+              "label": "设备名称",
+              "content": "${devname | default:'-'}",
+              "remark": "设备名称；来自 STA SIP协议审计上报字段“devname”。"
+            },
+            {
+              "label": "日期",
+              "content": "${ds | default:'-'}",
+              "remark": "年月日；来自 STA SIP协议审计上报字段“ds”。"
+            },
+            {
+              "label": "小时",
+              "content": "${hh | default:'-'}",
+              "remark": "小时；来自 STA SIP协议审计上报字段“hh”。"
+            },
+            {
+              "label": "厂商",
+              "content": "${vendor | default:'-'}",
+              "remark": "厂商sangfor；来自 STA SIP协议审计上报字段“vendor”。"
+            },
+            {
+              "label": "IP类型",
+              "content": "${iptype | default:'-'}",
+              "remark": "ip类型，4表示ipv4，6表示ipv6。"
+            },
+            {
+              "label": "应用层协议",
+              "content": "${appproto | default:'-'}",
+              "remark": "应用层协议；来自 STA SIP协议审计上报字段“appproto”。"
+            },
+            {
+              "label": "传输层协议",
+              "content": "${transproto | default:'-'}",
+              "remark": "传输层协议；来自 STA SIP协议审计上报字段“transproto”。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

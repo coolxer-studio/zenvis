@@ -1,0 +1,8 @@
+{
+  "name": "深信服 STA 潜伏威胁探针",
+  "package_name": "com.coolxer.plugin.sangfor.sta",
+  "version": "1.0.0",
+  "description": "独立对接深信服 STA 潜伏威胁探针 V2.0，覆盖 55 类日志的 Kafka 严格校验、ClickHouse 存储、低代码检索、详情查看与跨实体 IP 关联调查，并提供可独立停止的演示数据生成任务。",
+  "author": "CoolXer",
+  "icon": "icon.png"
+}

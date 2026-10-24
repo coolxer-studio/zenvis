@@ -1,0 +1,359 @@
+{
+  "type": "page",
+  "title": "46 SSL协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_ssl/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-ssl?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "src_mac",
+          "label": "源MAC",
+          "searchable": true
+        },
+        {
+          "name": "dst_mac",
+          "label": "目的MAC",
+          "searchable": true
+        },
+        {
+          "name": "session_time",
+          "label": "会话持续时长",
+          "searchable": true
+        },
+        {
+          "name": "up_pks",
+          "label": "上行包数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "down_pks",
+          "label": "下行包数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "up_size",
+          "label": "上行包累计大小",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "down_size",
+          "label": "下行包累计大小",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "handshake_success",
+          "label": "协商握手成功与否",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tls_server",
+          "label": "tls响应方向数据集合",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${tls_server | join:'、' | truncate:60}"
+        },
+        {
+          "name": "tls_client",
+          "label": "tls请求方向数据集合",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${tls_client | join:'、' | truncate:60}"
+        },
+        {
+          "name": "svr_version",
+          "label": "svr version",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cli_version",
+          "label": "cli version",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "svr_random",
+          "label": "svr random",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cli_random",
+          "label": "cli random",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "svr_cipher_suite",
+          "label": "svr cipher suite",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cli_cipher_suites",
+          "label": "cli cipher suites",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${cli_cipher_suites | join:'、' | truncate:60}"
+        },
+        {
+          "name": "svr_compression",
+          "label": "svr compression",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cli_compressions",
+          "label": "cli compressions",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${cli_compressions | join:'、' | truncate:60}"
+        },
+        {
+          "name": "cli_session_id",
+          "label": "cli session id",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "svr_session_id",
+          "label": "svr session id",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "cli_helo_ext",
+          "label": "cli helo ext",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${cli_helo_ext | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${cli_helo_ext | json}"
+            }
+          }
+        },
+        {
+          "name": "svr_helo_ext",
+          "label": "svr helo ext",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${svr_helo_ext | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${svr_helo_ext | json}"
+            }
+          }
+        },
+        {
+          "name": "cli_helo_ext_type",
+          "label": "cli helo ext type",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${cli_helo_ext_type | join:'、' | truncate:60}"
+        },
+        {
+          "name": "svr_helo_ext_type",
+          "label": "svr helo ext type",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${svr_helo_ext_type | join:'、' | truncate:60}"
+        },
+        {
+          "name": "new_session_ticket",
+          "label": "new session ticket",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ticket_lifetime",
+          "label": "ticket lifetime",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "alert_msg",
+          "label": "告警协议中的信息",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${alert_msg | join:'、' | truncate:60}"
+        },
+        {
+          "name": "cli_key_len",
+          "label": "cli key len",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "top_num_pkt",
+          "label": "会话中前n",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${top_num_pkt | join:'、' | truncate:60}"
+        },
+        {
+          "name": "tls_pkt",
+          "label": "tls数据包",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cli_cert",
+          "label": "客户端发送的证书",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${cli_cert | join:'、' | truncate:60}"
+        },
+        {
+          "name": "svr_cert",
+          "label": "服务端发送的证书",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${svr_cert | join:'、' | truncate:60}"
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无SSL协议审计数据"
+    }
+  ]
+}

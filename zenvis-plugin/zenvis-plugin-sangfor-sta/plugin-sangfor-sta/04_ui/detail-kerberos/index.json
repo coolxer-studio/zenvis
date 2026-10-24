@@ -1,0 +1,201 @@
+{
+  "type": "page",
+  "title": "KRB协议审计记录详情",
+  "subTitle": "使用 Zenvis 平台记录 ID 精确查询当前记录",
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!record_id}",
+      "body": "详情链接缺少 record_id，无法查询当前记录。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/sangfor_sta_kerberos/${record_id}/view",
+        "sendOn": "${!!record_id}"
+      },
+      "body": [
+        {
+          "type": "property",
+          "title": "KRB协议审计详细信息",
+          "column": 2,
+          "items": [
+            {
+              "label": "平台记录ID",
+              "content": "${zenvis_id | default:'-'}",
+              "remark": "Zenvis 自动生成的记录 UUID。",
+              "span": 2
+            },
+            {
+              "label": "入库时间",
+              "content": "${zenvis_insert_time | default:'-'}",
+              "remark": "Zenvis 自动记录的入库时间。",
+              "span": 2
+            },
+            {
+              "label": "日志ID",
+              "content": "${logid | default:'-'}",
+              "remark": "日志id；来自 STA KRB协议审计上报字段“logid”。"
+            },
+            {
+              "label": "事件时间",
+              "content": "${ts | default:'-'}",
+              "remark": "时间戳；来自 STA KRB协议审计上报字段“ts”。入库时按 Unix 秒时间戳转换为 Asia/Shanghai 时间。"
+            },
+            {
+              "label": "会话唯一ID",
+              "content": "${uid | default:'-'}",
+              "remark": "会话唯一ID；来自 STA KRB协议审计上报字段“uid”。"
+            },
+            {
+              "label": "源IP",
+              "content": "${src_ip | default:'-'}",
+              "remark": "源IP；来自 STA KRB协议审计上报字段“src_ip”。"
+            },
+            {
+              "label": "源端口",
+              "content": "${src_port | default:'-'}",
+              "remark": "源端口；来自 STA KRB协议审计上报字段“src_port”。"
+            },
+            {
+              "label": "目的IP",
+              "content": "${dst_ip | default:'-'}",
+              "remark": "目的IP；来自 STA KRB协议审计上报字段“dst_ip”。"
+            },
+            {
+              "label": "目的端口",
+              "content": "${dst_port | default:'-'}",
+              "remark": "目的端口；来自 STA KRB协议审计上报字段“dst_port”。"
+            },
+            {
+              "label": "request type",
+              "content": "${request_type | default:'-'}",
+              "remark": "请求的类型,\"AS\"、\"TGS\"、\"AP\"。",
+              "span": 2
+            },
+            {
+              "label": "请求的flow长度",
+              "content": "${request_len | default:'-'}",
+              "remark": "请求的flow长度；来自 STA KRB协议审计上报字段“request_len”。",
+              "span": 2
+            },
+            {
+              "label": "是否有特权pac,-1：无特权这一项",
+              "content": "${include_pac | default:'-'}",
+              "remark": "是否有特权pac,-1：无特权这一项，1：有特权，0:没特权。"
+            },
+            {
+              "label": "要登录的用户名",
+              "content": "${client_name | default:'-'}",
+              "remark": "表示要登录的用户名；来自 STA KRB协议审计上报字段“client_name”。"
+            },
+            {
+              "label": "DC接收端的用户名",
+              "content": "${service_name | default:'-'}",
+              "remark": "DC接收端的用户名，默认是krbtgt。"
+            },
+            {
+              "label": "域的dns_name",
+              "content": "${client_realm | default:'-'}",
+              "remark": "表示域的dns_name；来自 STA KRB协议审计上报字段“client_realm”。"
+            },
+            {
+              "label": "service realm",
+              "content": "${service_realm | default:'-'}",
+              "remark": "表示域的dns_name或要登录主机的netbios_name。"
+            },
+            {
+              "label": "要登录主机的netbios_name",
+              "content": "${netbios_name | default:'-'}",
+              "remark": "要登录主机的netbios_name；来自 STA KRB协议审计上报字段“netbios_name”。"
+            },
+            {
+              "label": "etype",
+              "content": "${etype | join:'、' | default:'-'}",
+              "remark": "加密的方式集合,list的元素为一个加密方式的操作数。入库时按文档声明的分隔形式转换为字符串数组。",
+              "span": 2
+            },
+            {
+              "label": "给客户端的TGT的MD5",
+              "content": "${tgt_md5 | default:'-'}",
+              "remark": "表示给客户端的TGT的MD5。"
+            },
+            {
+              "label": "给客户端的TGT的加密类型",
+              "content": "${tgt_etype | default:'-'}",
+              "remark": "表示给客户端的TGT的加密类型。"
+            },
+            {
+              "label": "auth data",
+              "content": "${auth_data | default:'-'}",
+              "remark": "除了ms14-068时为加密字符串,剩余没有。"
+            },
+            {
+              "label": "给客户端的Ticket的md5",
+              "content": "${ticket_md5 | default:'-'}",
+              "remark": "表示给客户端的Ticket的md5。"
+            },
+            {
+              "label": "给客户端的Ticket的加密类型",
+              "content": "${ticket_etype | default:'-'}",
+              "remark": "表示给客户端的Ticket的加密类型。"
+            },
+            {
+              "label": "预认证阶段时间戳加密算法",
+              "content": "${highest_etype | default:'-'}",
+              "remark": "预认证阶段时间戳加密算法；来自 STA KRB协议审计上报字段“highest_etype”。"
+            },
+            {
+              "label": "as-req的error状态码",
+              "content": "${error_code | default:'-'}",
+              "remark": "as-req的error状态码；来自 STA KRB协议审计上报字段“error_code”。"
+            },
+            {
+              "label": "日志类型",
+              "content": "${logtype | default:'-'}",
+              "remark": "日志类型，kerberos。"
+            },
+            {
+              "label": "设备名称",
+              "content": "${devname | default:'-'}",
+              "remark": "设备名称；来自 STA KRB协议审计上报字段“devname”。"
+            },
+            {
+              "label": "日期",
+              "content": "${ds | default:'-'}",
+              "remark": "年月日；来自 STA KRB协议审计上报字段“ds”。"
+            },
+            {
+              "label": "小时",
+              "content": "${hh | default:'-'}",
+              "remark": "小时；来自 STA KRB协议审计上报字段“hh”。"
+            },
+            {
+              "label": "厂商",
+              "content": "${vendor | default:'-'}",
+              "remark": "厂商sangfor；来自 STA KRB协议审计上报字段“vendor”。"
+            },
+            {
+              "label": "IP类型",
+              "content": "${iptype | default:'-'}",
+              "remark": "ip类型，4表示ipv4，6表示ipv6。"
+            },
+            {
+              "label": "应用层协议",
+              "content": "${appproto | default:'-'}",
+              "remark": "应用层协议；来自 STA KRB协议审计上报字段“appproto”。"
+            },
+            {
+              "label": "传输层协议",
+              "content": "${transproto | default:'-'}",
+              "remark": "传输层协议；来自 STA KRB协议审计上报字段“transproto”。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,227 @@
+{
+  "type": "page",
+  "title": "12 FTP文件审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_ftp_file/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-ftp_file?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "fuid",
+          "label": "文件标识",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "conn_uids",
+          "label": "文件在哪些连接上传输的",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${conn_uids | join:'、' | truncate:60}"
+        },
+        {
+          "name": "source",
+          "label": "文件传输的载体",
+          "searchable": true
+        },
+        {
+          "name": "is_orig",
+          "label": "表示文件的发送源",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "depth",
+          "label": "第几个文件",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "mime_type",
+          "label": "文件的类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "filename",
+          "label": "文件名",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "extract_bytes",
+          "label": "文件实际保存下来的字节数目大小",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "seen_bytes",
+          "label": "文件总的传输的字节数目大小",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tips",
+          "label": "文件写入磁盘是否到达限制",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "conn_type",
+          "label": "连接类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "command",
+          "label": "命令",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "command_msg",
+          "label": "命令信息",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "ftp_connid",
+          "label": "连接id",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "md5",
+          "label": "MD5",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无FTP文件审计数据"
+    }
+  ]
+}

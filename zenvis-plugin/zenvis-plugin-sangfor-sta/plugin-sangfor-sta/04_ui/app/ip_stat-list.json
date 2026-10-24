@@ -1,0 +1,185 @@
+{
+  "type": "page",
+  "title": "02 IP日志",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_ip_stat/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-ip_stat?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "request_flow",
+          "label": "请求大小",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "request_pack",
+          "label": "请求包个数",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "response_flow",
+          "label": "响应大小",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "response_pack",
+          "label": "响应包个数",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "start_time",
+          "label": "会话开始时间,时间戳",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "start_time"
+          },
+          "toggled": false,
+          "sortable": true
+        },
+        {
+          "name": "session_time",
+          "label": "会话持续时长",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "end_time",
+          "label": "会话结束时间,时间戳",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "end_time"
+          },
+          "toggled": false,
+          "sortable": true
+        },
+        {
+          "name": "qps",
+          "label": "QPS",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无IP日志数据"
+    }
+  ]
+}

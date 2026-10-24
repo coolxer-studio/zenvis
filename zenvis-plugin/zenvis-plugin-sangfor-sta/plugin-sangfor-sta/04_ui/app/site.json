@@ -1,0 +1,371 @@
+{
+  "status": 0,
+  "msg": "",
+  "data": {
+    "pages": [
+      {
+        "label": "Home",
+        "url": "/",
+        "redirect": "/index"
+      },
+      {
+        "children": [
+          {
+            "label": "接入总览",
+            "url": "index",
+            "icon": "fa-solid fa-gauge-high",
+            "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=overview.json"
+          },
+          {
+            "label": "流量日志",
+            "icon": "fa-solid fa-network-wired",
+            "children": [
+              {
+                "label": "网络流量日志",
+                "url": "/sta/netflow",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=netflow-list.json"
+              },
+              {
+                "label": "IP日志",
+                "url": "/sta/ip_stat",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ip_stat-list.json"
+              },
+              {
+                "label": "TCP日志",
+                "url": "/sta/tcp_flow",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=tcp_flow-list.json"
+              },
+              {
+                "label": "UDP日志",
+                "url": "/sta/udp_flow",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=udp_flow-list.json"
+              }
+            ]
+          },
+          {
+            "label": "协议审计",
+            "icon": "fa-solid fa-magnifying-glass-chart",
+            "children": [
+              {
+                "label": "ARP协议审计",
+                "url": "/sta/arp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=arp-list.json"
+              },
+              {
+                "label": "DB2登陆审计",
+                "url": "/sta/db2",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=db2-list.json"
+              },
+              {
+                "label": "DCE_RPC审计",
+                "url": "/sta/dce_rpc",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=dce_rpc-list.json"
+              },
+              {
+                "label": "DHCP协议审计",
+                "url": "/sta/dhcp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=dhcp-list.json"
+              },
+              {
+                "label": "DNS请求协议",
+                "url": "/sta/dns_request",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=dns_request-list.json"
+              },
+              {
+                "label": "DNS响应协议",
+                "url": "/sta/dns_response",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=dns_response-list.json"
+              },
+              {
+                "label": "FTP协议审计",
+                "url": "/sta/ftp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ftp-list.json"
+              },
+              {
+                "label": "FTP文件审计",
+                "url": "/sta/ftp_file",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ftp_file-list.json"
+              },
+              {
+                "label": "FTP登陆审计",
+                "url": "/sta/ftp_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ftp_login-list.json"
+              },
+              {
+                "label": "HTTP文件审计",
+                "url": "/sta/http_file",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=http_file-list.json"
+              },
+              {
+                "label": "HTTP登陆审计",
+                "url": "/sta/http_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=http_login-list.json"
+              },
+              {
+                "label": "HTTP协议审计",
+                "url": "/sta/http_session",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=http_session-list.json"
+              },
+              {
+                "label": "ICMP协议审计",
+                "url": "/sta/icmp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=icmp-list.json"
+              },
+              {
+                "label": "IMAP协议审计",
+                "url": "/sta/imap",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=imap-list.json"
+              },
+              {
+                "label": "IMAP文件审计",
+                "url": "/sta/imap_file",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=imap_file-list.json"
+              },
+              {
+                "label": "IMAP登陆审计",
+                "url": "/sta/imap_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=imap_login-list.json"
+              },
+              {
+                "label": "KRB协议审计",
+                "url": "/sta/kerberos",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=kerberos-list.json"
+              },
+              {
+                "label": "LDAP协议审计",
+                "url": "/sta/ldap",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ldap-list.json"
+              },
+              {
+                "label": "MYSQL协议审计",
+                "url": "/sta/mysql",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=mysql-list.json"
+              },
+              {
+                "label": "MYSQL登陆审计",
+                "url": "/sta/mysql_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=mysql_login-list.json"
+              },
+              {
+                "label": "NETBIOS协议审计",
+                "url": "/sta/netbios_nbns",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=netbios_nbns-list.json"
+              },
+              {
+                "label": "NFS协议审计",
+                "url": "/sta/nfs",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=nfs-list.json"
+              },
+              {
+                "label": "ONVIF协议审计",
+                "url": "/sta/onvif",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=onvif-list.json"
+              },
+              {
+                "label": "ORACLE协议审计",
+                "url": "/sta/oracle",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=oracle-list.json"
+              },
+              {
+                "label": "ORACLE登陆审计",
+                "url": "/sta/oracle_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=oracle_login-list.json"
+              },
+              {
+                "label": "POP3协议审计",
+                "url": "/sta/pop3",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=pop3-list.json"
+              },
+              {
+                "label": "POP3文件审计",
+                "url": "/sta/pop3_file",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=pop3_file-list.json"
+              },
+              {
+                "label": "POP3登陆审计",
+                "url": "/sta/pop3_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=pop3_login-list.json"
+              },
+              {
+                "label": "RADIUS协议审计",
+                "url": "/sta/radius",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=radius-list.json"
+              },
+              {
+                "label": "RDP协议审计",
+                "url": "/sta/rdp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=rdp-list.json"
+              },
+              {
+                "label": "RDP爆破",
+                "url": "/sta/rdp_burst",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=rdp_burst-list.json"
+              },
+              {
+                "label": "SIP协议审计",
+                "url": "/sta/sip",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=sip-list.json"
+              },
+              {
+                "label": "SMB_CMD审计",
+                "url": "/sta/smb",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=smb-list.json"
+              },
+              {
+                "label": "SMB文件审计",
+                "url": "/sta/smb_file",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=smb_file-list.json"
+              },
+              {
+                "label": "SMB登录审计",
+                "url": "/sta/smb_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=smb_login-list.json"
+              },
+              {
+                "label": "SMTP协议审计",
+                "url": "/sta/smtp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=smtp-list.json"
+              },
+              {
+                "label": "SMTP文件审计",
+                "url": "/sta/smtp_file",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=smtp_file-list.json"
+              },
+              {
+                "label": "SMTP登陆审计",
+                "url": "/sta/smtp_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=smtp_login-list.json"
+              },
+              {
+                "label": "SNMP协议审计",
+                "url": "/sta/snmp",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=snmp-list.json"
+              },
+              {
+                "label": "SQLSERVER协议审计",
+                "url": "/sta/sql_server",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=sql_server-list.json"
+              },
+              {
+                "label": "SSH协议审计",
+                "url": "/sta/ssh",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ssh-list.json"
+              },
+              {
+                "label": "SSL协议审计",
+                "url": "/sta/ssl",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ssl-list.json"
+              },
+              {
+                "label": "SYBASE协议审计",
+                "url": "/sta/sybase",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=sybase-list.json"
+              },
+              {
+                "label": "SYBASE登陆审计",
+                "url": "/sta/sybase_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=sybase_login-list.json"
+              },
+              {
+                "label": "TELNET命令审计",
+                "url": "/sta/telnet",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=telnet-list.json"
+              },
+              {
+                "label": "TELNET登陆审计",
+                "url": "/sta/telnet_login",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=telnet_login-list.json"
+              },
+              {
+                "label": "TELNET选项审计",
+                "url": "/sta/telnet_option",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=telnet_option-list.json"
+              }
+            ]
+          },
+          {
+            "label": "安全日志",
+            "icon": "fa-solid fa-shield-halved",
+            "children": [
+              {
+                "label": "WAF安全日志",
+                "url": "/sta/waf",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=waf-list.json"
+              },
+              {
+                "label": "IPS安全日志",
+                "url": "/sta/ips",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=ips-list.json"
+              },
+              {
+                "label": "UTM安全日志",
+                "url": "/sta/utm",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=utm-list.json"
+              },
+              {
+                "label": "PVS安全日志",
+                "url": "/sta/pvs",
+                "icon": "fa-solid fa-table-list",
+                "schemaApi": "get:/zenvis/api/v1/config/com.coolxer.plugin.sangfor.sta.app/get?file_name=pvs-list.json"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

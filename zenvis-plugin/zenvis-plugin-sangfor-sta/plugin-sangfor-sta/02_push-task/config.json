@@ -1,0 +1,12 @@
+[
+  {
+    "name": "深信服 STA Kafka 校验转换入库",
+    "description": "消费 STA 潜伏威胁探针 V2.0 Kafka 主题，按 55 类日志定义严格校验、类型转换和 snake_case 映射后写入 55 张独立 ClickHouse 表；异常记录进入插件专用死信主题。",
+    "config": "sangfor-sta-kafka-to-clickhouse.yaml"
+  },
+  {
+    "name": "深信服 STA 演示数据生成",
+    "description": "独立的演示数据生产任务，从 STA V2.0 官方 55 类样例中随机生成带当前时间的消息并写入 STA_SOURCE_TOPIC；沿用正式入库链路，正式设备接入后可单独手动停止，不影响正式入库任务。",
+    "config": "sangfor-sta-demo-to-kafka.yaml"
+  }
+]

@@ -1,0 +1,841 @@
+{
+  "type": "page",
+  "title": "深信服 STA IP 关联统计",
+  "subTitle": "按源 IP 与目的 IP 跨 50 类主要深信服 STA 日志实体精确统计",
+  "body": [
+    {
+      "type": "form",
+      "name": "sta_ip_statistics_form",
+      "title": "IP 检索",
+      "mode": "horizontal",
+      "wrapWithPanel": true,
+      "data": {
+        "ip": "${ip || params.ip || ''}"
+      },
+      "initApi": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/value-statistics/query",
+        "data": {
+          "focus_value": "${ip}",
+          "time_range": {
+            "preset": "ALL_TIME"
+          },
+          "mappings": [
+            {
+              "entity": "sangfor_sta_netflow",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ip_stat",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_tcp_flow",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_udp_flow",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_arp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_db2",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dce_rpc",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dhcp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dns_request",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dns_response",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ftp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ftp_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_http_file",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_http_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_http_session",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_icmp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_imap",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_imap_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_kerberos",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ldap",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_mysql",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_mysql_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_netbios_nbns",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_nfs",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_onvif",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_oracle",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_oracle_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_pop3",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_pop3_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_radius",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_rdp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_rdp_burst",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sip",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smb",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smb_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smtp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smtp_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_snmp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sql_server",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ssh",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ssl",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sybase",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sybase_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_telnet",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_telnet_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_telnet_option",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_waf",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ips",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_utm",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_pvs",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            }
+          ]
+        },
+        "sendOn": "${!!ip}",
+        "adaptor": "var __d=payload&&payload.data&&payload.data.result?payload.data:(payload&&payload.result?payload:{});var __r=__d.result||{},__rows=Array.isArray(__r.rows)?__r.rows:[],__out={focus_value:__r.focus_value,total:Number(__r.total||0),mapping_count:__rows.length,matched_mapping_count:__rows.filter(function(r){return Number(r.count||0)>0;}).length,xaxis_data:__rows.map(function(r){return r.label;}),series_data:__rows.map(function(r){return Number(r.count||0);}),rows:__rows.map(function(r){return {entity:r.entity,label:r.label,fields:r.match_fields,total:Number(r.count||0)};})};var __data=__out;var __items=Array.isArray(__data.rows)?__data.rows:[];var __esc=function(v){return String(v==null?'UNKNOWN':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');};var __max=__items.reduce(function(m,r){return Math.max(m,Number(r.total||0));},0)||1;var __bars=__items.map(function(r){var n=__esc(r.label),v=Number(r.total||0),w=Math.max(0,v*100/__max).toFixed(2);return '<div style=\"display:grid;grid-template-columns:minmax(88px,180px) minmax(80px,1fr) minmax(52px,auto);align-items:center;gap:10px;font-size:12px;line-height:18px\"><span title=\"'+n+'\" style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467\">'+n+'</span><span style=\"height:16px;border-radius:4px;background:#f2f4f7;overflow:hidden\"><span style=\"display:block;height:100%;width:'+w+'%;border-radius:4px;background:#1677ff\"></span></span><span style=\"color:#344054;font-variant-numeric:tabular-nums;text-align:right\">'+v+'</span></div>';}).join('');__data.chart_html='<div style=\"padding:16px 18px 10px;box-sizing:border-box\"><div style=\"font-size:14px;font-weight:600;color:#344054;margin-bottom:12px\">'+__esc(\"\\u5404\\u6570\\u636e\\u7c7b\\u578b\\u547d\\u4e2d\\u6570\\u91cf\")+'</div>'+(__items.length?'<div style=\"display:flex;flex-direction:column;gap:8px;max-height:'+482+'px;overflow-y:auto;padding-right:6px\">'+__bars+'</div>':'<div style=\"display:grid;place-items:center;min-height:'+482+'px;color:#98a2b3;font-size:12px\">暂无数据</div>')+'</div>';return {status:0,msg:'',data:__out};"
+      },
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/value-statistics/query",
+        "data": {
+          "focus_value": "${ip}",
+          "time_range": {
+            "preset": "ALL_TIME"
+          },
+          "mappings": [
+            {
+              "entity": "sangfor_sta_netflow",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ip_stat",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_tcp_flow",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_udp_flow",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_arp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_db2",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dce_rpc",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dhcp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dns_request",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_dns_response",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ftp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ftp_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_http_file",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_http_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_http_session",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_icmp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_imap",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_imap_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_kerberos",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ldap",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_mysql",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_mysql_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_netbios_nbns",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_nfs",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_onvif",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_oracle",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_oracle_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_pop3",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_pop3_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_radius",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_rdp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_rdp_burst",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sip",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smb",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smb_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smtp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_smtp_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_snmp",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sql_server",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ssh",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ssl",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sybase",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_sybase_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_telnet",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_telnet_login",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_telnet_option",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_waf",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_ips",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_utm",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            },
+            {
+              "entity": "sangfor_sta_pvs",
+              "match_fields": [
+                "src_ip",
+                "dst_ip"
+              ]
+            }
+          ]
+        },
+        "sendOn": "${!!ip}",
+        "adaptor": "var __d=payload&&payload.data&&payload.data.result?payload.data:(payload&&payload.result?payload:{});var __r=__d.result||{},__rows=Array.isArray(__r.rows)?__r.rows:[],__out={focus_value:__r.focus_value,total:Number(__r.total||0),mapping_count:__rows.length,matched_mapping_count:__rows.filter(function(r){return Number(r.count||0)>0;}).length,xaxis_data:__rows.map(function(r){return r.label;}),series_data:__rows.map(function(r){return Number(r.count||0);}),rows:__rows.map(function(r){return {entity:r.entity,label:r.label,fields:r.match_fields,total:Number(r.count||0)};})};var __data=__out;var __items=Array.isArray(__data.rows)?__data.rows:[];var __esc=function(v){return String(v==null?'UNKNOWN':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');};var __max=__items.reduce(function(m,r){return Math.max(m,Number(r.total||0));},0)||1;var __bars=__items.map(function(r){var n=__esc(r.label),v=Number(r.total||0),w=Math.max(0,v*100/__max).toFixed(2);return '<div style=\"display:grid;grid-template-columns:minmax(88px,180px) minmax(80px,1fr) minmax(52px,auto);align-items:center;gap:10px;font-size:12px;line-height:18px\"><span title=\"'+n+'\" style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467\">'+n+'</span><span style=\"height:16px;border-radius:4px;background:#f2f4f7;overflow:hidden\"><span style=\"display:block;height:100%;width:'+w+'%;border-radius:4px;background:#1677ff\"></span></span><span style=\"color:#344054;font-variant-numeric:tabular-nums;text-align:right\">'+v+'</span></div>';}).join('');__data.chart_html='<div style=\"padding:16px 18px 10px;box-sizing:border-box\"><div style=\"font-size:14px;font-weight:600;color:#344054;margin-bottom:12px\">'+__esc(\"\\u5404\\u6570\\u636e\\u7c7b\\u578b\\u547d\\u4e2d\\u6570\\u91cf\")+'</div>'+(__items.length?'<div style=\"display:flex;flex-direction:column;gap:8px;max-height:'+482+'px;overflow-y:auto;padding-right:6px\">'+__bars+'</div>':'<div style=\"display:grid;place-items:center;min-height:'+482+'px;color:#98a2b3;font-size:12px\">暂无数据</div>')+'</div>';return {status:0,msg:'',data:__out};"
+      },
+      "resetAfterSubmit": false,
+      "actions": [
+        {
+          "type": "reset",
+          "label": "清空"
+        },
+        {
+          "type": "submit",
+          "label": "查询",
+          "level": "primary",
+          "icon": "fa-solid fa-magnifying-glass"
+        }
+      ],
+      "body": [
+        {
+          "type": "input-text",
+          "name": "ip",
+          "label": "IP 地址",
+          "required": true,
+          "clearable": true,
+          "placeholder": "请输入 IPv4 或 IPv6 地址"
+        },
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "visibleOn": "${!ip}",
+          "body": "请输入 IP 地址后查询；同一实体内多个 IP 字段使用 OR 语义，同一记录只计数一次。受平台单次统计上限约束，本页覆盖 50 类主要日志；FTP、IMAP、POP3、SMB、SMTP 文件审计子类型可通过对应协议日志查看。"
+        },
+        {
+          "type": "container",
+          "visibleOn": "${!!ip && mapping_count !== undefined}",
+          "body": [
+            {
+              "type": "grid",
+              "columns": [
+                {
+                  "md": 4,
+                  "body": {
+                    "type": "panel",
+                    "title": "命中记录总数",
+                    "body": "<div style='font-size:32px;font-weight:700;color:#1677ff'>${total || 0}</div>"
+                  }
+                },
+                {
+                  "md": 4,
+                  "body": {
+                    "type": "panel",
+                    "title": "命中数据类型",
+                    "body": "<div style='font-size:32px;font-weight:700;color:#52c41a'>${matched_mapping_count || 0}</div>"
+                  }
+                },
+                {
+                  "md": 4,
+                  "body": {
+                    "type": "panel",
+                    "title": "统计数据类型",
+                    "body": "<div style='font-size:32px;font-weight:700;color:#722ed1'>${mapping_count || 0}</div>"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "tpl",
+              "html": "${chart_html | raw}"
+            },
+            {
+              "type": "table",
+              "title": "数据类型统计明细",
+              "source": "${rows || []}",
+              "columns": [
+                {
+                  "name": "label",
+                  "label": "数据类型"
+                },
+                {
+                  "name": "entity",
+                  "label": "实体",
+                  "copyable": true
+                },
+                {
+                  "name": "fields",
+                  "label": "参与匹配的 IP 字段",
+                  "type": "tpl",
+                  "tpl": "${fields|join:'、'|default:'无 IP 字段'}"
+                },
+                {
+                  "name": "total",
+                  "label": "命中数量",
+                  "sortable": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

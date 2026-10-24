@@ -1,0 +1,210 @@
+{
+  "type": "page",
+  "title": "53 IPS安全日志",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_ips/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-ips?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "level",
+          "label": "严重等级",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "net_action",
+          "label": "处置动作",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "target",
+          "label": "target",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hole_id",
+          "label": "规则ID",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "attack_type",
+          "label": "攻击类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "policy_id",
+          "label": "策略ID",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "attack_count",
+          "label": "归并次数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "record_time",
+          "label": "日志记录时间",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "rate",
+          "label": "频率",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "url_len",
+          "label": "Url长度",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "desc_len",
+          "label": "描述长度",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "scan",
+          "label": "扫描次数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "result",
+          "label": "结果",
+          "searchable": false,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无IPS安全日志数据"
+    }
+  ]
+}

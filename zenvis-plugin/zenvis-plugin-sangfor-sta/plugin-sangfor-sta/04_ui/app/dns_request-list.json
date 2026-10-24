@@ -1,0 +1,288 @@
+{
+  "type": "page",
+  "title": "09 DNS请求协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_dns_request/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-dns_request?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "szone",
+          "label": "源区域",
+          "searchable": true
+        },
+        {
+          "name": "dzone",
+          "label": "目的区域",
+          "searchable": true
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true
+        },
+        {
+          "name": "length",
+          "label": "包长",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "id",
+          "label": "标识id",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "qr",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "opcode",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "aa",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tc",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "rd",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ra",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "z",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ad",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cd",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "rcode",
+          "label": "标志位",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "cf",
+          "label": "代码和标志",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "qdcnt",
+          "label": "请求个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ancnt",
+          "label": "回答个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "nscnt",
+          "label": "授权资源个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "arcnt",
+          "label": "额外信息个数",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "qtypes",
+          "label": "查询问题",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${qtypes | join:'、' | truncate:60}"
+        },
+        {
+          "name": "qclasses",
+          "label": "查询问题",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${qclasses | join:'、' | truncate:60}"
+        },
+        {
+          "name": "queries",
+          "label": "查询问题",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${queries | join:'、' | truncate:60}"
+        },
+        {
+          "name": "questions",
+          "label": "问题明细",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${questions | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${questions | json}"
+            }
+          }
+        },
+        {
+          "name": "afver",
+          "label": "版本号",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无DNS请求协议审计数据"
+    }
+  ]
+}

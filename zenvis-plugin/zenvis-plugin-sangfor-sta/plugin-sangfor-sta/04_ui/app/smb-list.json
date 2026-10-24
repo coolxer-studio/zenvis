@@ -1,0 +1,239 @@
+{
+  "type": "page",
+  "title": "37 SMB_CMD审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_smb/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-smb?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "command",
+          "label": "命令类型",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "sub_command",
+          "label": "子命令类型",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "version",
+          "label": "版本号1或2",
+          "searchable": true
+        },
+        {
+          "name": "flags",
+          "label": "头部字段",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "flags2",
+          "label": "头部字段",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "word_count",
+          "label": "每个smb1命令的参数都有",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tree_id",
+          "label": "头部字段",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "process_id",
+          "label": "头部字段",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "user_id",
+          "label": "头部字段",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "message_id",
+          "label": "头部字段",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "argument",
+          "label": "参数",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${argument | json | truncate:60}",
+          "popOver": {
+            "body": {
+              "type": "json",
+              "value": "${argument | json}"
+            }
+          }
+        },
+        {
+          "name": "username",
+          "label": "用户名",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "status",
+          "label": "状态",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tree",
+          "label": "目前没用",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "tree_service",
+          "label": "目前没用",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "is_orig",
+          "label": "表示方向",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无SMB_CMD审计数据"
+    }
+  ]
+}

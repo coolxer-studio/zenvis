@@ -1,0 +1,231 @@
+{
+  "type": "page",
+  "title": "21 KRB协议审计",
+  "body": [
+    {
+      "type": "crud",
+      "api": "/zenvis/api/v1/entity/sangfor_sta_kerberos/list",
+      "autoGenerateFilter": true,
+      "defaultParams": {
+        "orderBy": "ts",
+        "orderDir": "desc"
+      },
+      "columns": [
+        {
+          "name": "logid",
+          "label": "日志ID",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.detail-kerberos?record_id=${zenvis_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${logid}"
+          }
+        },
+        {
+          "name": "ts",
+          "label": "事件时间",
+          "searchable": {
+            "type": "input-datetime-range",
+            "name": "ts"
+          },
+          "sortable": true
+        },
+        {
+          "name": "uid",
+          "label": "会话唯一ID",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "src_ip",
+          "label": "源IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${src_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${src_ip}"
+          }
+        },
+        {
+          "name": "src_port",
+          "label": "源端口",
+          "searchable": true
+        },
+        {
+          "name": "dst_ip",
+          "label": "目的IP",
+          "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sangfor.sta.ip-statistics?ip=${dst_ip|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${dst_ip}"
+          }
+        },
+        {
+          "name": "dst_port",
+          "label": "目的端口",
+          "searchable": true
+        },
+        {
+          "name": "request_type",
+          "label": "request type",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "request_len",
+          "label": "请求的flow长度",
+          "searchable": false,
+          "toggled": false
+        },
+        {
+          "name": "include_pac",
+          "label": "是否有特权pac,-1：无特权这一项",
+          "searchable": true
+        },
+        {
+          "name": "client_name",
+          "label": "要登录的用户名",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "service_name",
+          "label": "DC接收端的用户名",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "client_realm",
+          "label": "域的dns_name",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "service_realm",
+          "label": "service realm",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "netbios_name",
+          "label": "要登录主机的netbios_name",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "etype",
+          "label": "etype",
+          "searchable": false,
+          "toggled": false,
+          "type": "tpl",
+          "tpl": "${etype | join:'、' | truncate:60}"
+        },
+        {
+          "name": "tgt_md5",
+          "label": "给客户端的TGT的MD5",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "tgt_etype",
+          "label": "给客户端的TGT的加密类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "auth_data",
+          "label": "auth data",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ticket_md5",
+          "label": "给客户端的Ticket的md5",
+          "searchable": true,
+          "toggled": false,
+          "copyable": true
+        },
+        {
+          "name": "ticket_etype",
+          "label": "给客户端的Ticket的加密类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "highest_etype",
+          "label": "预认证阶段时间戳加密算法",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "error_code",
+          "label": "as-req的error状态码",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "logtype",
+          "label": "日志类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "devname",
+          "label": "设备名称",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "ds",
+          "label": "日期",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "hh",
+          "label": "小时",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "vendor",
+          "label": "厂商",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "iptype",
+          "label": "IP类型",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "appproto",
+          "label": "应用层协议",
+          "searchable": true,
+          "toggled": false
+        },
+        {
+          "name": "transproto",
+          "label": "传输层协议",
+          "searchable": true,
+          "toggled": false
+        }
+      ],
+      "affixHeader": true,
+      "columnsTogglable": "auto",
+      "placeholder": "暂无KRB协议审计数据"
+    }
+  ]
+}

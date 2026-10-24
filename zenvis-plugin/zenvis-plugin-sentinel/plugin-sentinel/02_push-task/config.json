@@ -1,7 +1,12 @@
 [
   {
     "name": "Sentinel安全事件解析入库",
-    "description": "直接消费上游多消息汇聚平台 Kafka 主题 ai-agent-security-result 的 Sentinel 安全事件 JSON 信封，校验协议版本与必填字段、抽取命中/证据字段、转换时间后写入 ClickHouse 表 sentinel_security_event；契约异常记录进入死信主题。",
+    "description": "直接消费上游 Kafka 主题 ai-agent-security-result 的 Sentinel 安全事件 JSON 信封，兼容 schema_version 1.0/1.1，抽取命中、证据、消息标识与请求现场后写入 ClickHouse 表 sentinel_security_event；契约异常记录进入死信主题。",
     "config": "sentinel-security-event-clickhouse.yaml"
+  },
+  {
+    "name": "Sentinel会话事件解析入库",
+    "description": "直接消费独立 Kafka 主题 ai-agent-chat-message 的会话流 JSON 信封，校验 started/append/snapshot/mutation 四类事件、生成稳定幂等键、保留消息原文与会话上下文后写入 ClickHouse 表 sentinel_chat_session_event；契约异常记录进入独立死信主题。",
+    "config": "sentinel-chat-session-event-clickhouse.yaml"
   }
 ]

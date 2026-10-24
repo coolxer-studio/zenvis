@@ -1,0 +1,433 @@
+---
+# Sentinel / Warden 会话流：上游 Kafka → ClickHouse
+#
+# 数据来源为独立主题 ai-agent-chat-message（schema_version 1.0）。一条消息对应
+# 一个会话事件信封，可能是 started / append / snapshot / mutation。本任务用
+# 插件专属消费组直接消费并写入 sentinel_chat_session_event，不做 Kafka→Kafka
+# 转存；原始报文仍留在上游主题中，重放时重置本消费组偏移即可。
+#
+# 校验策略：
+#   - 必须是合法 JSON 对象信封；
+#   - schema_version 必须为 1.0；
+#   - type 必须为四种 chat.session.*.v1 之一；
+#   - occurred_at 必须是 10 位 epoch 秒；
+#   - payload.session.session_id 必填；
+#   - append / snapshot 的 messages 必须为对象数组；
+#   - mutation 必须包含整数 msg_index 以及 old / new 对象；
+#   - 每条消息必须具备 message_id、整数 msg_index、msg_hash、role、original 对象。
+# 契约异常进入独立死信主题，不写入正常表。
+
+sources:
+  sentinel_chat_session_event:
+    type: "kafka"
+    bootstrap_servers: "${SENTINEL_CHAT_KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    group_id: "${SENTINEL_CHAT_GROUP_ID:-sentinel-chat-session-event-clickhouse-v1}"
+    topics:
+      - "${SENTINEL_CHAT_SOURCE_TOPIC:-ai-agent-chat-message}"
+    auto_offset_reset: "earliest"
+    decoding:
+      codec: "bytes"
+
+transforms:
+  parse_sentinel_chat_session_event:
+    type: "remap"
+    inputs:
+      - "sentinel_chat_session_event"
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+      raw = to_string(.message) ?? ""
+      envelope, parse_err = parse_json(raw)
+      assert_eq!(parse_err, null, message: "sentinel 会话事件必须是合法 JSON")
+      assert!(is_object(envelope), message: "sentinel 会话事件根节点必须是 JSON 对象")
+      event = object!(envelope)
+
+      message_type = to_string(event.type) ?? ""
+      valid_message_type = message_type == "chat.session.started.v1" || message_type == "chat.session.append.v1" || message_type == "chat.session.snapshot.v1" || message_type == "chat.session.mutation.v1"
+      assert!(valid_message_type, message: "非预期的 sentinel 会话事件 type")
+
+      schema_version = to_string(event.schema_version) ?? ""
+      assert_eq!(schema_version, "1.0", message: "sentinel 会话事件 schema_version 必须为 1.0")
+
+      epoch_seconds = to_int(event.occurred_at) ?? -1
+      assert!(epoch_seconds >= 1000000000 && epoch_seconds < 10000000000, message: "sentinel 会话事件 occurred_at 必须是 10 位 epoch 秒整数")
+      occurred_at_value, occurred_at_err = from_unix_timestamp(epoch_seconds, unit: "seconds")
+      assert_eq!(occurred_at_err, null, message: "sentinel 会话事件 occurred_at 无法转换为时间")
+
+      assert!(is_object(event.payload), message: "sentinel 会话事件缺少 payload 对象")
+      payload = object!(event.payload)
+      assert!(is_object(payload.session), message: "sentinel 会话事件缺少 payload.session 对象")
+      session_obj = object!(payload.session)
+      session_id = strip_whitespace(to_string(session_obj.session_id) ?? "")
+      assert!(session_id != "", message: "sentinel 会话事件缺少 payload.session.session_id")
+      request_obj = object(payload.request) ?? {}
+      source_obj = object(event.source) ?? {}
+
+      event_kind = ""
+      if message_type == "chat.session.started.v1" {
+        event_kind = "started"
+      } else if message_type == "chat.session.append.v1" {
+        event_kind = "append"
+      } else if message_type == "chat.session.snapshot.v1" {
+        event_kind = "snapshot"
+      } else if message_type == "chat.session.mutation.v1" {
+        event_kind = "mutation"
+      }
+
+      event_key = ""
+      if event_kind == "started" {
+        event_key = "st_" + session_id
+      } else if event_kind == "append" {
+        event_key = strip_whitespace(to_string(event.piece_id) ?? "")
+      } else if event_kind == "snapshot" {
+        event_key = strip_whitespace(to_string(event.snapshot_id) ?? "")
+      } else if event_kind == "mutation" {
+        event_key = strip_whitespace(to_string(event.mutation_id) ?? "")
+      }
+      assert!(event_key != "", message: "sentinel 会话事件缺少对应的事件幂等键")
+
+      messages_value = payload.messages
+      if is_null(messages_value) {
+        messages_value = []
+      }
+      old_obj = {}
+      new_obj = {}
+      mutation_obj = {}
+      msg_index_value = null
+      turn_no_value = null
+
+      if event_kind == "mutation" {
+        assert!(is_object(payload.old), message: "mutation 事件缺少 payload.old 对象")
+        assert!(is_object(payload.new), message: "mutation 事件缺少 payload.new 对象")
+        old_obj = object!(payload.old)
+        new_obj = object!(payload.new)
+        messages_value = [new_obj]
+        mutation_obj = {"old": old_obj, "new": new_obj}
+
+        parsed_msg_index, msg_index_err = to_int(payload.msg_index)
+        assert_eq!(msg_index_err, null, message: "mutation 事件 payload.msg_index 不是整数")
+        msg_index_value = parsed_msg_index
+      }
+
+      if event_kind == "snapshot" {
+        parsed_turn_no, turn_no_err = to_int(payload.turn_no)
+        assert_eq!(turn_no_err, null, message: "snapshot 事件 payload.turn_no 不是整数")
+        turn_no_value = parsed_turn_no
+      }
+
+      assert!(is_array(messages_value), message: "sentinel 会话事件 messages 必须是数组")
+      messages_list = array!(messages_value)
+      message_ids = []
+      msg_hashes = []
+      message_roles = []
+      for_each(messages_list) -> |_message_index, message| {
+        assert!(is_object(message), message: "sentinel 会话事件 messages[] 必须是对象")
+        message_obj = object!(message)
+        message_id = strip_whitespace(to_string(message_obj.message_id) ?? "")
+        assert!(message_id != "", message: "sentinel 会话事件消息缺少 message_id")
+        _parsed_index, index_err = to_int(message_obj.msg_index)
+        assert_eq!(index_err, null, message: "sentinel 会话事件消息 msg_index 不是整数")
+        msg_hash = strip_whitespace(to_string(message_obj.msg_hash) ?? "")
+        assert!(msg_hash != "", message: "sentinel 会话事件消息缺少 msg_hash")
+        role = strip_whitespace(to_string(message_obj.role) ?? "")
+        assert!(role != "", message: "sentinel 会话事件消息缺少 role")
+        assert!(is_object(message_obj.original), message: "sentinel 会话事件消息缺少 original 对象")
+        message_ids = push(message_ids, message_id)
+        msg_hashes = push(msg_hashes, msg_hash)
+        message_roles = push(message_roles, role)
+      }
+
+      old_message_id = strip_whitespace(to_string(old_obj.message_id) ?? "")
+      old_msg_hash = strip_whitespace(to_string(old_obj.msg_hash) ?? "")
+      new_message_id = strip_whitespace(to_string(new_obj.message_id) ?? "")
+      new_msg_hash = strip_whitespace(to_string(new_obj.msg_hash) ?? "")
+      if event_kind == "mutation" {
+        assert!(old_message_id != "", message: "mutation 事件 payload.old 缺少 message_id")
+        assert!(old_msg_hash != "", message: "mutation 事件 payload.old 缺少 msg_hash")
+        assert!(new_message_id != "", message: "mutation 事件 payload.new 缺少 message_id")
+        assert!(new_msg_hash != "", message: "mutation 事件 payload.new 缺少 msg_hash")
+      }
+
+      headers_value = request_obj.headers
+      request_headers = {"headers": {}}
+      if !is_null(headers_value) {
+        assert!(is_object(headers_value), message: "sentinel 会话事件 payload.request.headers 必须是对象")
+        request_headers = {"headers": object!(headers_value)}
+      }
+
+      . = {
+        "event_key": event_key,
+        "occurred_at": format_timestamp!(occurred_at_value, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: "Asia/Shanghai"),
+        "event_kind": event_kind,
+        "session_id": session_id,
+        "session_id_source": to_string(session_obj.session_id_source) ?? "",
+        "message_type": message_type,
+        "request_method": to_string(request_obj.method) ?? "",
+        "request_path": to_string(request_obj.path) ?? "",
+        "request_wire": to_string(request_obj.wire) ?? "",
+        "request_remote_addr": to_string(request_obj.remote_addr) ?? "",
+        "message_count": length(messages_list),
+        "turn_no": turn_no_value,
+        "msg_index": msg_index_value,
+        "old_message_id": old_message_id,
+        "old_msg_hash": old_msg_hash,
+        "new_message_id": new_message_id,
+        "new_msg_hash": new_msg_hash,
+        "message_ids": message_ids,
+        "msg_hashes": msg_hashes,
+        "message_roles": message_roles,
+        "messages": {"messages": messages_list},
+        "mutation": mutation_obj,
+        "request_headers": request_headers,
+        "source_component": to_string(source_obj.component) ?? "",
+        "schema_version": schema_version
+      }
+
+sinks:
+  sentinel_chat_session_event_dead_letter:
+    type: "kafka"
+    inputs:
+      - "parse_sentinel_chat_session_event.dropped"
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka-service:9092}"
+    topic: "${SENTINEL_CHAT_DLQ_TOPIC:-sentinel-chat-session-event-dead-letter}"
+    compression: "zstd"
+    encoding:
+      codec: "json"
+    librdkafka_options:
+      request.required.acks: "-1"
+      message.send.max.retries: "10"
+      retry.backoff.ms: "1000"
+    acknowledgements:
+      enabled: true
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+
+  sentinel_chat_session_event_clickhouse:
+    type: "clickhouse"
+    inputs:
+      - "parse_sentinel_chat_session_event"
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse-service:8123}"
+    database: "${CLICKHOUSE_DATABASE:-zenvis}"
+    table: "sentinel_chat_session_event"
+    format: "json_each_row"
+    compression: "gzip"
+    date_time_best_effort: true
+    auth:
+      strategy: "basic"
+      user: "${CLICKHOUSE_USER:-default}"
+      password: "${CLICKHOUSE_PASSWORD:-SFGEfSVVMcUHCBCjKmzJ}"
+    skip_unknown_fields: false
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 1
+    buffer:
+      type: "disk"
+      max_size: 268435488
+      when_full: "block"
+    request:
+      retry_attempts: 10
+      retry_initial_backoff_secs: 1
+      retry_max_duration_secs: 300
+      timeout_secs: 30
+    healthcheck:
+      enabled: true
+
+tests:
+  - name: "append 事件应抽取消息标识与请求现场"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.append.v1","piece_id":"pc_demo","source":{"component":"gateway"},"occurred_at":1792235744,"payload":{"session":{"session_id":"sess-1","session_id_source":"header"},"request":{"method":"POST","path":"/anthropic/v1/messages","wire":"anthropic","remote_addr":"10.1.2.3","headers":{"content-type":"application/json"}},"messages":[{"message_id":"m-system","msg_index":-1,"msg_hash":"h-system","role":"system","original":{"system":"policy"}},{"message_id":"m-user","msg_index":0,"msg_hash":"h-user","role":"user","original":{"role":"user","content":"hello"}}]}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.event_key, "pc_demo")
+              assert_eq!(.event_kind, "append")
+              assert_eq!(.occurred_at, "2026-10-17 19:15:44.000")
+              assert_eq!(.session_id, "sess-1")
+              assert_eq!(.session_id_source, "header")
+              assert_eq!(.message_type, "chat.session.append.v1")
+              assert_eq!(.request_method, "POST")
+              assert_eq!(.request_path, "/anthropic/v1/messages")
+              assert_eq!(.request_wire, "anthropic")
+              assert_eq!(.request_remote_addr, "10.1.2.3")
+              assert_eq!(.message_count, 2)
+              assert_eq!(.message_ids, ["m-system", "m-user"])
+              assert_eq!(.msg_hashes, ["h-system", "h-user"])
+              assert_eq!(.message_roles, ["system", "user"])
+              assert_eq!(.messages.messages[1].original.content, "hello")
+              assert_eq!(.request_headers.headers."content-type", "application/json")
+              assert_eq!(.source_component, "gateway")
+              assert_eq!(.schema_version, "1.0")
+              true
+
+  - name: "started 事件应生成稳定会话首见键"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.started.v1","source":{"component":"gateway"},"occurred_at":1792235700,"payload":{"session":{"session_id":"sess-2","session_id_source":"derived_hash"},"request":{"method":"POST","path":"/openai_passthrough/v1/chat/completions","wire":"openai","remote_addr":"10.0.0.9","headers":{}}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.event_key, "st_sess-2")
+              assert_eq!(.event_kind, "started")
+              assert_eq!(.message_count, 0)
+              assert_eq!(.message_ids, [])
+              assert_eq!(.msg_hashes, [])
+              assert_eq!(.message_roles, [])
+              assert_eq!(.turn_no, null)
+              assert_eq!(.msg_index, null)
+              true
+
+  - name: "snapshot 事件应保留轮次与全量消息"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.snapshot.v1","snapshot_id":"sn_demo","source":{"component":"gateway"},"occurred_at":1792235800,"payload":{"session":{"session_id":"sess-3","session_id_source":"body_field"},"request":{"method":"POST","path":"/v1/chat/completions","wire":"openai","remote_addr":"10.0.0.3","headers":{"x-trace-id":"t-1"}},"turn_no":3,"messages":[{"message_id":"m-1","msg_index":0,"msg_hash":"h-1","role":"user","original":{"role":"user","content":"one"}},{"message_id":"m-2","msg_index":1,"msg_hash":"h-2","role":"assistant","original":{"role":"assistant","content":"two"}}]}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.event_key, "sn_demo")
+              assert_eq!(.event_kind, "snapshot")
+              assert_eq!(.turn_no, 3)
+              assert_eq!(.message_count, 2)
+              assert_eq!(.messages.messages[0].message_id, "m-1")
+              assert_eq!(.messages.messages[1].role, "assistant")
+              true
+
+  - name: "mutation 事件应保留旧标识与改写后消息"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.mutation.v1","mutation_id":"mt_demo","source":{"component":"gateway"},"occurred_at":1792235900,"payload":{"session":{"session_id":"sess-4","session_id_source":"header"},"request":{"method":"POST","path":"/v1/chat/completions","wire":"openai","remote_addr":"10.0.0.4","headers":{}},"msg_index":2,"old":{"message_id":"m-old","msg_hash":"h-old"},"new":{"message_id":"m-new","msg_index":2,"msg_hash":"h-new","role":"user","original":{"role":"user","content":"changed"}}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert_eq!(.event_key, "mt_demo")
+              assert_eq!(.event_kind, "mutation")
+              assert_eq!(.msg_index, 2)
+              assert_eq!(.old_message_id, "m-old")
+              assert_eq!(.old_msg_hash, "h-old")
+              assert_eq!(.new_message_id, "m-new")
+              assert_eq!(.new_msg_hash, "h-new")
+              assert_eq!(.message_ids, ["m-new"])
+              assert_eq!(.message_roles, ["user"])
+              assert_eq!(.mutation.old.message_id, "m-old")
+              assert_eq!(.mutation.new.original.content, "changed")
+              true
+
+  - name: "非法 JSON 会话消息应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: 'not a json envelope'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              assert!(exists(.metadata.dropped.reason))
+              true
+
+  - name: "非会话流消息类型应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"sentinel.security.event.v1","source":{"component":"gateway"},"occurred_at":1792235744,"payload":{"session":{"session_id":"sess-x"}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "非法 epoch 时间应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.started.v1","source":{"component":"gateway"},"occurred_at":"2026-10-17 19:15:44","payload":{"session":{"session_id":"sess-time"}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "毫秒时间戳应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.started.v1","source":{"component":"gateway"},"occurred_at":1792235744000,"payload":{"session":{"session_id":"sess-ms"}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "缺少会话号应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.started.v1","source":{"component":"gateway"},"occurred_at":1792235744,"payload":{"session":{}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "消息缺少稳定标识应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.append.v1","piece_id":"pc-bad","source":{"component":"gateway"},"occurred_at":1792235744,"payload":{"session":{"session_id":"sess-bad"},"request":{},"messages":[{"msg_index":0,"msg_hash":"h","role":"user","original":{"role":"user","content":"x"}}]}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true
+
+  - name: "mutation 缺少旧消息标识应进入死信"
+    inputs:
+      - insert_at: "parse_sentinel_chat_session_event"
+        type: "log"
+        log_fields:
+          message: '{"schema_version":"1.0","type":"chat.session.mutation.v1","mutation_id":"mt-bad","source":{"component":"gateway"},"occurred_at":1792235744,"payload":{"session":{"session_id":"sess-bad"},"request":{},"msg_index":1,"old":{"msg_hash":"h-old"},"new":{"message_id":"m-new","msg_index":1,"msg_hash":"h-new","role":"user","original":{"role":"user","content":"x"}}}}'
+    outputs:
+      - extract_from: "parse_sentinel_chat_session_event.dropped"
+        conditions:
+          - type: "vrl"
+            source: |-
+              assert!(exists(.metadata.dropped.message))
+              true

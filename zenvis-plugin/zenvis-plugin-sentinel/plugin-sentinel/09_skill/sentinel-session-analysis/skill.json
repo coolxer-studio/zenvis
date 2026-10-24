@@ -1,0 +1,59 @@
+{
+  "id": "sentinel-session-analysis",
+  "name": "智能体会话现场回放",
+  "description": "按 session_id 只读检索 Warden 会话事件，应用 started / append / snapshot / mutation 重建消息线，并按 message_id / msg_hash 关联 Sentinel 安全事件，输出命中消息所在会话现场与审计说明。",
+  "version": "1.0.0",
+  "author": "CoolXer",
+  "agentTypes": [
+    "agent_skill"
+  ],
+  "tags": [
+    "sentinel",
+    "agent-security",
+    "chat-session",
+    "timeline-reconstruction",
+    "read-only"
+  ],
+  "chat": {
+    "enabled": true,
+    "label": "智能体会话现场",
+    "icon": "data-analysis",
+    "order": 102,
+    "agentType": "agent_skill",
+    "prologue": "我是智能体会话现场回放助手，可在只读工具范围内按 session_id 拉取会话事件、重建消息线，并通过 message_id 或 msg_hash 定位 Sentinel 安全事件的命中消息。",
+    "promptSuggestions": [
+      {
+        "label": "回放会话消息线",
+        "prompt": "请按会话号检索 Warden 会话事件，按事件类型重建消息线，并说明是否出现 snapshot 覆盖或 mutation 历史改写：session_id="
+      },
+      {
+        "label": "定位命中消息",
+        "prompt": "请在会话消息线中定位 Sentinel 安全事件命中的消息，展示该消息原文、前后上下文以及关联的安全事件：session_id="
+      },
+      {
+        "label": "审计历史改写",
+        "prompt": "请检查该会话的 mutation 事件，列出被替换消息、新消息、改写时刻和对应的 message_id / msg_hash：session_id="
+      }
+    ]
+  },
+  "runtime": {
+    "promptMode": "skill_only",
+    "tools": {
+      "local": {
+        "retrieval": [
+          "retrieval_list_entity",
+          "retrieval_list_attribute",
+          "retrieval_search"
+        ]
+      }
+    },
+    "limits": {
+      "maxToolCalls": 18,
+      "maxRepeatedFailures": 2,
+      "maxToolResultChars": 16000,
+      "maxAccumulatedToolResultChars": 60000
+    }
+  },
+  "enabled": true,
+  "entry": "SKILL.md"
+}

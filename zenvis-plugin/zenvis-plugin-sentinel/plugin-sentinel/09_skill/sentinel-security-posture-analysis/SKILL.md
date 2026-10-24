@@ -2,10 +2,11 @@
 
 ## 目标与触发场景
 
-基于真实检索统计快照，对 Sentinel 智能体安全事件（实体 `sentinel_security_event`）做宏观态势分析，输出确定性发现与图表。触发场景：
+基于真实检索统计快照，对 Sentinel 安全事件（实体 `sentinel_security_event`）与 Warden 会话事件（实体 `sentinel_chat_session_event`）做宏观态势分析，输出确定性发现与图表。触发场景：
 
 - 用户要求“分析最新态势 / 最近 N 天安全情况”；
-- 用户要求比较不同判定点、协议线或命中类别的分布；
+- 用户要求比较不同判定点、协议线、命中类别或会话事件类型的分布；
+- 用户要求评估会话消息规模、会话覆盖率或安全事件现场还原的数据基础；
 - 用户给出一个明确时间窗要求态势评估。
 
 不处理：单条事件的逐条取证（改用“智能体安全事件研判”）、任何写操作。
@@ -20,31 +21,33 @@
 
 | 工具 | 用途 |
 | --- | --- |
-| `retrieval_list_entity` | 确认实体 `sentinel_security_event` |
+| `retrieval_list_entity` | 确认实体 `sentinel_security_event`、`sentinel_chat_session_event` |
 | `retrieval_list_attribute` | 确认维度字段逻辑名 |
 | `entity_overview` | 累计量与周期量 |
 | `entity_summary` | 单实体多指标汇总 |
 | `entity_trend` | 按时间粒度趋势 |
 | `entity_distribution` | 按维度 TopN 分布 |
 
-维度仅使用逻辑字段：`verdict_severity`、`verdict_category`、`verdict_action`、`verdict_decision_point`、`frag_kind`、`request_wire`、`source_policy_version`。时间字段使用 `occurred_at`。
+安全事件维度仅使用逻辑字段：`verdict_severity`、`verdict_category`、`verdict_action`、`verdict_decision_point`、`frag_kind`、`request_wire`、`source_policy_version`；会话事件维度使用 `event_kind`、`session_id_source`、`request_wire`。两类实体的时间字段均使用 `occurred_at`。
 
 ## 固定步骤
 
-1. 确认实体与字段（`retrieval_list_entity`、`retrieval_list_attribute`）。
-2. `entity_overview`：取指定时间范围的累计量与周期量。
-3. `entity_trend`（粒度 `HOUR` 或 `DAY`）：事件总量趋势，识别爆发时段。
+1. 确认实体与字段（`retrieval_list_entity`、`retrieval_list_attribute`）。若会话实体缺失，可仅分析安全事件，但必须说明消息现场分析不可用。
+2. `entity_overview`：取指定时间范围内两个实体的累计量与周期量。
+3. `entity_trend`（粒度 `HOUR` 或 `DAY`）：安全事件与会话事件趋势，识别爆发时段和两流覆盖偏差。
 4. `entity_distribution`：风险等级（`verdict_severity`）与命中类别（`verdict_category`）分布。
 5. `entity_distribution`：判定点（`verdict_decision_point`）与协议线（`request_wire`）分布，说明风险面。
-6. 如需要，对高危类别补充 `entity_summary` 计数。
-7. 输出发现与图表。
+6. `entity_summary`：对 `sentinel_chat_session_event` 统计 `DISTINCT_COUNT(session_id)`、`SUM(message_count)` 与 `DISTINCT_COUNT(event_kind)`，说明会话覆盖和消息规模。
+7. `entity_distribution`：会话事件类型（`event_kind`）与会话号来源（`session_id_source`）分布。
+8. 如需要，对高危类别补充 `entity_summary` 计数。
+9. 输出发现与图表。
 
 ## 输出格式
 
-1. **态势摘要**（不超过 5 句）：时间范围、事件总量、高危占比、最突出类别。
+1. **态势摘要**（不超过 5 句）：时间范围、安全事件总量、高危占比、最突出类别、会话事件覆盖与会话消息规模。
 2. **确定性发现**，按风险排序，每条包含：现象、支撑数据（工具与维度）、判读、建议。
 3. **图表**：用 Markdown 表格或代码块描述趋势与分布数据；若平台支持图表输出，给出 ECharts 数据集与 series 的明确字段。
-4. **数据覆盖与限制**：说明时间范围、查询粒度、TopN 上限，以及本插件仅接入 Sentinel 镜像档事件、不含实际阻断动作的事实。
+4. **数据覆盖与限制**：说明时间范围、查询粒度、TopN 上限、两流时间字段差异（安全事件 ISO8601、会话事件 epoch 秒已在入库时统一），以及镜像档判定不代表实际阻断的事实；`SUM(message_count)` 是事件消息数组累计量，不宣称等于去重后的最终消息数。
 
 ## 完成标准
 

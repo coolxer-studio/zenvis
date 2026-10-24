@@ -6,7 +6,7 @@
       "type": "alert",
       "level": "info",
       "showIcon": true,
-      "body": "本插件接入 Sentinel 智能体安全检测网关导出的安全事件（sentinel.security.event.v1）。镜像档判定不代表请求已被拦截，建议动作仅供参考。"
+      "body": "本插件同时接入 Sentinel 安全事件流（ai-agent-security-result）与 Warden 会话流（ai-agent-chat-message）。镜像档判定不代表请求已被拦截；安全事件可通过 message_id / msg_hash 关联到重建后的会话消息。"
     },
     {
       "type": "service",
@@ -15,33 +15,119 @@
         "url": "/zenvis/api/v1/entity/overview/query",
         "data": {
           "entities": [
-            "sentinel_security_event"
+            "sentinel_security_event",
+            "sentinel_chat_session_event"
           ],
           "time_range": {
             "preset": "TODAY"
           },
+          "time_field": "occurred_at",
           "comparison": "NONE"
         },
-        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){out.total=Number(r.all_time_count||0);out.today=Number(r.current_value||0);});return {status:0,msg:'',data:out};"
+        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){var key=String(r.entity||'');out[key+'_total']=Number(r.all_time_count||0);out[key+'_today']=Number(r.current_value||0);});return {status:0,msg:'',data:out};"
       },
       "body": {
         "type": "grid",
         "gap": "md",
         "columns": [
           {
-            "md": 6,
+            "md": 3,
             "body": {
               "type": "panel",
               "title": "累计安全事件",
-              "body": "<div style='font-size:28px;font-weight:700'>${total || 0}</div><div>入库以来全部命中事件</div>"
+              "body": "<div style='font-size:28px;font-weight:700'>${sentinel_security_event_total || 0}</div><div>入库以来全部命中事件</div>"
             }
           },
           {
-            "md": 6,
+            "md": 3,
             "body": {
               "type": "panel",
-              "title": "今日新增",
-              "body": "<div style='font-size:28px;font-weight:700'>${today || 0}</div><div>按判定时刻统计</div>"
+              "title": "今日安全事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${sentinel_security_event_today || 0}</div><div>按判定时刻统计</div>"
+            }
+          },
+          {
+            "md": 3,
+            "body": {
+              "type": "panel",
+              "title": "累计会话事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${sentinel_chat_session_event_total || 0}</div><div>started / append / snapshot / mutation</div>"
+            }
+          },
+          {
+            "md": 3,
+            "body": {
+              "type": "panel",
+              "title": "今日会话事件",
+              "body": "<div style='font-size:28px;font-weight:700'>${sentinel_chat_session_event_today || 0}</div><div>按会话事件时刻统计</div>"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "post",
+        "url": "/zenvis/api/v1/entity/summary/query",
+        "data": {
+          "entity": "sentinel_chat_session_event",
+          "metrics": [
+            {
+              "name": "session_count",
+              "operation": "DISTINCT_COUNT",
+              "field": "session_id",
+              "label": "覆盖会话数"
+            },
+            {
+              "name": "message_volume",
+              "operation": "SUM",
+              "field": "message_count",
+              "label": "事件承载消息数"
+            },
+            {
+              "name": "event_kind_count",
+              "operation": "DISTINCT_COUNT",
+              "field": "event_kind",
+              "label": "事件类型数"
+            }
+          ],
+          "time_range": {
+            "preset": "ALL_TIME"
+          },
+          "time_field": "occurred_at",
+          "comparison": "NONE",
+          "criteria_list": [],
+          "criteria_logic": "and"
+        },
+        "adaptor": "var d=payload&&payload.data?payload.data:{},rows=d.result&&Array.isArray(d.result.rows)?d.result.rows:[],out={};rows.forEach(function(r){out[r.metric]=Number(r.value||0);});return {status:0,msg:'',data:out};"
+      },
+      "body": {
+        "type": "grid",
+        "gap": "md",
+        "columns": [
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "覆盖会话数",
+              "body": "<div style='font-size:28px;font-weight:700'>${session_count || 0}</div><div>按 session_id 去重，可进入会话消息线重建</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "事件承载消息数",
+              "body": "<div style='font-size:28px;font-weight:700'>${message_volume || 0}</div><div>消息数组累计，含 at-least-once 重复投递</div>"
+            }
+          },
+          {
+            "md": 4,
+            "body": {
+              "type": "panel",
+              "title": "会话事件类型数",
+              "body": "<div style='font-size:28px;font-weight:700'>${event_kind_count || 0}</div><div>started / append / snapshot / mutation 覆盖情况</div>"
             }
           }
         ]
@@ -60,6 +146,7 @@
           "time_range": {
             "preset": "LAST_7_DAYS"
           },
+          "time_field": "occurred_at",
           "granularity": "HOUR"
         },
         "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
@@ -82,6 +169,95 @@
         },
         "series": "${chart_series}"
       }
+    },
+    {
+      "type": "grid",
+      "gap": "md",
+      "columns": [
+        {
+          "md": 7,
+          "body": {
+            "type": "chart",
+            "height": 380,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/trend/query",
+              "data": {
+                "entities": [
+                  "sentinel_chat_session_event"
+                ],
+                "time_range": {
+                  "preset": "LAST_7_DAYS"
+                },
+                "time_field": "occurred_at",
+                "granularity": "HOUR"
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "近 7 天会话事件趋势（按小时）"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "category"
+              },
+              "yAxis": {
+                "type": "value",
+                "minInterval": 1
+              },
+              "series": "${chart_series}"
+            }
+          }
+        },
+        {
+          "md": 5,
+          "body": {
+            "type": "chart",
+            "height": 380,
+            "api": {
+              "method": "post",
+              "url": "/zenvis/api/v1/entity/distribution/query",
+              "data": {
+                "mappings": [
+                  {
+                    "entity": "sentinel_chat_session_event",
+                    "dimension": "event_kind",
+                    "label": "会话事件类型",
+                    "time_field": "occurred_at"
+                  }
+                ],
+                "time_range": {
+                  "preset": "ALL_TIME"
+                },
+                "limit": 10
+              },
+              "adaptor": "var d=payload&&payload.data?payload.data:{},o=d.echarts&&d.echarts.option?d.echarts.option:{};return {status:0,msg:'',data:{chart_dataset:o.dataset||{source:[]},chart_series:o.series||[]}};"
+            },
+            "config": {
+              "title": {
+                "text": "会话事件类型分布"
+              },
+              "tooltip": {
+                "trigger": "axis"
+              },
+              "legend": {},
+              "dataset": "${chart_dataset}",
+              "xAxis": {
+                "type": "value"
+              },
+              "yAxis": {
+                "type": "category"
+              },
+              "series": "${chart_series}"
+            }
+          }
+        }
+      ]
     },
     {
       "type": "grid",

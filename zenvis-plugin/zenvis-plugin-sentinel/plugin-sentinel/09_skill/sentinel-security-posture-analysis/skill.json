@@ -1,8 +1,8 @@
 {
   "id": "sentinel-security-posture-analysis",
   "name": "智能体安全态势分析",
-  "description": "使用只读检索分析工具统计 Sentinel 智能体安全事件的趋势与分布，识别高危命中类别、异常时段与集中主体，输出确定性态势结论与后续调查建议。",
-  "version": "1.0.0",
+  "description": "使用只读检索分析工具同时统计 Sentinel 安全事件与 Warden 会话事件的趋势、分布和消息规模，识别高危命中类别、异常时段、集中主体与会话覆盖变化，输出确定性态势结论与后续调查建议。",
+  "version": "1.1.0",
   "author": "CoolXer",
   "agentTypes": [
     "agent_skill"
@@ -20,7 +20,7 @@
     "icon": "data-analysis",
     "order": 101,
     "agentType": "agent_skill",
-    "prologue": "我是智能体安全态势分析助手，可基于真实检索统计快照识别安全事件趋势、风险等级与命中类别分布、判定点与协议线分布，并输出确定性发现与图表。",
+    "prologue": "我是智能体安全态势分析助手，可基于真实检索统计快照分析安全事件与会话事件的趋势、风险分布、判定点、协议线和消息规模，并输出确定性发现与图表。",
     "promptSuggestions": [
       {
         "label": "分析最近 7 天态势",
@@ -29,6 +29,10 @@
       {
         "label": "对比判定点分布",
         "prompt": "请按判定点（input/output/stream/tool）和协议线格式统计 Sentinel 安全事件分布，指出主要风险面并给出数据覆盖限制。"
+      },
+      {
+        "label": "关联会话规模",
+        "prompt": "请同时分析 Sentinel 安全事件与 Warden 会话事件最近 7 天的趋势和分布，说明会话消息规模、事件类型构成及安全事件与会话覆盖的变化。"
       },
       {
         "label": "自定义时间窗",
@@ -51,7 +55,7 @@
       }
     },
     "limits": {
-      "maxToolCalls": 10,
+      "maxToolCalls": 14,
       "maxRepeatedFailures": 2,
       "maxToolResultChars": 20000,
       "maxAccumulatedToolResultChars": 48000

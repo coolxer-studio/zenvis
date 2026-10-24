@@ -8,5 +8,10 @@
     "name": "智能体安全监测",
     "type": "LOW_CODE_APP",
     "params": "com.coolxer.plugin.sentinel.app"
+  },
+  {
+    "name": "智能体会话现场",
+    "type": "LOW_CODE_PAGE",
+    "params": "com.coolxer.plugin.sentinel.session-timeline"
   }
 ]

@@ -1,0 +1,144 @@
+{
+  "type": "page",
+  "title": "智能体会话消息线",
+  "subTitle": "按 session_id 只读重建：started / append / snapshot / mutation",
+  "toolbar": [
+    {
+      "type": "button",
+      "label": "刷新",
+      "actionType": "reload"
+    },
+    {
+      "type": "button",
+      "label": "关闭",
+      "actionType": "custom",
+      "onEvent": {
+        "click": {
+          "actions": [
+            {
+              "actionType": "custom",
+              "script": "window.close();"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "body": [
+    {
+      "type": "alert",
+      "level": "warning",
+      "showIcon": true,
+      "visibleOn": "${!session_id}",
+      "body": "缺少 session_id 查询参数。请从安全事件或会话事件列表中的会话号进入。"
+    },
+    {
+      "type": "service",
+      "api": {
+        "method": "get",
+        "url": "/zenvis/api/v1/entity/sentinel_chat_session_event/list?session_id=${session_id|url_encode}&page=1&perPage=100&orderBy=occurred_at&orderDir=asc",
+        "sendOn": "${!!session_id}",
+        "adaptor": "var status=payload&&payload.status!==undefined?Number(payload.status):0;if(status!==0)return {status:status,msg:(payload&&payload.msg)||'会话事件查询失败',data:{}};var d=payload&&payload.data?payload.data:(payload||{}),rows=Array.isArray(d.rows)?d.rows:((d.result&&Array.isArray(d.result.rows))?d.result.rows:[]),total=Number(d.total||(d.result&&d.result.total)||rows.length);function asObject(value){if(value&&typeof value==='object')return value;if(typeof value==='string'&&value.trim()!==''){try{return JSON.parse(value);}catch(e){return null;}}return null;}function messageList(row){var value=asObject(row.messages);if(Array.isArray(value))return value;if(value&&Array.isArray(value.messages))return value.messages;return [];}function mutationOf(row){var value=asObject(row.mutation);return value&&typeof value==='object'?value:{};}function messageKey(message){if(!message||typeof message!=='object')return '';return String(message.msg_hash||message.message_id||'');}function addMessage(map,message){if(!message||typeof message!=='object')return;var key=messageKey(message);if(key)map[key]=message;}var sorted=rows.slice(0);sorted.sort(function(a,b){var ta=String(a.occurred_at||''),tb=String(b.occurred_at||'');if(ta!==tb)return ta<tb?-1:1;var ia=String(a.zenvis_insert_time||''),ib=String(b.zenvis_insert_time||'');if(ia!==ib)return ia<ib?-1:1;var ea=String(a.event_key||''),eb=String(b.event_key||'');return ea<eb?-1:(ea>eb?1:0);});var seen={},events=[];sorted.forEach(function(row){var key=String(row.event_key||'');if(!key)key=String(row.event_kind||'')+'|'+String(row.session_id||'')+'|'+String(row.occurred_at||'');if(seen[key])return;seen[key]=1;events.push(row);});var messageMap={},startedCount=0,appendCount=0,snapshotCount=0,mutationCount=0;events.forEach(function(row){var kind=String(row.event_kind||'');if(kind==='started'){startedCount++;return;}if(kind==='snapshot'){snapshotCount++;messageMap={};messageList(row).forEach(function(message){addMessage(messageMap,message);});return;}if(kind==='append'){appendCount++;messageList(row).forEach(function(message){addMessage(messageMap,message);});return;}if(kind==='mutation'){mutationCount++;var mutation=mutationOf(row),oldMessage=mutation.old||{},newMessage=mutation.new||messageList(row)[0];if(oldMessage.msg_hash)delete messageMap[String(oldMessage.msg_hash)];addMessage(messageMap,newMessage);}});var messages=[];Object.keys(messageMap).forEach(function(key){var message=messageMap[key]||{},index=(message.msg_index===null||message.msg_index===undefined)?999999:Number(message.msg_index);messages.push({message_id:String(message.message_id||''),msg_index:index,msg_hash:String(message.msg_hash||''),role:String(message.role||''),original:(message.original===undefined?null:message.original)});});messages.sort(function(a,b){if(a.msg_index!==b.msg_index)return a.msg_index-b.msg_index;return a.message_id<b.message_id?-1:(a.message_id>b.message_id?1:0);});var eventRows=events.map(function(row){return{zenvis_id:row.zenvis_id,event_key:row.event_key,occurred_at:row.occurred_at,event_kind:row.event_kind,message_count:Number(row.message_count||0),msg_index:row.msg_index,request_path:row.request_path,request_wire:row.request_wire};}),truncated=total>rows.length,warnings=[];if(!events.length)warnings.push('未查询到当前会话的会话流事件；请确认会话号正确、ai-agent-chat-message 有消息，且「Sentinel会话事件解析入库」任务已启用');else if(startedCount===0)warnings.push('未找到 started 事件，消息线可能不完整');if(startedCount>1)warnings.push('检测到多条不同 started 事件，请核对上游契约');if(truncated)warnings.push('事件总数超过单页上限，当前仅加载前 '+rows.length+' 条，消息线可能不完整');var pageSessionId=api&&api.data?String(api.data.session_id||''):'';return {status:0,msg:'',data:{has_data:events.length>0,session_id:pageSessionId||String((events[0]&&events[0].session_id)||''),event_total:total,event_count:events.length,started_count:startedCount,append_count:appendCount,snapshot_count:snapshotCount,mutation_count:mutationCount,message_count:messages.length,messages:messages,event_rows:eventRows,truncated:truncated,warnings:warnings,warning_text:warnings.join('；')}};"
+      },
+      "messages": {
+        "fetchFailed": "会话事件查询失败，请核对 session_id 或访问权限"
+      },
+      "body": [
+        {
+          "type": "alert",
+          "level": "warning",
+          "showIcon": true,
+          "visibleOn": "${warnings && warnings.length > 0}",
+          "body": "${warning_text}"
+        },
+        {
+          "type": "alert",
+          "level": "info",
+          "showIcon": true,
+          "body": "消息线按事件幂等键去重，并按到达顺序应用 append / snapshot / mutation；只读展示，不回写上游。若上游使用 snapshot 模式，snapshot 会覆盖此前的全量视图。"
+        },
+        {
+          "type": "property",
+          "title": "会话摘要",
+          "column": 4,
+          "items": [
+            { "label": "网关会话号", "content": "${session_id || params.session_id || '-'}" },
+            { "label": "事件总数", "content": "${event_count | default:0}" },
+            { "label": "started", "content": "${started_count | default:0}" },
+            { "label": "append", "content": "${append_count | default:0}" },
+            { "label": "snapshot", "content": "${snapshot_count | default:0}" },
+            { "label": "mutation", "content": "${mutation_count | default:0}" },
+            { "label": "重建消息数", "content": "${message_count | default:0}" },
+            { "label": "查询总量", "content": "${event_total | default:0}" }
+          ]
+        },
+        {
+          "type": "tabs",
+          "tabs": [
+            {
+              "title": "重建消息线",
+              "body": [
+                {
+                  "type": "each",
+                  "source": "${messages}",
+                  "placeholder": "尚未还原出消息",
+                  "items": {
+                    "type": "panel",
+                    "title": "#${item.msg_index} · ${item.role}",
+                    "body": [
+                      {
+                        "type": "property",
+                        "column": 3,
+                        "items": [
+                          { "label": "消息ID", "content": "${item.message_id | default:'-'}" },
+                          { "label": "消息哈希", "content": "${item.msg_hash | default:'-'}" },
+                          { "label": "角色", "content": "${item.role | default:'-'}" }
+                        ]
+                      },
+                      {
+                        "type": "json",
+                        "source": "${item.original}",
+                        "levelExpand": 2,
+                        "mutable": false,
+                        "displayDataTypes": false,
+                        "enableClipboard": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "title": "事件时间线",
+              "body": {
+                "type": "table",
+                "source": "${event_rows}",
+                "placeholder": "暂无会话事件",
+                "columns": [
+                  {
+                    "name": "event_key",
+                    "label": "事件幂等键",
+                    "type": "link",
+                    "href": "/#/service/low-code-page/com.coolxer.plugin.sentinel.detail-chat-session-event?record_id=${zenvis_id|url_encode}",
+                    "blank": true
+                  },
+                  {
+                    "name": "occurred_at",
+                    "label": "事件时刻",
+                    "type": "datetime",
+                    "format": "YYYY-MM-DD HH:mm:ss"
+                  },
+                  { "name": "event_kind", "label": "类型", "type": "tag" },
+                  { "name": "message_count", "label": "消息数" },
+                  { "name": "msg_index", "label": "改写下标" },
+                  { "name": "request_path", "label": "请求路径" },
+                  { "name": "request_wire", "label": "协议线" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

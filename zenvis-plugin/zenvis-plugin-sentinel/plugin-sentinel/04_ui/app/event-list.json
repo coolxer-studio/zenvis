@@ -1,7 +1,7 @@
 {
   "type": "page",
   "title": "智能体安全事件",
-  "remark": "Sentinel 智能体安全检测网关安全事件（sentinel.security.event.v1）。点击事件唯一ID可进入详情复盘。",
+  "remark": "Sentinel 智能体安全检测网关安全事件（schema_version 1.1，兼容 1.0）。点击事件唯一ID可进入详情复盘，点击会话号可重建对应会话消息线。",
   "body": [
     {
       "type": "crud",
@@ -102,6 +102,19 @@
           "name": "session_id",
           "label": "网关会话号",
           "searchable": true,
+          "copyable": true,
+          "type": "link",
+          "href": "/#/service/low-code-page/com.coolxer.plugin.sentinel.session-timeline?session_id=${session_id|url_encode}",
+          "blank": true,
+          "body": {
+            "type": "tpl",
+            "tpl": "${session_id}"
+          }
+        },
+        {
+          "name": "message_id",
+          "label": "命中消息ID",
+          "searchable": true,
           "copyable": true
         },
         {
@@ -150,8 +163,19 @@
           }
         },
         {
+          "name": "request_method",
+          "label": "请求方法",
+          "searchable": true
+        },
+        {
           "name": "request_path",
           "label": "原始请求路径",
+          "searchable": true,
+          "copyable": true
+        },
+        {
+          "name": "request_remote_addr",
+          "label": "客户端地址",
           "searchable": true,
           "copyable": true
         },

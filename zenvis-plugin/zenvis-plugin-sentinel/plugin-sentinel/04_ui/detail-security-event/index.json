@@ -5,6 +5,15 @@
   "toolbar": [
     {
       "type": "button",
+      "label": "查看会话消息线",
+      "level": "primary",
+      "visibleOn": "${!!session_id}",
+      "actionType": "url",
+      "url": "/#/service/low-code-page/com.coolxer.plugin.sentinel.session-timeline?session_id=${session_id|url_encode}",
+      "blank": true
+    },
+    {
+      "type": "button",
       "label": "关闭",
       "actionType": "custom",
       "onEvent": {
@@ -42,7 +51,7 @@
           "type": "alert",
           "level": "info",
           "showIcon": true,
-          "body": "镜像档判定仅记录命中与建议动作，不实际阻断或改写客户端请求；建议动作（allow/mask/refuse/answer_on_behalf/escalate）为策略建议，不代表请求已被拦截。"
+          "body": "镜像档判定仅记录命中与建议动作，不实际阻断或改写客户端请求；建议动作（allow/mask/refuse/answer_on_behalf/escalate）为策略建议，不代表请求已被拦截。schema_version 1.1 的事件可通过 message_id / msg_hash 与会话流消息关联。"
         },
         {
           "type": "property",
@@ -107,12 +116,22 @@
             {
               "label": "命中消息哈希",
               "content": "${msg_hash | default:'-'}",
-              "remark": "同一原始消息的多个事件共享该值。"
+              "remark": "同一原始消息的多个事件共享该值；与会话流消息的 msg_hash 同值。"
+            },
+            {
+              "label": "命中消息ID",
+              "content": "${message_id | default:'-'}",
+              "remark": "1.1 新增；与会话流消息的 message_id 同值，关联时优先使用。"
+            },
+            {
+              "label": "命中消息下标",
+              "content": "${evidence_msg_index | default:'-'}",
+              "remark": "evidence.msg_index；system 伪消息为 -1。"
             },
             {
               "label": "证据片段数",
               "content": "${evidence_count | default:'-'}",
-              "remark": "evidence 数组长度。"
+              "remark": "schema_version 1.1 为 1；1.0 为 evidence 数组长度。"
             },
             {
               "label": "判定模式",
@@ -134,7 +153,12 @@
             {
               "label": "网关会话号",
               "content": "${session_id | default:'-'}",
-              "remark": "x-bf-session-id。"
+              "remark": "可点击工具栏按钮重建对应会话消息线。"
+            },
+            {
+              "label": "会话号来源",
+              "content": "${session_id_source | default:'-'}",
+              "remark": "header / body_field / derived_hash。"
             },
             {
               "label": "事件主体",
@@ -147,6 +171,11 @@
               "remark": "客户端原始请求路径。"
             },
             {
+              "label": "请求方法",
+              "content": "${request_method | default:'-'}",
+              "remark": "网关签收现场的 HTTP 方法。"
+            },
+            {
               "label": "协议线格式",
               "content": "${request_wire | default:'-'}",
               "remark": "openai / anthropic。"
@@ -157,6 +186,11 @@
               "remark": "镜像信封恒为空。"
             },
             {
+              "label": "客户端地址",
+              "content": "${request_remote_addr | default:'-'}",
+              "remark": "1.1 新增，网关观察到的客户端 IPv4/IPv6 地址。"
+            },
+            {
               "label": "来源组件",
               "content": "${source_component | default:'-'}",
               "remark": "固定 sentinel。"
@@ -164,7 +198,7 @@
             {
               "label": "信封格式版本",
               "content": "${schema_version | default:'-'}",
-              "remark": "当前 1.0。"
+              "remark": "当前上游 1.1，入库任务兼容 1.0。"
             },
             {
               "label": "消息类型",
@@ -198,7 +232,7 @@
         },
         {
           "type": "panel",
-          "title": "证据片段（evidence，含 ±2 上下文邻居）",
+          "title": "证据片段（evidence：1.1 单片段 / 1.0 兼容数组）",
           "body": {
             "type": "json",
             "value": "${evidence|raw}",

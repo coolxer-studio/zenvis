@@ -8,10 +8,11 @@
 | --- | --- |
 | 插件名称 | 插件能力实验室 |
 | 包名 | `com.coolxer.plugin.lab` |
-| 当前版本 | 1.0.1 |
+| 当前版本 | 1.0.0 |
 | 插件形态 | 全栈示例型插件 |
 | 数据实体 | 2 个：实验室访问事件、实验室风险线索 |
 | 主要入口 | 实验室应用、实验室 IP 关联调查、HTML 大屏、数据观察台 |
+| 安装包 | [com-coolxer-plugin-lab-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-lab-1.0.0.tar.gz) |
 
 ## 用途与价值
 

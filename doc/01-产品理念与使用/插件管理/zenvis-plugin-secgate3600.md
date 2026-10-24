@@ -12,6 +12,7 @@
 | 插件形态 | 设备日志接入与分析型插件（Syslog → Kafka → ClickHouse） |
 | 数据实体 | 8 个：流量会话、DNS、本机终结、威胁、系统告警、系统升级、配置恢复、管理员事件 |
 | 主要入口 | SecGate 3600 NSG 应用、IP 关联调查、态势总览看板 |
+| 安装包 | [com-coolxer-plugin-secgate3600-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-secgate3600-1.0.0.tar.gz) |
 
 ## 用途与价值
 

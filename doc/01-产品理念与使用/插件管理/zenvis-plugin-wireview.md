@@ -12,6 +12,7 @@
 | 插件形态 | 纯前端静态工具插件（HTML 页面） |
 | 数据实体 | 无 |
 | 主要入口 | 左侧菜单“流量包分析” |
+| 安装包 | [com-coolxer-plugin-wireview-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-wireview-1.0.0.tar.gz) |
 
 ## 用途与价值
 

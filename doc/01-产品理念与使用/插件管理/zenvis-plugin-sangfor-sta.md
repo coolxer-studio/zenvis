@@ -12,6 +12,7 @@
 | 插件形态 | 探针日志接入与分析型插件（Kafka → ClickHouse） |
 | 数据实体 | 55 个，覆盖流量日志、47 类协议审计和 4 类安全日志 |
 | 主要入口 | 深信服 STA 应用、STA IP 关联调查、深信服 STA 配置 |
+| 安装包 | [com-coolxer-plugin-sangfor-sta-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-sangfor-sta-1.0.0.tar.gz) |
 
 ## 用途与价值
 

@@ -8,10 +8,11 @@
 | --- | --- |
 | 插件名称 | 资产管理 |
 | 包名 | `com.coolxer.plugin.asset` |
-| 当前版本 | 1.3.1 |
+| 当前版本 | 1.0.0 |
 | 插件形态 | 资产建模、治理与可视化型插件 |
 | 数据实体 | 10 个：主机、PC、IoT、移动端、探针、应用、服务、API、日志、文件 |
 | 主要入口 | 资产管理应用、资产 IP 命中调查、资产治理态势看板 |
+| 安装包 | [com-coolxer-plugin-asset-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-asset-1.0.0.tar.gz) |
 
 ## 用途与价值
 

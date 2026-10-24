@@ -12,6 +12,7 @@
 | 插件形态 | 指标采集、归档与可视化型插件 |
 | 数据实体 | 1 个：基础设施指标样本 |
 | 主要入口 | 基础设施指标监控应用、基础设施指标大屏 |
+| 安装包 | [com-coolxer-plugin-infra-monitor-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-infra-monitor-1.0.0.tar.gz) |
 
 ## 用途与价值
 

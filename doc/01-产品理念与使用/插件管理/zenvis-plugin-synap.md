@@ -8,10 +8,11 @@
 | --- | --- |
 | 插件名称 | 探针数据采集 |
 | 包名 | `com.coolxer.plugin.synap` |
-| 当前版本 | 1.2.0 |
+| 当前版本 | 1.0.0 |
 | 插件形态 | 探针消息接入型插件（Kafka → ClickHouse） |
 | 数据实体 | 1 个：探针消息 |
 | 主要入口 | 实体详情页、参数聚合分析页（不提供插件菜单） |
+| 安装包 | [com-coolxer-plugin-synap-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-synap-1.0.0.tar.gz) |
 
 ## 用途与价值
 

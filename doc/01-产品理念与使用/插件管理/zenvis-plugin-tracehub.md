@@ -12,6 +12,7 @@
 | 插件形态 | 外部工具集成与 AI 研判型插件 |
 | 数据实体 | 无 |
 | 主要入口 | 外链菜单“TraceHub 溯源查询”、MCP 工具、知识库与研判 Skill |
+| 安装包 | [com-coolxer-plugin-tracehub-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-tracehub-1.0.0.tar.gz) |
 
 ## 用途与价值
 

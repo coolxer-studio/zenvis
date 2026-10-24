@@ -8,10 +8,11 @@
 | --- | --- |
 | 插件名称 | 智能体安全监测 |
 | 包名 | `com.coolxer.plugin.sentinel` |
-| 当前版本 | 1.1.0 |
+| 当前版本 | 1.0.0 |
 | 插件形态 | 安全事件接入、检索与 AI 研判型插件 |
 | 数据实体 | 2 个：智能体安全事件、智能体会话事件 |
 | 主要入口 | 智能体安全监测应用、智能体会话现场页面、只读研判 Skill |
+| 安装包 | [com-coolxer-plugin-sentinel-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-sentinel-1.0.0.tar.gz) |
 
 ## 用途与价值
 

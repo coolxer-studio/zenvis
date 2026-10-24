@@ -8,10 +8,11 @@
 | --- | --- |
 | 插件名称 | Nginx日志监控 |
 | 包名 | `com.coolxer.plugin.nginx` |
-| 当前版本 | 1.0.1 |
+| 当前版本 | 1.0.0 |
 | 插件形态 | 日志接入与分析型插件（Syslog → Kafka → ClickHouse） |
 | 数据实体 | 2 个：访问日志、错误日志 |
 | 主要入口 | 左侧菜单“Nginx日志监控” |
+| 安装包 | [com-coolxer-plugin-nginx-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-nginx-1.0.0.tar.gz) |
 
 ## 用途与价值
 

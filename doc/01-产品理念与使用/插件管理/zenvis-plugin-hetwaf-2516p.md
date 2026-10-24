@@ -12,6 +12,7 @@
 | 插件形态 | 设备日志接入型插件（Syslog → Kafka → ClickHouse） |
 | 数据实体 | 2 个：规则事件、原始事件 |
 | 主要入口 | 插件配置、低代码应用、安全态势看板 |
+| 安装包 | [com-coolxer-plugin-hetwaf2516p-1.0.0.tar.gz](https://gitee.com/coolxer-studio/zenvis/releases/download/zenvis-plugin-1.0.0/com-coolxer-plugin-hetwaf2516p-1.0.0.tar.gz) |
 
 ## 用途与价值
 

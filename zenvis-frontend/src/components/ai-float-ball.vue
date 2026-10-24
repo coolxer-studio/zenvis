@@ -35,7 +35,7 @@
           </div>
           <div class="chat-header-actions">
             <button
-              class="action-btn"
+              class="action-btn is-fullscreen"
               aria-label="在新页面打开对话"
               title="在新页面打开对话"
               @click="openChatPage"
@@ -441,6 +441,60 @@ onUnmounted(() => {
   }
 }
 
+// 全屏按钮呼吸灯，提升可发现性
+.action-btn.is-fullscreen {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--zv-primary, #2f5ee5);
+  background: rgb(47 94 229 / 8%);
+  border-radius: 8px;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    animation: fullscreen-breathe 2.4s ease-in-out infinite;
+  }
+
+  .el-icon {
+    font-size: 14px;
+    animation: fullscreen-icon-breathe 2.4s ease-in-out infinite;
+  }
+
+  &:hover {
+    color: var(--zv-primary, #2f5ee5);
+    background: rgb(47 94 229 / 14%);
+  }
+}
+
+@keyframes fullscreen-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(47 94 229 / 14%), 0 1px 4px 0 rgb(47 94 229 / 4%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 1px rgb(47 94 229 / 5%), 0 1px 6px 0 rgb(47 94 229 / 14%);
+  }
+}
+
+@keyframes fullscreen-icon-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.82;
+  }
+
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
 .float-ball-enter-active {
   transition: opacity 180ms ease-out, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -495,6 +549,11 @@ onUnmounted(() => {
   .chat-pop-leave-to {
     filter: none;
     transform: none;
+  }
+
+  .action-btn.is-fullscreen::after,
+  .action-btn.is-fullscreen .el-icon {
+    animation: none;
   }
 }
 </style>

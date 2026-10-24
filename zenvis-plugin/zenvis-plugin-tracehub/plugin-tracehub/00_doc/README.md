@@ -36,7 +36,9 @@ TraceHub 管理页不内置 Token。用户在页面中输入后，值仅保存�
 
 ## iframe 来源白名单
 
-ZenVis 前端会对 `EXTERNAL_APP` 地址执行协议校验，只允许 `http/https`。若前端构建环境配置了 `VITE_IFRAME_ALLOWED_ORIGINS`，TraceHub 的完整 Origin 必须出现在列表中：
+TraceHub 服务端允许管理页被任意页面通过 iframe 嵌入，CSP 使用 `frame-ancestors *`，且不返回 `X-Frame-Options`。
+
+ZenVis 前端还会对 `EXTERNAL_APP` 地址执行协议校验，只允许 `http/https`。若前端构建环境配置了 `VITE_IFRAME_ALLOWED_ORIGINS`，TraceHub 的完整 Origin 也必须出现在列表中：
 
 ```text
 VITE_IFRAME_ALLOWED_ORIGINS=https://tracehub.example.com

@@ -8,7 +8,7 @@
 
 - **插件名称**: Nginx日志监控
 - **包名**: `com.coolxer.plugin.nginx`
-- **版本**: 1.0.1
+- **版本**: 1.0.0
 - **作者**: CoolXer
 - **描述**: 收集 Nginx 访问日志（access_log）和错误日志（error_log），提供日志检索、详情查看、IP 命中调查。
 

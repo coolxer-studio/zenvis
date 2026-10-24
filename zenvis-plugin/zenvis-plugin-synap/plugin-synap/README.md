@@ -1,6 +1,6 @@
 # 探针数据采集
 
-`com.coolxer.plugin.synap` 1.2.0 是 Zenvis 的统一探针 Kafka 数据采集插件。Android、H5、iOS、Host、WeChat 和 Server 的每个 Kafka Checkpoint 都转换为 63 个公共字段，写入 `synap_agent_message` / `zenvis.synap_agent_message`。
+`com.coolxer.plugin.synap` 1.0.0 是 Zenvis 的统一探针 Kafka 数据采集插件。Android、H5、iOS、Host、WeChat 和 Server 的每个 Kafka Checkpoint 都转换为 63 个公共字段，写入 `synap_agent_message` / `zenvis.synap_agent_message`。
 
 ## 主要能力
 
@@ -35,7 +35,7 @@ Server Topic ──▶ Server v1 严格校验
 | 资源 | 标识 |
 | --- | --- |
 | 包名 | `com.coolxer.plugin.synap` |
-| 版本 | `1.2.0` |
+| 版本 | `1.0.0` |
 | 实体 | `synap_agent_message` |
 | ClickHouse 表 | `zenvis.synap_agent_message` |
 | 推送任务 | `synap-kafka-to-clickhouse.yaml` |
@@ -93,11 +93,11 @@ DLQ 使用 JSON 编码并保留：
 ## 安装与升级
 
 1. 执行 `./build.sh`。
-2. 在 Zenvis 插件管理上传 `com-coolxer-plugin-synap.tar.gz`。
+2. 在 Zenvis 插件管理上传 `com-coolxer-plugin-synap-1.0.0.tar.gz`。
 3. 安装或升级插件，并确认唯一的“探针 Kafka 消息入库”任务已启动。
 4. 通过 `synap_agent_message` 检查记录；使用 `platform=server` 筛选 Server 数据。
 
-`1.2.0` 不改变现有实体和 ClickHouse 表结构，只扩大统一任务的主题范围并增加 Server 严格校验。没有 Server 专属表、数据迁移或 UI。
+`1.0.0` 不改变现有实体和 ClickHouse 表结构，只扩大统一任务的主题范围并增加 Server 严格校验。没有 Server 专属表、数据迁移或 UI。
 
 ## 目录
 

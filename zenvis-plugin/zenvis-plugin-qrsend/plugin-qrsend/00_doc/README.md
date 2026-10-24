@@ -152,7 +152,7 @@ plugin-qrsend/
 
 ## 安装与使用
 
-1. 运行 `build.sh` 构建插件包：`./build.sh`，产物为 `com-coolxer-plugin-qrsend.tar.gz`（位于仓库根目录）。
+1. 运行 `build.sh` 构建插件包：`./build.sh`，产物为 `com-coolxer-plugin-qrsend-1.0.0.tar.gz`（位于仓库根目录）。
 2. 在 Zenvis 插件管理页面上传并安装。
 3. 在「角色权限」中为角色分配「二维码离线传输」菜单。
 4. 从菜单进入 QRSend：

@@ -72,7 +72,7 @@ $ApiTarget = Join-Path $PluginPath "03_api"
 $JarCount = @(Get-ChildItem $ApiTarget -Filter "*.jar" -File -ErrorAction SilentlyContinue).Count
 if ($JarCount -gt 1) { throw "03_api 根目录最多允许一个 JAR，当前为 $JarCount" }
 
-$ArchiveName = ($PackageName -replace '\.', '-') + ".tar.gz"
+$ArchiveName = ($PackageName -replace '\.', '-') + "-$PluginVersion.tar.gz"
 $ArchivePath = Join-Path $RepoDir $ArchiveName
 if (Test-Path $ArchivePath) { Remove-Item $ArchivePath -Force }
 

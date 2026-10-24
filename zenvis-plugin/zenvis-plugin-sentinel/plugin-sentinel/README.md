@@ -15,7 +15,7 @@
 | --- | --- |
 | 插件名称 | 智能体安全监测 |
 | 包名 | `com.coolxer.plugin.sentinel` |
-| 版本 | 1.1.0 |
+| 版本 | 1.0.0 |
 | 作者 | CoolXer |
 | 能力目录 | 00_doc / 01_meta / 02_push-task / 03_api(空) / 04_ui / 05_dashboard / 06_menu / 07_mcp(空) / 08_rag(未声明) / 09_skill |
 
@@ -133,11 +133,11 @@ cd zenvis-plugin/zenvis-plugin-sentinel
 bash build.sh plugin-sentinel
 ```
 
-产出归档 `com-coolxer-plugin-sentinel-1.1.0.tar.gz`（归档根目录直接包含 `index.json`）。
+产出归档 `com-coolxer-plugin-sentinel-1.0.0.tar.gz`（归档根目录直接包含 `index.json`）。
 
 ## 版本历史
 
 | 版本 | 日期 | 说明 |
 | --- | --- | --- |
 | 1.0.0 | 2026-10-13 | 初始版本：接入 `sentinel.security.event.v1`，直接消费上游主题并解析入库，1 个实体、列表/详情/态势页、2 个只读 Skill |
-| 1.1.0 | 2026-10-21 | 增加独立 topic `ai-agent-chat-message` 的 Warden 会话流：新增 `sentinel_chat_session_event` 实体、会话事件列表/详情/消息线页面、会话现场 Skill；安全事件兼容 1.0/1.1，补充 `message_id` 等关联字段，总览增加会话规模与事件类型图表 |
+| 1.0.0 | 2026-10-21 | 增加独立 topic `ai-agent-chat-message` 的 Warden 会话流：新增 `sentinel_chat_session_event` 实体、会话事件列表/详情/消息线页面、会话现场 Skill；安全事件兼容 1.0/1.1，补充 `message_id` 等关联字段，总览增加会话规模与事件类型图表 |

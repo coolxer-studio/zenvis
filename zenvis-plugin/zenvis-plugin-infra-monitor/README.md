@@ -22,7 +22,7 @@
 产物：
 
 - `plugin-infra-monitor/03_api/extend-infra-monitor-1.0.0.jar`
-- `com-coolxer-plugin-infra-monitor.tar.gz`
+- `com-coolxer-plugin-infra-monitor-1.0.0.tar.gz`
 
 脚本会检查 `index.json` 与 `pom.xml` 版本一致，执行 `mvn clean package`，拒绝包含 `BOOT-INF` 的胖 JAR，并检查归档根目录存在 `index.json`。
 

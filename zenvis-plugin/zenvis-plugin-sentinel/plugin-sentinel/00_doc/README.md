@@ -8,7 +8,7 @@
 
 - **插件名称**：智能体安全监测
 - **包名**：`com.coolxer.plugin.sentinel`
-- **版本**：1.1.0
+- **版本**：1.0.0
 - **作者**：CoolXer
 - **描述**：接入 Sentinel 安全事件流（`sentinel.security.event.v1`）与 Warden 会话流（`chat.session.*.v1`），对提示注入、越狱、敏感数据、资源攻击与数据外渗等命中做原始留存、解析入库、检索、详情复盘、态势分析、会话消息线重建和 AI 研判。
 

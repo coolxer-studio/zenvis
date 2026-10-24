@@ -110,7 +110,7 @@ plugin-wireview/
    cd zenvis-plugin-wireview
    ./build.sh
    ```
-2. 在 Zenvis 插件管理页面上传生成的 `com-coolxer-plugin-wireview.tar.gz`。
+2. 在 Zenvis 插件管理页面上传生成的 `com-coolxer-plugin-wireview-1.0.0.tar.gz`。
 3. 安装完成后，在「角色权限」中为需要的角色分配「流量包分析」菜单。
 4. 从左侧菜单「流量包分析」进入 Wireview，打开或拖入本地抓包文件开始分析。
 

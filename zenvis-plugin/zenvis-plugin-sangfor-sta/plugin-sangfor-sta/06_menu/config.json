@@ -8,10 +8,5 @@
     "name": "深信服 STA 潜伏威胁探针",
     "type": "LOW_CODE_APP",
     "params": "com.coolxer.plugin.sangfor.sta.app"
-  },
-  {
-    "name": "STA IP 关联调查",
-    "type": "LOW_CODE_PAGE",
-    "params": "com.coolxer.plugin.sangfor.sta.ip-statistics"
   }
 ]

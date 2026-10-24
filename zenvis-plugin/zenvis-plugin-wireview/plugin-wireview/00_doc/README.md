@@ -104,7 +104,7 @@ plugin-wireview/
 
 ## 安装与使用
 
-1. 运行 `build.sh` 构建插件包：`./build.sh`，产物为 `com-coolxer-plugin-wireview.tar.gz`（位于仓库根目录）。
+1. 运行 `build.sh` 构建插件包：`./build.sh`，产物为 `com-coolxer-plugin-wireview-1.0.0.tar.gz`（位于仓库根目录）。
 2. 在 Zenvis 插件管理页面上传并安装。
 3. 在「角色权限」中为角色分配「流量包分析」菜单。
 4. 从菜单进入 Wireview，打开或拖入抓包文件；也可点击首页 “try out an example” 加载内置示例样本。

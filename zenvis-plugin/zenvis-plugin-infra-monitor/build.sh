@@ -104,7 +104,7 @@ else
     exit 1
 fi
 
-ARCHIVE_NAME="${PACKAGE_NAME//./-}.tar.gz"
+ARCHIVE_NAME="${PACKAGE_NAME//./-}-${PLUGIN_VERSION}.tar.gz"
 ARCHIVE_PATH="${REPO_DIR}/${ARCHIVE_NAME}"
 rm -f "${ARCHIVE_PATH}"
 

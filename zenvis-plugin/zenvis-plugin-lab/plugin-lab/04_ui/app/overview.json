@@ -17,7 +17,7 @@
       "body": [
         {
           "type": "tpl",
-          "tpl": "<div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:16px\"><div><div style=\"font-size:12px;letter-spacing:.18em;color:#3ce6c1\">ZENVIS PLUGIN LAB / 1.0.1</div><h1 style=\"margin:6px 0 4px;color:#eefcff;font-size:28px;letter-spacing:.08em\">插件能力实验室</h1><div style=\"color:#8fb4c8\">访问事件 + 风险线索双实体 · 合成数据 · 开箱即用</div></div><div style=\"padding:9px 14px;border:1px solid rgba(60,230,193,.28);border-radius:9px;background:rgba(8,42,58,.72);color:#9fe9dc;font-size:12px\">Meta · Vector · API · MySQL · UI · Dashboard · MCP · RAG · Skill</div></div>"
+          "tpl": "<div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:16px\"><div><div style=\"font-size:12px;letter-spacing:.18em;color:#3ce6c1\">ZENVIS PLUGIN LAB / 1.0.0</div><h1 style=\"margin:6px 0 4px;color:#eefcff;font-size:28px;letter-spacing:.08em\">插件能力实验室</h1><div style=\"color:#8fb4c8\">访问事件 + 风险线索双实体 · 合成数据 · 开箱即用</div></div><div style=\"padding:9px 14px;border:1px solid rgba(60,230,193,.28);border-radius:9px;background:rgba(8,42,58,.72);color:#9fe9dc;font-size:12px\">Meta · Vector · API · MySQL · UI · Dashboard · MCP · RAG · Skill</div></div>"
         },
         {
           "type": "alert",

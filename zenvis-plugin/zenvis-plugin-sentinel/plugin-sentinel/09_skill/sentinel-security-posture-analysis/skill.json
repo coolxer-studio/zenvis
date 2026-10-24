@@ -2,7 +2,7 @@
   "id": "sentinel-security-posture-analysis",
   "name": "智能体安全态势分析",
   "description": "使用只读检索分析工具同时统计 Sentinel 安全事件与 Warden 会话事件的趋势、分布和消息规模，识别高危命中类别、异常时段、集中主体与会话覆盖变化，输出确定性态势结论与后续调查建议。",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "author": "CoolXer",
   "agentTypes": [
     "agent_skill"

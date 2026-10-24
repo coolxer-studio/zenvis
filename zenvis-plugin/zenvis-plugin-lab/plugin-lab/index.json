@@ -1,7 +1,7 @@
 {
   "name": "插件能力实验室",
   "package_name": "com.coolxer.plugin.lab",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "用一个可运行的双实体示例串联 Meta、YAML 推送与 DLQ、动态 REST API、MySQL、MCP、RAG、Skill、低代码页面和 HTML 看板，集中展示 ZenVis 插件的组合方式。",
   "author": "CoolXer",
   "icon": "icon.png"

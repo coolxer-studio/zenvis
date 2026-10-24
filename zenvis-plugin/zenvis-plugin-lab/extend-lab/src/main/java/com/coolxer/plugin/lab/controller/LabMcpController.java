@@ -48,7 +48,7 @@ public class LabMcpController {
     public static final String NOTE_SEARCH_TOOL_NAME = "lab_note_search";
     public static final int NOTE_SEARCH_DEFAULT_LIMIT = 20;
     public static final int NOTE_SEARCH_MAX_LIMIT = 50;
-    public static final String EXTENSION_VERSION = "1.0.1";
+    public static final String EXTENSION_VERSION = "1.0.0";
 
     private final LabCapabilityService capabilityService;
     private final LabNoteService noteService;

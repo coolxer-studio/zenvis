@@ -17,10 +17,10 @@ Meta 数据模型
 | --- | --- |
 | 显示名称 | 插件能力实验室 |
 | 包名 | `com.coolxer.plugin.lab` |
-| 版本 | `1.0.1` |
+| 版本 | `1.0.0` |
 | 作者 | CoolXer |
 | 安装身份 | 全新安装，不兼容 `com.coolxer.plugin.user.event` |
-| 发布包 | `com-coolxer-plugin-lab-1.0.1.tar.gz` |
+| 发布包 | `com-coolxer-plugin-lab-1.0.0.tar.gz` |
 | 插件 API 前缀 | `/api/v1/plugin/com.coolxer.plugin.lab` |
 
 所有事件、IP、规则、风险分和笔记均为合成数据。两个实体之间的 IP 关联只演示查询方式，不代表真实攻击链或因果归属；风险等级也不是生产环境的安全结论。
@@ -34,7 +34,7 @@ Meta 数据模型
    ./build.sh
    ```
 
-2. 在 ZenVis 插件管理中上传 `com-coolxer-plugin-lab-1.0.1.tar.gz` 并升级安装。
+2. 在 ZenVis 插件管理中上传 `com-coolxer-plugin-lab-1.0.0.tar.gz` 并升级安装。
 3. 确认“实验室演示数据生成”和“实验室 Kafka 接入与死信”两个任务均生效。访问事件约每 5 秒、风险线索约每 9 秒由生成器写入 Kafka，再由消费任务落库。
 4. 打开“插件能力实验室”菜单，依次查看能力总览、访问事件、风险线索和实验室笔记。
 5. 打开“实验室 IP 关联调查”，输入 `10.24.8.15`、`10.24.16.20` 等演示地址进行跨实体查询。

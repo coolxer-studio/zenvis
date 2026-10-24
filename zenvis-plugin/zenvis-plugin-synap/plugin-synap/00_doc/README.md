@@ -1,6 +1,6 @@
 # 探针消息数据契约与运维说明
 
-本文档是 `com.coolxer.plugin.synap` 1.2.0 的统一消息接入契约。插件面向首次安装和 additive 升级，不包含旧 `msg` 表、网关 Syslog 或业务日志文件兼容逻辑。Server 平台的严格校验和业务载荷保留语义见 [`server-data-contract.md`](server-data-contract.md)。
+本文档是 `com.coolxer.plugin.synap` 1.0.0 的统一消息接入契约。插件面向首次安装和 additive 升级，不包含旧 `msg` 表、网关 Syslog 或业务日志文件兼容逻辑。Server 平台的严格校验和业务载荷保留语义见 [`server-data-contract.md`](server-data-contract.md)。
 
 ## 契约矩阵
 
@@ -288,7 +288,7 @@ DLQ Sink 开启：
 - 使用 amis JSON 组件的 `source` 绑定保留嵌套对象，避免显示为 `[object Object]`；
 - 不修改 ClickHouse 中的 `fact`、`agendas`、`punishes` 或 `raw_message` 原值。
 
-`1.1.0` 新增 26 个传输/风险结构化字段以及 Host AuditData、WeChat 新 Fact 的契约和测试；后端 additive schema 升级会为已有表补列。`06_menu/config.json` 固定为空数组，安装时仅注册 `parameter-analytics` 参数聚合页和详情页，不注册消息管理应用、插件菜单或探针看板。
+`1.0.0` 新增 26 个传输/风险结构化字段以及 Host AuditData、WeChat 新 Fact 的契约和测试；后端 additive schema 升级会为已有表补列。`06_menu/config.json` 固定为空数组，安装时仅注册 `parameter-analytics` 参数聚合页和详情页，不注册消息管理应用、插件菜单或探针看板。
 
 ## 环境覆盖
 

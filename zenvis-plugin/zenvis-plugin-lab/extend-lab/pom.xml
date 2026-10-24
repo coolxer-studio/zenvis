@@ -12,7 +12,7 @@
 
     <groupId>com.coolxer.plugin</groupId>
     <artifactId>extend-lab</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.0</version>
     <name>extend-lab</name>
     <description>Zenvis plugin capability lab REST and MCP extension</description>
 

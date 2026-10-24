@@ -13,8 +13,8 @@
 | --- | --- |
 | 显示名称 | 插件能力实验室 |
 | 包名 | `com.coolxer.plugin.lab` |
-| 版本 | `1.0.1` |
-| 发布包 | `com-coolxer-plugin-lab-1.0.1.tar.gz` |
+| 版本 | `1.0.0` |
+| 发布包 | `com-coolxer-plugin-lab-1.0.0.tar.gz` |
 | 插件目录 | `plugin-lab/` |
 | 动态 API 工程 | `extend-lab/` |
 
@@ -30,7 +30,7 @@ cd zenvis-plugin/zenvis-plugin-lab
 输出位于当前目录：
 
 ```text
-com-coolxer-plugin-lab-1.0.1.tar.gz
+com-coolxer-plugin-lab-1.0.0.tar.gz
 ```
 
 归档根目录包含 `index.json`。构建过程排除 `target/`、`build.log`、历史 JAR、临时归档与 `.DS_Store`。

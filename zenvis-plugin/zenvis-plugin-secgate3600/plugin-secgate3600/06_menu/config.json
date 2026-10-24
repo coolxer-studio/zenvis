@@ -8,10 +8,5 @@
     "name": "SecGate 3600 NSG 防火墙",
     "type": "LOW_CODE_APP",
     "params": "com.coolxer.plugin.secgate3600.app"
-  },
-  {
-    "name": "SecGate 3600 NSG IP 关联调查",
-    "type": "LOW_CODE_PAGE",
-    "params": "com.coolxer.plugin.secgate3600.ip-statistics"
   }
 ]

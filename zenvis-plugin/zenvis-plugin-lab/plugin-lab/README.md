@@ -1,6 +1,6 @@
 # 插件能力实验室（插件包）
 
-本目录是最终进入 `com-coolxer-plugin-lab-1.0.1.tar.gz` 的运行时内容。
+本目录是最终进入 `com-coolxer-plugin-lab-1.0.0.tar.gz` 的运行时内容。
 
 ## 包信息
 
@@ -8,7 +8,7 @@
 | --- | --- |
 | 显示名称 | 插件能力实验室 |
 | 包名 | `com.coolxer.plugin.lab` |
-| 版本 | `1.0.1` |
+| 版本 | `1.0.0` |
 | 图标 | `icon.png`，100×100 PNG |
 | 完整文档 | `00_doc/README.md` |
 

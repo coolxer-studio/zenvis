@@ -16,10 +16,11 @@ zenvis-service/*
 
 # 白名单：不忽略指定子目录
 !zenvis-plugin/zenvis-plugin-asset/
+!zenvis-plugin/zenvis-plugin-sangfor-sta/
 !zenvis-plugin/zenvis-plugin-operation/
 !zenvis-plugin/zenvis-plugin-risk/
 !zenvis-plugin/zenvis-plugin-synap/
-!zenvis-plugin/zenvis-plugin-user-event/
+!zenvis-plugin/zenvis-plugin-lab/
 !zenvis-plugin/zenvis-plugin-nginx/
 !zenvis-plugin/zenvis-plugin-rzweb/
 !zenvis-plugin/zenvis-plugin-wireview/
@@ -27,6 +28,10 @@ zenvis-service/*
 !zenvis-plugin/zenvis-plugin-tracehub/
 !zenvis-plugin/zenvis-plugin-qrsend/
 !zenvis-plugin/zenvis-plugin-infra-monitor/
+!zenvis-plugin/zenvis-plugin-hetwaf-2516p
+!zenvis-plugin/zenvis-plugin-secgate3600
+!zenvis-plugin/zenvis-plugin-sangfor-sta
+
 !zenvis-plugin/market-plugins.json
 
 !zenvis-service/zenvis-service-vectum/

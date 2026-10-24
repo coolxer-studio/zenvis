@@ -4,8 +4,8 @@
 
 | 目录 | 构件 | 版本 | 说明 |
 | --- | --- | --- | --- |
-| `plugin-asset` | `com.coolxer.plugin.asset` | `1.3.1` | 十类资产的接入、检索、规则、详情、IP 调查与治理看板 |
-| `extend-asset` | `com.coolxer.plugin:extend-asset` | `1.3.1` | 资产规则动态 API 薄 JAR 工程 |
+| `plugin-asset` | `com.coolxer.plugin.asset` | `1.0.0` | 十类资产的接入、检索、规则、详情、IP 调查与治理看板 |
+| `extend-asset` | `com.coolxer.plugin:extend-asset` | `1.0.0` | 资产规则动态 API 薄 JAR 工程 |
 
 ## 环境与构建
 
@@ -26,7 +26,7 @@ Windows：
 ```
 
 构建会先执行 Maven 测试和打包，将唯一薄 JAR 写入 `plugin-asset/03_api`，随后生成
-`com-coolxer-plugin-asset.tar.gz`。`target/`、运行 JAR、日志和归档均为可再生成物，不提交到 Git。
+`com-coolxer-plugin-asset-1.0.0.tar.gz`。`target/`、运行 JAR、日志和归档均为可再生成物，不提交到 Git。
 
 插件能力、接口、环境变量和升级约束见 [plugin-asset/README.md](plugin-asset/README.md)。
 

@@ -1,6 +1,6 @@
 # Server 探针统一消息契约
 
-本文档描述 `com.coolxer.plugin.synap` 1.2.0 对 Synap Server/Spring Boot Agent 协议 v1 Checkpoint 的统一入库契约。源字段以当前 `synap-server` 的 Server Fact、Topic 定义和 `synap-agent/agent-springboot` 采集实现为准。
+本文档描述 `com.coolxer.plugin.synap` 1.0.0 对 Synap Server/Spring Boot Agent 协议 v1 Checkpoint 的统一入库契约。源字段以当前 `synap-server` 的 Server Fact、Topic 定义和 `synap-agent/agent-springboot` 采集实现为准。
 
 ## 统一模型
 

@@ -62,13 +62,15 @@ http://127.0.0.1:8010/ui
 
 这是浏览器访问地址，必须能从用户浏览器所在网络直接访问。`127.0.0.1` 只适用于 TraceHub 与浏览器在同一台机器，或本机已完成端口转发的场景；其他部署方式应在安装前把 `params` 改为实际可达地址。若通过 ZenVis 同源反向代理访问，代理必须保留 TraceHub 的 `/ui` 和 `/api/v1` 路径，因为管理页使用 `/ui/app.css`、`/ui/app.js` 等绝对路径。
 
-前端 iframe 会拒绝 `javascript:`、`data:`、`blob:`、`file:` 等不安全协议，并允许 `http/https`。如果 ZenVis 前端构建环境配置了 `VITE_IFRAME_ALLOWED_ORIGINS`，则 TraceHub 的完整 Origin 必须加入该列表，例如：
+TraceHub 服务端允许被任意页面通过 iframe 嵌入，`/ui` 返回 `frame-ancestors *`，且不设置 `X-Frame-Options`，无需额外配置嵌入白名单。
+
+ZenVis 前端本身会拒绝 `javascript:`、`data:`、`blob:`、`file:` 等不安全协议，并允许 `http/https`。如果 ZenVis 前端构建环境配置了 `VITE_IFRAME_ALLOWED_ORIGINS`，则 TraceHub 管理页的完整 Origin 也必须加入该列表，例如：
 
 ```text
 VITE_IFRAME_ALLOWED_ORIGINS=https://tracehub.example.com
 ```
 
-白名单按完整 Origin 精确匹配，不包含路径。未配置该变量时，前端不额外限制 HTTP/HTTPS Origin。修改白名单后需要重新构建或重新发布前端。TraceHub 页面不会把 Token 写入 URL；用户需要在页面内输入 Bearer Token，Token 仅保存在当前标签页的 `sessionStorage`。
+前端白名单同样按完整 Origin 精确匹配，不包含路径。未配置该变量时，前端不额外限制 HTTP/HTTPS Origin。修改白名单后需要重新构建或重新发布前端。TraceHub 页面不会把 Token 写入 URL；用户需要在页面内输入 Bearer Token，Token 仅保存在当前标签页的 `sessionStorage`。
 
 ## MCP 接入
 
@@ -148,7 +150,7 @@ IOC 的 `max_matches` 默认 20，实际范围受 TraceHub 的 `IOC_MAX_MATCHES`
 
 1. 启动 TraceHub，确认 `/health/live` 和 `/health/ready` 正常。
 2. 确认 TraceHub 的 `base_url` 对 ZenVis 后端可达，并在 MCP 管理页把占位 Bearer Token 替换为真实值。
-3. 安装 `com-coolxer-plugin-tracehub.tar.gz`。
+3. 安装 `com-coolxer-plugin-tracehub-1.0.0.tar.gz`。
 4. 为角色授权菜单“TraceHub 溯源查询”，在浏览器中验证 iframe 可达并完成 Token 连接。
 5. 在 MCP 管理页确认 `tracehub` 连接成功且发现四个工具。
 6. 在 RAG 管理页确认 `tracehub-kb` 构建状态为 `BUILT`。

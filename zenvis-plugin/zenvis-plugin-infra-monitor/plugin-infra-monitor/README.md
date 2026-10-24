@@ -323,4 +323,4 @@ cd zenvis-plugin/zenvis-plugin-infra-monitor
 ./build.sh
 ```
 
-构建会执行 Maven 测试，确认动态 JAR 是薄 JAR（无 `BOOT-INF`），复制到 `plugin-infra-monitor/03_api/`，并生成 `com-coolxer-plugin-infra-monitor.tar.gz`。
+构建会执行 Maven 测试，确认动态 JAR 是薄 JAR（无 `BOOT-INF`），复制到 `plugin-infra-monitor/03_api/`，并生成 `com-coolxer-plugin-infra-monitor-1.0.0.tar.gz`。

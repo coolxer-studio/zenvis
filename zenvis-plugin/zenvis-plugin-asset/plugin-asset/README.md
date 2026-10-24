@@ -4,7 +4,7 @@
 
 - 插件名称：资产管理
 - 包名：`com.coolxer.plugin.asset`
-- 版本：`1.3.1`
+- 版本：`1.0.0`
 - 作者：CoolXer
 
 插件统一管理主机、PC、IoT、移动端、探针、应用、服务、API、日志和文件十类资产，提供检索、通用 CRUD、规则配置、详情页、IP 命中调查与资产治理看板。
@@ -91,7 +91,7 @@ Kafka → 校验/转换 → 对应 ClickHouse 表
 
 ## 升级兼容
 
-`1.3.1` 保留原实体 ID、表名、字段 ID、列名、列类型、引擎、排序键和分区键，可从 `1.2.3` 或 `1.3.0` 走平台增量升级。历史表使用 `ReplacingMergeTree(update_time)`、`ORDER BY id` 和 `PARTITION BY id`；平台禁止升级包修改这些物理属性，因此本版本没有就地改变已有表结构。
+`1.0.0` 保留原实体 ID、表名、字段 ID、列名、列类型、引擎、排序键和分区键，可从 `1.2.3` 或 `1.3.0` 走平台增量升级。历史表使用 `ReplacingMergeTree(update_time)`、`ORDER BY id` 和 `PARTITION BY id`；平台禁止升级包修改这些物理属性，因此本版本没有就地改变已有表结构。
 
 如需迁移到 `toYYYYMM(zenvis_insert_time)` 分区，应制定数据迁移、双写/停机和回滚方案，不能通过普通插件升级直接修改。
 
@@ -102,4 +102,4 @@ mvn -f extend-asset/pom.xml test
 ./build.sh
 ```
 
-安装包为仓库根目录下的 `com-coolxer-plugin-asset.tar.gz`。构建后应检查 JSON、YAML、Meta、页面引用、API 薄 JAR、版本和归档内容；没有目标 ClickHouse/Zenvis 环境时，不应宣称完成实时写入验证。
+安装包为仓库根目录下的 `com-coolxer-plugin-asset-1.0.0.tar.gz`。构建后应检查 JSON、YAML、Meta、页面引用、API 薄 JAR、版本和归档内容；没有目标 ClickHouse/Zenvis 环境时，不应宣称完成实时写入验证。

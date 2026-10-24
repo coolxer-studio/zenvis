@@ -8,10 +8,5 @@
     "name": "插件能力实验室",
     "type": "LOW_CODE_APP",
     "params": "com.coolxer.plugin.lab.app"
-  },
-  {
-    "name": "实验室 IP 关联调查",
-    "type": "LOW_CODE_PAGE",
-    "params": "com.coolxer.plugin.lab.ip-investigation"
   }
 ]

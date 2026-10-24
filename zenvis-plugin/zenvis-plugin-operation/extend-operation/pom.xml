@@ -12,7 +12,7 @@
 
     <groupId>com.coolxer.plugin</groupId>
     <artifactId>extend-operation</artifactId>
-    <version>1.2.1</version>
+    <version>1.0.0</version>
     <name>extend-operation</name>
     <description>Zenvis operation dashboard compatibility dynamic API extension</description>
 

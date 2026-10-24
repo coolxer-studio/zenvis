@@ -1,8 +1,0 @@
-[
-  {
-    "name": "基础设施指标大屏",
-    "code": "com.coolxer.plugin.infra.monitor.dashboard.endpoint-overview",
-    "type": "HTML_PAGE",
-    "html_path": "infra-endpoints.html"
-  }
-]

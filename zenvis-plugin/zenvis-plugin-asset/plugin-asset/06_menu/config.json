@@ -1,9 +1,0 @@
-[{
-	"name": "资管可视化配置",
-	"type": "POLICY_CONFIG",
-	"params": "com.coolxer.plugin.asset"
-}, {
-	"name": "资产管理",
-	"type": "LOW_CODE_APP",
-	"params": "com.coolxer.plugin.asset"
-}]

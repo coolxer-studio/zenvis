@@ -1,7 +1,0 @@
-[
-  {
-    "name": "TraceHub 溯源查询",
-    "type": "EXTERNAL_APP",
-    "params": "http://127.0.0.1:8010/ui"
-  }
-]

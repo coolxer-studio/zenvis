@@ -1,4 +1,0 @@
-interface:
-  display_name: "Zenvis 插件创建"
-  short_description: "基于数据字典或集成规范创建、校验并打包完整 Zenvis 插件：Meta 实体建模、Vector YAML 数据接入、动态 API 薄 JAR 与 MySQL 迁移、看板与菜单、MCP 服务注册、09_skill 运行时技能、构建归档与上架登记"
-  default_prompt: "使用 $create-zenvis-plugin 根据输入数据字典创建、校验并打包 Zenvis 插件。"

@@ -1,8 +1,0 @@
-{
-  "name": "TraceHub 安全事件研判",
-  "package_name": "com.coolxer.plugin.tracehub",
-  "version": "1.0.0",
-  "description": "嵌入独立运行的 TraceHub 溯源查询页面，并通过只读 MCP 工具、知识库和研判 Skill 对安全事件中的 IOC 与 IP 地址进行证据化核验。",
-  "author": "CoolXer",
-  "icon": "icon.png"
-}

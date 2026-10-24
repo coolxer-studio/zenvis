@@ -1,8 +1,0 @@
-{
-  "name": "Wireview PCAP 流量分析",
-  "package_name": "com.coolxer.plugin.wireview",
-  "version": "1.0.0",
-  "description": "浏览器端 PCAP/PCAPNG 数据包分析工具，基于 Wiregasm（Wireshark 的 WebAssembly 移植）实现，支持在页面内直接打开或拖入抓包文件，完成协议解码、数据包列表与详情查看、显示过滤、流跟踪、十六进制查看与导出，无需本地安装 Wireshark，抓包文件不上传服务器。",
-  "author": "CoolXer",
-  "icon": "icon.png"
-}

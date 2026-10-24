@@ -1,7 +1,0 @@
-[
-  {
-    "name": "二维码离线传输",
-    "type": "HTML_PAGE",
-    "params": "/zenvis/html-page/com.coolxer.plugin.qrsend/qrsend/index.html"
-  }
-]

@@ -1,4 +1,0 @@
-interface:
-  display_name: "智能体安全态势分析"
-  short_description: "基于只读统计快照输出安全事件趋势、分布与确定性发现"
-  default_prompt: "Use $sentinel-security-posture-analysis to summarize Sentinel security event trends and distributions for a given time range with deterministic findings and charts."

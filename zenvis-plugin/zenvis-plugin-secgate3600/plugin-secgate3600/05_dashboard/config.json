@@ -1,8 +1,0 @@
-[
-  {
-    "name": "SecGate 3600 NSG 防火墙态势总览",
-    "code": "com.coolxer.plugin.secgate3600.dashboard.nsg-overview",
-    "type": "HTML_PAGE",
-    "html_path": "secgate3600-nsg-overview.html"
-  }
-]

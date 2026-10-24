@@ -1,8 +1,0 @@
-{
-  "name": "惠尔特 HET-WAF-2516P 防火墙",
-  "package_name": "com.coolxer.plugin.hetwaf2516p",
-  "version": "1.0.0",
-  "description": "独立接入惠尔特 HET-WAF-2516P 防火墙 Syslog，支持规则事件结构化入库、DDoS 与其他格式原文留存、Kafka 死信隔离、检索详情、安全态势看板和可单独停用的演示数据推送。",
-  "author": "CoolXer",
-  "icon": "icon.png"
-}

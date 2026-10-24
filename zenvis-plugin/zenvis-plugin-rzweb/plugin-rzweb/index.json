@@ -1,8 +1,0 @@
-{
-  "name": "RzWeb 二进制逆向分析",
-  "package_name": "com.coolxer.plugin.rzweb",
-  "version": "1.0.0",
-  "description": "浏览器端二进制逆向分析工具，基于 Rizin 反汇编框架的 WebAssembly 移植，支持反汇编、十六进制查看、反编译、调用图、字符串、导入导出、交叉引用等功能，无需本地安装即可在浏览器中完成二进制文件静态分析。",
-  "author": "CoolXer",
-  "icon": "icon.png"
-}

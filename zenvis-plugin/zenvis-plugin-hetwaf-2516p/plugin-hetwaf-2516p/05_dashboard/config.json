@@ -1,8 +1,0 @@
-[
-  {
-    "name": "惠尔特 HET-WAF-2516P 安全态势",
-    "code": "com.coolxer.plugin.hetwaf2516p.dashboard.waf-security-overview",
-    "type": "HTML_PAGE",
-    "html_path": "waf-security-overview.html"
-  }
-]

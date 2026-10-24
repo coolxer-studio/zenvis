@@ -1,8 +1,0 @@
-{
-  "name": "智能体安全监测",
-  "package_name": "com.coolxer.plugin.sentinel",
-  "version": "1.0.0",
-  "description": "接入 Sentinel 智能体安全事件流（sentinel.security.event.v1）与 Warden 会话流（chat.session.*.v1），对提示注入、越狱、敏感数据、资源攻击与数据外渗等命中做原始留存、解析入库、检索与态势分析，并支持按 session_id 重建会话消息线、通过 message_id / msg_hash 还原安全事件现场和 AI 研判。",
-  "author": "CoolXer",
-  "icon": "icon.png"
-}

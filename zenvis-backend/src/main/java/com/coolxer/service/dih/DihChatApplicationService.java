@@ -70,6 +70,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -505,7 +507,7 @@ public class DihChatApplicationService {
         }
         if (step == AgentWorkflowStep.ATTRIBUTE_META) {
             return bootstrapVisualizationAttributeMeta(
-                    mcpToolContext, prompt, workflow);
+                    mcpToolContext, prompt, chatSession, workflow);
         }
         if (step == AgentWorkflowStep.PERSISTING) {
             return executeApprovedVisualizationPersistence(
@@ -514,11 +516,13 @@ public class DihChatApplicationService {
         if (!Set.of(
                 AgentWorkflowStep.INTENT_CONFIRMATION,
                 AgentWorkflowStep.ENTITY_META,
-                AgentWorkflowStep.ENTITY_SELECTION).contains(step)) {
+                AgentWorkflowStep.ENTITY_SELECTION,
+                AgentWorkflowStep.BLOCKED).contains(step)) {
             return prompt + "\n\n【平台工作流状态】\n当前阶段：" + step.name()
                     + "。本轮不重复查询实体 Meta，请严格按当前阶段继续。";
         }
-        return bootstrapVisualizationEntityMeta(mcpToolContext, prompt);
+        return bootstrapVisualizationEntityMeta(
+                mcpToolContext, prompt, chatSession, workflow, true);
     }
 
     private String executeApprovedVisualizationPersistence(
@@ -1493,7 +1497,10 @@ public class DihChatApplicationService {
 
     private String bootstrapVisualizationEntityMeta(
             McpToolContext mcpToolContext,
-            String prompt) {
+            String prompt,
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            boolean attributePrefetch) {
         ToolCallback entityMetaTool = findToolCallback(
                 mcpToolContext, "retrieval_list_display_entity");
         if (entityMetaTool == null) {
@@ -1546,13 +1553,16 @@ public class DihChatApplicationService {
                     .filter(entity -> StringUtils.hasText(stringValue(entity, "name", "")))
                     .limit(50)
                     .toList();
+            String fastPathBlock = tryBootstrapUnambiguousAttributeMeta(
+                    mcpToolContext, prompt, controlledRows, chatSession, workflow, true);
             return prompt + "\n\n【平台已执行实体 Meta MCP】\n"
                     + "工具：" + toolName + "\n"
                     + "调用参数：{}\n"
                     + "真实返回：" + JacksonUtil.toJson(Map.of("entityList", controlledRows)) + "\n"
                     + "实体选择只能使用上述 entityList；value 必须严格等于 name，"
                     + "label 显示 label（name）。不要重复调用实体列表工具，"
-                    + "不得输出自由输入框或未出现在返回结果中的实体。";
+                    + "不得输出自由输入框或未出现在返回结果中的实体。"
+                    + fastPathBlock;
         } catch (RuntimeException e) {
             log.warn("数据可视化实体 Meta MCP 前置调用失败: tool={}, error={}",
                     toolName, e.getMessage(), e);
@@ -1563,9 +1573,192 @@ public class DihChatApplicationService {
         }
     }
 
+    /**
+     * Prefetch attribute Meta in the same turn whenever the entity is already
+     * unambiguous. Meta evidence is validated per turn, so a turn that only refreshes
+     * the entity list forces the model to re-emit a plan that then cannot be verified
+     * (and permanently loops through BLOCKED). The entity comes from the workflow
+     * context first, then the prompt, then a single-entity Meta result.
+     */
+    private String tryBootstrapUnambiguousAttributeMeta(
+            McpToolContext mcpToolContext,
+            String prompt,
+            List<Map<String, Object>> entityRows,
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            boolean attributePrefetch) {
+        if (!attributePrefetch || entityRows == null || entityRows.isEmpty()) {
+            return "";
+        }
+        String entity = resolveAttributeMetaEntity(workflow, prompt, entityRows);
+        if (!StringUtils.hasText(entity)) {
+            return "";
+        }
+        ToolCallback attributeTool = findToolCallback(
+                mcpToolContext, "retrieval_list_display_attribute");
+        if (attributeTool == null) {
+            attributeTool = findToolCallback(mcpToolContext, "retrieval_list_attribute");
+        }
+        if (attributeTool == null) {
+            return "";
+        }
+        String toolName = attributeTool.getToolDefinition().name();
+        String arguments = JacksonUtil.toJson(Map.of("entity", entity));
+        String entityLabel = entityRows.stream()
+                .filter(row -> entity.equals(stringValue(row, "name", "")))
+                .map(row -> stringValue(row, "label", ""))
+                .findFirst()
+                .orElse("");
+        try {
+            String result = callTool(attributeTool, arguments, mcpToolContext);
+            List<Map<String, Object>> controlledRows = controlledAttributeRows(result);
+            rememberVerifiedMeta(chatSession, workflow, Map.of(
+                    "verifiedMetaEntityRows", entityRows,
+                    "verifiedMetaAttributeEntity", entity,
+                    "verifiedMetaAttributeRows", controlledRows));
+            return "\n\n【平台已确定唯一实体 "
+                    + (StringUtils.hasText(entityLabel) ? entityLabel + "（" + entity + "）" : entity)
+                    + "，已继续执行字段 Meta MCP】\n"
+                    + "工具：" + toolName + "\n"
+                    + "调用参数：" + arguments + "\n"
+                    + "真实返回：" + JacksonUtil.toJson(Map.of(
+                            "entity", entity,
+                            "attributeList", controlledRows)) + "\n"
+                    + "实体已唯一确定，本轮不要输出实体选择卡；请直接基于上述真实 Meta"
+                    + "输出 action=data_visualization.confirm_query_plan 的 zenvis:confirm"
+                    + " 查询方案卡（含 planId、实体、字段角色、统计口径、目标 MCP 工具和完整查询参数），"
+                    + "随后立即停止本轮。";
+        } catch (RuntimeException e) {
+            log.warn("数据可视化直达路径字段 Meta MCP 调用失败: entity={}, tool={}, error={}",
+                    entity, toolName, e.getMessage(), e);
+            return "";
+        }
+    }
+
+    private String resolveAttributeMetaEntity(
+            AgentWorkflowState workflow,
+            String prompt,
+            List<Map<String, Object>> entityRows) {
+        Map<String, Object> context = workflow == null || workflow.getContext() == null
+                ? Map.of() : workflow.getContext();
+        String selected = stringValue(context, "selectedEntity", "");
+        if (StringUtils.hasText(selected) && containsMetaEntity(entityRows, selected)) {
+            return selected;
+        }
+        List<String> contextEntities = visualizationRequestEntities(
+                mapValue(mapValue(context.get("query")).get("request")));
+        if (contextEntities.size() == 1
+                && containsMetaEntity(entityRows, contextEntities.get(0))) {
+            return contextEntities.get(0);
+        }
+        Set<String> matched = new LinkedHashSet<>();
+        for (Map<String, Object> row : entityRows) {
+            String name = stringValue(row, "name", "");
+            if (promptNamesEntity(prompt, name, stringValue(row, "label", ""))) {
+                matched.add(name);
+            }
+        }
+        if (matched.size() == 1) {
+            return matched.iterator().next();
+        }
+        if (entityRows.size() == 1) {
+            String only = stringValue(entityRows.get(0), "name", "");
+            return StringUtils.hasText(only) ? only : "";
+        }
+        return "";
+    }
+
+    private boolean containsMetaEntity(
+            List<Map<String, Object>> entityRows,
+            String entity) {
+        return entityRows.stream()
+                .anyMatch(row -> entity.equals(stringValue(row, "name", "")));
+    }
+
+    private boolean promptNamesEntity(String prompt, String name, String label) {
+        if (!StringUtils.hasText(prompt) || !StringUtils.hasText(name)) {
+            return false;
+        }
+        String lowerPrompt = prompt.toLowerCase(Locale.ROOT);
+        if (name.length() >= 2
+                && lowerPrompt.contains(name.toLowerCase(Locale.ROOT))) {
+            return true;
+        }
+        String compactName = name.replaceAll("[_\\-\\s]", "");
+        if (compactName.length() >= 2
+                && lowerPrompt.contains(compactName.toLowerCase(Locale.ROOT))) {
+            return true;
+        }
+        if (!StringUtils.hasText(label)) {
+            return false;
+        }
+        if (label.length() >= 2 && prompt.contains(label)) {
+            return true;
+        }
+        String trimmedLabel = label.replaceAll("(数据|表|信息|记录|日志|详情|列表)$", "");
+        return trimmedLabel.length() >= 2 && prompt.contains(trimmedLabel);
+    }
+
+    private List<Map<String, Object>> controlledAttributeRows(String result) {
+        Map<String, Object> payload = metaToolPayload(result);
+        List<Map<String, Object>> rows = firstNonEmptyListOfMaps(
+                payload.get("attributeList"),
+                payload.get("attribute_list"),
+                payload.get("attributes"),
+                payload.get("datalist"),
+                mapValue(payload.get("result")).get("rows"));
+        return rows.stream()
+                .map(attribute -> {
+                    Map<String, Object> controlled = new LinkedHashMap<>();
+                    controlled.put("name", stringValue(attribute, "name", ""));
+                    controlled.put("label", stringValue(attribute, "label", ""));
+                    controlled.put("type", firstNonBlank(
+                            stringValue(attribute, "type", ""),
+                            stringValue(attribute, "dataType", "")));
+                    return controlled;
+                })
+                .filter(attribute -> StringUtils.hasText(
+                        stringValue(attribute, "name", "")))
+                .limit(200)
+                .toList();
+    }
+
+    /**
+     * Keeps the platform-fetched Meta snapshot in the workflow context so a later turn
+     * can still verify a plan when the current turn carries no Meta tool evidence.
+     */
+    private void rememberVerifiedMeta(ChatSession chatSession,
+                                      AgentWorkflowState workflow,
+                                      Map<String, Object> values) {
+        if (chatSession == null
+                || workflow == null
+                || workflow.getContext() == null
+                || workflowStateStore == null) {
+            return;
+        }
+        workflow.getContext().putAll(values);
+        workflowStateStore.upsert(chatSession, workflow);
+    }
+
+    private Map<String, Object> verifiedMetaSnapshot(ChatSession chatSession) {
+        AgentWorkflowState workflow = workflowStateStore == null || chatSession == null
+                ? null
+                : workflowStateStore.loadActive(
+                chatSession, DataVisualizationAgent.AGENT_TYPE).orElse(null);
+        Map<String, Object> context = workflow == null || workflow.getContext() == null
+                ? Map.of() : workflow.getContext();
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("entityRows", listOfMaps(context.get("verifiedMetaEntityRows")));
+        snapshot.put("attributeEntity",
+                stringValue(context, "verifiedMetaAttributeEntity", ""));
+        snapshot.put("attributeRows", listOfMaps(context.get("verifiedMetaAttributeRows")));
+        return snapshot;
+    }
+
     private String bootstrapVisualizationAttributeMeta(
             McpToolContext mcpToolContext,
             String prompt,
+            ChatSession chatSession,
             AgentWorkflowState workflow) {
         String entity = workflow == null || workflow.getContext() == null
                 ? "" : stringValue(workflow.getContext(), "selectedEntity", "");
@@ -1587,32 +1780,16 @@ public class DihChatApplicationService {
                     + "当前未暴露字段 Meta MCP；不得生成查询方案或图表。";
         }
 
-        String refreshedPrompt = bootstrapVisualizationEntityMeta(mcpToolContext, prompt);
+        String refreshedPrompt = bootstrapVisualizationEntityMeta(
+                mcpToolContext, prompt, chatSession, null, false);
         String toolName = attributeTool.getToolDefinition().name();
         String arguments = JacksonUtil.toJson(Map.of("entity", entity));
         try {
             String result = callTool(attributeTool, arguments, mcpToolContext);
-            Map<String, Object> payload = metaToolPayload(result);
-            List<Map<String, Object>> rows = firstNonEmptyListOfMaps(
-                    payload.get("attributeList"),
-                    payload.get("attribute_list"),
-                    payload.get("attributes"),
-                    payload.get("datalist"),
-                    mapValue(payload.get("result")).get("rows"));
-            List<Map<String, Object>> controlledRows = rows.stream()
-                    .map(attribute -> {
-                        Map<String, Object> controlled = new LinkedHashMap<>();
-                        controlled.put("name", stringValue(attribute, "name", ""));
-                        controlled.put("label", stringValue(attribute, "label", ""));
-                        controlled.put("type", firstNonBlank(
-                                stringValue(attribute, "type", ""),
-                                stringValue(attribute, "dataType", "")));
-                        return controlled;
-                    })
-                    .filter(attribute -> StringUtils.hasText(
-                            stringValue(attribute, "name", "")))
-                    .limit(200)
-                    .toList();
+            List<Map<String, Object>> controlledRows = controlledAttributeRows(result);
+            rememberVerifiedMeta(chatSession, workflow, Map.of(
+                    "verifiedMetaAttributeEntity", entity,
+                    "verifiedMetaAttributeRows", controlledRows));
             return refreshedPrompt + "\n\n【平台已执行字段 Meta MCP】\n"
                     + "工具：" + toolName + "\n"
                     + "调用参数：" + arguments + "\n"
@@ -2390,6 +2567,21 @@ public class DihChatApplicationService {
                                         MessageType type,
                                         ReportActionDto reportAction,
                                         String runId) {
+        return saveAgentRunResponse(
+                chatSession, currentUser, content, type, reportAction, runId, null);
+    }
+
+    /**
+     * Agent Run 模式必须把本步骤真实发生的 MCP 调用作为校验证据传入，
+     * 否则确认卡和图表卡会因为“无当轮工具证据”被平台永久阻断。
+     */
+    public Message saveAgentRunResponse(ChatSession chatSession,
+                                        User currentUser,
+                                        String content,
+                                        MessageType type,
+                                        ReportActionDto reportAction,
+                                        String runId,
+                                        McpToolLogStream toolEvidence) {
         return saveAiResponse(
                 chatSession,
                 currentUser,
@@ -2398,7 +2590,7 @@ public class DihChatApplicationService {
                 true,
                 false,
                 List.of(),
-                null,
+                toolEvidence,
                 null,
                 reportAction,
                 false,
@@ -2543,7 +2735,7 @@ public class DihChatApplicationService {
         List<Map<String, Object>> reportEvidenceRefs = List.of();
         if (withParts) {
             List<ChatMessagePart> streamedParts = new ArrayList<>();
-            if (toolActivityStream != null) {
+            if (toolActivityStream != null && toolActivityStream.exposeParts()) {
                 streamedParts.addAll(toolActivityStream.toolParts());
             }
             if (supplementalParts != null) {
@@ -2557,6 +2749,8 @@ public class DihChatApplicationService {
             if (StringUtils.hasText(demoId)) {
                 decorateDemoParts(parts, demoId);
             } else {
+                ensurePlatformVisualizationEntitySelection(
+                        chatSession, parts, toolActivityStream);
                 ensurePlatformVisualizationChartPreview(
                         chatSession, parts, toolActivityStream);
                 validateDataVisualizationParts(chatSession, parts, toolActivityStream);
@@ -2582,7 +2776,7 @@ public class DihChatApplicationService {
                         .status("completed")
                         .build());
             }
-            if (toolActivityStream != null) {
+            if (toolActivityStream != null && toolActivityStream.exposeParts()) {
                 List<ChatMessagePart> ragParts = toolActivityStream.ragSearchParts();
                 if (!ragParts.isEmpty()) {
                     List<ChatMessagePart> merged = new ArrayList<>(ragParts);
@@ -3134,15 +3328,135 @@ public class DihChatApplicationService {
         return StringUtils.hasText(error) ? error : fallback;
     }
 
+    private static final Pattern INFO_STEPS_FENCE_PATTERN = Pattern.compile(
+            "```zenvis:info-steps[^\\r\\n]*\\R[\\s\\S]*?(?:\\R?```|$)");
+
+    /**
+     * Platform fallback for the entity-selection step: the model is expected to emit a
+     * zenvis:info-steps card, but when it only emits text (or a malformed fence) the
+     * user is left with nothing actionable and the workflow stalls. The platform already
+     * holds this turn's real entity Meta result, so it repairs/synthesizes the selection
+     * card; validation then re-normalizes the suggestions from the same evidence.
+     */
+    private void ensurePlatformVisualizationEntitySelection(
+            ChatSession chatSession,
+            List<ChatMessagePart> parts,
+            McpToolLogStream evidence) {
+        if (chatSession == null || parts == null || evidence == null) {
+            return;
+        }
+        boolean visualizationSession = !StringUtils.hasText(chatSession.getType())
+                || DataVisualizationAgent.AGENT_TYPE.equals(chatSession.getType());
+        if (!visualizationSession) {
+            return;
+        }
+        if (parts.stream().anyMatch(part -> Set.of(
+                "info-steps", "confirm", "config",
+                "visualization-chart-preview", "visualization-chart-record",
+                "visualization-config-record", "dashboard-config-record",
+                "menu-config-record").contains(part.getType()))) {
+            return;
+        }
+        AgentWorkflowState workflow = workflowStateStore == null
+                ? null
+                : workflowStateStore.loadActive(
+                        chatSession, DataVisualizationAgent.AGENT_TYPE).orElse(null);
+        if (workflow != null && !Set.of(
+                AgentWorkflowStep.INTENT_CONFIRMATION,
+                AgentWorkflowStep.ENTITY_META,
+                AgentWorkflowStep.ENTITY_SELECTION).contains(workflow.getStep())) {
+            return;
+        }
+        McpToolLogStream.SuccessfulToolCall entityCall =
+                latestSuccessfulCall(evidence, VISUALIZATION_META_ENTITY_TOOLS);
+        if (entityCall == null) {
+            return;
+        }
+        boolean repaired = stripMalformedInfoStepsFences(parts);
+        if (!repaired && !mentionsMetaEntity(parts, entityCall)) {
+            return;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("action", "data_visualization.select_entity_from_meta");
+        metadata.put("steps", new ArrayList<Map<String, Object>>());
+        parts.add(ChatMessagePart.builder()
+                .id("entity-selection:" + (workflow == null
+                        ? java.util.UUID.randomUUID().toString()
+                        : workflow.getWorkflowId()))
+                .type("info-steps")
+                .title("选择分析实体")
+                .content("平台已查询实体 Meta，请选择要分析的逻辑实体。")
+                .status("pending")
+                .metadata(metadata)
+                .build());
+    }
+
+    private boolean stripMalformedInfoStepsFences(List<ChatMessagePart> parts) {
+        boolean stripped = false;
+        for (int index = parts.size() - 1; index >= 0; index--) {
+            ChatMessagePart part = parts.get(index);
+            if (!"markdown".equals(part.getType())
+                    || part.getContent() == null
+                    || !part.getContent().contains("```zenvis:info-steps")) {
+                continue;
+            }
+            String cleaned = INFO_STEPS_FENCE_PATTERN.matcher(part.getContent())
+                    .replaceAll("").trim();
+            stripped = true;
+            if (cleaned.isEmpty()) {
+                parts.remove(index);
+            } else {
+                part.setContent(cleaned);
+            }
+        }
+        return stripped;
+    }
+
+    private boolean mentionsMetaEntity(
+            List<ChatMessagePart> parts,
+            McpToolLogStream.SuccessfulToolCall entityCall) {
+        Map<String, Object> payload = metaToolPayload(entityCall.result());
+        List<Map<String, Object>> entityRows = firstNonEmptyListOfMaps(
+                payload.get("entityList"),
+                payload.get("entity_list"),
+                payload.get("entities"),
+                payload.get("datalist"),
+                mapValue(payload.get("result")).get("rows"));
+        if (entityRows.isEmpty()) {
+            return false;
+        }
+        StringBuilder text = new StringBuilder();
+        for (ChatMessagePart part : parts) {
+            if ("markdown".equals(part.getType()) && part.getContent() != null) {
+                text.append('\n').append(part.getContent());
+            }
+        }
+        String content = text.toString();
+        if (!StringUtils.hasText(content)) {
+            return false;
+        }
+        String lowerContent = content.toLowerCase(Locale.ROOT);
+        for (Map<String, Object> row : entityRows) {
+            String name = stringValue(row, "name", "");
+            String label = stringValue(row, "label", "");
+            if (name.length() >= 2
+                    && lowerContent.contains(name.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+            if (label.length() >= 2 && content.contains(label)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void ensurePlatformVisualizationChartPreview(
             ChatSession chatSession,
             List<ChatMessagePart> parts,
             McpToolLogStream evidence) {
         if (chatSession == null
                 || workflowStateStore == null
-                || parts == null
-                || parts.stream().anyMatch(part ->
-                "visualization-chart-preview".equals(part.getType()))) {
+                || parts == null) {
             return;
         }
         AgentWorkflowState workflow = workflowStateStore.loadActive(
@@ -3154,6 +3468,19 @@ public class DihChatApplicationService {
         }
         Map<String, Object> query = mapValue(workflow.getContext().get("query"));
         String toolName = stringValue(query, "tool", "");
+        String approvedPlanId = stringValue(workflow.getContext(), "planId", "");
+        // Drop model-emitted previews that cannot pass validation (plan/query mismatch);
+        // the platform card below replaces them with the real executed snapshot instead
+        // of leaving the user with a blocked card while real data is available.
+        if (StringUtils.hasText(approvedPlanId)) {
+            parts.removeIf(part ->
+                    "visualization-chart-preview".equals(part.getType())
+                    && !platformPreviewMatchesApprovedPlan(part, approvedPlanId, query));
+        }
+        if (parts.stream().anyMatch(part ->
+                "visualization-chart-preview".equals(part.getType()))) {
+            return;
+        }
         McpToolLogStream.SuccessfulToolCall call =
                 evidence == null ? null : evidence.successfulCall(toolName);
         if (!VISUALIZATION_DATA_TOOLS.contains(toolName)) {
@@ -3237,6 +3564,31 @@ public class DihChatApplicationService {
         }
     }
 
+    /**
+     * A model-emitted preview only survives when it references the exact approved
+     * plan and query; anything else would be blocked by validation, so the platform
+     * treats it as replaceable by the real executed snapshot.
+     */
+    private boolean platformPreviewMatchesApprovedPlan(
+            ChatMessagePart part,
+            String planId,
+            Map<String, Object> approvedQuery) {
+        Map<String, Object> metadata = part.getMetadata();
+        if (metadata == null || !planId.equals(stringValue(metadata, "planId", ""))) {
+            return false;
+        }
+        Map<String, Object> partQuery = VisualizationQueryNormalizer.normalizeQuery(
+                metadata.get("query"));
+        if (!stringValue(partQuery, "tool", "")
+                .equals(stringValue(approvedQuery, "tool", ""))) {
+            return false;
+        }
+        return VisualizationQueryNormalizer.normalizeRequest(
+                mapValue(partQuery.get("request")))
+                .equals(VisualizationQueryNormalizer.normalizeRequest(
+                        mapValue(approvedQuery.get("request"))));
+    }
+
     private void validateDataVisualizationParts(ChatSession chatSession,
                                                 List<ChatMessagePart> parts,
                                                 McpToolLogStream toolActivityStream) {
@@ -3245,10 +3597,15 @@ public class DihChatApplicationService {
         }
         McpToolLogStream evidence = toolActivityStream == null
                 ? McpToolLogStream.disabled() : toolActivityStream;
-        boolean metaReady = VISUALIZATION_META_ENTITY_TOOLS.stream()
+        Map<String, Object> metaSnapshot = verifiedMetaSnapshot(chatSession);
+        boolean evidenceMetaReady = VISUALIZATION_META_ENTITY_TOOLS.stream()
                 .anyMatch(evidence::hasSuccessfulTool)
                 && VISUALIZATION_META_ATTRIBUTE_TOOLS.stream()
                 .anyMatch(evidence::hasSuccessfulTool);
+        boolean snapshotMetaReady = !listOfMaps(metaSnapshot.get("entityRows")).isEmpty()
+                && StringUtils.hasText(stringValue(metaSnapshot, "attributeEntity", ""))
+                && !listOfMaps(metaSnapshot.get("attributeRows")).isEmpty();
+        boolean metaReady = evidenceMetaReady || snapshotMetaReady;
         boolean visualizationSession = chatSession == null
                 || !StringUtils.hasText(chatSession.getType())
                 || DataVisualizationAgent.AGENT_TYPE.equals(chatSession.getType());
@@ -3266,7 +3623,7 @@ public class DihChatApplicationService {
             if ("confirm".equals(part.getType())
                     && "data_visualization.confirm_query_plan".equals(action)) {
                 String metaValidationError = metaReady
-                        ? normalizeVisualizationPlanMetadata(part, raw, evidence)
+                        ? normalizeVisualizationPlanMetadata(part, raw, evidence, metaSnapshot)
                         : "尚未成功调用实体与字段 Meta MCP，查询方案不能确认";
                 boolean complete = metaReady
                         && !StringUtils.hasText(metaValidationError)
@@ -3274,25 +3631,20 @@ public class DihChatApplicationService {
                         && StringUtils.hasText(stringValue(raw, "entity", ""))
                         && hasSafeVisualizationQuery(raw);
                 if (complete) {
-                    AgentWorkflowState activeWorkflow = workflowStateStore == null
-                            ? null : workflowStateStore.loadActive(
-                            chatSession, DataVisualizationAgent.AGENT_TYPE).orElse(null);
-                    if (activeWorkflow != null
-                            && activeWorkflow.getStep() == AgentWorkflowStep.BLOCKED) {
-                        blockVisualizationPart(part, raw,
-                                latestWorkflowFailureMessage(
-                                        activeWorkflow,
-                                        "工作流当前处于阻塞状态，请先重试失败阶段"));
-                    } else {
-                        raw.put("validationStatus", "success");
-                        raw.put("metaVerified", true);
-                    }
+                    // A plan that just passed the full Meta + query re-verification must be
+                    // able to recover a workflow whose previous attempt was blocked;
+                    // otherwise the stale BLOCKED step keeps rejecting valid cards forever.
+                    raw.put("validationStatus", "success");
+                    raw.put("metaVerified", true);
                 } else {
                     blockVisualizationPart(part, raw,
                             StringUtils.hasText(metaValidationError)
                                     ? metaValidationError
                                     : "确认卡缺少planId或安全查询参数，查询方案不能确认");
                 }
+                log.info("数据可视化方案校验: planId={}, evidenceMeta={}, snapshotMeta={}, metaReady={}, error={}",
+                        stringValue(raw, "planId", ""), evidenceMetaReady, snapshotMetaReady,
+                        metaReady, metaValidationError);
                 continue;
             }
             if ("visualization-chart-record".equals(part.getType())) {
@@ -3321,6 +3673,29 @@ public class DihChatApplicationService {
                 continue;
             }
             validateVisualizationChartArtifact(chatSession, part, raw, evidence);
+        }
+        dedupeVisualizationChartPreviews(parts);
+    }
+
+    /**
+     * 模型有时会在同一轮输出多张相同 artifactId 的预览卡，只保留第一张，
+     * 避免同一份数据在界面上被重复渲染成两个图表。
+     */
+    private void dedupeVisualizationChartPreviews(List<ChatMessagePart> parts) {
+        Set<String> seenArtifacts = new LinkedHashSet<>();
+        try {
+            parts.removeIf(part -> {
+                if (part == null
+                        || !"visualization-chart-preview".equals(part.getType())) {
+                    return false;
+                }
+                String artifactId = stringValue(
+                        part.getMetadata() == null ? Map.of() : part.getMetadata(),
+                        "artifactId", "");
+                return StringUtils.hasText(artifactId) && !seenArtifacts.add(artifactId);
+            });
+        } catch (UnsupportedOperationException ignored) {
+            // 只读列表无需去重（仅测试或外部调用会传入不可变集合）
         }
     }
 
@@ -3691,21 +4066,50 @@ public class DihChatApplicationService {
     private String normalizeVisualizationPlanMetadata(
             ChatMessagePart part,
             Map<String, Object> raw,
-            McpToolLogStream evidence) {
+            McpToolLogStream evidence,
+            Map<String, Object> metaSnapshot) {
         McpToolLogStream.SuccessfulToolCall entityCall =
                 latestSuccessfulCall(evidence, VISUALIZATION_META_ENTITY_TOOLS);
         McpToolLogStream.SuccessfulToolCall attributeCall =
                 latestSuccessfulCall(evidence, VISUALIZATION_META_ATTRIBUTE_TOOLS);
-        if (entityCall == null || attributeCall == null) {
-            return "尚未成功调用实体与字段 Meta MCP，查询方案不能确认";
+        List<Map<String, Object>> entityRows;
+        List<Map<String, Object>> attributeRows;
+        String attributeEntity;
+        List<Map<String, Object>> selectedAttributeRows = List.of();
+        if (entityCall != null && attributeCall != null) {
+            Map<String, Object> entityPayload = metaToolPayload(entityCall.result());
+            entityRows = firstNonEmptyListOfMaps(
+                    entityPayload.get("entityList"),
+                    entityPayload.get("entity_list"),
+                    entityPayload.get("entities"),
+                    entityPayload.get("datalist"),
+                    mapValue(entityPayload.get("result")).get("rows"));
+            Map<String, Object> attributePayload = metaToolPayload(attributeCall.result());
+            Map<String, Object> attributeArguments = parseJsonObject(attributeCall.arguments());
+            attributeEntity = firstNonBlank(
+                    stringValue(attributePayload, "entity", ""),
+                    stringValue(attributeArguments, "entity", ""));
+            attributeRows = firstNonEmptyListOfMaps(
+                    attributePayload.get("attributeList"),
+                    attributePayload.get("attribute_list"),
+                    attributePayload.get("attributes"),
+                    attributePayload.get("datalist"),
+                    mapValue(attributePayload.get("result")).get("rows"));
+            selectedAttributeRows = firstNonEmptyListOfMaps(
+                    attributePayload.get("selectAttributeList"),
+                    attributePayload.get("select_attribute_list"));
+        } else {
+            entityRows = listOfMaps(metaSnapshot == null ? null : metaSnapshot.get("entityRows"));
+            attributeRows = listOfMaps(
+                    metaSnapshot == null ? null : metaSnapshot.get("attributeRows"));
+            attributeEntity = stringValue(
+                    metaSnapshot == null ? Map.of() : metaSnapshot, "attributeEntity", "");
+            if (entityRows.isEmpty()
+                    || attributeRows.isEmpty()
+                    || !StringUtils.hasText(attributeEntity)) {
+                return "尚未成功调用实体与字段 Meta MCP，查询方案不能确认";
+            }
         }
-        Map<String, Object> entityPayload = metaToolPayload(entityCall.result());
-        List<Map<String, Object>> entityRows = firstNonEmptyListOfMaps(
-                entityPayload.get("entityList"),
-                entityPayload.get("entity_list"),
-                entityPayload.get("entities"),
-                entityPayload.get("datalist"),
-                mapValue(entityPayload.get("result")).get("rows"));
         Map<String, Map<String, Object>> entitiesByName = new LinkedHashMap<>();
         for (Map<String, Object> entity : entityRows) {
             String name = stringValue(entity, "name", "");
@@ -3737,25 +4141,11 @@ public class DihChatApplicationService {
         String entityName = requestedEntities.get(0);
         Map<String, Object> entityMeta = entitiesByName.get(entityName);
 
-        Map<String, Object> attributePayload = metaToolPayload(attributeCall.result());
-        Map<String, Object> attributeArguments = parseJsonObject(attributeCall.arguments());
-        String attributeEntity = firstNonBlank(
-                stringValue(attributePayload, "entity", ""),
-                stringValue(attributeArguments, "entity", ""));
         if (!entityName.equals(attributeEntity)) {
             return "字段 Meta MCP 查询的实体为"
                     + (StringUtils.hasText(attributeEntity) ? attributeEntity : "空")
                     + "，与查询方案实体" + entityName + "不一致";
         }
-        List<Map<String, Object>> attributeRows = firstNonEmptyListOfMaps(
-                attributePayload.get("attributeList"),
-                attributePayload.get("attribute_list"),
-                attributePayload.get("attributes"),
-                attributePayload.get("datalist"),
-                mapValue(attributePayload.get("result")).get("rows"));
-        List<Map<String, Object>> selectedAttributeRows = firstNonEmptyListOfMaps(
-                attributePayload.get("selectAttributeList"),
-                attributePayload.get("select_attribute_list"));
         Map<String, Map<String, Object>> attributesByName = new LinkedHashMap<>();
         java.util.stream.Stream.concat(
                         attributeRows.stream(), selectedAttributeRows.stream())
@@ -4090,23 +4480,38 @@ public class DihChatApplicationService {
             if (messages == null) {
                 return Map.of();
             }
-            Map<String, Object> approved = messages.stream()
-                    .filter(Objects::nonNull)
-                    .flatMap(message -> message.getParts() == null
-                            ? java.util.stream.Stream.empty()
-                            : message.getParts().stream())
-                    .filter(part -> "confirm".equals(part.getType())
-                            && "approved".equals(part.getStatus())
-                            && part.getMetadata() != null
-                            && "data_visualization.confirm_query_plan".equals(
+            Map<String, Object> steerConfirmed = null;
+            for (int index = 0; index < messages.size(); index++) {
+                Message message = messages.get(index);
+                if (message == null || message.getParts() == null) {
+                    continue;
+                }
+                for (ChatMessagePart part : message.getParts()) {
+                    if (part == null
+                            || !"confirm".equals(part.getType())
+                            || part.getMetadata() == null
+                            || !"data_visualization.confirm_query_plan".equals(
                             stringValue(part.getMetadata(), "action", ""))
-                            && planId.equals(stringValue(part.getMetadata(), "planId", "")))
-                    .map(ChatMessagePart::getMetadata)
-                    .findFirst()
-                    .<Map<String, Object>>map(LinkedHashMap::new)
-                    .orElseGet(Map::of);
-            if (!approved.isEmpty()) {
-                return approved;
+                            || !planId.equals(stringValue(
+                            part.getMetadata(), "planId", ""))) {
+                        continue;
+                    }
+                    if ("approved".equals(part.getStatus())) {
+                        return new LinkedHashMap<>(part.getMetadata());
+                    }
+                    // Agent Run 模式下用户点击确认或回复“已确认”只会发送 steer 消息，
+                    // 不经过工作流 approve 动作；平台已验证成功（Meta 与查询均校验通过）
+                    // 的方案卡，若其后紧跟用户确认消息，视为已批准。
+                    if ("pending".equals(part.getStatus())
+                            && "success".equals(stringValue(
+                            part.getMetadata(), "validationStatus", ""))
+                            && isVisualizationPlanConfirmedAfter(messages, index)) {
+                        steerConfirmed = new LinkedHashMap<>(part.getMetadata());
+                    }
+                }
+            }
+            if (steerConfirmed != null) {
+                return steerConfirmed;
             }
             AgentWorkflowState workflow = workflowStateStore == null
                     ? null : workflowStateStore.loadActive(
@@ -4121,6 +4526,31 @@ public class DihChatApplicationService {
             log.warn("读取数据可视化查询方案状态失败: {}", e.getMessage());
             return Map.of();
         }
+    }
+
+    private boolean isVisualizationPlanConfirmedAfter(
+            List<Message> messages,
+            int cardIndex) {
+        for (int index = cardIndex + 1; index < messages.size(); index++) {
+            Message message = messages.get(index);
+            if (message == null || Boolean.TRUE.equals(message.getInternal())) {
+                continue;
+            }
+            if (!"user".equalsIgnoreCase(message.getSender())) {
+                continue;
+            }
+            return isPlanConfirmationText(message.getContent());
+        }
+        return false;
+    }
+
+    private boolean isPlanConfirmationText(String content) {
+        if (!StringUtils.hasText(content)) {
+            return false;
+        }
+        String text = content.trim().toLowerCase(Locale.ROOT);
+        return text.matches(
+                "^(已确认|确认|确认执行|同意|继续|执行|开始|可以|好的|ok|okay|yes|go)(?s).*");
     }
 
     private boolean workflowQueryWasApproved(AgentWorkflowState workflow) {
@@ -5381,7 +5811,7 @@ public class DihChatApplicationService {
         return JacksonUtil.toJson(event) + "\n";
     }
 
-    private static class McpToolLogStream {
+    public static class McpToolLogStream {
 
         private static final String APPROVAL_EVENT_PREFIX = "\u001ezenvis-mcp-approval:";
         private static final String TOOL_EVENT_PREFIX = "\u001ezenvis-tool-call:";
@@ -5410,6 +5840,12 @@ public class DihChatApplicationService {
 
         private final String turnId;
 
+        /**
+         * Agent Run 只需要把本步骤的 MCP 调用作为校验证据，工具调用过程已由 Run 事件流展示，
+         * 不再重复写入聊天消息的 tool-call 片段。
+         */
+        private final boolean exposeParts;
+
         private McpToolLogStream(Sinks.Many<String> sink,
                                  Map<String, McpApprovalVo> approvalStates,
                                  Map<String, Integer> approvalOffsets,
@@ -5420,7 +5856,8 @@ public class DihChatApplicationService {
                                  AtomicInteger toolSequence,
                                  Map<String, RagSearchPartState> ragSearchStates,
                                  AtomicInteger ragSearchSequence,
-                                 String turnId) {
+                                 String turnId,
+                                 boolean exposeParts) {
             this.sink = sink;
             this.approvalStates = approvalStates;
             this.approvalOffsets = approvalOffsets;
@@ -5432,26 +5869,43 @@ public class DihChatApplicationService {
             this.ragSearchStates = ragSearchStates;
             this.ragSearchSequence = ragSearchSequence;
             this.turnId = turnId;
+            this.exposeParts = exposeParts;
         }
 
-        private static McpToolLogStream create() {
+        public static McpToolLogStream create() {
             return create(UUID.randomUUID().toString());
         }
 
-        private static McpToolLogStream create(String turnId) {
+        public static McpToolLogStream create(String turnId) {
             return new McpToolLogStream(Sinks.many().multicast().onBackpressureBuffer(),
                     new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
                     new ConcurrentHashMap<>(),
                     new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
                     new ConcurrentHashMap<>(), new AtomicInteger(),
-                    new ConcurrentHashMap<>(), new AtomicInteger(), turnId);
+                    new ConcurrentHashMap<>(), new AtomicInteger(), turnId, true);
+        }
+
+        /**
+         * 只收集工具证据、不向聊天消息注入 tool-call 片段的证据流。
+         */
+        public static McpToolLogStream createEvidenceOnly(String turnId) {
+            return new McpToolLogStream(Sinks.many().multicast().onBackpressureBuffer(),
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>(), new AtomicInteger(),
+                    new ConcurrentHashMap<>(), new AtomicInteger(), turnId, false);
         }
 
         private static McpToolLogStream disabled() {
             return new McpToolLogStream(
                     null, Map.of(), Map.of(), Map.of(), Map.of(),
                     Map.of(), Map.of(), new AtomicInteger(),
-                    new ConcurrentHashMap<>(), new AtomicInteger(), null);
+                    new ConcurrentHashMap<>(), new AtomicInteger(), null, true);
+        }
+
+        boolean exposeParts() {
+            return exposeParts;
         }
 
         private String turnId() {
@@ -5505,7 +5959,7 @@ public class DihChatApplicationService {
             return enabled() ? sink.asFlux() : Flux.empty();
         }
 
-        private void emit(McpToolCallLoggingProvider.McpToolCallLog logEvent) {
+        public void emit(McpToolCallLoggingProvider.McpToolCallLog logEvent) {
             if (!enabled() || logEvent == null) {
                 return;
             }

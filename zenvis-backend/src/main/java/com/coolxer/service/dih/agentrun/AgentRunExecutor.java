@@ -27,6 +27,7 @@ import com.coolxer.service.dih.AIChatService;
 import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.ContextCompactionObserver;
 import com.coolxer.service.dih.DihChatApplicationService;
+import com.coolxer.service.dih.DihChatApplicationService.McpToolLogStream;
 import com.coolxer.service.dih.DihChatExecutionPolicy;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -208,7 +209,10 @@ public class AgentRunExecutor {
         StringBuilder assistantText = new StringBuilder();
         AtomicBoolean truncated = new AtomicBoolean(false);
 
-        McpToolContext toolContext = buildToolContext(run, policy, user, state, stepId, toolCalls);
+        McpToolLogStream toolEvidence = McpToolLogStream.createEvidenceOnly(
+                "run:" + runId + ":" + stepId);
+        McpToolContext toolContext = buildToolContext(
+                run, policy, user, state, stepId, toolCalls, toolEvidence);
         ContextCompactionObserver compactionObserver = compactionObserver(run, stepId);
         AgentRunPrompt preparedPrompt = buildPrompt(run, stepId, user, compactionObserver);
         ChatDto chatDto = buildChatDto(run, preparedPrompt.text(), preparedPrompt.attachments());
@@ -331,7 +335,8 @@ public class AgentRunExecutor {
                     assistantAnswer,
                     MessageType.TEXT,
                     null,
-                    runId);
+                    runId,
+                    toolEvidence);
             runService.checkpointStep(runId, elapsedMillis, toolCalls.get(), true, null, stepId);
             runService.saveCheckpoint(runId, StringUtils.left(assistantAnswer, 24_000));
             runService.markWaitingUser(runId,
@@ -370,7 +375,7 @@ public class AgentRunExecutor {
                 || reportDraftService.hasFinalizedDraft(runId);
         if (planComplete(plan) && reportReady
                 && (state.isFinished() || StringUtils.isNotBlank(answer))) {
-            saveFinalMessage(session, user, runId, answer);
+            saveFinalMessage(session, user, runId, answer, toolEvidence);
             runService.markSucceeded(runId, answer, stepId);
             return;
         }
@@ -415,7 +420,8 @@ public class AgentRunExecutor {
                                             User user,
                                             AgentRunExecutionState state,
                                             String stepId,
-                                            AtomicInteger toolCalls) {
+                                            AtomicInteger toolCalls,
+                                            McpToolLogStream toolEvidence) {
         McpToolContext resolved = policy.toolsAllowed()
                 ? agentMcpToolService.resolve(policy.agentType(), policy.skillIds())
                 : McpToolContext.empty();
@@ -437,6 +443,7 @@ public class AgentRunExecutor {
                 "agent-run:" + run.getRunId(),
                 event -> handleApprovalEvent(run.getRunId(), stepId, state, event));
         ToolCallbackProvider logging = new McpToolCallLoggingProvider(merged, call -> {
+            toolEvidence.emit(call);
             if ("started".equals(call.status())) {
                 int current = toolCalls.incrementAndGet();
                 if (run.getToolCalls() + current > run.getMaxToolCalls()) {
@@ -721,12 +728,13 @@ public class AgentRunExecutor {
     private void saveFinalMessage(ChatSession session,
                                   User user,
                                   String runId,
-                                  String answer) {
+                                  String answer,
+                                  McpToolLogStream toolEvidence) {
         if (StringUtils.isBlank(answer)) {
             return;
         }
         chatApplicationService.saveAgentRunResponse(
-                session, user, answer, MessageType.TEXT, null, runId);
+                session, user, answer, MessageType.TEXT, null, runId, toolEvidence);
     }
 
     private void heartbeat(String runId, String leaseId) {

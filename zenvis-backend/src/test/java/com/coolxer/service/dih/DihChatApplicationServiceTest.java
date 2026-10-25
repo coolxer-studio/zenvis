@@ -29,6 +29,9 @@ import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.workflow.AgentWorkflowState;
+import com.coolxer.service.dih.workflow.AgentWorkflowStep;
+import com.coolxer.service.dih.workflow.WorkflowStateStore;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
@@ -40,6 +43,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -50,6 +56,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -1276,6 +1283,363 @@ class DihChatApplicationServiceTest {
                 .containsEntry("validationStatus", "blocked")
                 .containsEntry("validationMessage",
                         "图表 source 未指向本轮成功的 MCP 工具调用，图表不能验证");
+    }
+
+    @Test
+    void unambiguousEntityPromptPrefetchesAttributeMetaForDirectPlanCard() {
+        DihChatApplicationService service = emptyService();
+        ToolCallback attributeTool = mock(ToolCallback.class);
+        ToolDefinition attributeDefinition = mock(ToolDefinition.class);
+        when(attributeDefinition.name()).thenReturn("retrieval_list_display_attribute");
+        when(attributeTool.getToolDefinition()).thenReturn(attributeDefinition);
+        when(attributeTool.call(any(String.class))).thenReturn(
+                "{\"entity\":\"traffic\",\"attributeList\":["
+                        + "{\"name\":\"fact_type\",\"label\":\"事实类型\",\"type\":\"string\"}]}");
+        ToolCallbackProvider provider = mock(ToolCallbackProvider.class);
+        when(provider.getToolCallbacks()).thenReturn(new ToolCallback[]{attributeTool});
+        McpToolContext context = new McpToolContext(provider, "system-prompt");
+        List<Map<String, Object>> entityRows = List.of(
+                Map.of("name", "traffic", "label", "网络流量"),
+                Map.of("name", "probe_agent_message", "label", "探针消息"));
+
+        String fastPath = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "分析下网络流量最近的趋势", entityRows, null, null, true);
+
+        assertThat(fastPath).contains("retrieval_list_display_attribute")
+                .contains("data_visualization.confirm_query_plan")
+                .contains("fact_type");
+
+        String ambiguous = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "对比网络流量和探针消息的差异", entityRows, null, null, true);
+        assertThat(ambiguous).isEmpty();
+
+        String unrelated = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "你好", entityRows, null, null, true);
+        assertThat(unrelated).isEmpty();
+    }
+
+    @Test
+    void attributeMetaPrefetchUsesSingleEntityAndWorkflowContextEntity() {
+        DihChatApplicationService service = emptyService();
+        ToolCallback attributeTool = mock(ToolCallback.class);
+        ToolDefinition attributeDefinition = mock(ToolDefinition.class);
+        when(attributeDefinition.name()).thenReturn("retrieval_list_display_attribute");
+        when(attributeTool.getToolDefinition()).thenReturn(attributeDefinition);
+        when(attributeTool.call(any(String.class))).thenReturn(
+                "{\"entity\":\"user_event\",\"attributeList\":["
+                        + "{\"name\":\"event_type\",\"label\":\"事件类型\",\"type\":\"string\"}]}");
+        ToolCallbackProvider provider = mock(ToolCallbackProvider.class);
+        when(provider.getToolCallbacks()).thenReturn(new ToolCallback[]{attributeTool});
+        McpToolContext context = new McpToolContext(provider, "system-prompt");
+        List<Map<String, Object>> entityRows = List.of(
+                Map.of("name", "user_event", "label", "用户事件数据"));
+
+        String single = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "风险事件都有哪些类型，按照饼图展示", entityRows, null, null, true);
+        assertThat(single).contains("user_event").contains("event_type");
+
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("wf-1")
+                .setAgentType(DataVisualizationAgent.AGENT_TYPE)
+                .setStep(AgentWorkflowStep.ENTITY_META)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "query", Map.of("tool", "entity_distribution",
+                                "request", Map.of("entity", "user_event")))));
+        List<Map<String, Object>> manyEntities = List.of(
+                Map.of("name", "user_event", "label", "用户事件数据"),
+                Map.of("name", "probe_agent_message", "label", "探针消息"));
+        String fromContext = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "继续", manyEntities, null, workflow, true);
+        assertThat(fromContext).contains("user_event");
+
+        String disabled = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "继续", entityRows, null, workflow, false);
+        assertThat(disabled).isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void steerConfirmationAfterVerifiedPlanCardCountsAsApproval() {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> planMetadata = new LinkedHashMap<>();
+        planMetadata.put("action", "data_visualization.confirm_query_plan");
+        planMetadata.put("planId", "plan-1");
+        planMetadata.put("validationStatus", "success");
+        planMetadata.put("query", Map.of(
+                "tool", "entity_distribution",
+                "request", Map.of("entity", "user_event", "dimension", "event_type")));
+
+        ChatSession session = new ChatSession();
+        session.setMessages(com.coolxer.utils.JacksonUtil.toJson(List.of(
+                Map.of("sender", "user", "content", "风险事件都有哪些类型"),
+                Map.of("sender", "ai", "content", "请确认方案",
+                        "parts", List.of(Map.of(
+                                "type", "confirm",
+                                "status", "pending",
+                                "metadata", planMetadata))),
+                Map.of("sender", "user", "content", "已确认"))));
+
+        Map<String, Object> approved = ReflectionTestUtils.invokeMethod(
+                service, "approvedVisualizationPlan", session, "plan-1");
+        assertThat(approved).containsEntry("planId", "plan-1");
+
+        session.setMessages(com.coolxer.utils.JacksonUtil.toJson(List.of(
+                Map.of("sender", "user", "content", "风险事件都有哪些类型"),
+                Map.of("sender", "ai", "content", "请确认方案",
+                        "parts", List.of(Map.of(
+                                "type", "confirm",
+                                "status", "pending",
+                                "metadata", planMetadata))),
+                Map.of("sender", "user", "content", "改成柱状图"))));
+        Map<String, Object> revised = ReflectionTestUtils.invokeMethod(
+                service, "approvedVisualizationPlan", session, "plan-1");
+        assertThat(revised).isEmpty();
+
+        ChatSession confirmed = new ChatSession();
+        confirmed.setMessages(com.coolxer.utils.JacksonUtil.toJson(List.of(
+                Map.of("sender", "user", "content", "风险事件都有哪些类型"),
+                Map.of("sender", "ai", "content", "请确认方案",
+                        "parts", List.of(Map.of(
+                                "type", "confirm",
+                                "status", "pending",
+                                "metadata", planMetadata))),
+                Map.of("sender", "user", "content", "就按这个来"))));
+        Map<String, Object> exactConfirmed = ReflectionTestUtils.invokeMethod(
+                service, "approvedVisualizationPlan", confirmed, "plan-1");
+        assertThat(exactConfirmed).isEmpty();
+
+        session.setMessages(com.coolxer.utils.JacksonUtil.toJson(List.of(
+                Map.of("sender", "ai", "content", "请确认方案",
+                        "parts", List.of(Map.of(
+                                "type", "confirm",
+                                "status", "pending",
+                                "metadata", planMetadata))))));
+        Map<String, Object> unanswered = ReflectionTestUtils.invokeMethod(
+                service, "approvedVisualizationPlan", session, "plan-1");
+        assertThat(unanswered).isEmpty();
+    }
+
+    @Test
+    void platformChartPreviewReplacesModelPreviewThatCannotPassValidation() throws Exception {
+        DihChatApplicationService service = emptyService();
+        WorkflowStateStore store = mock(WorkflowStateStore.class);
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("wf-1")
+                .setAgentType(DataVisualizationAgent.AGENT_TYPE)
+                .setStep(AgentWorkflowStep.DATA_QUERY)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "planId", "plan-1",
+                        "query", Map.of(
+                                "tool", "entity_trend",
+                                "request", Map.of(
+                                        "entities", List.of("traffic"),
+                                        "granularity", "DAY")))));
+        when(store.loadActive(any(), any())).thenReturn(Optional.of(workflow));
+        ReflectionTestUtils.setField(service, "workflowStateStore", store);
+        ChatSession session = new ChatSession();
+        session.setType(DataVisualizationAgent.AGENT_TYPE);
+
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "entity_trend",
+                "{\"request\":{\"entities\":[\"traffic\"],\"granularity\":\"DAY\"}}",
+                "{\"data\":{\"meta\":{\"entity\":\"traffic\"},"
+                        + "\"result\":{\"columns\":[],\"rows\":[]},"
+                        + "\"echarts\":{\"chart_type\":\"line\","
+                        + "\"option\":{\"xAxis\":{\"type\":\"time\"}}}}}");
+
+        ChatMessagePart mismatched = ChatMessagePart.builder()
+                .id("model-preview-bad")
+                .type("visualization-chart-preview")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "planId", "plan-1",
+                        "query", Map.of(
+                                "tool", "entity_trend",
+                                "request", Map.of(
+                                        "entities", List.of("security_event"),
+                                        "granularity", "DAY")))))
+                .build();
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(mismatched));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationChartPreview",
+                session, parts, evidence);
+
+        assertThat(parts).hasSize(1);
+        ChatMessagePart platformPreview = parts.get(0);
+        assertThat(platformPreview.getId()).isEqualTo("artifact:wf-1:plan-1");
+        assertThat(platformPreview.getMetadata())
+                .containsEntry("planId", "plan-1")
+                .containsEntry("action", "data_visualization.add_chart_library");
+
+        ChatMessagePart matching = ChatMessagePart.builder()
+                .id("model-preview-ok")
+                .type("visualization-chart-preview")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "planId", "plan-1",
+                        "query", Map.of(
+                                "tool", "entity_trend",
+                                "request", Map.of(
+                                        "entities", List.of("traffic"),
+                                        "granularity", "DAY")))))
+                .build();
+        List<ChatMessagePart> keptParts = new ArrayList<>(List.of(matching));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationChartPreview",
+                session, keptParts, evidence);
+
+        assertThat(keptParts).hasSize(1);
+        assertThat(keptParts.get(0).getId()).isEqualTo("model-preview-ok");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void platformEntitySelectionCardIsSynthesizedWhenModelOnlyOutputsText() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "retrieval_list_display_entity", "{}",
+                "{\"entityList\":["
+                        + "{\"name\":\"traffic\",\"label\":\"网络流量\"},"
+                        + "{\"name\":\"probe_agent_message\",\"label\":\"探针消息\"}]}");
+        ChatSession session = new ChatSession();
+        session.setType(DataVisualizationAgent.AGENT_TYPE);
+
+        ChatMessagePart markdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content("我来帮你分析网络流量的趋势，请先确认要分析的实体。")
+                .build();
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(markdown));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationEntitySelection",
+                session, parts, evidence);
+
+        assertThat(parts).hasSize(2);
+        ChatMessagePart selection = parts.get(1);
+        assertThat(selection.getType()).isEqualTo("info-steps");
+        assertThat(selection.getMetadata())
+                .containsEntry("action", "data_visualization.select_entity_from_meta");
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, parts, evidence);
+        assertThat(selection.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("metaVerified", true);
+        List<Map<String, Object>> steps =
+                (List<Map<String, Object>>) selection.getMetadata().get("steps");
+        assertThat(steps).hasSize(1);
+        List<Map<String, Object>> suggestions =
+                (List<Map<String, Object>>) steps.get(0).get("suggestions");
+        assertThat(suggestions).extracting(option -> option.get("value"))
+                .containsExactly("traffic", "probe_agent_message");
+
+        List<ChatMessagePart> chitchat = new ArrayList<>(List.of(ChatMessagePart.builder()
+                .type("markdown")
+                .content("你好，介绍一下你自己。")
+                .build()));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationEntitySelection",
+                session, chitchat, evidence);
+        assertThat(chitchat).hasSize(1);
+    }
+
+    @Test
+    void platformEntitySelectionCardRepairsMalformedInfoStepsFence() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "retrieval_list_display_entity", "{}",
+                "{\"entityList\":[{\"name\":\"traffic\",\"label\":\"网络流量\"}]}");
+        ChatSession session = new ChatSession();
+        session.setType(DataVisualizationAgent.AGENT_TYPE);
+
+        ChatMessagePart malformed = ChatMessagePart.builder()
+                .type("markdown")
+                .content("请先选择实体。\n```zenvis:info-steps\n{not valid json\n")
+                .build();
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(malformed));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationEntitySelection",
+                session, parts, evidence);
+
+        assertThat(malformed.getContent()).doesNotContain("zenvis:info-steps");
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(1).getType()).isEqualTo("info-steps");
+    }
+
+    @Test
+    void agentRunResponseValidatesPlanCardWithStepToolEvidence() throws Exception {
+        DihChatApplicationService service = streamingService();
+        Object evidence = newEvidenceOnlyStream();
+        emitEvidenceSuccess(evidence, "retrieval_list_display_entity", "{}",
+                "{\"entityList\":[{\"name\":\"user_event\",\"label\":\"用户事件数据\"}]}");
+        emitEvidenceSuccess(evidence, "retrieval_list_display_attribute",
+                "{\"entity\":\"user_event\"}",
+                "{\"entity\":\"user_event\",\"attributeList\":["
+                        + "{\"name\":\"event_type\",\"label\":\"事件类型\",\"type\":\"string\"},"
+                        + "{\"name\":\"zenvis_insert_time\",\"label\":\"创建时间\",\"type\":\"datetime\"}]}");
+        String content = """
+                ```zenvis:confirm
+                {"title":"确认实体与字段查询方案","action":"data_visualization.confirm_query_plan",
+                "planId":"plan-run-1","entity":"user_event",
+                "query":{"tool":"entity_distribution","request":{"entity":"user_event",
+                "dimension":"event_type","time_field":"zenvis_insert_time",
+                "time_range":{"preset":"ALL_TIME"}}}}
+                ```
+                """;
+
+        Message message = ReflectionTestUtils.invokeMethod(
+                service, "saveAgentRunResponse",
+                null, null, content, MessageType.TEXT, null, "run-1", evidence);
+
+        assertThat(message).isNotNull();
+        assertThat(message.getParts()).extracting(ChatMessagePart::getType)
+                .doesNotContain("tool-call");
+        ChatMessagePart confirm = message.getParts().stream()
+                .filter(part -> "confirm".equals(part.getType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(confirm.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("metaVerified", true);
+        assertThat(confirm.getStatus()).isNotEqualTo("blocked");
+    }
+
+    private Object newEvidenceOnlyStream() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(
+                        DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("createEvidenceOnly", String.class);
+        create.setAccessible(true);
+        return create.invoke(null, "turn-evidence");
+    }
+
+    private Object newEvidenceStream() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(
+                        DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("create");
+        create.setAccessible(true);
+        return create.invoke(null);
+    }
+
+    private void emitEvidenceSuccess(Object evidence,
+                                     String tool,
+                                     String arguments,
+                                     String result) throws Exception {
+        var emit = evidence.getClass().getDeclaredMethod(
+                "emit", McpToolCallLoggingProvider.McpToolCallLog.class);
+        emit.setAccessible(true);
+        String callId = java.util.UUID.randomUUID().toString();
+        emit.invoke(evidence,
+                McpToolCallLoggingProvider.McpToolCallLog.started(
+                        callId, tool, arguments, arguments));
+        emit.invoke(evidence,
+                McpToolCallLoggingProvider.McpToolCallLog.succeeded(
+                        callId, tool, 1L, result, result));
     }
 
     private void emitSuccessfulCall(java.lang.reflect.Method emit,

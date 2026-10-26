@@ -333,7 +333,7 @@ onUnmounted(() => {
     overflow-wrap: anywhere;
   }
 
-  :deep(.message-bubble) {
+  :deep(.user-message) {
     max-width: 90%;
   }
 }

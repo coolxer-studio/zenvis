@@ -48,6 +48,7 @@ type UseChatStreamOptions = {
   chatSessionType: Ref<string>;
   chatSessionExtraData: Ref<string>;
   scrollToBottom: () => Promise<void>;
+  scrollToBottomIfFollowing: () => Promise<void>;
   processMessageFormat: (message: ChatMessage) => void;
   refreshChatSessionExtraData: () => Promise<void>;
   reloadChatSessionMessages: () => Promise<void>;
@@ -71,6 +72,7 @@ export const useChatStream = ({
   chatSessionType,
   chatSessionExtraData,
   scrollToBottom,
+  scrollToBottomIfFollowing,
   processMessageFormat,
   refreshChatSessionExtraData,
   reloadChatSessionMessages,
@@ -277,7 +279,7 @@ export const useChatStream = ({
           messages.value[aiMessageIndex].content = accumulatedContent;
           appendStreamingDelta(messages.value[aiMessageIndex], delta, accumulatedContent);
           await nextTick();
-          void scrollToBottom();
+          void scrollToBottomIfFollowing();
           return;
         }
 
@@ -297,7 +299,7 @@ export const useChatStream = ({
           message.parts = upsertRagSearchPart(message.parts, event.data);
           message.loading = false;
           await nextTick();
-          void scrollToBottom();
+          void scrollToBottomIfFollowing();
           return;
         }
 
@@ -306,7 +308,7 @@ export const useChatStream = ({
           message.parts = upsertToolCallPart(message.parts, event.data);
           message.loading = false;
           await nextTick();
-          void scrollToBottom();
+          void scrollToBottomIfFollowing();
           return;
         }
 
@@ -325,7 +327,7 @@ export const useChatStream = ({
             messages.value[aiMessageIndex].content = accumulatedContent;
           }
           await nextTick();
-          void scrollToBottom();
+          void scrollToBottomIfFollowing();
           return;
         }
 
@@ -408,7 +410,7 @@ export const useChatStream = ({
       await refreshChatSessionExtraData();
     }
     await nextTick();
-    void scrollToBottom();
+    void scrollToBottomIfFollowing();
   };
 
   const agentRun = useAgentRun({

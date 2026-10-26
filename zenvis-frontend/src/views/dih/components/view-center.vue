@@ -87,90 +87,75 @@
     </div>
 
     <!-- 聊天内容区域 -->
-    <div class="chat-content" ref="chatContentRef">
+    <div class="chat-content" ref="chatContentRef" @scroll.passive="handleChatScroll">
       <!-- Enter提示信息 -->
       <!-- 已移除原来的 enter-tip 元素，改为使用 ElMessage 实现 toast 提示 -->
-      <div class="message-list">
+      <div class="message-list" role="list" aria-label="对话消息">
         <div
           v-for="(message, index) in messages"
           :key="messageRenderKey(message)"
           class="message-item"
           :class="message.sender === 'ai' ? 'is-ai-message-item' : 'is-user-message-item'"
+          role="listitem"
+          :aria-label="message.sender === 'ai' ? '智能助手回复' : '你的消息'"
         >
           <div
             v-if="message.sender === 'ai'"
             class="ai-message-container"
+            :aria-busy="message.loading ? 'true' : 'false'"
             @mouseenter="handleMouseEnter('ai', index)"
             @mouseleave="handleMouseLeave('ai')"
           >
-            <div class="avatar ai-avatar">
+            <div class="avatar ai-avatar" aria-hidden="true">
               <img v-if="systemLogo" :src="systemLogo" alt="" />
               <el-icon v-else :size="20"><Monitor /></el-icon>
             </div>
-            <div class="message-bubble ai-message">
-              <!-- 加载动画 -->
-              <div v-if="message.loading && !message.parts?.length" class="typing-indicator">
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
+            <div class="ai-message-body">
+              <div class="message-bubble ai-message" :class="{ 'is-error': message.isError }">
+                <!-- 加载动画 -->
+                <div v-if="message.loading && !message.parts?.length" class="typing-indicator">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                </div>
+                <message-card-renderer
+                  v-else
+                  :message="message"
+                  :workflow-revisions="currentWorkflowRevisions"
+                  @copy-code="copyMessage"
+                  @decide-action="handleActionDecision(message, $event)"
+                  @submit-info-steps="handleInfoStepsSubmit(message, $event)"
+                  @add-chart-library="handleAddChartLibrary(message, $event)"
+                  @chart-render-failed="handleChartRenderFailure($event)"
+                  @choose-data-access-decision="handleDataAccessDecision(message, $event)"
+                  @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
+                  @resume-agent-run="handleResumeAgentRun"
+                  @select-prompt-suggestion="fillPromptSuggestion"
+                />
               </div>
-              <message-card-renderer
-                v-else
-                :message="message"
-                :workflow-revisions="currentWorkflowRevisions"
-                @copy-code="copyMessage"
-                @decide-action="handleActionDecision(message, $event)"
-                @submit-info-steps="handleInfoStepsSubmit(message, $event)"
-                @add-chart-library="handleAddChartLibrary(message, $event)"
-                @chart-render-failed="handleChartRenderFailure($event)"
-                @choose-data-access-decision="handleDataAccessDecision(message, $event)"
-                @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
-                @resume-agent-run="handleResumeAgentRun"
-                @select-prompt-suggestion="fillPromptSuggestion"
-              />
-              <div class="message-time">{{ message.time }}</div>
-              <!-- 新增：AI消息的交互按钮 -->
-              <div class="message-actions">
-                <el-tooltip content="复制回答" placement="top">
-                  <el-button
-                    text
-                    circle
-                    size="small"
-                    :icon="CopyDocument"
-                    aria-label="复制回答"
-                    @click="copyMessage(message.content)"
-                  />
-                </el-tooltip>
-                <el-tooltip content="分享回答" placement="top">
-                  <el-button
-                    text
-                    circle
-                    size="small"
-                    :icon="Share"
-                    aria-label="分享回答"
-                    @click="shareMessage(message.content)"
-                  />
-                </el-tooltip>
-                <el-tooltip content="回答准确" placement="top">
-                  <el-button
-                    text
-                    circle
-                    size="small"
-                    :icon="Sunny"
-                    aria-label="回答准确"
-                    @click="likeMessage(index)"
-                  />
-                </el-tooltip>
-                <el-tooltip content="回答不准确" placement="top">
-                  <el-button
-                    text
-                    circle
-                    size="small"
-                    :icon="Lightning"
-                    aria-label="回答不准确"
-                    @click="dislikeMessage(index)"
-                  />
-                </el-tooltip>
+              <div v-if="!message.loading" class="message-footer">
+                <span class="message-time" :title="message.time">
+                  {{ formatMessageTime(message.time) }}
+                </span>
+                <div class="message-actions">
+                  <el-tooltip
+                    :content="
+                      copiedMessageKey === messageRenderKey(message) ? '已复制' : '复制回答'
+                    "
+                    placement="top"
+                  >
+                    <el-button
+                      text
+                      circle
+                      size="small"
+                      :icon="copiedMessageKey === messageRenderKey(message) ? Check : CopyDocument"
+                      :aria-label="
+                        copiedMessageKey === messageRenderKey(message) ? '已复制回答' : '复制回答'
+                      "
+                      @click="copyMessage(message.content, messageRenderKey(message))"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </div>
           </div>
@@ -205,17 +190,25 @@
                   </template>
                 </div>
               </div>
-              <div class="message-time">{{ message.time }}</div>
-              <!-- 新增：用户消息的交互按钮 -->
+            </div>
+            <div class="message-footer user-message-footer">
+              <span class="message-time" :title="message.time">
+                {{ formatMessageTime(message.time) }}
+              </span>
               <div class="message-actions">
-                <el-tooltip content="复制消息" placement="top">
+                <el-tooltip
+                  :content="copiedMessageKey === messageRenderKey(message) ? '已复制' : '复制消息'"
+                  placement="top"
+                >
                   <el-button
                     text
                     circle
                     size="small"
-                    :icon="CopyDocument"
-                    aria-label="复制消息"
-                    @click="copyMessage(message.content)"
+                    :icon="copiedMessageKey === messageRenderKey(message) ? Check : CopyDocument"
+                    :aria-label="
+                      copiedMessageKey === messageRenderKey(message) ? '已复制消息' : '复制消息'
+                    "
+                    @click="copyMessage(message.content, messageRenderKey(message))"
                   />
                 </el-tooltip>
               </div>
@@ -381,14 +374,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, nextTick } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import {
+  Check,
   CircleCheckFilled,
   Clock,
   Close,
   CopyDocument,
   DataAnalysis,
-  Lightning,
   Loading,
   Lock,
   Menu,
@@ -396,8 +389,6 @@ import {
   Opportunity,
   Paperclip,
   Position,
-  Share,
-  Sunny,
   Tickets,
   VideoPlay,
   WarningFilled,
@@ -422,6 +413,7 @@ import type { TAnalysisTaskQueue } from '@/types/type-analysis-task';
 const router = useRouter();
 
 const chatContentRef = ref<HTMLElement | null>(null);
+const isNearBottom = ref(true);
 const messageRenderKeys = new WeakMap<ChatMessage, string>();
 let nextMessageRenderKey = 0;
 
@@ -441,7 +433,19 @@ const scrollToBottom = async (): Promise<void> => {
   await nextTick();
   if (chatContentRef.value) {
     chatContentRef.value.scrollTop = chatContentRef.value.scrollHeight;
+    isNearBottom.value = true;
   }
+};
+
+const handleChatScroll = () => {
+  const container = chatContentRef.value;
+  if (!container) return;
+  isNearBottom.value = container.scrollHeight - container.scrollTop - container.clientHeight < 96;
+};
+
+const scrollToBottomIfFollowing = async (): Promise<void> => {
+  if (!isNearBottom.value) return;
+  await scrollToBottom();
 };
 
 // 定义建议接口
@@ -843,6 +847,7 @@ const {
   chatSessionType,
   chatSessionExtraData,
   scrollToBottom,
+  scrollToBottomIfFollowing,
   processMessageFormat,
   refreshChatSessionExtraData,
   reloadChatSessionMessages: loadChatSession,
@@ -1012,10 +1017,34 @@ const handleMouseLeave = (type: string) => {
   }
 };
 
+const copiedMessageKey = ref('');
+let copiedMessageTimer: number | undefined;
+
+const formatMessageTime = (time?: string): string => {
+  const value = (time || '').trim();
+  if (!value) return '';
+  const matched = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2})/.exec(value);
+  if (!matched) return value;
+  const now = new Date();
+  const isToday =
+    Number(matched[1]) === now.getFullYear() &&
+    Number(matched[2]) === now.getMonth() + 1 &&
+    Number(matched[3]) === now.getDate();
+  return isToday ? matched[4] : `${matched[2]}-${matched[3]} ${matched[4]}`;
+};
+
 // 复制消息到剪贴板
-const copyMessage = async (content: string) => {
+const copyMessage = async (content: string, messageKey = '') => {
   const copied = await copyTextToClipboard(content);
   if (copied) {
+    if (messageKey) {
+      copiedMessageKey.value = messageKey;
+      if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer);
+      copiedMessageTimer = window.setTimeout(() => {
+        copiedMessageKey.value = '';
+        copiedMessageTimer = undefined;
+      }, 1600);
+    }
     ElMessage.success('已复制到剪贴板');
   } else {
     ElMessage.error('复制失败，请手动复制');
@@ -1026,21 +1055,9 @@ const fillPromptSuggestion = (prompt: string) => {
   inputMessage.value = prompt;
 };
 
-// 分享消息（示例）
-const shareMessage = (content: string) => {
-  // 显示 toast 提示信息
-  ElMessage({
-    message: '当前用户暂不支持分享',
-    type: 'info',
-    duration: 2000,
-  });
-};
-
-// 点赞消息
-const likeMessage = (index: number) => {};
-
-// 点踩消息
-const dislikeMessage = (index: number) => {};
+onBeforeUnmount(() => {
+  if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer);
+});
 </script>
 
 <style lang="scss" scoped>
@@ -1299,6 +1316,7 @@ const dislikeMessage = (index: number) => {};
 
 .message-item {
   width: 100%;
+  min-width: 0;
 }
 
 .message-item + .message-item {
@@ -1306,7 +1324,7 @@ const dislikeMessage = (index: number) => {};
 }
 
 .is-ai-message-item + .message-item {
-  margin-top: var(--zv-space-10);
+  margin-top: 36px;
 }
 
 .ai-message-container,
@@ -1315,12 +1333,15 @@ const dislikeMessage = (index: number) => {};
 }
 
 .ai-message-container {
+  display: flex;
   align-items: flex-start;
   justify-content: flex-start;
 }
 
 .user-message-container {
-  flex-direction: row;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   justify-content: flex-end;
 }
 
@@ -1349,9 +1370,15 @@ const dislikeMessage = (index: number) => {};
   border-radius: var(--zv-radius-lg);
 }
 
-.ai-message {
+.ai-message-body {
   width: calc(100% - 40px);
   max-width: calc(100% - 40px);
+  min-width: 0;
+}
+
+.ai-message {
+  width: 100%;
+  max-width: 100%;
   padding: 2px 0 0;
   color: var(--zv-text-primary);
   background: transparent;
@@ -1361,23 +1388,37 @@ const dislikeMessage = (index: number) => {};
 .user-message {
   width: auto;
   max-width: 78%;
-  padding: 11px 14px 7px;
+  padding: 11px 14px;
   color: var(--zv-text-primary);
-  background: var(--zv-bg-subtle);
-  border: 1px solid var(--zv-border);
+  background: var(--zv-primary-soft);
+  border: 1px solid var(--zv-primary-border);
   border-bottom-right-radius: var(--zv-radius-sm);
 }
 
+.message-footer {
+  display: flex;
+  min-height: 24px;
+  margin-top: 2px;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+
+.user-message-footer {
+  justify-content: flex-end;
+}
+
 .message-time {
-  margin-top: 6px;
+  margin: 0;
   color: var(--zv-text-placeholder);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   line-height: 1.35;
+  white-space: nowrap;
 }
 
 .message-actions {
   display: flex;
-  margin-top: 2px;
+  margin: 0;
   gap: var(--zv-space-1);
   padding: 0;
   align-items: center;
@@ -1397,9 +1438,9 @@ const dislikeMessage = (index: number) => {};
 }
 
 .message-actions :deep(.el-button) {
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
   margin: 0;
   padding: 0;
   color: var(--zv-text-muted);
@@ -1944,14 +1985,14 @@ const dislikeMessage = (index: number) => {};
   }
 
   .is-ai-message-item + .message-item {
-    margin-top: 64px;
+    margin-top: var(--zv-space-8);
   }
 
   .input-area {
     padding: var(--zv-space-2) var(--zv-space-3) var(--zv-space-3);
   }
 
-  .ai-message {
+  .ai-message-body {
     width: calc(100% - 36px);
     max-width: calc(100% - 36px);
   }

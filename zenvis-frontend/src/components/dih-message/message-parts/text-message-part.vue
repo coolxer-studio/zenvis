@@ -34,11 +34,12 @@
     </div>
   </div>
 
-  <div
+  <MarkdownContent
     v-else-if="part.type === 'markdown'"
     class="message-content markdown-body"
-    v-html="parseMarkdown(part.content || '')"
-  ></div>
+    :content="part.content || ''"
+    :render-markdown="parseMarkdown"
+  />
 
   <div v-else-if="part.type === 'prompt-suggestions'" class="prompt-suggestions-part">
     <div v-if="part.title" class="prompt-suggestions-title">{{ part.title }}</div>
@@ -65,6 +66,20 @@
       </el-tag>
     </div>
   </div>
+
+  <MermaidDiagram
+    v-else-if="isMermaidCode"
+    :source="part.content || ''"
+    :title="part.title || part.language || 'mermaid'"
+    :default-collapsed="isTruthyMetadata(part, 'defaultCollapsed')"
+  />
+
+  <HtmlPreview
+    v-else-if="isHtmlCode"
+    :source="part.content || ''"
+    :title="part.title || part.language || 'html'"
+    :default-collapsed="isTruthyMetadata(part, 'defaultCollapsed')"
+  />
 
   <div v-else-if="part.type === 'code'" class="code-part">
     <div class="code-header">
@@ -95,17 +110,21 @@
     <pre v-if="codeExpanded" class="code-content"><code>{{ part.content }}</code></pre>
   </div>
 
-  <div
+  <MarkdownContent
     v-else
     class="message-content markdown-body"
-    v-html="parseMarkdown(part.content || '')"
-  ></div>
+    :content="part.content || ''"
+    :render-markdown="parseMarkdown"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { CaretBottom, CaretTop, Close, CopyDocument, Loading } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
+import HtmlPreview from '@/components/markdown/html-preview.vue';
+import MarkdownContent from '@/components/markdown/markdown-content.vue';
+import MermaidDiagram from '@/components/markdown/mermaid-diagram.vue';
 import { isTruthyMetadata, partKey, useMarkdownRenderer } from './message-part-context';
 
 type PromptSuggestionExample = {
@@ -135,6 +154,14 @@ const thinkingExpanded = computed(() => {
 const codeExpanded = computed(() => {
   return codeExpandedOverride.value ?? !isTruthyMetadata(props.part, 'defaultCollapsed');
 });
+
+const codeLanguage = computed(() => {
+  if (props.part.type !== 'code') return '';
+  return (props.part.language || '').trim().toLowerCase().split(/\s+/)[0];
+});
+
+const isMermaidCode = computed(() => codeLanguage.value === 'mermaid');
+const isHtmlCode = computed(() => codeLanguage.value === 'html');
 
 const toggleThinking = () => {
   thinkingExpandedOverride.value = !thinkingExpanded.value;

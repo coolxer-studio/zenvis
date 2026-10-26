@@ -83,11 +83,12 @@
     </template>
   </div>
 
-  <div
+  <MarkdownContent
     v-else
     class="message-content markdown-body"
-    v-html="parseMarkdown(part.content || '')"
-  ></div>
+    :content="part.content || ''"
+    :render-markdown="parseMarkdown"
+  />
 </template>
 
 <script setup lang="ts">
@@ -95,6 +96,7 @@ import { computed, ref, toRef } from 'vue';
 import { ElMessageBox } from 'element-plus';
 import { CaretBottom, CaretTop, QuestionFilled } from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
+import MarkdownContent from '@/components/markdown/markdown-content.vue';
 import { useDefaultExpanded, useMarkdownRenderer } from './message-part-context';
 
 const props = defineProps<{

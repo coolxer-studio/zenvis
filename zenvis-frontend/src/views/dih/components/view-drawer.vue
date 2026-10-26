@@ -179,7 +179,11 @@
                   <template #reference>
                     <div class="markdown-cell-preview">{{ row.prompt }}</div>
                   </template>
-                  <div class="result-markdown-preview" v-html="parseMarkdown(row.prompt)"></div>
+                  <MarkdownContent
+                    class="result-markdown-preview"
+                    :content="row.prompt"
+                    :render-markdown="parseMarkdown"
+                  />
                 </el-popover>
                 <span v-else>-</span>
               </template>
@@ -198,7 +202,11 @@
                   <template #reference>
                     <div class="markdown-cell-preview">{{ row.result }}</div>
                   </template>
-                  <div class="result-markdown-preview" v-html="parseMarkdown(row.result)"></div>
+                  <MarkdownContent
+                    class="result-markdown-preview"
+                    :content="row.result"
+                    :render-markdown="parseMarkdown"
+                  />
                 </el-popover>
                 <span v-else>-</span>
               </template>
@@ -334,6 +342,7 @@ import {
   View,
 } from '@element-plus/icons-vue';
 import { AnalysisTaskService } from '@/service/api';
+import MarkdownContent from '@/components/markdown/markdown-content.vue';
 import { createMarkdownRenderer } from '@/components/dih-message/message-parts/message-part-context';
 import type {
   TAnalysisTask,

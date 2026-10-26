@@ -9,11 +9,23 @@
         <el-tag size="small" effect="plain">{{ reportDocumentFormatText }}</el-tag>
       </div>
       <div class="config-card-tools">
+        <el-tooltip v-if="isReportDocumentHtml" content="下载 HTML" placement="top">
+          <el-button
+            class="config-copy-btn"
+            size="small"
+            :icon="Download"
+            :disabled="!reportDocumentContent.trim()"
+            aria-label="下载 HTML"
+            circle
+            @click="downloadReportDocument"
+          />
+        </el-tooltip>
         <el-tooltip content="复制文档" placement="top">
           <el-button
             class="config-copy-btn"
             size="small"
             :icon="CopyDocument"
+            aria-label="复制报表文档"
             circle
             @click="emit('copyCode', reportDocumentContent)"
           />
@@ -23,6 +35,7 @@
             class="card-toggle-btn"
             size="small"
             :icon="isExpanded ? CaretTop : CaretBottom"
+            :aria-label="isExpanded ? '折叠报表文档' : '展开报表文档'"
             circle
             @click="toggleExpanded"
           />
@@ -37,13 +50,15 @@
         v-if="isReportDocumentHtml"
         class="config-html-preview"
         :srcdoc="reportDocumentContent"
-        sandbox="allow-same-origin"
+        :sandbox="HTML_PREVIEW_SANDBOX"
+        :referrerpolicy="HTML_PREVIEW_REFERRER_POLICY"
       ></iframe>
-      <div
+      <MarkdownContent
         v-else
         class="message-content markdown-body report-document-preview"
-        v-html="parseMarkdown(reportDocumentContent)"
-      ></div>
+        :content="reportDocumentContent"
+        :render-markdown="parseMarkdown"
+      />
     </template>
   </div>
 
@@ -55,6 +70,17 @@
         <el-tag size="small" effect="plain">{{ configKindText }}</el-tag>
       </div>
       <div class="config-card-tools">
+        <el-tooltip v-if="isHtmlConfig" content="下载 HTML" placement="top">
+          <el-button
+            class="config-copy-btn"
+            size="small"
+            :icon="Download"
+            :disabled="!part.content?.trim()"
+            aria-label="下载 HTML"
+            circle
+            @click="downloadConfigHtml"
+          />
+        </el-tooltip>
         <el-tooltip
           v-if="isConfigPreviewable"
           :content="isConfigPreviewMode ? '查看源码' : '预览最终效果'"
@@ -64,6 +90,7 @@
             class="config-copy-btn"
             size="small"
             :icon="configPreviewButtonIcon"
+            :aria-label="isConfigPreviewMode ? '查看源码' : '预览最终效果'"
             circle
             @click="toggleConfigPreview"
           />
@@ -73,6 +100,7 @@
             class="config-copy-btn"
             size="small"
             :icon="CopyDocument"
+            aria-label="复制配置"
             circle
             @click="emit('copyCode', part.content || '')"
           />
@@ -82,6 +110,7 @@
             class="card-toggle-btn"
             size="small"
             :icon="isExpanded ? CaretTop : CaretBottom"
+            :aria-label="isExpanded ? '折叠配置' : '展开配置'"
             circle
             @click="toggleExpanded"
           />
@@ -97,7 +126,8 @@
           v-if="isHtmlConfig"
           class="config-html-preview"
           :srcdoc="part.content || ''"
-          sandbox="allow-scripts allow-forms allow-same-origin"
+          :sandbox="HTML_PREVIEW_SANDBOX"
+          :referrerpolicy="HTML_PREVIEW_REFERRER_POLICY"
         ></iframe>
         <div v-else class="config-low-code-preview" v-html="lowCodePreviewHtml"></div>
       </div>
@@ -109,8 +139,22 @@
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue';
 import DOMPurify from 'dompurify';
-import { CaretBottom, CaretTop, CopyDocument, Document, View } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import {
+  CaretBottom,
+  CaretTop,
+  CopyDocument,
+  Document,
+  Download,
+  View,
+} from '@element-plus/icons-vue';
 import type { ChatMessagePart } from '@/types/type-dih';
+import MarkdownContent from '@/components/markdown/markdown-content.vue';
+import {
+  HTML_PREVIEW_REFERRER_POLICY,
+  HTML_PREVIEW_SANDBOX,
+  downloadHtmlDocument,
+} from '@/utils/html-download';
 import { resolveReportDocumentPartContent } from '@/views/dih/components/report-document-sync';
 import { metadataText, useDefaultExpanded, useMarkdownRenderer } from './message-part-context';
 
@@ -141,7 +185,7 @@ const configKindText = computed(() => {
 });
 
 const reportDocumentFormat = computed(() => {
-  return metadataText(props.part, 'format') || props.part.language || 'markdown';
+  return (metadataText(props.part, 'format') || props.part.language || 'markdown').toLowerCase();
 });
 
 const reportDocumentFormatText = computed(() => {
@@ -151,6 +195,10 @@ const reportDocumentFormatText = computed(() => {
 const reportDocumentContent = computed(() => resolveReportDocumentPartContent(props.part));
 
 const isReportDocumentHtml = computed(() => reportDocumentFormat.value === 'html');
+
+const reportDocumentTitle = computed(() => {
+  return props.part.title || metadataText(props.part, 'title') || '报表文档';
+});
 
 const defaultConfigFileName = computed(() => {
   return metadataText(props.part, 'defaultFileName') || '-';
@@ -179,6 +227,34 @@ const toggleConfigPreview = () => {
 const configPreviewButtonIcon = computed(() => {
   return isConfigPreviewMode.value ? Document : View;
 });
+
+const downloadReportDocument = () => {
+  if (!isReportDocumentHtml.value || !reportDocumentContent.value.trim()) return;
+  try {
+    downloadHtmlDocument(reportDocumentContent.value, {
+      fileName: reportDocumentTitle.value,
+      title: reportDocumentTitle.value,
+    });
+    ElMessage.success('HTML 文件已下载');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'HTML 文件下载失败');
+  }
+};
+
+const downloadConfigHtml = () => {
+  const content = props.part.content || '';
+  if (!isHtmlConfig.value || !content.trim()) return;
+  const title = props.part.title || metadataText(props.part, 'title') || 'HTML 配置';
+  try {
+    downloadHtmlDocument(content, {
+      fileName: metadataText(props.part, 'defaultFileName') || undefined,
+      title,
+    });
+    ElMessage.success('HTML 文件已下载');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'HTML 文件下载失败');
+  }
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

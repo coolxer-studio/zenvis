@@ -71,8 +71,165 @@ test('服务端已保存的最终答复消息不会被恢复出第二份正文',
 
   assert.equal(messages[0].parts.length, 2);
   assert.equal(messages[0].parts[0].type, 'agent-run');
-  assert.equal(messages[0].parts[1].id, 'agent-run-final-run-1');
+  assert.equal(messages[0].parts[1].id, 'server-markdown');
   assert.equal(messages[0].parts[1].content, '最终答复');
+});
+
+test('成功运行卡迁移到最终图表消息且不改写查询方案确认消息', () => {
+  const rawFinalAnswer = [
+    '已按批准的查询方案执行 entity_distribution。',
+    '```zenvis:visualization-chart-preview',
+    '{"title":"风险等级分布"}',
+    '```',
+  ].join('\n');
+  const confirmation = {
+    id: 'confirm-1',
+    type: 'confirm',
+    content: '请确认查询方案',
+    status: 'approved',
+  };
+  const chart = {
+    id: 'chart-1',
+    type: 'visualization-chart-preview',
+    content: '风险等级分布',
+    metadata: { planId: 'plan-1' },
+  };
+  const messages: any[] = [
+    { sender: 'user', content: '用饼图展示风险等级', runId: 'run-1' },
+    {
+      sender: 'ai',
+      content: '查询方案如下',
+      runId: 'run-1',
+      parts: [confirmation],
+    },
+    { sender: 'user', content: '已确认', runId: 'run-1' },
+    {
+      sender: 'ai',
+      content: '已按批准的查询方案执行。',
+      runId: 'run-1',
+      parts: [
+        { id: 'final-markdown-1', type: 'markdown', content: '真实图表如下' },
+        chart,
+      ],
+    },
+  ];
+
+  const index = upsertAgentRunMessage(messages, run({ finalAnswer: rawFinalAnswer }) as any);
+
+  assert.equal(index, 3);
+  assert.equal(messages[1].content, '查询方案如下');
+  assert.deepEqual(messages[1].parts, [confirmation]);
+  assert.equal(messages[3].parts[0].type, 'agent-run');
+  assert.equal(messages[3].parts[1].id, 'final-markdown-1');
+  assert.equal(messages[3].parts[2], chart);
+  assert.equal(messages[3].content, '已按批准的查询方案执行。');
+  assert.equal(messages[3].parts.some((part: any) => part.id === 'agent-run-final-run-1'), false);
+  assert.equal(messages[3].parts.some((part: any) =>
+    part.type === 'markdown' && String(part.content).includes('```zenvis:')), false);
+});
+
+test('交互确认消息之后没有服务端最终消息时创建独立最终答复', () => {
+  const confirmation = {
+    id: 'confirm-1',
+    type: 'confirm',
+    content: '请确认查询方案',
+    status: 'approved',
+  };
+  const messages: any[] = [{
+    sender: 'ai',
+    content: '查询方案如下',
+    runId: 'run-1',
+    parts: [confirmation],
+  }];
+
+  const index = upsertAgentRunMessage(messages, run({ finalAnswer: '最终图表答复' }) as any);
+
+  assert.equal(index, 1);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].content, '查询方案如下');
+  assert.deepEqual(messages[0].parts, [confirmation]);
+  assert.equal(messages[1].runId, 'run-1');
+  assert.equal(messages[1].content, '最终图表答复');
+  assert.equal(messages[1].parts[0].type, 'agent-run');
+  assert.equal(messages[1].parts[1].type, 'markdown');
+  assert.equal(messages[1].parts[1].content, '最终图表答复');
+});
+
+test('最新消息仍是交互确认时不把更早的同 Run 文本当作最终结果', () => {
+  const messages: any[] = [
+    {
+      sender: 'ai',
+      content: '更早的说明文本',
+      runId: 'run-1',
+      parts: [{ id: 'old-markdown', type: 'markdown', content: '更早的说明文本' }],
+    },
+    {
+      sender: 'ai',
+      content: '请确认最新查询方案',
+      runId: 'run-1',
+      parts: [{ id: 'confirm-latest', type: 'confirm', content: '请确认最新查询方案' }],
+    },
+  ];
+
+  const index = upsertAgentRunMessage(messages, run({ finalAnswer: '真正最终答复' }) as any);
+
+  assert.equal(index, 2);
+  assert.equal(messages[1].content, '请确认最新查询方案');
+  assert.deepEqual(messages[1].parts, [{
+    id: 'confirm-latest',
+    type: 'confirm',
+    content: '请确认最新查询方案',
+  }]);
+  assert.equal(messages[2].content, '真正最终答复');
+  assert.equal(messages[2].parts[0].type, 'agent-run');
+});
+
+test('服务端最终消息存在时清理旧版合成最终答复和重复运行卡', () => {
+  const messages: any[] = [
+    {
+      sender: 'ai',
+      content: '查询方案如下',
+      runId: 'run-1',
+      parts: [{
+        id: 'confirm-1',
+        type: 'confirm',
+        content: '请确认查询方案',
+      }],
+    },
+    {
+      sender: 'ai',
+      content: '服务端最终答复',
+      runId: 'run-1',
+      parts: [
+        { id: 'server-markdown-1', type: 'markdown', content: '服务端最终答复' },
+        { id: 'chart-1', type: 'visualization-chart-preview', content: '图表' },
+      ],
+    },
+    {
+      sender: 'ai',
+      content: '旧版原始答复',
+      runId: 'run-1',
+      parts: [
+        { id: 'agent-run-run-1', type: 'agent-run', metadata: { run: run() } },
+        { id: 'agent-run-final-run-1', type: 'markdown', content: '旧版原始答复' },
+      ],
+    },
+  ];
+
+  const index = upsertAgentRunMessage(messages, run({ finalAnswer: '旧版原始答复' }) as any);
+  upsertAgentRunMessage(messages, run({ finalAnswer: '旧版原始答复' }) as any);
+
+  assert.equal(index, 1);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].parts.length, 1);
+  assert.equal(messages[0].parts[0].type, 'confirm');
+  assert.equal(messages[1].parts[0].type, 'agent-run');
+  assert.equal(messages[1].parts[1].id, 'server-markdown-1');
+  assert.equal(messages[1].parts[2].type, 'visualization-chart-preview');
+  assert.equal(messages.flatMap(message => message.parts || [])
+    .filter((part: any) => part.type === 'agent-run').length, 1);
+  assert.equal(messages.flatMap(message => message.parts || [])
+    .some((part: any) => part.id === 'agent-run-final-run-1'), false);
 });
 
 test('会话恢复后优先定位 AI 运行消息而不是同 runId 的用户消息', () => {

@@ -14,6 +14,12 @@ const SUBSCRIBABLE_STATUSES = new Set([
   'CANCELING',
 ]);
 const RESTORABLE_STATUSES = new Set([...SUBSCRIBABLE_STATUSES, 'PAUSED']);
+const INTERACTIVE_PART_TYPES = new Set([
+  'confirm',
+  'info-steps',
+  'data-access-decision',
+  'mcp-approval',
+]);
 
 export const isAgentRunLive = (status?: string) =>
   Boolean(status && LIVE_STATUSES.has(status));
@@ -73,15 +79,87 @@ const finalAnswerPart = (run: AgentRun): ChatMessagePart => ({
   content: run.finalAnswer || '',
 });
 
+const runIdFromPart = (part: ChatMessagePart): string => {
+  const run = part.metadata?.run;
+  return run && typeof run === 'object'
+    ? String((run as AgentRun).runId || '')
+    : '';
+};
+
+const isAgentRunPartForRun = (part: ChatMessagePart, runId: string) =>
+  part.type === 'agent-run'
+  && (part.id === `agent-run-${runId}` || runIdFromPart(part) === runId);
+
+const isLegacyFinalPartForRun = (part: ChatMessagePart, runId: string) =>
+  part.id === `agent-run-final-${runId}`;
+
+const messageBelongsToRun = (message: ChatMessage, runId: string) =>
+  message.runId === runId
+  || (message.parts || []).some(part => isAgentRunPartForRun(part, runId));
+
+const isInteractiveWorkflowMessage = (message: ChatMessage) =>
+  (message.parts || []).some(part => INTERACTIVE_PART_TYPES.has(part.type));
+
+const findLatestRunAiMessageIndex = (messages: ChatMessage[], runId: string) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.sender === 'ai' && messageBelongsToRun(message, runId)) return index;
+  }
+  return -1;
+};
+
+const findLatestServerFinalIndex = (messages: ChatMessage[], runId: string) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.sender !== 'ai' || !messageBelongsToRun(message, runId)) continue;
+    const parts = message.parts || [];
+    if (parts.some(part => isLegacyFinalPartForRun(part, runId))) continue;
+    if (isInteractiveWorkflowMessage(message)) continue;
+    const hasServerPart = parts.some(part => !isAgentRunPartForRun(part, runId));
+    if (hasServerPart || Boolean(message.content?.trim())) return index;
+  }
+  return -1;
+};
+
+const removeSupersededSyntheticFinals = (
+  messages: ChatMessage[],
+  runId: string,
+  serverFinalIndex: number,
+) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (index === serverFinalIndex) continue;
+    const message = messages[index];
+    if (message.sender !== 'ai' || message.runId !== runId) continue;
+    if (!(message.parts || []).some(part => isLegacyFinalPartForRun(part, runId))) continue;
+    messages.splice(index, 1);
+  }
+};
+
+const stripRunDecorationsFromOtherMessages = (
+  messages: ChatMessage[],
+  runId: string,
+  anchorIndex: number,
+  stripLegacyFinal: boolean,
+) => {
+  messages.forEach((message, index) => {
+    if (index === anchorIndex || message.sender !== 'ai' || !messageBelongsToRun(message, runId)) {
+      return;
+    }
+    const parts = message.parts || [];
+    const nextParts = parts.filter(part =>
+      !isAgentRunPartForRun(part, runId)
+      && !(stripLegacyFinal && isLegacyFinalPartForRun(part, runId)),
+    );
+    if (nextParts.length !== parts.length) message.parts = nextParts;
+  });
+};
+
 export const findAgentRunMessageIndex = (messages: ChatMessage[], runId: string) => {
   const cardIndex = messages.findIndex(message =>
-    (message.parts || []).some(part => part.type === 'agent-run'
-      && part.id === `agent-run-${runId}`),
+    (message.parts || []).some(part => isAgentRunPartForRun(part, runId)),
   );
   if (cardIndex >= 0) return cardIndex;
-  const aiIndex = messages.findIndex(message =>
-    message.sender === 'ai' && message.runId === runId,
-  );
+  const aiIndex = findLatestRunAiMessageIndex(messages, runId);
   if (aiIndex >= 0) return aiIndex;
   return messages.findIndex(message =>
     message.sender !== 'user' && message.runId === runId,
@@ -94,7 +172,29 @@ export const upsertAgentRunMessage = (
   options: AgentRunMessageOptions = {},
 ) => {
   if (!run?.runId) return -1;
-  let index = findAgentRunMessageIndex(messages, run.runId);
+  const runId = run.runId;
+  let serverFinalIndex = run.status === 'SUCCEEDED'
+    ? findLatestServerFinalIndex(messages, runId)
+    : -1;
+  const latestRunAiIndex = findLatestRunAiMessageIndex(messages, runId);
+  if (serverFinalIndex >= 0
+    && latestRunAiIndex >= 0
+    && isInteractiveWorkflowMessage(messages[latestRunAiIndex])) {
+    serverFinalIndex = -1;
+  }
+  if (serverFinalIndex >= 0) {
+    removeSupersededSyntheticFinals(messages, runId, serverFinalIndex);
+    serverFinalIndex = findLatestServerFinalIndex(messages, runId);
+  }
+
+  let index = serverFinalIndex >= 0
+    ? serverFinalIndex
+    : findLatestRunAiMessageIndex(messages, runId);
+  const latestIsInteractive = index >= 0 && isInteractiveWorkflowMessage(messages[index]);
+  const needsSeparateOutcomeMessage = latestIsInteractive
+    && ((run.status === 'SUCCEEDED' && Boolean(run.finalAnswer))
+      || run.status === 'FAILED');
+  if (index >= 0 && needsSeparateOutcomeMessage) index = -1;
   if (index < 0) {
     messages.push({
       sender: 'ai',
@@ -108,42 +208,47 @@ export const upsertAgentRunMessage = (
   }
 
   const message = messages[index];
-  const parts = [...(message.parts || [])];
-  const runPartId = `agent-run-${run.runId}`;
-  const partIndex = parts.findIndex(part => part.type === 'agent-run'
-    && (part.id === runPartId
-      || String((part.metadata?.run as AgentRun | undefined)?.runId || '') === run.runId));
-  if (partIndex >= 0) {
-    parts[partIndex] = agentRunPart(
-      run, options.currentTool || null, options.activityEvents || []);
-  } else {
-    parts.unshift(agentRunPart(
-      run, options.currentTool || null, options.activityEvents || []));
+  const isServerFinal = serverFinalIndex >= 0 && index === serverFinalIndex;
+  const contentParts = (message.parts || []).filter(part =>
+    !isAgentRunPartForRun(part, runId)
+    && !isLegacyFinalPartForRun(part, runId),
+  );
+  let appendedFinal = false;
+  if (run.status === 'SUCCEEDED' && run.finalAnswer && !isServerFinal) {
+    contentParts.push(finalAnswerPart(run));
+    message.content = run.finalAnswer;
+    appendedFinal = true;
+  } else if (!contentParts.length && message.content?.trim()) {
+    contentParts.push({
+      id: `${message.id || `agent-run-content-${runId}`}-content`,
+      type: 'markdown',
+      content: message.content,
+    });
   }
 
-  if (run.status === 'SUCCEEDED' && run.finalAnswer) {
-    const finalIndex = parts.findIndex(part => part.id === `agent-run-final-${run.runId}`);
-    if (finalIndex >= 0) {
-      parts[finalIndex] = finalAnswerPart(run);
-    } else {
-      const markdownIndex = parts.findIndex(part => part.type === 'markdown'
-        && Boolean(part.content?.trim()));
-      if (markdownIndex >= 0) {
-        parts[markdownIndex] = finalAnswerPart(run);
-      } else {
-        parts.push(finalAnswerPart(run));
-      }
-    }
-    message.content = run.finalAnswer;
+  stripRunDecorationsFromOtherMessages(
+    messages,
+    runId,
+    index,
+    run.status === 'SUCCEEDED',
+  );
+  message.parts = [
+    agentRunPart(run, options.currentTool || null, options.activityEvents || []),
+    ...contentParts,
+  ];
+
+  if (run.status === 'SUCCEEDED') {
     message.isError = false;
+    if (!isServerFinal && (appendedFinal || !message.content?.trim())) {
+      message.content = run.finalAnswer || '';
+    }
   }
   if (run.status === 'FAILED') {
     message.isError = true;
     message.content = run.lastError || '智能体任务执行失败';
   }
 
-  message.parts = parts;
-  message.runId = message.runId || run.runId;
+  message.runId = message.runId || runId;
   message.loading = false;
   return index;
 };

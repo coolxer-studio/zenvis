@@ -126,7 +126,6 @@
                 @choose-data-access-decision="handleDataAccessDecision(message, $event)"
                 @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
                 @resume-agent-run="handleResumeAgentRun"
-                @reply-agent-run="handleReplyAgentRun"
                 @select-prompt-suggestion="fillPromptSuggestion"
               />
               <div class="message-time">{{ message.time }}</div>
@@ -830,7 +829,6 @@ const {
   sendMessage,
   stopCurrentChat,
   resumeAgentRun,
-  replyToWaitingAgentRun,
   restoreActiveAgentRun,
 } = useChatStream({
   router,
@@ -897,14 +895,6 @@ const handleResumeAgentRun = async (runId: string) => {
     ElMessage.success('任务已继续');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '继续任务失败');
-  }
-};
-
-const handleReplyAgentRun = async (payload: { runId: string; message: string }) => {
-  try {
-    await replyToWaitingAgentRun(payload.runId, payload.message);
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
   }
 };
 

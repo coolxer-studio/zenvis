@@ -394,8 +394,10 @@ export const useChatStream = ({
   };
 
   const handleAgentRunEvent = async (event: AgentRunEvent) => {
-    syncAgentRunMessage(event.run_id);
-    if (event.type === 'run.waiting_user' || event.type === 'run.succeeded') {
+    const refreshBeforeSync = event.type === 'run.waiting_user'
+      || event.type === 'run.succeeded';
+    if (!refreshBeforeSync) syncAgentRunMessage(event.run_id);
+    if (refreshBeforeSync) {
       await reloadChatSessionMessages();
       await restoreActiveAgentRun();
       syncAgentRunMessage(event.run_id);
@@ -579,26 +581,6 @@ export const useChatStream = ({
     return updated;
   };
 
-  const replyToWaitingAgentRun = async (runId: string, rawMessage: string) => {
-    const message = rawMessage.trim();
-    if (!runId || !message) return null;
-    const steered = await agentRun.steer(runId, {
-      message,
-      clientMessageId: generateUUID(),
-    });
-    messages.value.push({
-      sender: 'user',
-      content: message,
-      time: getCurrentFormattedDate(),
-    });
-    ensureAgentRunMessage(steered, agentRun.currentTool.value, agentRun.activityEvents.value);
-    await agentRun.attach(steered, { after: agentRun.lastSequence.value });
-    await nextTick();
-    void scrollToBottom();
-    ElMessage.success('补充信息已提交，任务将继续执行');
-    return steered;
-  };
-
   const sendMessage = async (options: SendMessageOptions = {}) => {
     if (isChatUnavailable.value) {
       ElMessage.warning('当前 Skill 已停用或不存在，请选择其他可用技能');
@@ -662,7 +644,6 @@ export const useChatStream = ({
     sendMessage,
     stopCurrentChat,
     resumeAgentRun,
-    replyToWaitingAgentRun,
     restoreActiveAgentRun,
   };
 };

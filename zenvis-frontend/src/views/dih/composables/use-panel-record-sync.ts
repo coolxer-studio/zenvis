@@ -11,13 +11,21 @@ import {
   CONFIG_RECORD_ACTION_EVENT,
   CONFIG_RECORD_EVENT,
   CONFIG_RECORD_REQUEST_EVENT,
-  DATA_ACCESS_RECORD_EVENT,
+  DATA_METADATA_CONFIG_RECORD_EVENT,
+  DATA_METADATA_CONFIG_RECORD_REQUEST_EVENT,
+  DATA_PUSH_SERVICE_RECORD_EVENT,
+  DATA_PUSH_SERVICE_RECORD_REQUEST_EVENT,
   DATA_ANALYSIS_RECORD_EVENT,
   DATA_ANALYSIS_RECORD_REQUEST_EVENT,
   DATA_REPORT_RECORD_EVENT,
   DATA_REPORT_RECORD_REQUEST_EVENT,
-  DATA_VISUALIZATION_RECORD_EVENT,
-  DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT,
+  DATA_VISUALIZATION_APP_RECORD_EVENT,
+  DATA_VISUALIZATION_APP_RECORD_REQUEST_EVENT,
+  DATA_VISUALIZATION_CHART_EXTRA_DATA_CHANGED_EVENT,
+  DATA_VISUALIZATION_CHART_RECORD_EVENT,
+  DATA_VISUALIZATION_CHART_RECORD_REQUEST_EVENT,
+  DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT,
+  DATA_VISUALIZATION_DASHBOARD_RECORD_REQUEST_EVENT,
   REPORT_EXTRA_DATA_CHANGED_EVENT,
   REPORT_QUICK_ACTION_EVENT,
   REPORT_SELECTION_REWRITE_COMPLETED_EVENT,
@@ -121,37 +129,57 @@ export const usePanelRecordSync = ({
 
   const addChartRecordToExtraData = (record: DihPanelRecord) => {
     const extraData = asObject(parseSessionExtraData());
-    const dataVisualization = asObject(extraData.dataVisualization);
-    extraData.dataVisualization = {
-      ...dataVisualization,
-      chartLibrary: upsertById(asRecordList(dataVisualization.chartLibrary), record),
+    const visualizationChart = asObject(extraData.visualizationChart);
+    extraData.visualizationChart = {
+      ...visualizationChart,
+      chartLibrary: upsertById(asRecordList(visualizationChart.chartLibrary), record),
     };
     return JSON.stringify(extraData);
   };
 
-  const extractDataAccessRecords = () => {
-    const metadataConfigs: DihPanelRecord[] = [];
-    const dataPushServices: DihPanelRecord[] = [];
-    const dataAccess = asObject(parseSessionExtraData().dataAccess);
-    asRecordList(dataAccess.metadataConfigs).forEach(record => {
-      upsertInto(metadataConfigs, record);
+  const extractMetadataConfigRecords = () => {
+    const records: DihPanelRecord[] = [];
+    const metadataConfig = asObject(parseSessionExtraData().metadataConfig);
+    asRecordList(metadataConfig.records).forEach(record => {
+      upsertInto(records, record);
     });
-    asRecordList(dataAccess.dataPushServices).forEach(record => {
-      upsertInto(dataPushServices, record);
+    return { records };
+  };
+
+  const extractDataPushServiceRecords = () => {
+    const records: DihPanelRecord[] = [];
+    const dataPushService = asObject(parseSessionExtraData().dataPushService);
+    asRecordList(dataPushService.records).forEach(record => {
+      upsertInto(records, record);
     });
+    return { records };
+  };
+
+  const extractVisualizationChartRecords = () => {
+    const visualizationChart = asObject(parseSessionExtraData().visualizationChart);
     return {
-      metadataConfigs,
-      dataPushServices,
+      chartLibrary: asRecordList(visualizationChart.chartLibrary),
+      extraData: chatSessionExtraData.value,
+      sessionRecordId: chatSessionRecordId.value,
     };
   };
 
-  const extractDataVisualizationRecords = () => {
-    const dataVisualization = asObject(parseSessionExtraData().dataVisualization);
+  const extractVisualizationAppRecords = () => {
+    const visualizationApp = asObject(parseSessionExtraData().visualizationApp);
     return {
-      chartLibrary: asRecordList(dataVisualization.chartLibrary),
-      visualizationConfigs: asRecordList(dataVisualization.visualizationConfigs),
-      dashboardConfigs: asRecordList(dataVisualization.dashboardConfigs),
-      menuConfigs: asRecordList(dataVisualization.menuConfigs),
+      configs: asRecordList(visualizationApp.configs),
+      menus: asRecordList(visualizationApp.menus),
+      extraData: chatSessionExtraData.value,
+      sessionRecordId: chatSessionRecordId.value,
+    };
+  };
+
+  const extractVisualizationDashboardRecords = () => {
+    const visualizationDashboard = asObject(parseSessionExtraData().visualizationDashboard);
+    return {
+      configs: asRecordList(visualizationDashboard.configs),
+      dashboards: asRecordList(visualizationDashboard.dashboards),
+      menus: asRecordList(visualizationDashboard.menus),
       extraData: chatSessionExtraData.value,
       sessionRecordId: chatSessionRecordId.value,
     };
@@ -185,7 +213,7 @@ export const usePanelRecordSync = ({
     const storedDocument = asObject(report.currentDocument);
     const messageDocument = extractLatestMessageReportDocument(messages.value);
     const currentDocument = mergeStoredAndMessageReportDocument(storedDocument, messageDocument);
-    const dataVisualization = asObject(parseSessionExtraData().dataVisualization);
+    const visualizationChart = asObject(parseSessionExtraData().visualizationChart);
     const dataAnalysis = asObject(parseSessionExtraData().dataAnalysis);
     const materials: DihPanelRecord[] = [];
     messages.value.forEach(message => {
@@ -202,7 +230,7 @@ export const usePanelRecordSync = ({
         });
       });
     });
-    asRecordList(dataVisualization.chartLibrary).forEach(record => {
+    asRecordList(visualizationChart.chartLibrary).forEach(record => {
       materials.push({
         ...record,
         type: 'chart',
@@ -237,12 +265,24 @@ export const usePanelRecordSync = ({
     };
   };
 
-  const publishDataAccessRecords = () => {
-    emitDihEvent(DATA_ACCESS_RECORD_EVENT, extractDataAccessRecords());
+  const publishMetadataConfigRecords = () => {
+    emitDihEvent(DATA_METADATA_CONFIG_RECORD_EVENT, extractMetadataConfigRecords());
   };
 
-  const publishDataVisualizationRecords = () => {
-    emitDihEvent(DATA_VISUALIZATION_RECORD_EVENT, extractDataVisualizationRecords());
+  const publishDataPushServiceRecords = () => {
+    emitDihEvent(DATA_PUSH_SERVICE_RECORD_EVENT, extractDataPushServiceRecords());
+  };
+
+  const publishVisualizationChartRecords = () => {
+    emitDihEvent(DATA_VISUALIZATION_CHART_RECORD_EVENT, extractVisualizationChartRecords());
+  };
+
+  const publishVisualizationAppRecords = () => {
+    emitDihEvent(DATA_VISUALIZATION_APP_RECORD_EVENT, extractVisualizationAppRecords());
+  };
+
+  const publishVisualizationDashboardRecords = () => {
+    emitDihEvent(DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT, extractVisualizationDashboardRecords());
   };
 
   const publishDataAnalysisRecords = () => {
@@ -258,8 +298,11 @@ export const usePanelRecordSync = ({
   };
 
   watch(chatSessionExtraData, () => {
-    publishDataAccessRecords();
-    publishDataVisualizationRecords();
+    publishMetadataConfigRecords();
+    publishDataPushServiceRecords();
+    publishVisualizationChartRecords();
+    publishVisualizationAppRecords();
+    publishVisualizationDashboardRecords();
     publishDataAnalysisRecords();
     publishConfigurationRecords();
     publishReportRecords();
@@ -341,7 +384,7 @@ export const usePanelRecordSync = ({
     }
   };
 
-  const handleDataVisualizationExtraDataChanged = (
+  const handleVisualizationChartExtraDataChanged = (
     detail: { extraData?: string },
   ) => {
     if (typeof detail?.extraData === 'string') {
@@ -404,17 +447,30 @@ export const usePanelRecordSync = ({
   };
 
   useDihEventListener(DATA_ANALYSIS_RECORD_REQUEST_EVENT, publishDataAnalysisRecords);
+  useDihEventListener(DATA_METADATA_CONFIG_RECORD_REQUEST_EVENT, publishMetadataConfigRecords);
+  useDihEventListener(DATA_PUSH_SERVICE_RECORD_REQUEST_EVENT, publishDataPushServiceRecords);
+  useDihEventListener(DATA_VISUALIZATION_CHART_RECORD_REQUEST_EVENT, publishVisualizationChartRecords);
+  useDihEventListener(DATA_VISUALIZATION_APP_RECORD_REQUEST_EVENT, publishVisualizationAppRecords);
+  useDihEventListener(
+    DATA_VISUALIZATION_DASHBOARD_RECORD_REQUEST_EVENT,
+    publishVisualizationDashboardRecords,
+  );
   useDihEventListener(CONFIG_RECORD_REQUEST_EVENT, publishConfigurationRecords);
   useDihEventListener(CONFIG_RECORD_ACTION_EVENT, handleConfigRecordActionRequested);
   useDihEventListener(DATA_REPORT_RECORD_REQUEST_EVENT, publishReportRecords);
   useDihEventListener(REPORT_EXTRA_DATA_CHANGED_EVENT, handleReportExtraDataChanged);
   useDihEventListener(
-    DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT,
-    handleDataVisualizationExtraDataChanged,
+    DATA_VISUALIZATION_CHART_EXTRA_DATA_CHANGED_EVENT,
+    handleVisualizationChartExtraDataChanged,
   );
   useDihEventListener(REPORT_QUICK_ACTION_EVENT, handleReportQuickActionRequested);
 
   onMounted(() => {
+    void nextTick(() => publishMetadataConfigRecords());
+    void nextTick(() => publishDataPushServiceRecords());
+    void nextTick(() => publishVisualizationChartRecords());
+    void nextTick(() => publishVisualizationAppRecords());
+    void nextTick(() => publishVisualizationDashboardRecords());
     void nextTick(() => publishDataAnalysisRecords());
     void nextTick(() => publishConfigurationRecords());
     void nextTick(() => publishReportRecords());
@@ -422,13 +478,19 @@ export const usePanelRecordSync = ({
 
   return {
     addChartRecordToExtraData,
-    extractDataAccessRecords,
-    extractDataVisualizationRecords,
+    extractMetadataConfigRecords,
+    extractDataPushServiceRecords,
+    extractVisualizationChartRecords,
+    extractVisualizationAppRecords,
+    extractVisualizationDashboardRecords,
     extractDataAnalysisRecords,
     extractConfigurationRecords,
     extractReportRecords,
-    publishDataAccessRecords,
-    publishDataVisualizationRecords,
+    publishMetadataConfigRecords,
+    publishDataPushServiceRecords,
+    publishVisualizationChartRecords,
+    publishVisualizationAppRecords,
+    publishVisualizationDashboardRecords,
     publishDataAnalysisRecords,
     publishConfigurationRecords,
     publishReportRecords,

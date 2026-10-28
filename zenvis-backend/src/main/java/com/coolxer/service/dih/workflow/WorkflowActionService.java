@@ -9,8 +9,9 @@ import com.coolxer.model.dih.dto.WorkflowActionDto;
 import com.coolxer.model.dih.dto.WorkflowTelemetryDto;
 import com.coolxer.model.dih.vo.WorkflowActionVo;
 import com.coolxer.service.dih.ChatSessionService;
-import com.coolxer.service.dih.agent.DataAccessAgent;
-import com.coolxer.service.dih.agent.DataVisualizationAgent;
+import com.coolxer.service.dih.agent.VisualizationAgentTypes;
+import com.coolxer.service.dih.agent.DataPushServiceAgent;
+import com.coolxer.service.dih.agent.MetadataConfigAgent;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -115,7 +116,7 @@ public class WorkflowActionService {
             definition.rememberAnswers(state, request.getAnswers());
         }
         if (("approve".equals(request.getAction()) || "retry".equals(request.getAction()))
-                && DataVisualizationAgent.AGENT_TYPE.equals(state.getAgentType())) {
+                && VisualizationAgentTypes.isVisualization(state.getAgentType())) {
             if (metadata.containsKey("query")) {
                 metadata.put("query", VisualizationQueryNormalizer.normalizeQuery(
                         metadata.get("query")));
@@ -135,8 +136,8 @@ public class WorkflowActionService {
 
         Map<String, Object> continuation;
         if ("add_to_library".equals(request.getAction())) {
-            require(DataVisualizationAgent.AGENT_TYPE.equals(state.getAgentType()),
-                    "只有数据可视化工作流支持加入图表库");
+            require(VisualizationAgentTypes.isChart(state.getAgentType()),
+                    "只有临时图表工作流支持加入图表库");
             addChartToLibrary(chatSession, state, located.part(), metadata);
             continuation = Map.of();
         } else {
@@ -304,11 +305,20 @@ public class WorkflowActionService {
                 return definition;
             }
         }
-        if (DataVisualizationAgent.AGENT_TYPE.equals(agentType)) {
-            return new DataVisualizationWorkflowDefinition();
+        if (VisualizationAgentTypes.isChart(agentType)) {
+            return new VisualizationChartWorkflowDefinition();
         }
-        if (DataAccessAgent.AGENT_TYPE.equals(agentType)) {
-            return new DataAccessWorkflowDefinition();
+        if (VisualizationAgentTypes.isApp(agentType)) {
+            return new VisualizationAppWorkflowDefinition();
+        }
+        if (VisualizationAgentTypes.isDashboard(agentType)) {
+            return new VisualizationDashboardWorkflowDefinition();
+        }
+        if (MetadataConfigAgent.AGENT_TYPE.equals(agentType)) {
+            return new MetadataConfigWorkflowDefinition();
+        }
+        if (DataPushServiceAgent.AGENT_TYPE.equals(agentType)) {
+            return new DataPushWorkflowDefinition();
         }
         return null;
     }
@@ -332,8 +342,8 @@ public class WorkflowActionService {
         require(chatSession != null, "会话不存在或无权访问");
         AgentWorkflowState state = stateStore.load(chatSession, request.getWorkflowId())
                 .orElseThrow(() -> invalid("工作流不存在或已过期"));
-        require(DataVisualizationAgent.AGENT_TYPE.equals(state.getAgentType()),
-                "当前工作流不属于数据可视化智能体");
+        require(VisualizationAgentTypes.isVisualization(state.getAgentType()),
+                "当前工作流不属于可视化智能体");
         require(state.getStep() == AgentWorkflowStep.ARTIFACT_READY,
                 "当前工作流阶段没有可渲染图表");
         List<Map<String, Object>> failures = state.getFailures() == null
@@ -459,7 +469,7 @@ public class WorkflowActionService {
                 "图表产物缺少可渲染的 ECharts 配置");
 
         Map<String, Object> root = stateStore.parse(chatSession.getExtraData());
-        Map<String, Object> visualization = map(root.get("dataVisualization"));
+        Map<String, Object> visualization = map(root.get("visualizationChart"));
         List<Map<String, Object>> records =
                 new ArrayList<>(listOfMaps(visualization.get("chartLibrary")));
         Map<String, Object> record = new LinkedHashMap<>(metadata);
@@ -479,7 +489,7 @@ public class WorkflowActionService {
                 text(item.get("artifactId")), text(item.get("id")))));
         records.add(record);
         visualization.put("chartLibrary", records);
-        root.put("dataVisualization", visualization);
+        root.put("visualizationChart", visualization);
         chatSession.setExtraData(JacksonUtil.toJson(root));
         state.setArtifactId(artifactId);
         state.getContext().put("libraryArtifactId", artifactId);
@@ -559,15 +569,21 @@ public class WorkflowActionService {
         String action = firstText(
                 text(metadata.get("action")),
                 text(metadata.get("blockedAction")));
-        return "data_visualization.confirm_query_plan".equals(action)
+        return isVisualizationAction(action, "confirm_query_plan")
                 && StringUtils.hasText(text(metadata.get("planId")))
                 && !map(metadata.get("query")).isEmpty();
     }
 
     private boolean isExecuteApprovedQueryCard(Map<String, Object> metadata) {
-        return "data_visualization.execute_approved_query".equals(firstText(
+        return isVisualizationAction(firstText(
                 text(metadata.get("action")),
-                text(metadata.get("blockedAction"))));
+                text(metadata.get("blockedAction"))), "execute_approved_query");
+    }
+
+    private boolean isVisualizationAction(String action, String suffix) {
+        return VisualizationAgentTypes.ALL.stream()
+                .map(VisualizationAgentTypes::actionPrefix)
+                .anyMatch(prefix -> (prefix + "." + suffix).equals(action));
     }
 
     private boolean hasRetryableQuery(AgentWorkflowState state) {

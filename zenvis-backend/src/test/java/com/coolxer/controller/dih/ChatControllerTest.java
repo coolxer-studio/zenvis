@@ -15,7 +15,7 @@ class ChatControllerTest {
         Boolean visualizationPlaceholder = ReflectionTestUtils.invokeMethod(
                 controller,
                 "isPlaceholderBuiltinAgent",
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART
         );
         Boolean reportPlaceholder = ReflectionTestUtils.invokeMethod(
                 controller,

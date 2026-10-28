@@ -60,7 +60,7 @@ class ChatMessagePartParserTest {
     }
 
     @Test
-    @DisplayName("数据可视化图表预览围栏应解析为预览片段")
+    @DisplayName("可视化图表预览围栏应解析为预览片段")
     void parseDataVisualizationChartPreviewFence() {
         String content = """
                 ```zenvis:visualization-chart-preview
@@ -79,20 +79,20 @@ class ChatMessagePartParserTest {
     }
 
     @Test
-    @DisplayName("数据可视化记录围栏应解析为对应记录片段")
-    void parseDataVisualizationRecordFences() {
+    @DisplayName("可视化记录围栏应解析为对应记录片段")
+    void parseVisualizationRecordFences() {
         String content = """
                 ```zenvis:visualization-chart-record
                 {"name":"登录趋势图","chartType":"line","status":"temporary"}
                 ```
-                ```zenvis:visualization-config-record
-                {"name":"登录可视化页面","configType":"login-visualization","fileName":"index.json"}
+                ```zenvis:visualization-app-record
+                {"name":"登录可视化页面","recordKind":"config","configType":"login-visualization","fileName":"index.json"}
                 ```
-                ```zenvis:dashboard-config-record
-                {"name":"登录大屏","dashboardId":"12","code":"login-dashboard"}
+                ```zenvis:visualization-dashboard-record
+                {"name":"登录大屏","recordKind":"dashboard","dashboardId":"12","code":"login-dashboard"}
                 ```
-                ```zenvis:menu-config-record
-                {"name":"登录菜单","menuId":"34","params":"login-visualization"}
+                ```zenvis:visualization-dashboard-record
+                {"name":"登录菜单","recordKind":"menu","menuId":"34","params":"login-visualization"}
                 ```
                 """;
 
@@ -102,11 +102,11 @@ class ChatMessagePartParserTest {
         assertEquals("visualization-chart-record", parts.get(0).getType());
         assertEquals("登录趋势图", parts.get(0).getContent());
         assertEquals("line", parts.get(0).getMetadata().get("chartType"));
-        assertEquals("visualization-config-record", parts.get(1).getType());
+        assertEquals("visualization-app-record", parts.get(1).getType());
         assertEquals("login-visualization", parts.get(1).getMetadata().get("configType"));
-        assertEquals("dashboard-config-record", parts.get(2).getType());
+        assertEquals("visualization-dashboard-record", parts.get(2).getType());
         assertEquals("12", parts.get(2).getMetadata().get("dashboardId"));
-        assertEquals("menu-config-record", parts.get(3).getType());
+        assertEquals("visualization-dashboard-record", parts.get(3).getType());
         assertEquals("34", parts.get(3).getMetadata().get("menuId"));
     }
 
@@ -344,10 +344,10 @@ class ChatMessagePartParserTest {
     }
 
     @Test
-    @DisplayName("数据接入后续选择围栏应解析为待选择片段")
-    void parseDataAccessDecisionFence() {
+    @DisplayName("元数据配置决策围栏应解析为待选择片段")
+    void parseMetadataConfigDecisionFence() {
         String content = """
-                ```zenvis:data-access-decision
+                ```zenvis:metadata-config-decision
                 {"title":"元数据配置已生成，请选择后续处理","content":"可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。","actions":["apply_config","abandon","revise"]}
                 ```
                 """;
@@ -355,11 +355,28 @@ class ChatMessagePartParserTest {
         List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
 
         assertEquals(1, parts.size());
-        assertEquals("data-access-decision", parts.get(0).getType());
+        assertEquals("metadata-config-decision", parts.get(0).getType());
         assertEquals("元数据配置已生成，请选择后续处理", parts.get(0).getTitle());
         assertEquals("可以添加配置到系统、放弃本次配置，或补充调整要求继续更新配置。", parts.get(0).getContent());
         assertEquals("pending", parts.get(0).getStatus());
         assertEquals(List.of("apply_config", "abandon", "revise"), parts.get(0).getMetadata().get("actions"));
+    }
+
+    @Test
+    @DisplayName("数据推送服务决策围栏应解析为待选择片段")
+    void parseDataPushServiceDecisionFence() {
+        String content = """
+                ```zenvis:data-push-service-decision
+                {"title":"缺少已发布 Meta","kind":"missing_meta","handoff":{"targetAgentType":"agent_metadata_config","label":"前往元数据配置","prompt":"请创建 Meta"},"actions":[]}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("data-push-service-decision", parts.get(0).getType());
+        assertEquals("missing_meta", parts.get(0).getMetadata().get("kind"));
+        assertEquals("pending", parts.get(0).getStatus());
     }
 
     @Test
@@ -431,7 +448,7 @@ class ChatMessagePartParserTest {
     void parsePushTaskDiagnosticNoticeCards() {
         String content = """
                 ```zenvis:notice
-                {"title":"数据推送任务运行失败（第 1/5 轮）","content":"任务 ID：12\\nsourceMark：data-access:chat:service-log\\n状态：error\\n失败阶段：运行检查","level":"error"}
+                {"title":"数据推送任务运行失败（第 1/5 轮）","content":"任务 ID：12\\nsourceMark：data-push:chat:service-log\\n状态：error\\n失败阶段：运行检查","level":"error"}
                 ```
                 ```zenvis:notice
                 {"title":"数据推送任务日志（第 1/5 轮）","content":"日志类型：system\\n最新相关日志：unknown field","level":"warning"}

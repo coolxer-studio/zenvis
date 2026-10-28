@@ -1,7 +1,8 @@
 package com.coolxer.web;
 
 import com.coolxer.service.dih.AIChatService;
-import com.coolxer.service.dih.agent.DataAccessAgent;
+import com.coolxer.service.dih.agent.DataPushServiceAgent;
+import com.coolxer.service.dih.agent.MetadataConfigAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -40,13 +41,13 @@ class WebServiceApplicationTests {
 	}
 
 	@Test
-	void dataAccessSkillAndRealToolDefinitionsFitEmptyConversationBudget() throws Exception {
-		List<String> skillIds = List.of("data-access-agent");
-		McpToolContext toolContext =
-				agentMcpToolService.resolve(DataAccessAgent.AGENT_TYPE, skillIds);
-		String systemPrompt =
-				skillService.buildAgentSkillPrompt(DataAccessAgent.AGENT_TYPE, skillIds)
-						+ "\n\n" + toolContext.systemPrompt();
+	void splitAgentSkillsAndRealToolDefinitionsFitEmptyConversationBudget() throws Exception {
+		List<String> metadataSkillIds = List.of("metadata-config-agent");
+		McpToolContext metadataTools =
+				agentMcpToolService.resolve(MetadataConfigAgent.AGENT_TYPE, metadataSkillIds);
+		String metadataPrompt =
+				skillService.buildAgentSkillPrompt(MetadataConfigAgent.AGENT_TYPE, metadataSkillIds)
+						+ "\n\n" + metadataTools.systemPrompt();
 		Method method = AIChatService.class.getDeclaredMethod(
 				"prepareChatInput",
 				String.class,
@@ -59,16 +60,34 @@ class WebServiceApplicationTests {
 
 		Object prepared = method.invoke(
 				aiChatService,
-				"data-access-budget-test",
-				systemPrompt,
-				"开始数据接入",
-				toolContext.toolCallbackProvider(),
-				toolContext.toolRuntimeContext()
+				"metadata-config-budget-test",
+				metadataPrompt,
+				"开始元数据配置",
+				metadataTools.toolCallbackProvider(),
+				metadataTools.toolRuntimeContext()
 		);
 
 		assertThat(prepared).isNotNull();
-		assertThat(toolContext.toolCallbackProvider().getToolCallbacks()).hasSize(10);
-		assertThat(toolContext.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(64_000);
-		assertThat(toolContext.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(48_000);
+		assertThat(metadataTools.toolCallbackProvider().getToolCallbacks()).hasSize(4);
+
+		List<String> pushSkillIds = List.of("data-push-service-agent");
+		McpToolContext pushTools =
+				agentMcpToolService.resolve(DataPushServiceAgent.AGENT_TYPE, pushSkillIds);
+		String pushPrompt =
+				skillService.buildAgentSkillPrompt(DataPushServiceAgent.AGENT_TYPE, pushSkillIds)
+						+ "\n\n" + pushTools.systemPrompt();
+		Object preparedPush = method.invoke(
+				aiChatService,
+				"data-push-budget-test",
+				pushPrompt,
+				"开始数据推送服务",
+				pushTools.toolCallbackProvider(),
+				pushTools.toolRuntimeContext()
+		);
+
+		assertThat(preparedPush).isNotNull();
+		assertThat(pushTools.toolCallbackProvider().getToolCallbacks()).hasSize(8);
+		assertThat(pushTools.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(64_000);
+		assertThat(pushTools.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(48_000);
 	}
 }

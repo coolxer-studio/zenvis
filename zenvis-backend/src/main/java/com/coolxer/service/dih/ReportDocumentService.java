@@ -542,7 +542,7 @@ public class ReportDocumentService {
         } catch (RuntimeException e) {
             return;
         }
-        Map<String, Object> visualization = mapValue(extraData.get("dataVisualization"));
+        Map<String, Object> visualization = mapValue(extraData.get("visualizationChart"));
         for (Map<String, Object> chart : listOfMaps(visualization.get("chartLibrary"))) {
             Map<String, Object> ref = structuredMaterial(
                     "chart", chart, session, "图表", "recordId");

@@ -197,16 +197,22 @@ import AgentRunCenter from './components/agent-run-center.vue';
 import ViewDrawer from './components/view-drawer.vue';
 import ViewLeft from './components/view-left.vue';
 import ViewRightConfigManagement from './components/view-right-config-management.vue';
-import ViewRightDataAccess from './components/view-right-data-access.vue';
 import ViewRightDataAnalysis from './components/view-right-data-analysis.vue';
-import ViewRightDataVisualization from './components/view-right-data-visualization.vue';
+import ViewRightDataPushService from './components/view-right-data-push-service.vue';
+import ViewRightMetadataConfig from './components/view-right-metadata-config.vue';
 import ViewRightReport from './components/view-right-report.vue';
+import ViewRightVisualizationApp from './components/view-right-visualization-app.vue';
+import ViewRightVisualizationChart from './components/view-right-visualization-chart.vue';
+import ViewRightVisualizationDashboard from './components/view-right-visualization-dashboard.vue';
 import {
   CONFIG_RECORD_EVENT,
-  DATA_ACCESS_RECORD_EVENT,
   DATA_ANALYSIS_RECORD_EVENT,
+  DATA_METADATA_CONFIG_RECORD_EVENT,
+  DATA_PUSH_SERVICE_RECORD_EVENT,
   DATA_REPORT_RECORD_EVENT,
-  DATA_VISUALIZATION_RECORD_EVENT,
+  DATA_VISUALIZATION_APP_RECORD_EVENT,
+  DATA_VISUALIZATION_CHART_RECORD_EVENT,
+  DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT,
   useDihEventListener,
 } from './events';
 
@@ -218,10 +224,13 @@ type Suggestion = {
 };
 
 type ResultAgentType =
-  | 'agent_data_visualization'
+  | 'agent_visualization_chart'
+  | 'agent_visualization_app'
+  | 'agent_visualization_dashboard'
   | 'agent_data_analysis'
   | 'agent_config_management'
-  | 'agent_data_access'
+  | 'agent_metadata_config'
+  | 'agent_data_push_service'
   | 'agent_report';
 
 const route = useRoute();
@@ -255,8 +264,11 @@ let taskQueuePollingTimer: ReturnType<typeof setInterval> | undefined;
 let taskQueueRefreshInFlight = false;
 
 const agentIconMap: Record<string, any> = {
-  agent_data_access: Connection,
-  agent_data_visualization: Monitor,
+  agent_metadata_config: Operation,
+  agent_data_push_service: Connection,
+  agent_visualization_chart: DataAnalysis,
+  agent_visualization_app: Monitor,
+  agent_visualization_dashboard: Operation,
   agent_data_analysis: DataAnalysis,
   agent_config_management: Operation,
   agent_report: Document,
@@ -272,18 +284,24 @@ const configuredIconMap: Record<string, any> = {
 };
 
 const rightComponentMap: Record<ResultAgentType, any> = {
-  agent_data_visualization: ViewRightDataVisualization,
+  agent_visualization_chart: ViewRightVisualizationChart,
+  agent_visualization_app: ViewRightVisualizationApp,
+  agent_visualization_dashboard: ViewRightVisualizationDashboard,
   agent_data_analysis: ViewRightDataAnalysis,
   agent_config_management: ViewRightConfigManagement,
-  agent_data_access: ViewRightDataAccess,
+  agent_metadata_config: ViewRightMetadataConfig,
+  agent_data_push_service: ViewRightDataPushService,
   agent_report: ViewRightReport,
 };
 
 const rightPanelMeta: Record<ResultAgentType, { title: string; description: string }> = {
-  agent_data_visualization: { title: '可视化结果', description: '图表、看板与菜单配置' },
+  agent_visualization_chart: { title: '图表库', description: '临时图表与真实查询快照' },
+  agent_visualization_app: { title: '可视化应用结果', description: '应用配置与应用菜单' },
+  agent_visualization_dashboard: { title: '数据大屏结果', description: '看板、配置与看板入口' },
   agent_data_analysis: { title: '分析结果', description: '数据集、服务结果与分析报告' },
   agent_config_management: { title: '配置工作区', description: '配置记录、试验和正式生效' },
-  agent_data_access: { title: '数据接入结果', description: '元数据与数据推送服务' },
+  agent_metadata_config: { title: '元数据配置结果', description: '已发布的 Meta 配置记录' },
+  agent_data_push_service: { title: '数据推送服务结果', description: '已创建并运行的推送任务' },
   agent_report: { title: '报表工作台', description: '文档、素材与交付产物' },
 };
 
@@ -417,8 +435,14 @@ const revealResult = <T>(eventName: string, agentType: ResultAgentType, detail: 
   }
 };
 
-useDihEventListener(DATA_VISUALIZATION_RECORD_EVENT, detail =>
-  revealResult(DATA_VISUALIZATION_RECORD_EVENT, 'agent_data_visualization', detail),
+useDihEventListener(DATA_VISUALIZATION_CHART_RECORD_EVENT, detail =>
+  revealResult(DATA_VISUALIZATION_CHART_RECORD_EVENT, 'agent_visualization_chart', detail),
+);
+useDihEventListener(DATA_VISUALIZATION_APP_RECORD_EVENT, detail =>
+  revealResult(DATA_VISUALIZATION_APP_RECORD_EVENT, 'agent_visualization_app', detail),
+);
+useDihEventListener(DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT, detail =>
+  revealResult(DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT, 'agent_visualization_dashboard', detail),
 );
 useDihEventListener(DATA_ANALYSIS_RECORD_EVENT, detail =>
   revealResult(DATA_ANALYSIS_RECORD_EVENT, 'agent_data_analysis', detail),
@@ -426,8 +450,11 @@ useDihEventListener(DATA_ANALYSIS_RECORD_EVENT, detail =>
 useDihEventListener(CONFIG_RECORD_EVENT, detail =>
   revealResult(CONFIG_RECORD_EVENT, 'agent_config_management', detail),
 );
-useDihEventListener(DATA_ACCESS_RECORD_EVENT, detail =>
-  revealResult(DATA_ACCESS_RECORD_EVENT, 'agent_data_access', detail),
+useDihEventListener(DATA_METADATA_CONFIG_RECORD_EVENT, detail =>
+  revealResult(DATA_METADATA_CONFIG_RECORD_EVENT, 'agent_metadata_config', detail),
+);
+useDihEventListener(DATA_PUSH_SERVICE_RECORD_EVENT, detail =>
+  revealResult(DATA_PUSH_SERVICE_RECORD_EVENT, 'agent_data_push_service', detail),
 );
 useDihEventListener(DATA_REPORT_RECORD_EVENT, detail =>
   revealResult(DATA_REPORT_RECORD_EVENT, 'agent_report', detail),

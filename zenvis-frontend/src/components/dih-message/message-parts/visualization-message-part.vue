@@ -56,10 +56,10 @@
     />
   </div>
 
-  <div v-else-if="isDataVisualizationRecord" class="notice-part notice-info">
+  <div v-else-if="isVisualizationRecord" class="notice-part notice-info">
     <div class="notice-title">
       <el-icon><DataAnalysis /></el-icon>
-      <span class="card-title-text">{{ dataVisualizationRecordTitle }}</span>
+      <span class="card-title-text">{{ visualizationRecordTitle }}</span>
       <el-tooltip :content="isExpanded ? '折叠' : '展开'" placement="top">
         <el-button
           class="card-toggle-btn"
@@ -74,7 +74,7 @@
       {{
         part.content ||
         metadataText(part, 'description') ||
-        (interactive ? '已记录到右侧数据可视化面板。' : '数据可视化记录')
+        (interactive ? '已记录到对应可视化结果面板。' : '可视化记录')
       }}
     </div>
   </div>
@@ -130,7 +130,7 @@ const chartPreviewConfigText = computed(() => {
 
 const chartLibraryAction = computed(() => {
   const action = metadataText(props.part, 'action');
-  if (action !== 'data_visualization.add_chart_library') {
+  if (action !== 'visualization_chart.add_chart_library') {
     return '';
   }
   const source = metadataText(props.part, 'source');
@@ -226,21 +226,20 @@ const chartPreviewError = computed(() => {
   return '';
 });
 
-const isDataVisualizationRecord = computed(() => {
+const isVisualizationRecord = computed(() => {
   return [
     'visualization-chart-record',
-    'visualization-config-record',
-    'dashboard-config-record',
-    'menu-config-record',
+    'visualization-app-record',
+    'visualization-dashboard-record',
   ].includes(props.part.type);
 });
 
-const dataVisualizationRecordTitle = computed(() => {
+const visualizationRecordTitle = computed(() => {
   if (props.part.type === 'visualization-chart-record') return props.part.title || '图表库记录';
-  if (props.part.type === 'visualization-config-record')
-    return props.part.title || '可视化配置记录';
-  if (props.part.type === 'dashboard-config-record') return props.part.title || '数据看板配置记录';
-  if (props.part.type === 'menu-config-record') return props.part.title || '菜单配置记录';
-  return props.part.title || '数据可视化记录';
+  if (props.part.type === 'visualization-app-record')
+    return props.part.title || '可视化应用记录';
+  if (props.part.type === 'visualization-dashboard-record')
+    return props.part.title || '数据大屏记录';
+  return props.part.title || '可视化记录';
 });
 </script>

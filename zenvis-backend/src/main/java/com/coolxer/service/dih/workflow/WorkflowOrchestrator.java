@@ -2,6 +2,7 @@ package com.coolxer.service.dih.workflow;
 
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.model.dih.ChatMessagePart;
+import com.coolxer.service.dih.agent.VisualizationAgentTypes;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -84,6 +85,7 @@ public class WorkflowOrchestrator {
 
             AgentWorkflowStep previousStep = state.getStep();
             String previousUpdatedAt = state.getUpdatedAt();
+            hydrateMenuPersistenceContext(chatSession, state, metadata);
             AgentWorkflowStep step = definition.resolveStep(state, part, metadata);
             if (step == null) {
                 continue;
@@ -156,8 +158,11 @@ public class WorkflowOrchestrator {
             return workflowDefinitions;
         }
         return List.of(
-                new DataVisualizationWorkflowDefinition(),
-                new DataAccessWorkflowDefinition());
+                new VisualizationChartWorkflowDefinition(),
+                new VisualizationAppWorkflowDefinition(),
+                new VisualizationDashboardWorkflowDefinition(),
+                new MetadataConfigWorkflowDefinition(),
+                new DataPushWorkflowDefinition());
     }
 
     private AgentWorkflowState newState(WorkflowDefinition definition) {
@@ -172,6 +177,54 @@ public class WorkflowOrchestrator {
                 .setStateRevision(0)
                 .setCreatedAt(now)
                 .setUpdatedAt(now);
+    }
+
+    /**
+     * Menu publication happens after a prior configuration/Dashboard turn, when the
+     * writable workflow itself is already terminal. Rehydrate only server-owned
+     * persistence evidence from the session record sections; card metadata is never
+     * trusted as proof that a configuration was written and read back.
+     */
+    private void hydrateMenuPersistenceContext(ChatSession chatSession,
+                                               AgentWorkflowState state,
+                                               Map<String, Object> metadata) {
+        String agentType = state.getAgentType();
+        if (!VisualizationAgentTypes.WRITABLE.contains(agentType)
+                || !VisualizationAgentTypes.confirmMenuAction(agentType)
+                .equals(text(metadata.get("action")))) {
+            return;
+        }
+        Map<String, Object> root = stateStore.parse(chatSession.getExtraData());
+        Map<String, Object> context = state.getContext() == null
+                ? new LinkedHashMap<>() : state.getContext();
+        state.setContext(context);
+        if (VisualizationAgentTypes.isApp(agentType)) {
+            if (hasRecords(root, "visualizationApp", "configs")) {
+                context.put(AbstractVisualizationWorkflowDefinition.VERIFIED_CONFIG_KEY,
+                        true);
+            }
+            return;
+        }
+        Map<String, Object> dashboard = stateStore.map(
+                root.get(VisualizationAgentTypes.extraDataKey(agentType)));
+        if (hasNonEmptyList(dashboard.get("configs"))) {
+            context.put(AbstractVisualizationWorkflowDefinition.VERIFIED_CONFIG_KEY,
+                    true);
+        }
+        if (hasNonEmptyList(dashboard.get("dashboards"))) {
+            context.put(AbstractVisualizationWorkflowDefinition.VERIFIED_DASHBOARD_KEY,
+                    true);
+        }
+    }
+
+    private boolean hasRecords(Map<String, Object> root,
+                               String sectionKey,
+                               String recordsKey) {
+        return hasNonEmptyList(stateStore.map(root.get(sectionKey)).get(recordsKey));
+    }
+
+    private boolean hasNonEmptyList(Object value) {
+        return value instanceof List<?> list && !list.isEmpty();
     }
 
     private void mergeEvidence(

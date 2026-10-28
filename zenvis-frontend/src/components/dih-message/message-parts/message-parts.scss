@@ -597,7 +597,9 @@
   .confirm-part,
   .mcp-approval-part,
   .info-steps-part,
-  .data-access-decision-part,
+  .metadata-config-decision-part,
+  .data-push-service-decision-part,
+  .visualization-decision-part,
   .visualization-chart-preview-part,
   .chart-part {
     max-width: 100%;
@@ -613,7 +615,9 @@
   .confirm-title,
   .mcp-approval-title,
   .info-steps-title,
-  .data-access-decision-title,
+  .metadata-config-decision-title,
+  .data-push-service-decision-title,
+  .visualization-decision-title,
   .visualization-chart-preview-header,
   .chart-part {
     display: flex;
@@ -715,7 +719,9 @@
   .notice-content,
   .confirm-content,
   .info-steps-content,
-  .data-access-decision-content {
+  .metadata-config-decision-content,
+  .data-push-service-decision-content,
+  .visualization-decision-content {
     margin-top: 8px;
     color: #606266;
     font-size: 14px;
@@ -920,26 +926,50 @@
     margin-top: 4px;
   }
 
-  .data-access-decision-part {
+  .metadata-config-decision-part,
+  .data-push-service-decision-part,
+  .visualization-decision-part {
     border-color: #d9ecff;
     background: #f8fbff;
   }
 
-  .data-access-decision-actions {
+  .metadata-config-decision-actions,
+  .data-push-service-decision-actions,
+  .visualization-decision-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 12px;
   }
 
-  .data-access-revise-box {
+  .metadata-config-revise-box,
+  .data-push-service-revise-box,
+  .visualization-decision-revise-box {
     margin-top: 12px;
   }
 
-  .data-access-revise-actions {
+  .metadata-config-revise-actions,
+  .data-push-service-revise-actions,
+  .visualization-decision-revise-actions {
     display: flex;
     gap: 8px;
     margin-top: 8px;
+  }
+
+  .data-push-service-decision-part.is-missing-meta,
+  .visualization-decision-part.is-missing-meta {
+    border-color: var(--el-color-danger-light-7);
+    background: var(--el-color-danger-light-9);
+  }
+
+  .data-push-service-handoff {
+    display: flex;
+    margin-top: 12px;
+  }
+
+  .visualization-decision-handoff {
+    display: flex;
+    margin-top: 12px;
   }
 
   .chart-part {
@@ -1125,7 +1155,9 @@
   .confirm-part,
   .mcp-approval-part,
   .info-steps-part,
-  .data-access-decision-part,
+  .metadata-config-decision-part,
+  .data-push-service-decision-part,
+  .visualization-decision-part,
   .visualization-chart-preview-part,
   .chart-part {
     border-color: var(--zv-border);

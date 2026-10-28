@@ -8,7 +8,7 @@ import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.vo.SkillChatEntryVo;
 import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
-import com.coolxer.service.dih.agent.DataVisualizationAgent;
+import com.coolxer.service.dih.agent.VisualizationChartAgent;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.attachment.AttachmentToolProviderFactory;
@@ -200,11 +200,11 @@ class DihChatExecutionBoundaryTest {
     void agentIgnoresDeepThinkingAndOnlyResolvesAgentMcp() {
         Fixture fixture = fixture();
         when(fixture.skillService.isBuiltinAgentEnabled(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART
         )).thenReturn(true);
         when(fixture.agentMcpToolService.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
-                List.of("data-visualization-agent")
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
+                List.of("visualization-chart-agent")
         )).thenReturn(McpToolContext.empty());
         when(fixture.visualizationAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(), anyList(),
@@ -212,23 +212,23 @@ class DihChatExecutionBoundaryTest {
         )).thenReturn(Flux.just("智能体回答"));
 
         List<String> response = fixture.service.chat(
-                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION, true),
+                chatDto(BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART, true),
                 null
         ).collectList().block();
 
         assertThat(response).containsExactly("智能体回答");
         verify(fixture.agentMcpToolService).resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
-                List.of("data-visualization-agent")
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
+                List.of("visualization-chart-agent")
         );
         verify(fixture.visualizationAgent).chat(
                 eq("chat-1"),
                 eq("model-1"),
                 argThat(prompt -> prompt.startsWith("问题")
-                        && prompt.contains("普通数据可视化请求没有可用的 MCP 工具")),
+                        && prompt.contains("可视化智能体请求没有可用的 MCP 工具")),
                 eq(List.of()),
                 isNull(),
-                eq(List.of("data-visualization-agent")),
+                eq(List.of("visualization-chart-agent")),
                 eq(McpToolContext.empty()),
                 any(ContextCompactionObserver.class)
         );
@@ -271,11 +271,11 @@ class DihChatExecutionBoundaryTest {
                 "允许 retrieval_list_display_entity"
         );
         when(fixture.skillService.isBuiltinAgentEnabled(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART
         )).thenReturn(true);
         when(fixture.agentMcpToolService.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
-                List.of("data-visualization-agent")
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
+                List.of("visualization-chart-agent")
         )).thenReturn(toolContext);
         when(fixture.visualizationAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(),
@@ -283,7 +283,7 @@ class DihChatExecutionBoundaryTest {
         )).thenReturn(Flux.just("实体选择结果"));
 
         List<String> response = fixture.service.chat(
-                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION, false),
+                chatDto(BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART, false),
                 null
         ).collectList().block();
 
@@ -298,7 +298,7 @@ class DihChatExecutionBoundaryTest {
                 promptCaptor.capture(),
                 eq(List.of()),
                 isNull(),
-                eq(List.of("data-visualization-agent")),
+                eq(List.of("visualization-chart-agent")),
                 any(McpToolContext.class),
                 any(ContextCompactionObserver.class)
         );
@@ -317,14 +317,14 @@ class DihChatExecutionBoundaryTest {
                 .thenReturn(new SkillChatEntryVo(
                         "jmr-analysis",
                         chatType,
-                        BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                        BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
                         "僵木蠕研判",
                         "说明",
                         "data-analysis",
                         60
                 ));
         when(fixture.agentMcpToolService.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
                 List.of("jmr-analysis")
         ))
                 .thenReturn(McpToolContext.empty());
@@ -337,7 +337,7 @@ class DihChatExecutionBoundaryTest {
 
         assertThat(response).containsExactly("专项研判回答");
         verify(fixture.agentMcpToolService).resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
                 List.of("jmr-analysis")
         );
         verify(fixture.visualizationAgent).chat(
@@ -504,16 +504,16 @@ class DihChatExecutionBoundaryTest {
     void disabledBuiltinSkillReturnsExplicitCapabilityError() {
         Fixture fixture = fixture();
         when(fixture.skillService.isBuiltinAgentEnabled(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART
         )).thenReturn(false);
 
         List<String> response = fixture.service.chat(
-                chatDto(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION, false),
+                chatDto(BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART, false),
                 null
         ).collectList().block();
 
         assertThat(response).containsExactly(
-                "智能体能力不可用：以下 Skill 不存在或未启用: data-visualization-agent"
+                "智能体能力不可用：以下 Skill 不存在或未启用: visualization-chart-agent"
         );
         verifyNoInteractions(fixture.agentMcpToolService);
         verify(fixture.baseService, never()).isModelSupported(any());
@@ -565,9 +565,9 @@ class DihChatExecutionBoundaryTest {
         ChatTitleService titleService = mock(ChatTitleService.class);
         AgentMcpToolService agentMcpToolService = mock(AgentMcpToolService.class);
         SkillService skillService = mock(SkillService.class);
-        DataVisualizationDemoResponseService visualizationDemoResponseService =
-                mock(DataVisualizationDemoResponseService.class);
-        DataVisualizationAgent visualizationAgent = mock(DataVisualizationAgent.class);
+        VisualizationChartDemoResponseService visualizationDemoResponseService =
+                mock(VisualizationChartDemoResponseService.class);
+        VisualizationChartAgent visualizationAgent = mock(VisualizationChartAgent.class);
         ChatSession chatSession = mock(ChatSession.class);
 
         when(baseService.isModelSupported("model-1")).thenReturn(true);
@@ -593,11 +593,17 @@ class DihChatExecutionBoundaryTest {
                 baseService,
                 chatSessionService,
                 null,
+                null,
                 visualizationDemoResponseService,
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 visualizationAgent,
+                null,
+                null,
                 new ChatMessagePartParser(),
                 attachmentService,
                 titleService,
@@ -630,7 +636,7 @@ class DihChatExecutionBoundaryTest {
             ChatSessionService chatSessionService,
             AgentMcpToolService agentMcpToolService,
             SkillService skillService,
-            DataVisualizationAgent visualizationAgent,
+            VisualizationChartAgent visualizationAgent,
             AttachmentToolProviderFactory attachmentToolProviderFactory,
             ChatAttachmentService attachmentService
     ) {

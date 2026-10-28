@@ -62,7 +62,7 @@ import org.springframework.web.multipart.MultipartFile;
  * 本地 Skill 注册表。
  *
  * <p>默认扫描 app.paths.skills 目录，目录结构示例：
- * skill_config/data-visualization-agent/skill.json + SKILL.md
+ * skill_config/metadata-config-agent/skill.json + SKILL.md
  */
 @Slf4j
 @Service

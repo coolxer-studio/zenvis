@@ -22,10 +22,16 @@ public record McpInvocationContext(
 ) {
     public static final String TOOL_CONTEXT_KEY = "zenvis_mcp_invocation_context";
     public static final String ANALYSIS_TASK_AGENT_TYPE = "agent_analysis_task";
-    public static final String BUILTIN_DATA_ACCESS_DEMO =
-            "builtin-data-access-demo";
-    public static final String BUILTIN_DATA_VISUALIZATION_DEMO =
-            "builtin-data-visualization-demo";
+    public static final String BUILTIN_METADATA_CONFIG_DEMO =
+            "builtin-metadata-config-demo";
+    public static final String BUILTIN_DATA_PUSH_DEMO =
+            "builtin-data-push-demo";
+    public static final String BUILTIN_VISUALIZATION_CHART_DEMO =
+            "builtin-visualization-chart-demo";
+    public static final String BUILTIN_VISUALIZATION_APP_DEMO =
+            "builtin-visualization-app-demo";
+    public static final String BUILTIN_VISUALIZATION_DASHBOARD_DEMO =
+            "builtin-visualization-dashboard-demo";
 
     public McpInvocationContext(McpInvocationChannel channel,
                                 Integer requesterUserId,
@@ -101,8 +107,11 @@ public record McpInvocationContext(
     }
 
     public static boolean isExplicitApprovalDemoClient(String clientInfo) {
-        return BUILTIN_DATA_ACCESS_DEMO.equals(clientInfo)
-                || BUILTIN_DATA_VISUALIZATION_DEMO.equals(clientInfo);
+        return BUILTIN_METADATA_CONFIG_DEMO.equals(clientInfo)
+                || BUILTIN_DATA_PUSH_DEMO.equals(clientInfo)
+                || BUILTIN_VISUALIZATION_CHART_DEMO.equals(clientInfo)
+                || BUILTIN_VISUALIZATION_APP_DEMO.equals(clientInfo)
+                || BUILTIN_VISUALIZATION_DASHBOARD_DEMO.equals(clientInfo);
     }
 
     public void emit(McpApprovalEvent event) {

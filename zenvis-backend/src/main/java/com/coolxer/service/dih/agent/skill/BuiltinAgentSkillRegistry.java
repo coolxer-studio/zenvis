@@ -8,24 +8,48 @@ import java.util.Optional;
  */
 public final class BuiltinAgentSkillRegistry {
 
-    public static final String AGENT_DATA_ACCESS = "agent_data_access";
-    public static final String AGENT_DATA_VISUALIZATION = "agent_data_visualization";
+    public static final String AGENT_METADATA_CONFIG = "agent_metadata_config";
+    public static final String AGENT_DATA_PUSH_SERVICE = "agent_data_push_service";
+    public static final String AGENT_VISUALIZATION_CHART = "agent_visualization_chart";
+    public static final String AGENT_VISUALIZATION_APP = "agent_visualization_app";
+    public static final String AGENT_VISUALIZATION_DASHBOARD = "agent_visualization_dashboard";
     public static final String AGENT_REPORT = "agent_report";
 
     private static final List<BuiltinAgentSkill> AGENT_SKILLS = List.of(
             new BuiltinAgentSkill(
-                    "data-access-agent",
-                    AGENT_DATA_ACCESS,
-                    "数据接入",
+                    "metadata-config-agent",
+                    AGENT_METADATA_CONFIG,
+                    "元数据配置",
                     10,
-                    "数据接入智能体能力正在建设中，当前 Skill 仅用于入口占位。"
+                    "元数据配置智能体负责生成、写入并读回校验 Meta 元数据配置。"
             ),
             new BuiltinAgentSkill(
-                    "data-visualization-agent",
-                    AGENT_DATA_VISUALIZATION,
-                    "数据可视化",
+                    "data-push-service-agent",
+                    AGENT_DATA_PUSH_SERVICE,
+                    "数据推送服务",
+                    11,
+                    "数据推送服务智能体负责基于已发布 Meta 创建、诊断和修复 PushTask。"
+            ),
+            new BuiltinAgentSkill(
+                    "visualization-chart-agent",
+                    AGENT_VISUALIZATION_CHART,
+                    "临时图表",
                     20,
-                    "数据可视化智能体基于元数据实体生成临时图表、低代码页面/应用、静态 HTML、数据看板和菜单配置。"
+                    "临时图表智能体基于已发布 Meta 查询真实数据并生成可加入图表库的 ECharts 快照。"
+            ),
+            new BuiltinAgentSkill(
+                    "visualization-app-agent",
+                    AGENT_VISUALIZATION_APP,
+                    "可视化应用",
+                    21,
+                    "可视化应用智能体生成低代码单页、侧边栏应用和静态 HTML 页面，并按需发布应用菜单。"
+            ),
+            new BuiltinAgentSkill(
+                    "visualization-dashboard-agent",
+                    AGENT_VISUALIZATION_DASHBOARD,
+                    "数据大屏",
+                    22,
+                    "数据大屏智能体生成低代码或静态 HTML 看板，并完成配置、看板与菜单读回。"
             ),
             new BuiltinAgentSkill(
                     "report-agent",

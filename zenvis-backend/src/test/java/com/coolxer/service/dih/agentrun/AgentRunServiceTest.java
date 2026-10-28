@@ -289,22 +289,24 @@ class AgentRunServiceTest {
     @Test
     void allAgentTypesAreEnabledByDefaultAndCanBeRestrictedForRollback() {
         assertThat(service.isEnabledFor("agent_report")).isTrue();
-        assertThat(service.isEnabledFor("agent_data_access")).isTrue();
-        assertThat(service.isEnabledFor("agent_data_visualization")).isTrue();
+        assertThat(service.isEnabledFor("agent_data_push_service")).isTrue();
+        assertThat(service.isEnabledFor("agent_visualization_chart")).isTrue();
+        assertThat(service.isEnabledFor("agent_visualization_app")).isTrue();
+        assertThat(service.isEnabledFor("agent_visualization_dashboard")).isTrue();
         assertThat(service.isEnabledFor("agent_skill")).isTrue();
 
         ReflectionTestUtils.setField(service, "enabledTypes", "agent_report");
         assertThat(service.isEnabledFor("agent_report")).isTrue();
-        assertThat(service.isEnabledFor("agent_data_access")).isFalse();
+        assertThat(service.isEnabledFor("agent_data_push_service")).isFalse();
 
         ReflectionTestUtils.setField(service, "enabledTypes", "*");
-        ReflectionTestUtils.setField(service, "disabledTypes", "agent_data_access");
+        ReflectionTestUtils.setField(service, "disabledTypes", "agent_data_push_service");
         assertThat(service.isEnabledFor("agent_report")).isTrue();
-        assertThat(service.isEnabledFor("agent_data_access")).isFalse();
+        assertThat(service.isEnabledFor("agent_data_push_service")).isFalse();
 
-        ReflectionTestUtils.setField(service, "enabledTypes", "agent_report,agent_data_access");
+        ReflectionTestUtils.setField(service, "enabledTypes", "agent_report,agent_data_push_service");
         ReflectionTestUtils.setField(service, "disabledTypes", "");
-        assertThat(service.isEnabledFor("agent_data_access")).isTrue();
+        assertThat(service.isEnabledFor("agent_data_push_service")).isTrue();
     }
 
     @Test

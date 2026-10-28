@@ -132,7 +132,7 @@ class WorkflowActionServiceTest {
                 "request", request));
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("workflowId", "workflow-retry");
-        metadata.put("action", "data_visualization.confirm_query_plan");
+        metadata.put("action", "visualization_chart.confirm_query_plan");
         metadata.put("step", "BLOCKED");
         metadata.put("stateRevision", 1);
         metadata.put("allowedActions", List.of("retry", "revise"));
@@ -147,7 +147,7 @@ class WorkflowActionServiceTest {
         session.setMessages(JacksonUtil.toJson(List.of(message("message-retry", part))));
         store.upsert(session, new AgentWorkflowState()
                 .setWorkflowId("workflow-retry")
-                .setAgentType("agent_data_visualization")
+                .setAgentType("agent_visualization_chart")
                 .setStep(AgentWorkflowStep.BLOCKED)
                 .setStatus("blocked")
                 .setMessageId("message-retry")
@@ -177,7 +177,7 @@ class WorkflowActionServiceTest {
         assertThat(persisted.get(0).getParts().get(0).getStatus()).isEqualTo("approved");
         assertThat(persisted.get(0).getParts().get(0).getMetadata())
                 .containsEntry("step", "DATA_QUERY")
-                .containsEntry("action", "data_visualization.confirm_query_plan")
+                .containsEntry("action", "visualization_chart.confirm_query_plan")
                 .doesNotContainKey("blockedAction");
         assertThat((List<?>) persisted.get(0).getParts().get(0)
                 .getMetadata().get("allowedActions")).isEmpty();
@@ -198,8 +198,8 @@ class WorkflowActionServiceTest {
                 "request", request));
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("workflowId", "workflow-artifact-retry");
-        metadata.put("action", "data_visualization.add_chart_library");
-        metadata.put("blockedAction", "data_visualization.add_chart_library");
+        metadata.put("action", "visualization_chart.add_chart_library");
+        metadata.put("blockedAction", "visualization_chart.add_chart_library");
         metadata.put("step", "BLOCKED");
         metadata.put("stateRevision", 3);
         metadata.put("allowedActions", List.of("retry", "revise"));
@@ -217,7 +217,7 @@ class WorkflowActionServiceTest {
         session.setMessages(JacksonUtil.toJson(List.of(message("message-artifact", part))));
         store.upsert(session, new AgentWorkflowState()
                 .setWorkflowId("workflow-artifact-retry")
-                .setAgentType("agent_data_visualization")
+                .setAgentType("agent_visualization_chart")
                 .setStep(AgentWorkflowStep.BLOCKED)
                 .setStatus("blocked")
                 .setMessageId("message-artifact")
@@ -280,7 +280,7 @@ class WorkflowActionServiceTest {
         session.setMessages(JacksonUtil.toJson(List.of(message("message-chart", part))));
         AgentWorkflowState state = new AgentWorkflowState()
                 .setWorkflowId("workflow-chart")
-                .setAgentType("agent_data_visualization")
+                .setAgentType("agent_visualization_chart")
                 .setStep(AgentWorkflowStep.ARTIFACT_READY)
                 .setStatus("active")
                 .setMessageId("message-chart")
@@ -298,7 +298,7 @@ class WorkflowActionServiceTest {
 
         Map<String, Object> root = store.parse(session.getExtraData());
         List<Map<String, Object>> records = listOfMaps(
-                store.map(root.get("dataVisualization")).get("chartLibrary"));
+                store.map(root.get("visualizationChart")).get("chartLibrary"));
         assertThat(records)
                 .hasSize(1)
                 .first()
@@ -332,7 +332,7 @@ class WorkflowActionServiceTest {
         session.setMessages(JacksonUtil.toJson(List.of(message("message-1", part))));
         store.upsert(session, new AgentWorkflowState()
                 .setWorkflowId("workflow-1")
-                .setAgentType("agent_data_visualization")
+                .setAgentType("agent_visualization_chart")
                 .setStep(AgentWorkflowStep.ENTITY_SELECTION)
                 .setStatus("active")
                 .setMessageId("message-1")
@@ -356,7 +356,7 @@ class WorkflowActionServiceTest {
     private ChatSession session() {
         ChatSession session = new ChatSession()
                 .setSessionId("chat-1")
-                .setType("agent_data_visualization");
+                .setType("agent_visualization_chart");
         session.setId(1);
         session.setCreateBy(9);
         return session;

@@ -243,7 +243,7 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 
 - 普通 `ask` 不加载 Skill，也不调用 MCP 或本地工具。
 - 业务 Agent 通过 `PromptDrivenAgentRuntime` 执行，通过 `AgentMcpToolService` 获取工具白名单。
-- 数据可视化 Agent 只使用只读 retrieval MCP 工具，不生成或执行任意 SQL。
+- 临时图表只使用只读 retrieval MCP 工具；可视化应用和数据大屏分别使用独立的配置、Dashboard 和菜单工具白名单，三者都不生成或执行任意 SQL。
 - 写工具必须保留审批、审计、参数校验和风险策略。
 - 普通问答和深度问答在全部未删除知识库中自动执行 RAG；业务 Agent / Skill 在所选启用 Skill 绑定知识库的并集内自动执行 RAG，未绑定时不检索也不回退全库。
 - 持久化执行由 `AgentRunService` 管理状态和事件，`AgentRunScheduler` 负责租约认领，`AgentRunExecutor` 执行单步决策；修改状态迁移时必须同步释放租约、等待动作和事件序号。

@@ -16,21 +16,21 @@ class AgentDemoStateStoreTest {
     @Test
     void demoStateRoundTripsInSessionExtraData() {
         ChatSession session = new ChatSession()
-                .setType("agent_data_visualization");
+                .setType("agent_visualization_chart");
 
         store.activate(
                 session,
-                "data-visualization:user-event",
-                "agent_data_visualization",
+                "visualization-chart:user-event",
+                "agent_visualization_chart",
                 "initial");
 
         assertThat(store.activeDemoId(
-                session, "agent_data_visualization"))
-                .contains("data-visualization:user-event");
+                session, "agent_visualization_chart"))
+                .contains("visualization-chart:user-event");
         assertThat(store.isActive(
                 session,
-                "data-visualization:user-event",
-                "agent_data_visualization"))
+                "visualization-chart:user-event",
+                "agent_visualization_chart"))
                 .isTrue();
         assertThat(session.getExtraData())
                 .contains("\"stage\":\"initial\"");
@@ -41,13 +41,13 @@ class AgentDemoStateStoreTest {
         ChatSession session = new ChatSession();
         store.activate(
                 session,
-                "data-access:user-event",
-                "agent_data_access");
+                "metadata-config:user-event",
+                "agent_metadata_config");
 
         String merged = store.preserveReserved(
                 session.getExtraData(),
                 """
-                        {"dataVisualization":{"chartLibrary":[]},"agentDemos":{"client":true}}
+                        {"visualizationChart":{"chartLibrary":[]},"agentDemos":{"client":true}}
                         """);
 
         Map<String, Object> root = JacksonUtil.toMap(

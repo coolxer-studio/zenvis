@@ -131,7 +131,7 @@ AI 分析任务的 `approved_task` 必须通过任务自己的审批接口提交
 | --- | --- | --- | --- |
 | GET | `/api/v1/dih/mcp/agent/prompt` | query `agentType?` | `SingleValueVo`，查看该 Agent 当前可用 MCP 服务与工具提示词 |
 
-该结果已应用全局开关、Agent scope、Skill 工具边界、策略 `DENY`、数据可视化专属工具限制和外部服务可用状态，因此比静态工具总表更能反映某个 Agent 的实际运行视图。
+该结果已应用全局开关、Agent scope、Skill 工具边界、策略 `DENY`、可视化专属查询工具限制和外部服务可用状态，因此比静态工具总表更能反映某个 Agent 的实际运行视图。
 
 ## 管理建议
 

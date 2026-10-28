@@ -99,14 +99,17 @@ public class ChatMessagePartParser {
                 && !"zenvis:confirm".equals(info)
                 && !"zenvis:info-steps".equals(info)
                 && !"zenvis:data-analysis-record".equals(info)
-                && !"zenvis:data-access-decision".equals(info)
+                && !"zenvis:metadata-config-decision".equals(info)
+                && !"zenvis:data-push-service-decision".equals(info)
+                && !"zenvis:visualization-chart-decision".equals(info)
+                && !"zenvis:visualization-app-decision".equals(info)
+                && !"zenvis:visualization-dashboard-decision".equals(info)
                 && !"zenvis:meta-config-record".equals(info)
                 && !"zenvis:vectum-task-record".equals(info)
                 && !"zenvis:visualization-chart-preview".equals(info)
                 && !"zenvis:visualization-chart-record".equals(info)
-                && !"zenvis:visualization-config-record".equals(info)
-                && !"zenvis:dashboard-config-record".equals(info)
-                && !"zenvis:menu-config-record".equals(info)
+                && !"zenvis:visualization-app-record".equals(info)
+                && !"zenvis:visualization-dashboard-record".equals(info)
                 && !"zenvis:config-record".equals(info)
                 && !"zenvis:mcp-approval".equals(info)
                 && !"zenvis:tool-call".equals(info)) {
@@ -124,14 +127,17 @@ public class ChatMessagePartParser {
                 case "zenvis:notice" -> "notice";
                 case "zenvis:info-steps" -> "info-steps";
                 case "zenvis:data-analysis-record" -> "data-analysis-record";
-                case "zenvis:data-access-decision" -> "data-access-decision";
+                case "zenvis:metadata-config-decision" -> "metadata-config-decision";
+                case "zenvis:data-push-service-decision" -> "data-push-service-decision";
+                case "zenvis:visualization-chart-decision" -> "visualization-chart-decision";
+                case "zenvis:visualization-app-decision" -> "visualization-app-decision";
+                case "zenvis:visualization-dashboard-decision" -> "visualization-dashboard-decision";
                 case "zenvis:meta-config-record" -> "metadata-config-record";
                 case "zenvis:vectum-task-record" -> "data-push-service-record";
                 case "zenvis:visualization-chart-preview" -> "visualization-chart-preview";
                 case "zenvis:visualization-chart-record" -> "visualization-chart-record";
-                case "zenvis:visualization-config-record" -> "visualization-config-record";
-                case "zenvis:dashboard-config-record" -> "dashboard-config-record";
-                case "zenvis:menu-config-record" -> "menu-config-record";
+                case "zenvis:visualization-app-record" -> "visualization-app-record";
+                case "zenvis:visualization-dashboard-record" -> "visualization-dashboard-record";
                 case "zenvis:config-record" -> "config-record";
                 case "zenvis:mcp-approval" -> "mcp-approval";
                 case "zenvis:tool-call" -> "tool-call";
@@ -146,7 +152,11 @@ public class ChatMessagePartParser {
                     .metadata(metadata);
             if ("confirm".equals(type)
                     || "info-steps".equals(type)
-                    || "data-access-decision".equals(type)) {
+                    || "metadata-config-decision".equals(type)
+                    || "data-push-service-decision".equals(type)
+                    || "visualization-chart-decision".equals(type)
+                    || "visualization-app-decision".equals(type)
+                    || "visualization-dashboard-decision".equals(type)) {
                 builder.status("pending");
             } else if ("mcp-approval".equals(type) || "tool-call".equals(type)) {
                 builder.id(textValue(node, "id"))

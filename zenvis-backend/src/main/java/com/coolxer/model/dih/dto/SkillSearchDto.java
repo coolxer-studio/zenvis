@@ -17,7 +17,7 @@ public class SkillSearchDto extends PageDto {
     private String keyword;
 
     /**
-     * 智能体类型，如 agent_data_visualization
+     * 智能体类型，如 agent_visualization_chart
      */
     private String agentType;
 

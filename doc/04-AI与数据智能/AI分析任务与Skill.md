@@ -144,10 +144,19 @@ app.paths.skills=${app.paths.config.base:.}/skill_config
 ```text
 skill_config/
 ├── index.json
-├── data-access-agent/
+├── metadata-config-agent/
 │   ├── skill.json
 │   └── SKILL.md
-├── data-visualization-agent/
+├── data-push-service-agent/
+│   ├── skill.json
+│   └── SKILL.md
+├── visualization-chart-agent/
+│   ├── skill.json
+│   └── SKILL.md
+├── visualization-app-agent/
+│   ├── skill.json
+│   └── SKILL.md
+├── visualization-dashboard-agent/
 │   ├── skill.json
 │   └── SKILL.md
 └── report-agent/
@@ -190,8 +199,11 @@ skill_config/
 
 内置入口使用固定 Agent 类型：
 
-- `agent_data_access`
-- `agent_data_visualization`
+- `agent_metadata_config`
+- `agent_data_push_service`
+- `agent_visualization_chart`
+- `agent_visualization_app`
+- `agent_visualization_dashboard`
 - `agent_report`
 
 插件或自定义 Skill 可以暴露 `skill:<skillId>`。未绑定内置智能体的入口使用通用 Skill 运行时，只加载当前 Skill。
@@ -281,7 +293,7 @@ Skill 可以在平台允许范围内提供正整数覆盖。缺失、非法或�
 ## 管理员验收
 
 1. Skill 列表、详情、重载、启用和停用正常。
-2. 三个内置入口与对应 Skill 状态一致。
+2. 六个内置入口与对应 Skill 状态一致。
 3. 自定义聊天 Skill 使用 `skill:<skillId>`，停用后不能继续创建新执行。
 4. 未声明工具的 Skill 不会获得全部工具。
 5. 任务按计划时间、优先级和并发限制调度。

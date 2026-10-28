@@ -109,7 +109,7 @@ yarn test:e2e
 yarn preview
 ```
 
-当前 `yarn test` 先执行 `vue-tsc --noEmit`，再运行报表文档格式和数据可视化菜单路由的 Node test。Playwright 独立运行，可能需要浏览器和被测服务。
+当前 `yarn test` 先执行 `vue-tsc --noEmit`，再运行报表文档格式和可视化菜单路由的 Node test。Playwright 独立运行，可能需要浏览器和被测服务。
 
 ## 核心开发流程与代码约定
 
@@ -275,7 +275,7 @@ GET /retrieval/rule/detail?id=...
 
 ## DIH 与富消息开发
 
-DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、数据接入、数据可视化和报表工作台。修改时必须保持：
+DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、元数据配置、数据推送、临时图表、可视化应用、数据大屏和报表工作台。修改时必须保持：
 
 - 新旧会话与中止生成；
 - 流式文本和结构化事件顺序；
@@ -458,7 +458,7 @@ function greet(user: User) {
 
 ### `yarn test` 与文档描述不一致
 
-以 `package.json` 为准。当前命令包含 TypeScript 检查和两个 Node test，不再只是 `vue-tsc`。
+以 `package.json` 为准。当前命令包含 TypeScript 检查和 Node test 集，不再只是 `vue-tsc`。
 
 ### API 直接访问后端成功，前端却 404
 

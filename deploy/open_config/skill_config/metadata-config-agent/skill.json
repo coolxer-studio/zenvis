@@ -1,0 +1,43 @@
+{
+  "id": "metadata-config-agent",
+  "name": "元数据配置",
+  "description": "系统内置元数据配置智能体 Skill，负责 Meta 配置生成、确认、写入、读回校验和修订。",
+  "version": "2.0.0",
+  "author": "ZenVis",
+  "agentTypes": [
+    "agent_metadata_config"
+  ],
+  "tags": [
+    "builtin",
+    "agent",
+    "metadata-config",
+    "meta"
+  ],
+  "chat": {
+    "enabled": true,
+    "label": "元数据配置",
+    "icon": "operation",
+    "order": 10
+  },
+  "runtime": {
+    "tools": {
+      "local": {
+        "config": [
+          "config_tree",
+          "config_read",
+          "config_add",
+          "config_apply"
+        ]
+      }
+    },
+    "limits": {
+      "maxToolCalls": 32,
+      "maxRepeatedFailures": 2,
+      "maxToolResultChars": 8000,
+      "maxAccumulatedToolResultChars": 64000,
+      "maxAccumulatedToolResultTokens": 48000
+    }
+  },
+  "enabled": true,
+  "entry": "SKILL.md"
+}

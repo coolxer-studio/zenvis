@@ -9,8 +9,11 @@ DIH 前端
   ├── 普通问答 / 兼容单轮 → ChatController → DihChatApplicationService
   │     ├── 普通问答 → AIChatService → 全库 RAG → OpenAI 兼容模型
   │     ├── 深度思考 → 推理模型 + 全库 RAG + reasoning 消息
-  │     ├── 数据接入 → DataAccessAgent → Workflow Orchestrator
-  │     ├── 数据可视化 → DataVisualizationAgent → 受控 MCP Tool
+  │     ├── 元数据配置 → MetadataConfigAgent → Workflow Orchestrator
+  │     ├── 数据推送服务 → DataPushServiceAgent → Workflow Orchestrator
+  │     ├── 临时图表 → VisualizationChartAgent → 受控只读 MCP Tool
+  │     ├── 可视化应用 → VisualizationAppAgent → 受控配置/菜单 MCP Tool
+  │     ├── 数据大屏 → VisualizationDashboardAgent → 受控配置/看板/菜单 MCP Tool
   │     └── 专项 Skill → PromptDrivenAgentRuntime → 绑定范围 RAG
   │
   └── 持久化业务 Agent → AgentRunController
@@ -167,7 +170,7 @@ Run 默认最多 30 个决策步、30 分钟有效执行和 80 次工具调用�
 
 ## Workflow Orchestrator
 
-数据接入和数据可视化使用共享工作流基础设施：
+元数据配置、数据推送服务、临时图表、可视化应用和数据大屏使用共享工作流基础设施，但各自只接受本领域步骤与动作：
 
 | 组件 | 职责 |
 | --- | --- |
@@ -180,33 +183,56 @@ Run 默认最多 30 个决策步、30 分钟有效执行和 80 次工具调用�
 
 工作流保存已确认参数、工具证据、失败账本和下一步动作。模型不能通过自由文本跳过必需的确认与审批。
 
-## 数据接入 Agent
+## 元数据配置 Agent
 
 ```text
-需求澄清
-  → 识别数据源与目标实体
-  → 生成 Meta 候选
-  → 生成 Vectum / PushTask 配置
-  → 静态校验
-  → 用户确认
-  → MCP 审批
-  → 应用配置并读回
+METADATA_INPUT_COLLECTION
+  → config_tree
+  → Meta 候选确认
+  → 写前重查
+  → 可选覆盖确认
+  → config_add / config_apply
+  → config_read
+  → 成功记录或阻塞
 ```
 
-Meta 属性、转换输出和 Sink 字段必须一致。确定性示例可以绕过模型生成，但不能绕过配置校验、用户确认和最终读回。
+工具白名单仅包含 `config_tree`、`config_read`、`config_add`、`config_apply`。候选文件、内容摘要和计划 ID 在确认后由服务端锁定；覆盖必须单独确认，读回与候选语义一致前不能记录成功。
 
-## 数据可视化 Agent
+## 数据推送服务 Agent
 
-数据可视化 Agent 具有更窄的工具边界：
+```text
+PUSH_INPUT_COLLECTION
+  → config_tree(type="meta") + config_read（只读）
+  → PushTask 候选确认
+  → push_task_detect_format
+  → sourceMark 冲突检查
+  → 创建或复用
+  → 状态读回
+  → system 日志验证
+  → 成功记录或阻塞
+```
 
-- 不接入外部 MCP。
-- 不执行任意 SQL。
-- 不新增、修改或删除动态实体数据。
-- 先查询实体和字段 Meta，再调用实体分析白名单。
-- 配置、看板和菜单写入默认进入审批。
-- 创建后必须通过查看工具读回校验。
+- 工具白名单包含 `config_tree`、`config_read` 和 `push_task_*`，不包含 `config_add/config_apply`。
+- 唯一业务输入依赖是已发布 Meta 的只读契约；不存在 Agent 间自动调用。
+- 缺失 Meta 时停止写入并返回 `missing_meta` 深链，不创建任务。
+- Meta 内容摘要变化后必须重新确认推送配置，不能静默沿用旧方案。
+- 修复最多 5 轮，每轮必须引用本轮 system 日志证据。
 
-图表预览是临时产物，应用配置、看板和菜单是持久化产物。两者在消息模型和生命周期中必须区分。
+## 可视化智能体
+
+临时图表、可视化应用和数据大屏共享只读查询基础设施，但会话入口、Skill、工具白名单、Workflow 和结果分区完全独立：
+
+| Agent | Workflow | 写入边界 |
+| --- | --- | --- |
+| `VisualizationChartAgent` | `visualization_chart` | 无配置、Dashboard、菜单或 Meta 写工具；只生成临时图表和图表库快照 |
+| `VisualizationAppAgent` | `visualization_app` | 只写配置与菜单；不写 Dashboard、图表库或 Meta |
+| `VisualizationDashboardAgent` | `visualization_dashboard` | 写配置、Dashboard 与菜单；不写图表库或 Meta |
+
+- 三者都不接入外部 MCP、不执行任意 SQL，也不新增、修改或删除动态实体数据。
+- 先查询实体和字段 Meta，再调用实体分析白名单；`entity_aggregate`、`entity_histogram`、`entity_scatter` 仅对这三个可视化 Agent 类型开放，且仍需 Skill 显式允许。
+- 应用和大屏的配置、Dashboard、菜单写入默认进入审批，创建后必须通过 `config_read`、`dashboard_view` 或 `menu_view` 读回校验。
+- 图表预览是临时产物；应用配置、看板和菜单是持久化产物。只有临时图表可产生图表库记录。
+- 三个 Agent 之间没有自动调用或跨领域续跑。缺少 Meta 时只返回本领域 `missing_meta` 卡和前往元数据配置的预填深链。
 
 ## 本地与外部 MCP
 
@@ -273,7 +299,7 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
 - 文档更新使用版本检查避免覆盖并发修改。
 - 用户可以归档、恢复和导出。
 - 导出服务根据当前文档生成目标格式。
-- 报表工具范围独立于数据接入和数据可视化 Agent。
+- 报表工具范围独立于元数据配置、数据推送服务、临时图表、可视化应用和数据大屏 Agent。
 
 启用 Agent Run 时，报表 Agent 先创建草稿，再通过受控工具逐章节写入，最后由 `report_finalize` 生成正式修订。单章目标约 1,200 字、硬上限 2,400 字符；已写入章节独立保存，当前章节失败不会删除其他成果。Run 只有在存在已 finalize 草稿时才可成功结束。
 

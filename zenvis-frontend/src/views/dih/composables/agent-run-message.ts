@@ -17,7 +17,11 @@ const RESTORABLE_STATUSES = new Set([...SUBSCRIBABLE_STATUSES, 'PAUSED']);
 const INTERACTIVE_PART_TYPES = new Set([
   'confirm',
   'info-steps',
-  'data-access-decision',
+  'metadata-config-decision',
+  'data-push-service-decision',
+  'visualization-chart-decision',
+  'visualization-app-decision',
+  'visualization-dashboard-decision',
   'mcp-approval',
 ]);
 

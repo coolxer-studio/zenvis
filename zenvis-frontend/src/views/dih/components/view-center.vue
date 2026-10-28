@@ -127,7 +127,11 @@
                   @submit-info-steps="handleInfoStepsSubmit(message, $event)"
                   @add-chart-library="handleAddChartLibrary(message, $event)"
                   @chart-render-failed="handleChartRenderFailure($event)"
-                  @choose-data-access-decision="handleDataAccessDecision(message, $event)"
+                  @choose-metadata-config-decision="handleMetadataConfigDecision(message, $event)"
+                  @choose-data-push-decision="handleDataPushDecision(message, $event)"
+                  @choose-visualization-chart-decision="handleVisualizationChartDecision(message, $event)"
+                  @choose-visualization-app-decision="handleVisualizationAppDecision(message, $event)"
+                  @choose-visualization-dashboard-decision="handleVisualizationDashboardDecision(message, $event)"
                   @decide-mcp-approval="handleMcpApprovalDecision(message, $event)"
                   @resume-agent-run="handleResumeAgentRun"
                   @select-prompt-suggestion="fillPromptSuggestion"
@@ -442,7 +446,7 @@ import { useChatSession } from '../composables/use-chat-session';
 import { useChatStream } from '../composables/use-chat-stream';
 import { useMcpApproval } from '../composables/use-mcp-approval';
 import { usePanelRecordSync } from '../composables/use-panel-record-sync';
-import { DATA_VISUALIZATION_CHART_DATA_EVENT, emitDihEvent } from '../events';
+import { VISUALIZATION_CHART_DATA_EVENT, emitDihEvent } from '../events';
 import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
 import type { TAnalysisTaskQueue } from '@/types/type-analysis-task';
 
@@ -832,7 +836,7 @@ const markChartAsLoaded = (message: ChatMessage) => {
 };
 
 const dispatchChartData = (jsonData: any) => {
-  emitDihEvent(DATA_VISUALIZATION_CHART_DATA_EVENT, {
+  emitDihEvent(VISUALIZATION_CHART_DATA_EVENT, {
     chartType: jsonData.chart_type || 'line',
     option: jsonData.option || jsonData,
     rawData: jsonData.raw_data,
@@ -935,7 +939,11 @@ const {
   handleInfoStepsSubmit,
   handleActionDecision,
   handleAddChartLibrary,
-  handleDataAccessDecision,
+  handleMetadataConfigDecision,
+  handleDataPushDecision,
+  handleVisualizationChartDecision,
+  handleVisualizationAppDecision,
+  handleVisualizationDashboardDecision,
   handleChartRenderFailure,
 } = useChatMessageActions({
   chatSessionId,

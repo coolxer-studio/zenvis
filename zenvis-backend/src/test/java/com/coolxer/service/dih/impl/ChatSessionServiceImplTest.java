@@ -63,7 +63,7 @@ class ChatSessionServiceImplTest {
         ChatSession current = new ChatSession()
                 .setSessionId("chat-1")
                 .setExtraData("{\"agentWorkflows\":{\"workflows\":{\"workflow-1\":{\"step\":\"QUERY_PLAN_CONFIRMATION\"}}},"
-                        + "\"agentDemos\":{\"activeByAgent\":{\"agent_data_visualization\":\"demo-1\"}}}");
+                        + "\"agentDemos\":{\"activeByAgent\":{\"agent_visualization_chart\":\"demo-1\"}}}");
         current.setId(7);
         current.setCreateBy(42);
         when(repository.findOwnedByIdForUpdate(7, 42)).thenReturn(Optional.of(locked));

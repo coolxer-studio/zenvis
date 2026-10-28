@@ -67,7 +67,7 @@ class PushTaskMcpToolTest {
 
     @Test
     void getLogReturnsLatestSanitizedBoundedLogForOwnedTask() {
-        PushTaskVo task = managedTask(12, "data-access:chat:service-log");
+        PushTaskVo task = managedTask(12, "data-push:chat:service-log");
         task.setStatus("running[error]");
         pushTaskService.findByIdResult = task;
         pushTaskService.getLogResult = IntStream.rangeClosed(1, 120)
@@ -78,13 +78,13 @@ class PushTaskMcpToolTest {
 
         Map<String, Object> result = tool.getLog(
                 12,
-                "data-access:chat:service-log",
+                "data-push:chat:service-log",
                 "system"
         );
 
         assertThat(result)
                 .containsEntry("taskId", 12)
-                .containsEntry("sourceMark", "data-access:chat:service-log")
+                .containsEntry("sourceMark", "data-push:chat:service-log")
                 .containsEntry("logType", "system")
                 .containsEntry("taskStatus", "running[error]")
                 .containsEntry("truncated", true);
@@ -99,7 +99,7 @@ class PushTaskMcpToolTest {
 
     @Test
     void getLogCapsLongContentFromTheTail() {
-        PushTaskVo task = managedTask(12, "data-access:chat:service-log");
+        PushTaskVo task = managedTask(12, "data-push:chat:service-log");
         pushTaskService.findByIdResult = task;
         pushTaskService.getLogResult = IntStream.rangeClosed(1, 100)
                 .mapToObj(index -> index + "-" + "x".repeat(100))
@@ -108,7 +108,7 @@ class PushTaskMcpToolTest {
 
         Map<String, Object> result = tool.getLog(
                 12,
-                "data-access:chat:service-log",
+                "data-push:chat:service-log",
                 "console"
         );
 
@@ -118,11 +118,11 @@ class PushTaskMcpToolTest {
 
     @Test
     void getLogRejectsMismatchedTaskOwnership() {
-        pushTaskService.findByIdResult = managedTask(12, "data-access:chat:other");
+        pushTaskService.findByIdResult = managedTask(12, "data-push:chat:other");
 
         assertThatThrownBy(() -> tool.getLog(
                 12,
-                "data-access:chat:service-log",
+                "data-push:chat:service-log",
                 "system"
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("不匹配");
@@ -130,7 +130,7 @@ class PushTaskMcpToolTest {
 
     @Test
     void repairAndRestartDelegatesCompleteManagedTask() {
-        String sourceMark = "data-access:chat:service-log";
+        String sourceMark = "data-push:chat:service-log";
         pushTaskService.findByIdResult = managedTask(12, sourceMark);
         pushTaskService.updateAndStartResult = true;
         PushTaskDto request = new PushTaskDto();
@@ -148,9 +148,9 @@ class PushTaskMcpToolTest {
 
     @Test
     void repairAndRestartRejectsMismatchedHistoricalTaskId() {
-        String sourceMark = "data-access:chat:service-log";
+        String sourceMark = "data-push:chat:service-log";
         pushTaskService.findByIdResult = managedTask(
-                13, "data-access:chat:other");
+                13, "data-push:chat:other");
         PushTaskDto request = new PushTaskDto();
         request.setName("service-log");
         request.setConfig("sources: {}");

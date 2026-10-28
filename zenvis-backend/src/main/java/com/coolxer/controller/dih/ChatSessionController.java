@@ -29,12 +29,11 @@ import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_INCIDENT_
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_OPERATION_WEEKLY_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT;
 import static com.coolxer.service.dih.ReportDemoResponseService.REPORT_VISUALIZATION_ARCHIVE_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DataVisualizationDemoResponseService.CHART_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DataVisualizationDemoResponseService.DASHBOARD_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DataVisualizationDemoResponseService.MENU_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DataVisualizationDemoResponseService.PAGE_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DataVisualizationDemoResponseService.SIDEBAR_APP_EXAMPLE_PROMPT;
-import static com.coolxer.service.dih.DataAccessDemoResponseService.USER_EVENT_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.VisualizationAppDemoResponseService.PAGE_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.VisualizationAppDemoResponseService.SIDEBAR_APP_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.VisualizationChartDemoResponseService.CHART_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.VisualizationDashboardDemoResponseService.DASHBOARD_EXAMPLE_PROMPT;
 
 /**
  * 会话管理
@@ -44,7 +43,7 @@ import static com.coolxer.service.dih.DataAccessDemoResponseService.USER_EVENT_E
 @RequestMapping("/api/v1/dih/chat-session")
 public class ChatSessionController extends BaseController {
 
-    private static final String DATA_ACCESS_TEMPLATE_DOWNLOAD_URL = "/zenvis/system-files/data-access-requirement-template.md";
+    private static final String METADATA_CONFIG_TEMPLATE_DOWNLOAD_URL = "/zenvis/system-files/metadata-config-requirement-template.md";
 
     @Autowired
     private ChatSessionService chatSessionService;
@@ -139,15 +138,25 @@ public class ChatSessionController extends BaseController {
     }
 
     private static final String PROLOGUE_DEFAULT = "我是数智助手，可以解答系统相关运营问题，有什么问题尽管提问吧！";
-    private static final String PROLOGUE_AGENT_DATA_ACCESS = "我是数据接入智能体，只处理数据接入相关工作，主要包括两件事：元数据配置和数据推送服务。\n" +
-            "默认会先完成元数据配置，配置成功生效后，再根据你的明确要求添加数据推送服务。\n" +
-            "你可以先下载并填写 [数据接入需求模板](" + DATA_ACCESS_TEMPLATE_DOWNLOAD_URL + ")，填写完成后作为 `.md` 附件上传，我会读取文档内容帮助生成并生效配置。";
-    private static final String PROLOGUE_AGENT_DATA_ACCESS_EXAMPLE_INTRO = "> 下面是可复制的用户事件数据接入需求样例。\n 复制后粘贴到对话框发送，即可按模板体验元数据配置和数据推送服务创建流程。";
-    private static final String DATA_ACCESS_USER_EVENT_EXAMPLE_PROMPT =
-            USER_EVENT_EXAMPLE_PROMPT;
-    private static final String PROLOGUE_AGENT_DATA_VISUALIZATION = "我是数据可视化智能体，建立在数据接入产生的元数据实体之上，可以生成临时图表、低代码页面/应用、静态 HTML 页面、数据看板和菜单配置。\n" +
-            "我会先确认目标类型、实体字段、时间范围、统计维度和实现方式；涉及写入 open_config、创建菜单或看板时，会先给出确认卡，只有你确认后才写入系统。";
-    private static final String PROLOGUE_AGENT_DATA_VISUALIZATION_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词。";
+    private static final String PROLOGUE_AGENT_METADATA_CONFIG = "我是元数据配置智能体，只负责 Meta 元数据配置的生成、写入和读回校验。\n" +
+            "我会先检查现有 Meta，生成完整候选并等待你确认；同名不同内容时会单独请求覆盖确认，写入后必须读回一致才算成功。\n" +
+            "你可以先下载并填写 [元数据配置需求模板](" + METADATA_CONFIG_TEMPLATE_DOWNLOAD_URL + ")，填写完成后作为 `.md` 附件上传，我会读取文档内容帮助生成并生效 Meta。";
+    private static final String PROLOGUE_AGENT_METADATA_CONFIG_EXAMPLE_INTRO = "> 下面是可复制的用户事件元数据配置需求样例。\n 复制后粘贴到对话框发送，即可体验元数据配置全流程。";
+    private static final String METADATA_CONFIG_USER_EVENT_EXAMPLE_PROMPT =
+            com.coolxer.service.dih.MetadataConfigDemoResponseService.USER_EVENT_EXAMPLE_PROMPT;
+    private static final String PROLOGUE_AGENT_DATA_PUSH_SERVICE = "我是数据推送服务智能体，只负责基于已发布 Meta 创建、诊断和修复 PushTask。\n" +
+            "Meta 对我始终只读：我会先通过 config_tree 和 config_read 校验目标 Meta；缺失时会停止写入并引导你前往元数据配置。\n" +
+            "创建任务前会展示完整 Vectum 配置并等待确认，执行后必须读回任务状态和 system 日志。";
+    private static final String PROLOGUE_AGENT_DATA_PUSH_SERVICE_EXAMPLE_INTRO = "> 下面是基于已发布 user_event Meta 创建数据推送服务的样例。\n 复制后粘贴到对话框发送，即可体验只读 Meta 校验、配置确认和真实 MCP 审批流程。";
+    private static final String DATA_PUSH_USER_EVENT_EXAMPLE_PROMPT =
+            com.coolxer.service.dih.DataPushDemoResponseService.USER_EVENT_EXAMPLE_PROMPT;
+    private static final String PROLOGUE_AGENT_VISUALIZATION_CHART = "我是临时图表智能体，只基于已发布 Meta 查询真实数据并生成临时 ECharts 图表。\n" +
+            "我不会写入配置、创建应用、看板或菜单；只有经过查询方案确认和真实数据校验的图表才能加入本次会话图表库。";
+    private static final String PROLOGUE_AGENT_VISUALIZATION_APP = "我是可视化应用智能体，只基于已发布 Meta 生成低代码单页、侧边栏应用或静态 HTML 页面，并按需创建应用菜单。\n" +
+            "配置写入前会先锁定并展示确认卡，写入后必须读回一致；我不会创建数据大屏。";
+    private static final String PROLOGUE_AGENT_VISUALIZATION_DASHBOARD = "我是数据大屏智能体，只基于已发布 Meta 生成低代码或静态 HTML 看板，并创建看板入口和配置管理菜单。\n" +
+            "我不会写入 Meta，也不会生成普通可视化应用页面；Dashboard 与菜单都必须真实创建并读回。";
+    private static final String PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词。";
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\n" +
             " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
@@ -180,61 +189,144 @@ public class ChatSessionController extends BaseController {
         if (SkillService.isDynamicChatType(normalizeType(type))) {
             return buildDynamicSkillPrologueMessage(type);
         }
-        if ("agent_data_access".equals(normalizeType(type))) {
-            String content = PROLOGUE_AGENT_DATA_ACCESS
+        if ("agent_metadata_config".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_METADATA_CONFIG
                     + "\n\n"
-                    + PROLOGUE_AGENT_DATA_ACCESS_EXAMPLE_INTRO
+                    + PROLOGUE_AGENT_METADATA_CONFIG_EXAMPLE_INTRO
                     + "\n\n````markdown\n"
-                    + DATA_ACCESS_USER_EVENT_EXAMPLE_PROMPT
+                    + METADATA_CONFIG_USER_EVENT_EXAMPLE_PROMPT
                     + "\n````";
             Message message = new Message("ai", content);
             message.setParts(List.of(
                     ChatMessagePart.builder()
                             .type("markdown")
-                            .content(PROLOGUE_AGENT_DATA_ACCESS)
+                            .content(PROLOGUE_AGENT_METADATA_CONFIG)
                             .build(),
                     ChatMessagePart.builder()
                             .type("markdown")
-                            .content(PROLOGUE_AGENT_DATA_ACCESS_EXAMPLE_INTRO)
+                            .content(PROLOGUE_AGENT_METADATA_CONFIG_EXAMPLE_INTRO)
                             .build(),
                     ChatMessagePart.builder()
                             .type("code")
-                            .title("用户事件数据接入需求样例")
+                            .title("用户事件元数据配置需求样例")
                             .language("markdown")
-                            .content(DATA_ACCESS_USER_EVENT_EXAMPLE_PROMPT)
+                            .content(METADATA_CONFIG_USER_EVENT_EXAMPLE_PROMPT)
                             .metadata(Map.of("defaultCollapsed", true))
                             .build()
             ));
             return message;
         }
-        if ("agent_data_visualization".equals(normalizeType(type))) {
-            String content = PROLOGUE_AGENT_DATA_VISUALIZATION
+        if ("agent_data_push_service".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_DATA_PUSH_SERVICE
                     + "\n\n"
-                    + PROLOGUE_AGENT_DATA_VISUALIZATION_EXAMPLE_INTRO
-                    + "\n\n"
-                    + "临时图表｜单页面应用｜带侧边栏应用｜数据看板｜添加菜单";
+                    + PROLOGUE_AGENT_DATA_PUSH_SERVICE_EXAMPLE_INTRO
+                    + "\n\n````markdown\n"
+                    + DATA_PUSH_USER_EVENT_EXAMPLE_PROMPT
+                    + "\n````";
             Message message = new Message("ai", content);
             message.setParts(List.of(
                     ChatMessagePart.builder()
                             .type("markdown")
-                            .content(PROLOGUE_AGENT_DATA_VISUALIZATION)
+                            .content(PROLOGUE_AGENT_DATA_PUSH_SERVICE)
                             .build(),
                     ChatMessagePart.builder()
                             .type("markdown")
-                            .content(PROLOGUE_AGENT_DATA_VISUALIZATION_EXAMPLE_INTRO)
+                            .content(PROLOGUE_AGENT_DATA_PUSH_SERVICE_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("code")
+                            .title("用户事件数据推送服务需求样例")
+                            .language("markdown")
+                            .content(DATA_PUSH_USER_EVENT_EXAMPLE_PROMPT)
+                            .metadata(Map.of("defaultCollapsed", true))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_visualization_chart".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_VISUALIZATION_CHART
+                    + "\n\n"
+                    + PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "临时图表";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_VISUALIZATION_CHART)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO)
                             .build(),
                     ChatMessagePart.builder()
                             .type("prompt-suggestions")
-                            .title("用户事件数据可视化示例")
+                            .title("临时图表示例")
                             .metadata(Map.of(
                                     "examples",
                                     List.of(
-                                            Map.of("label", "临时图表", "prompt", CHART_EXAMPLE_PROMPT),
+                                            Map.of("label", "用户事件临时图表", "prompt", CHART_EXAMPLE_PROMPT)
+                                    )
+                            ))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_visualization_app".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_VISUALIZATION_APP
+                    + "\n\n"
+                    + PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "单页面应用｜带侧边栏应用｜添加菜单";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_VISUALIZATION_APP)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title("可视化应用示例")
+                            .metadata(Map.of(
+                                    "examples",
+                                    List.of(
                                             Map.of("label", "单页面应用", "prompt", PAGE_EXAMPLE_PROMPT),
                                             Map.of("label", "带侧边栏应用", "prompt", SIDEBAR_APP_EXAMPLE_PROMPT),
-                                            Map.of("label", "数据看板", "prompt", DASHBOARD_EXAMPLE_PROMPT),
                                             Map.of("label", "添加菜单", "prompt", MENU_EXAMPLE_PROMPT)
                                     )
+                            ))
+                            .build()
+            ));
+            return message;
+        }
+        if ("agent_visualization_dashboard".equals(normalizeType(type))) {
+            String content = PROLOGUE_AGENT_VISUALIZATION_DASHBOARD
+                    + "\n\n"
+                    + PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO
+                    + "\n\n"
+                    + "数据大屏";
+            Message message = new Message("ai", content);
+            message.setParts(List.of(
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_VISUALIZATION_DASHBOARD)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("markdown")
+                            .content(PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO)
+                            .build(),
+                    ChatMessagePart.builder()
+                            .type("prompt-suggestions")
+                            .title("数据大屏示例")
+                            .metadata(Map.of(
+                                    "examples",
+                                    List.of(Map.of(
+                                            "label", "用户事件数据大屏",
+                                            "prompt", DASHBOARD_EXAMPLE_PROMPT))
                             ))
                             .build()
             ));
@@ -327,8 +419,11 @@ public class ChatSessionController extends BaseController {
 
     private String resolvePrologue(String type) {
         return switch (normalizeType(type)) {
-            case "agent_data_access" -> PROLOGUE_AGENT_DATA_ACCESS;
-            case "agent_data_visualization" -> PROLOGUE_AGENT_DATA_VISUALIZATION;
+            case "agent_metadata_config" -> PROLOGUE_AGENT_METADATA_CONFIG;
+            case "agent_data_push_service" -> PROLOGUE_AGENT_DATA_PUSH_SERVICE;
+            case "agent_visualization_chart" -> PROLOGUE_AGENT_VISUALIZATION_CHART;
+            case "agent_visualization_app" -> PROLOGUE_AGENT_VISUALIZATION_APP;
+            case "agent_visualization_dashboard" -> PROLOGUE_AGENT_VISUALIZATION_DASHBOARD;
             case "agent_report" -> PROLOGUE_AGENT_REPORT;
             default -> PROLOGUE_DEFAULT;
         };

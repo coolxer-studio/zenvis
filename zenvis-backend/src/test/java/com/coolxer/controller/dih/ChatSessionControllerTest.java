@@ -12,7 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static com.coolxer.service.dih.DataVisualizationDemoResponseService.MENU_EXAMPLE_PROMPT;
+import static com.coolxer.service.dih.VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT;
 
 class ChatSessionControllerTest {
 
@@ -26,7 +26,7 @@ class ChatSessionControllerTest {
         Message message = ReflectionTestUtils.invokeMethod(
                 controller,
                 "buildPrologueMessage",
-                "agent_data_visualization"
+                "agent_visualization_app"
         );
 
         assertThat(message).isNotNull();

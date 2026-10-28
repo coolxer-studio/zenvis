@@ -234,7 +234,9 @@ Skill 可通过 `runtime.limits.maxOutputTokens` 覆盖本轮最大输出 Token�
 | `mcp-approval` | 工具审批卡 |
 | `tool-call` | MCP 工具调用活动，保留输入、结果、错误和耗时 |
 | `rag-search` | 知识库检索记录，保留查询范围、原因和命中摘要 |
-| `visualization-*` | 图表、配置、看板和菜单产物 |
+| `visualization-chart-decision`、`visualization-app-decision`、`visualization-dashboard-decision` | 三个可视化智能体各自的业务确认卡 |
+| `visualization-chart-preview` | 临时图表预览，不包含应用或看板产物 |
+| `visualization-chart-record`、`visualization-app-record`、`visualization-dashboard-record` | 图表库、应用配置/菜单、看板配置/Dashboard/菜单的成功记录 |
 | `report-document`、`report-fragment` | 完整报表和选区改写 |
 | `prompt-suggestions` | 新会话开场建议 |
 

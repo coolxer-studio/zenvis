@@ -27,13 +27,23 @@ public class ChatTitleService {
         if (!StringUtils.hasText(userMessage)) {
             return "新建会话";
         }
-        if (DataAccessDemoResponseService.isUserEventDemoRequirementPrompt(userMessage)) {
-            return DataAccessDemoResponseService.USER_EVENT_DEMO_TITLE;
+        if (MetadataConfigDemoResponseService.isUserEventDemoRequirementPrompt(userMessage)) {
+            return MetadataConfigDemoResponseService.USER_EVENT_DEMO_TITLE;
         }
-        if (DataVisualizationDemoResponseService
-                .isUserEventVisualizationDemoPrompt(userMessage)) {
-            return DataVisualizationDemoResponseService
-                    .USER_EVENT_VISUALIZATION_DEMO_TITLE;
+        if (DataPushDemoResponseService.isUserEventDemoRequirementPrompt(userMessage)) {
+            return DataPushDemoResponseService.USER_EVENT_DEMO_TITLE;
+        }
+        if (VisualizationChartDemoResponseService
+                .isUserEventDemoRequirementPrompt(userMessage)) {
+            return VisualizationChartDemoResponseService.USER_EVENT_DEMO_TITLE;
+        }
+        if (VisualizationAppDemoResponseService
+                .isUserEventDemoRequirementPrompt(userMessage)) {
+            return VisualizationAppDemoResponseService.USER_EVENT_DEMO_TITLE;
+        }
+        if (VisualizationDashboardDemoResponseService
+                .isUserEventDemoRequirementPrompt(userMessage)) {
+            return VisualizationDashboardDemoResponseService.USER_EVENT_DEMO_TITLE;
         }
         if (ReportDemoResponseService.isReportDemoPrompt(userMessage)) {
             return ReportDemoResponseService.REPORT_DEMO_TITLE;

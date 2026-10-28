@@ -343,7 +343,8 @@ public class ChatController extends BaseController {
     private boolean isDecisionPart(ChatMessagePart part) {
         return "confirm".equals(part.getType())
                 || "info-steps".equals(part.getType())
-                || "data-access-decision".equals(part.getType());
+                || "metadata-config-decision".equals(part.getType())
+                || "data-push-service-decision".equals(part.getType());
     }
 
     private boolean updateDecisionPart(List<Message> messages, ChatActionDecisionDto decisionDto) {
@@ -416,7 +417,7 @@ public class ChatController extends BaseController {
         if (DECISION_APPLY_CONFIG.equals(decision)
                 || DECISION_ABANDON.equals(decision)
                 || DECISION_REVISE.equals(decision)) {
-            return "data-access-decision";
+            return null;
         }
         if (DECISION_APPROVED.equals(decision) || DECISION_REJECTED.equals(decision)) {
             return "confirm";

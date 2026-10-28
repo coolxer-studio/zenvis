@@ -19,9 +19,12 @@ import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.dto.ReportActionDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.model.dih.vo.McpApprovalVo;
-import com.coolxer.service.dih.agent.DataAccessAgent;
-import com.coolxer.service.dih.agent.DataVisualizationAgent;
+import com.coolxer.service.dih.agent.DataPushServiceAgent;
+import com.coolxer.service.dih.agent.MetadataConfigAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
+import com.coolxer.service.dih.agent.VisualizationAppAgent;
+import com.coolxer.service.dih.agent.VisualizationChartAgent;
+import com.coolxer.service.dih.agent.VisualizationDashboardAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.agentrun.AgentRunService;
 import com.coolxer.service.dih.demo.AgentDemoStateStore;
@@ -78,7 +81,7 @@ class DihChatApplicationServiceTest {
         DihChatApplicationService service = streamingService();
         String confirm = """
                 ```zenvis:confirm
-                {"title":"确认执行","content":"准备写入系统","action":"data_visualization.apply_config"}
+                {"title":"确认执行","content":"准备写入系统","action":"visualization_chart.confirm_query_plan"}
                 ```
                 """;
         String notice = """
@@ -96,7 +99,7 @@ class DihChatApplicationServiceTest {
     void persistentRunResponseKeepsRunIdAndStructuredParts() {
         DihChatApplicationService service = streamingService();
         String content = """
-                ```zenvis:data-access-decision
+                ```zenvis:metadata-config-decision
                 {"title":"元数据配置已生成","content":"请选择后续处理","actions":["apply_config","abandon"]}
                 ```
                 """;
@@ -107,7 +110,7 @@ class DihChatApplicationServiceTest {
         assertThat(message.getRunId()).isEqualTo("run-1");
         assertThat(message.getParts()).singleElement()
                 .satisfies(part -> assertThat(part.getType())
-                        .isEqualTo("data-access-decision"));
+                        .isEqualTo("metadata-config-decision"));
     }
 
     @Test
@@ -811,7 +814,7 @@ class DihChatApplicationServiceTest {
                 .setTurnId("turn-demo")
                 .setMcpClientInfo(
                         McpInvocationContext
-                                .BUILTIN_DATA_VISUALIZATION_DEMO)
+                                .BUILTIN_VISUALIZATION_CHART_DEMO)
                 .setArguments("{}");
 
         ChatMessagePart part = (ChatMessagePart) toApprovalPart.invoke(
@@ -864,9 +867,9 @@ class DihChatApplicationServiceTest {
         );
 
         assertThat(patch).isNotNull();
-        Map<String, Object> dataVisualization = (Map<String, Object>) patch.get("dataVisualization");
-        assertThat(dataVisualization).isNotNull();
-        List<Map<String, Object>> chartLibrary = (List<Map<String, Object>>) dataVisualization.get("chartLibrary");
+        Map<String, Object> visualizationChart = (Map<String, Object>) patch.get("visualizationChart");
+        assertThat(visualizationChart).isNotNull();
+        List<Map<String, Object>> chartLibrary = (List<Map<String, Object>>) visualizationChart.get("chartLibrary");
         assertThat(chartLibrary).hasSize(1);
         assertThat(chartLibrary.get(0))
                 .containsEntry("id", "traffic-trend")
@@ -905,7 +908,7 @@ class DihChatApplicationServiceTest {
                         "name", "用户事件上报趋势图",
                         "chartType", "line",
                         "source", "demo",
-                        "demoId", "data-visualization:chart",
+                        "demoId", "visualization-chart:chart",
                         "config", Map.of(
                                 "type", "chart",
                                 "config", Map.of("series", List.of()))))
@@ -915,10 +918,10 @@ class DihChatApplicationServiceTest {
                 service, "buildStructuredExtraDataPatch", List.of(part));
 
         assertThat(patch).isNotNull();
-        Map<String, Object> dataVisualization =
-                (Map<String, Object>) patch.get("dataVisualization");
+        Map<String, Object> visualizationChart =
+                (Map<String, Object>) patch.get("visualizationChart");
         List<Map<String, Object>> chartLibrary =
-                (List<Map<String, Object>>) dataVisualization.get("chartLibrary");
+                (List<Map<String, Object>>) visualizationChart.get("chartLibrary");
         assertThat(chartLibrary).hasSize(1);
         assertThat(chartLibrary.get(0))
                 .containsEntry("id", "demo-user-event-report-trend")
@@ -947,7 +950,7 @@ class DihChatApplicationServiceTest {
                 .title("实体选择")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.select_entity_from_meta",
+                        "action", "visualization_chart.select_entity_from_meta",
                         "steps", List.of(Map.of(
                                 "id", "analysis_entity",
                                 "title", "选择实体",
@@ -969,7 +972,7 @@ class DihChatApplicationServiceTest {
                 .type("confirm")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.confirm_query_plan",
+                        "action", "visualization_chart.confirm_query_plan",
                         "planId", "plan-1",
                         "entity", "traffic",
                         "fields", List.of(),
@@ -984,7 +987,7 @@ class DihChatApplicationServiceTest {
         assertThat(prematurePlan.getStatus()).isEqualTo("blocked");
         assertThat(prematurePlan.getMetadata())
                 .containsEntry("validationStatus", "blocked")
-                .containsEntry("blockedAction", "data_visualization.confirm_query_plan")
+                .containsEntry("blockedAction", "visualization_chart.confirm_query_plan")
                 .doesNotContainKey("action");
 
         Object evidence = create.invoke(null);
@@ -1018,7 +1021,7 @@ class DihChatApplicationServiceTest {
                 null, List.of(verifiedEntitySelection), evidence);
         assertThat(verifiedEntitySelection.getStatus()).isEqualTo("pending");
         assertThat(verifiedEntitySelection.getMetadata())
-                .containsEntry("action", "data_visualization.select_entity_from_meta")
+                .containsEntry("action", "visualization_chart.select_entity_from_meta")
                 .containsEntry("validationStatus", "success")
                 .containsEntry("metaVerified", true);
         List<Map<String, Object>> entitySteps =
@@ -1041,7 +1044,7 @@ class DihChatApplicationServiceTest {
                 .type("confirm")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.confirm_query_plan",
+                        "action", "visualization_chart.confirm_query_plan",
                         "planId", "plan-inferred",
                         "query", Map.of(
                                 "tool", "entity_distribution",
@@ -1068,7 +1071,7 @@ class DihChatApplicationServiceTest {
                 .type("confirm")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.confirm_query_plan",
+                        "action", "visualization_chart.confirm_query_plan",
                         "planId", "plan-category-kind",
                         "query", Map.of(
                                 "tool", "entity_aggregate",
@@ -1095,7 +1098,7 @@ class DihChatApplicationServiceTest {
                 .type("confirm")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.confirm_query_plan",
+                        "action", "visualization_chart.confirm_query_plan",
                         "planId", "plan-hallucinated-field",
                         "query", Map.of(
                                 "tool", "entity_distribution",
@@ -1115,7 +1118,7 @@ class DihChatApplicationServiceTest {
                 .type("confirm")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.confirm_query_plan",
+                        "action", "visualization_chart.confirm_query_plan",
                         "planId", "plan-2",
                         "entity", "traffic",
                         "fields", List.of(Map.of(
@@ -1149,7 +1152,7 @@ class DihChatApplicationServiceTest {
         ChatMessagePart preview = ChatMessagePart.builder()
                 .type("visualization-chart-preview")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.add_chart_library",
+                        "action", "visualization_chart.add_chart_library",
                         "planId", "plan-2",
                         "entities", List.of("traffic"),
                         "fields", List.of(),
@@ -1307,7 +1310,7 @@ class DihChatApplicationServiceTest {
                 context, "分析下网络流量最近的趋势", entityRows, null, null, true);
 
         assertThat(fastPath).contains("retrieval_list_display_attribute")
-                .contains("data_visualization.confirm_query_plan")
+                .contains("visualization_chart.confirm_query_plan")
                 .contains("fact_type");
 
         String ambiguous = ReflectionTestUtils.invokeMethod(
@@ -1344,7 +1347,7 @@ class DihChatApplicationServiceTest {
 
         AgentWorkflowState workflow = new AgentWorkflowState()
                 .setWorkflowId("wf-1")
-                .setAgentType(DataVisualizationAgent.AGENT_TYPE)
+                .setAgentType(VisualizationChartAgent.AGENT_TYPE)
                 .setStep(AgentWorkflowStep.ENTITY_META)
                 .setContext(new LinkedHashMap<>(Map.of(
                         "query", Map.of("tool", "entity_distribution",
@@ -1368,7 +1371,7 @@ class DihChatApplicationServiceTest {
     void steerConfirmationAfterVerifiedPlanCardCountsAsApproval() {
         DihChatApplicationService service = emptyService();
         Map<String, Object> planMetadata = new LinkedHashMap<>();
-        planMetadata.put("action", "data_visualization.confirm_query_plan");
+        planMetadata.put("action", "visualization_chart.confirm_query_plan");
         planMetadata.put("planId", "plan-1");
         planMetadata.put("validationStatus", "success");
         planMetadata.put("query", Map.of(
@@ -1431,7 +1434,7 @@ class DihChatApplicationServiceTest {
         WorkflowStateStore store = mock(WorkflowStateStore.class);
         AgentWorkflowState workflow = new AgentWorkflowState()
                 .setWorkflowId("wf-1")
-                .setAgentType(DataVisualizationAgent.AGENT_TYPE)
+                .setAgentType(VisualizationChartAgent.AGENT_TYPE)
                 .setStep(AgentWorkflowStep.DATA_QUERY)
                 .setContext(new LinkedHashMap<>(Map.of(
                         "planId", "plan-1",
@@ -1443,7 +1446,7 @@ class DihChatApplicationServiceTest {
         when(store.loadActive(any(), any())).thenReturn(Optional.of(workflow));
         ReflectionTestUtils.setField(service, "workflowStateStore", store);
         ChatSession session = new ChatSession();
-        session.setType(DataVisualizationAgent.AGENT_TYPE);
+        session.setType(VisualizationChartAgent.AGENT_TYPE);
 
         Object evidence = newEvidenceStream();
         emitEvidenceSuccess(evidence, "entity_trend",
@@ -1474,7 +1477,7 @@ class DihChatApplicationServiceTest {
         assertThat(platformPreview.getId()).isEqualTo("artifact:wf-1:plan-1");
         assertThat(platformPreview.getMetadata())
                 .containsEntry("planId", "plan-1")
-                .containsEntry("action", "data_visualization.add_chart_library");
+                .containsEntry("action", "visualization_chart.add_chart_library");
 
         ChatMessagePart matching = ChatMessagePart.builder()
                 .id("model-preview-ok")
@@ -1506,7 +1509,7 @@ class DihChatApplicationServiceTest {
                         + "{\"name\":\"traffic\",\"label\":\"网络流量\"},"
                         + "{\"name\":\"probe_agent_message\",\"label\":\"探针消息\"}]}");
         ChatSession session = new ChatSession();
-        session.setType(DataVisualizationAgent.AGENT_TYPE);
+        session.setType(VisualizationChartAgent.AGENT_TYPE);
 
         ChatMessagePart markdown = ChatMessagePart.builder()
                 .type("markdown")
@@ -1520,7 +1523,7 @@ class DihChatApplicationServiceTest {
         ChatMessagePart selection = parts.get(1);
         assertThat(selection.getType()).isEqualTo("info-steps");
         assertThat(selection.getMetadata())
-                .containsEntry("action", "data_visualization.select_entity_from_meta");
+                .containsEntry("action", "visualization_chart.select_entity_from_meta");
 
         ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
                 session, parts, evidence);
@@ -1551,7 +1554,7 @@ class DihChatApplicationServiceTest {
         emitEvidenceSuccess(evidence, "retrieval_list_display_entity", "{}",
                 "{\"entityList\":[{\"name\":\"traffic\",\"label\":\"网络流量\"}]}");
         ChatSession session = new ChatSession();
-        session.setType(DataVisualizationAgent.AGENT_TYPE);
+        session.setType(VisualizationChartAgent.AGENT_TYPE);
 
         ChatMessagePart malformed = ChatMessagePart.builder()
                 .type("markdown")
@@ -1579,7 +1582,7 @@ class DihChatApplicationServiceTest {
                         + "{\"name\":\"zenvis_insert_time\",\"label\":\"创建时间\",\"type\":\"datetime\"}]}");
         String content = """
                 ```zenvis:confirm
-                {"title":"确认实体与字段查询方案","action":"data_visualization.confirm_query_plan",
+                {"title":"确认实体与字段查询方案","action":"visualization_chart.confirm_query_plan",
                 "planId":"plan-run-1","entity":"user_event",
                 "query":{"tool":"entity_distribution","request":{"entity":"user_event",
                 "dimension":"event_type","time_field":"zenvis_insert_time",
@@ -1658,8 +1661,11 @@ class DihChatApplicationServiceTest {
 
     private DihChatApplicationService streamingService() {
         return new DihChatApplicationService(
-                null, null, null, null, null, null,
-                (ReportAgent) null, (DataAccessAgent) null, (DataVisualizationAgent) null,
+                null, null, null, null, null, null, null, null,
+                null,
+                (ReportAgent) null, (MetadataConfigAgent) null,
+                (DataPushServiceAgent) null, (VisualizationChartAgent) null,
+                (VisualizationAppAgent) null, (VisualizationDashboardAgent) null,
                 new ChatMessagePartParser(), null, null,
                 (AgentMcpToolService) null, (SkillService) null,
                 null, (PushTaskService) null, (DashboardService) null, (MenuService) null
@@ -1668,8 +1674,11 @@ class DihChatApplicationServiceTest {
 
     private DihChatApplicationService emptyService() {
         return new DihChatApplicationService(
-                null, null, null, null, null, null,
-                (ReportAgent) null, (DataAccessAgent) null, (DataVisualizationAgent) null,
+                null, null, null, null, null, null, null, null,
+                null,
+                (ReportAgent) null, (MetadataConfigAgent) null,
+                (DataPushServiceAgent) null, (VisualizationChartAgent) null,
+                (VisualizationAppAgent) null, (VisualizationDashboardAgent) null,
                 null, null, null, (AgentMcpToolService) null, (SkillService) null,
                 null, (PushTaskService) null, (DashboardService) null, (MenuService) null
         );
@@ -1879,7 +1888,7 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
-    void dataAccessExampleStartsWithoutConfiguredModelOrAgent() {
+    void metadataConfigExampleStartsWithoutConfiguredModelOrAgent() {
         FakeChatSessionService sessionService = new FakeChatSessionService();
         ThrowingAIBaseService baseService = new ThrowingAIBaseService();
         ThrowingChatModel titleModel = new ThrowingChatModel();
@@ -1887,7 +1896,13 @@ class DihChatApplicationServiceTest {
                 null,
                 baseService,
                 sessionService,
-                new DataAccessDemoResponseService(),
+                new MetadataConfigDemoResponseService(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -1904,12 +1919,12 @@ class DihChatApplicationServiceTest {
                 null
         );
         ChatDto chatDto = new ChatDto();
-        chatDto.setType(DataAccessAgent.AGENT_TYPE);
-        chatDto.setChatId("data-access-demo-chat");
+        chatDto.setType(MetadataConfigAgent.AGENT_TYPE);
+        chatDto.setChatId("metadata-config-demo-chat");
         chatDto.setModel("unsupported-model-should-not-be-checked");
         chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
         chatDto.setMessage(
-                DataAccessDemoResponseService.USER_EVENT_EXAMPLE_PROMPT);
+                MetadataConfigDemoResponseService.USER_EVENT_EXAMPLE_PROMPT);
 
         String response = String.join("", service.chat(chatDto, null).collectList().block());
 
@@ -1918,7 +1933,7 @@ class DihChatApplicationServiceTest {
         assertThat(baseService.resolveChatModelCalls.get()).isZero();
         assertThat(titleModel.calls.get()).isZero();
         assertThat(sessionService.session.getTitle())
-                .isEqualTo(DataAccessDemoResponseService.USER_EVENT_DEMO_TITLE);
+                .isEqualTo(MetadataConfigDemoResponseService.USER_EVENT_DEMO_TITLE);
     }
 
     @Test
@@ -1927,12 +1942,18 @@ class DihChatApplicationServiceTest {
         ThrowingAIBaseService baseService = new ThrowingAIBaseService();
         ThrowingChatModel titleModel = new ThrowingChatModel();
         AgentRunService agentRunService = mock(AgentRunService.class);
-        when(agentRunService.isEnabledFor(DataAccessAgent.AGENT_TYPE)).thenReturn(true);
+        when(agentRunService.isEnabledFor(MetadataConfigAgent.AGENT_TYPE)).thenReturn(true);
         DihChatApplicationService service = new DihChatApplicationService(
                 null,
                 baseService,
                 sessionService,
-                new DataAccessDemoResponseService(),
+                new MetadataConfigDemoResponseService(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -1950,11 +1971,11 @@ class DihChatApplicationServiceTest {
         );
         ReflectionTestUtils.setField(service, "agentRunService", agentRunService);
         ChatDto chatDto = new ChatDto();
-        chatDto.setType(DataAccessAgent.AGENT_TYPE);
-        chatDto.setChatId("data-access-demo-chat");
+        chatDto.setType(MetadataConfigAgent.AGENT_TYPE);
+        chatDto.setChatId("metadata-config-demo-chat");
         chatDto.setModel("unsupported-model-should-not-be-checked");
         chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
-        chatDto.setMessage(DataAccessDemoResponseService.USER_EVENT_EXAMPLE_PROMPT);
+        chatDto.setMessage(MetadataConfigDemoResponseService.USER_EVENT_EXAMPLE_PROMPT);
 
         String response = String.join("", service.chat(chatDto, null).collectList().block());
 
@@ -1964,39 +1985,44 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
-    void allTenBuiltinExamplesResolveToDeterministicDemoRoutes() {
+    void allBuiltinExamplesResolveToDeterministicDemoRoutes() {
         DihChatApplicationService service = emptyService();
         List<Map<String, String>> examples = List.of(
                 Map.of(
-                        "type", DataAccessAgent.AGENT_TYPE,
-                        "prompt", DataAccessDemoResponseService
+                        "type", MetadataConfigAgent.AGENT_TYPE,
+                        "prompt", MetadataConfigDemoResponseService
                                 .USER_EVENT_EXAMPLE_PROMPT,
-                        "demoId", "data-access:user-event"),
+                        "demoId", "metadata-config:user-event"),
                 Map.of(
-                        "type", DataVisualizationAgent.AGENT_TYPE,
-                        "prompt", DataVisualizationDemoResponseService
+                        "type", DataPushServiceAgent.AGENT_TYPE,
+                        "prompt", DataPushDemoResponseService
+                                .USER_EVENT_EXAMPLE_PROMPT,
+                        "demoId", "data-push:user-event"),
+                Map.of(
+                        "type", VisualizationChartAgent.AGENT_TYPE,
+                        "prompt", VisualizationChartDemoResponseService
                                 .CHART_EXAMPLE_PROMPT,
-                        "demoId", "data-visualization:chart"),
+                        "demoId", "visualization-chart:chart"),
                 Map.of(
-                        "type", DataVisualizationAgent.AGENT_TYPE,
-                        "prompt", DataVisualizationDemoResponseService
+                        "type", VisualizationAppAgent.AGENT_TYPE,
+                        "prompt", VisualizationAppDemoResponseService
                                 .PAGE_EXAMPLE_PROMPT,
-                        "demoId", "data-visualization:single-page"),
+                        "demoId", "visualization-app:single-page"),
                 Map.of(
-                        "type", DataVisualizationAgent.AGENT_TYPE,
-                        "prompt", DataVisualizationDemoResponseService
+                        "type", VisualizationAppAgent.AGENT_TYPE,
+                        "prompt", VisualizationAppDemoResponseService
                                 .SIDEBAR_APP_EXAMPLE_PROMPT,
-                        "demoId", "data-visualization:sidebar-app"),
+                        "demoId", "visualization-app:sidebar"),
                 Map.of(
-                        "type", DataVisualizationAgent.AGENT_TYPE,
-                        "prompt", DataVisualizationDemoResponseService
+                        "type", VisualizationDashboardAgent.AGENT_TYPE,
+                        "prompt", VisualizationDashboardDemoResponseService
                                 .DASHBOARD_EXAMPLE_PROMPT,
-                        "demoId", "data-visualization:dashboard"),
+                        "demoId", "visualization-dashboard:dashboard"),
                 Map.of(
-                        "type", DataVisualizationAgent.AGENT_TYPE,
-                        "prompt", DataVisualizationDemoResponseService
+                        "type", VisualizationAppAgent.AGENT_TYPE,
+                        "prompt", VisualizationAppDemoResponseService
                                 .MENU_EXAMPLE_PROMPT,
-                        "demoId", "data-visualization:menu"),
+                        "demoId", "visualization-app:menu"),
                 Map.of(
                         "type", ReportAgent.AGENT_TYPE,
                         "prompt", ReportDemoResponseService
@@ -2029,16 +2055,23 @@ class DihChatApplicationServiceTest {
         assertThat((String) ReflectionTestUtils.invokeMethod(
                 service,
                 "resolveBuiltinDemoId",
-                DataVisualizationAgent.AGENT_TYPE,
+                VisualizationChartAgent.AGENT_TYPE,
                 "请分析真实探针消息，生成近 24 小时趋势图",
                 null))
                 .isEmpty();
         assertThat((String) ReflectionTestUtils.invokeMethod(
                 service,
                 "resolveBuiltinDemoId",
-                DataAccessAgent.AGENT_TYPE,
-                DataAccessDemoResponseService.USER_EVENT_EXAMPLE_PROMPT
+                MetadataConfigAgent.AGENT_TYPE,
+                MetadataConfigDemoResponseService.USER_EVENT_EXAMPLE_PROMPT
                         + "\n请把实体名称修改为真实探针实体",
+                null))
+                .isEmpty();
+        assertThat((String) ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveBuiltinDemoId",
+                "agent_data_access",
+                MetadataConfigDemoResponseService.USER_EVENT_EXAMPLE_PROMPT,
                 null))
                 .isEmpty();
     }
@@ -2056,10 +2089,16 @@ class DihChatApplicationServiceTest {
                 sessionService,
                 null,
                 null,
+                null,
+                null,
+                null,
                 new ReportDemoResponseService(),
                 reportAgent,
-                (DataAccessAgent) null,
-                (DataVisualizationAgent) null,
+                (MetadataConfigAgent) null,
+                (DataPushServiceAgent) null,
+                (VisualizationChartAgent) null,
+                null,
+                null,
                 new ChatMessagePartParser(),
                 null,
                 new ChatTitleService(titleModel),
@@ -2105,10 +2144,14 @@ class DihChatApplicationServiceTest {
                 baseService,
                 sessionService,
                 null,
-                new DataVisualizationDemoResponseService(
-                        configService,
-                        mock(MenuService.class),
-                        mock(DashboardService.class)),
+                null,
+                new VisualizationChartDemoResponseService(
+                        configService),
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -2126,12 +2169,12 @@ class DihChatApplicationServiceTest {
         ReflectionTestUtils.setField(
                 service, "agentDemoStateStore", new AgentDemoStateStore());
         ChatDto chatDto = new ChatDto();
-        chatDto.setType(DataVisualizationAgent.AGENT_TYPE);
+        chatDto.setType(VisualizationChartAgent.AGENT_TYPE);
         chatDto.setChatId("visualization-demo-chat");
         chatDto.setModel("unsupported-model-should-not-be-checked");
         chatDto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
         chatDto.setMessage(
-                DataVisualizationDemoResponseService.CHART_EXAMPLE_PROMPT);
+                VisualizationChartDemoResponseService.CHART_EXAMPLE_PROMPT);
 
         String response = String.join(
                 "", service.chat(chatDto, null).collectList().block());
@@ -2143,11 +2186,10 @@ class DihChatApplicationServiceTest {
         assertThat(baseService.resolveChatModelCalls.get()).isZero();
         assertThat(titleModel.calls.get()).isZero();
         assertThat(sessionService.session.getTitle()).isEqualTo(
-                DataVisualizationDemoResponseService
-                        .USER_EVENT_VISUALIZATION_DEMO_TITLE);
+                VisualizationChartDemoResponseService.USER_EVENT_DEMO_TITLE);
         assertThat(sessionService.session.getExtraData())
                 .contains("\"agentDemos\"")
-                .contains("\"data-visualization:chart\"")
+                .contains("\"visualization-chart:chart\"")
                 .contains("\"stage\":\"initial\"");
         Message aiMessage = sessionService.messages.stream()
                 .filter(message -> "ai".equals(message.getSender()))
@@ -2158,7 +2200,7 @@ class DihChatApplicationServiceTest {
                 .allSatisfy(part -> assertThat(part.getMetadata())
                         .containsEntry(
                                 "demoId",
-                                "data-visualization:chart")
+                                "visualization-chart:chart")
                         .doesNotContainKey("workflowId"));
     }
 

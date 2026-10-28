@@ -545,7 +545,7 @@ class McpApprovalServiceTest {
         assertThat(pending.getPolicySnapshot())
                 .isEqualTo(McpApprovalPolicy.ASK);
         assertThat(pending.getMcpClientInfo()).isEqualTo(
-                McpInvocationContext.BUILTIN_DATA_VISUALIZATION_DEMO);
+                McpInvocationContext.BUILTIN_VISUALIZATION_CHART_DEMO);
         assertThat(events)
                 .filteredOn(event ->
                         "approval_required".equals(event.event()))
@@ -815,10 +815,10 @@ class McpApprovalServiceTest {
                 42,
                 "chat-demo",
                 "turn-demo",
-                "agent_data_visualization",
+                "agent_visualization_chart",
                 null,
                 McpInvocationContext
-                        .BUILTIN_DATA_VISUALIZATION_DEMO,
+                        .BUILTIN_VISUALIZATION_CHART_DEMO,
                 events == null ? null : events::add
         );
     }

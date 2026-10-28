@@ -30,15 +30,15 @@ class DihChatExecutionPolicyTest {
     @Test
     void builtinAgentAllowsExplicitSkillAndToolsButNoDeepThinking() {
         DihChatExecutionPolicy policy = DihChatExecutionPolicy.resolve(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART
         ).orElseThrow();
 
         assertThat(policy.mode()).isEqualTo(DihChatExecutionPolicy.Mode.AGENT);
-        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
+        assertThat(policy.agentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART);
         assertThat(policy.toolsAllowed()).isTrue();
         assertThat(policy.deepThinkAllowed()).isFalse();
         assertThat(policy.effectiveDeepThink(true)).isFalse();
-        assertThat(policy.skillIds()).containsExactly("data-visualization-agent");
+        assertThat(policy.skillIds()).containsExactly("visualization-chart-agent");
     }
 
     @Test

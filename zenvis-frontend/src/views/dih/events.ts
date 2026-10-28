@@ -11,9 +11,22 @@ import type {
   ReportAction,
 } from '@/types/type-dih';
 
-export const DATA_ACCESS_RECORD_EVENT = 'dihDataAccessRecordsUpdated';
-export const DATA_VISUALIZATION_RECORD_EVENT = 'dihDataVisualizationRecordsUpdated';
-export const DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT = 'dihDataVisualizationExtraDataChanged';
+export const DATA_METADATA_CONFIG_RECORD_EVENT = 'dihMetadataConfigRecordsUpdated';
+export const DATA_METADATA_CONFIG_RECORD_REQUEST_EVENT = 'dihMetadataConfigRecordsRequested';
+export const DATA_PUSH_SERVICE_RECORD_EVENT = 'dihDataPushServiceRecordsUpdated';
+export const DATA_PUSH_SERVICE_RECORD_REQUEST_EVENT = 'dihDataPushServiceRecordsRequested';
+export const DATA_VISUALIZATION_CHART_RECORD_EVENT = 'dihVisualizationChartRecordsUpdated';
+export const DATA_VISUALIZATION_CHART_RECORD_REQUEST_EVENT =
+  'dihVisualizationChartRecordsRequested';
+export const DATA_VISUALIZATION_CHART_EXTRA_DATA_CHANGED_EVENT =
+  'dihVisualizationChartExtraDataChanged';
+export const DATA_VISUALIZATION_APP_RECORD_EVENT = 'dihVisualizationAppRecordsUpdated';
+export const DATA_VISUALIZATION_APP_RECORD_REQUEST_EVENT =
+  'dihVisualizationAppRecordsRequested';
+export const DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT =
+  'dihVisualizationDashboardRecordsUpdated';
+export const DATA_VISUALIZATION_DASHBOARD_RECORD_REQUEST_EVENT =
+  'dihVisualizationDashboardRecordsRequested';
 export const DATA_ANALYSIS_RECORD_EVENT = 'dihDataAnalysisRecordsUpdated';
 export const DATA_ANALYSIS_RECORD_REQUEST_EVENT = 'dihDataAnalysisRecordsRequested';
 export const CONFIG_RECORD_EVENT = 'dihConfigRecordsUpdated';
@@ -25,23 +38,38 @@ export const REPORT_QUICK_ACTION_EVENT = 'dihReportQuickActionRequested';
 export const REPORT_EXTRA_DATA_CHANGED_EVENT = 'dihReportExtraDataChanged';
 export const REPORT_SELECTION_REWRITE_COMPLETED_EVENT = 'dihReportSelectionRewriteCompleted';
 export const NEW_CHAT_CREATED_EVENT = 'newChatCreated';
-export const DATA_VISUALIZATION_CHART_DATA_EVENT = 'dataVisualizationChartData';
+export const VISUALIZATION_CHART_DATA_EVENT = 'visualizationChartData';
 
-export type DataAccessRecordEventDetail = {
-  metadataConfigs?: unknown[];
-  dataPushServices?: unknown[];
+export type MetadataConfigRecordEventDetail = {
+  records?: unknown[];
 };
 
-export type DataVisualizationRecordEventDetail = {
+export type DataPushServiceRecordEventDetail = {
+  records?: unknown[];
+};
+
+export type VisualizationChartRecordEventDetail = {
   chartLibrary?: unknown[];
-  visualizationConfigs?: unknown[];
-  dashboardConfigs?: unknown[];
-  menuConfigs?: unknown[];
   extraData?: string;
   sessionRecordId?: string;
 };
 
-export type DataVisualizationExtraDataChangedEventDetail = {
+export type VisualizationAppRecordEventDetail = {
+  configs?: unknown[];
+  menus?: unknown[];
+  extraData?: string;
+  sessionRecordId?: string;
+};
+
+export type VisualizationDashboardRecordEventDetail = {
+  configs?: unknown[];
+  dashboards?: unknown[];
+  menus?: unknown[];
+  extraData?: string;
+  sessionRecordId?: string;
+};
+
+export type VisualizationChartExtraDataChangedEventDetail = {
   extraData?: string;
 };
 
@@ -95,7 +123,7 @@ export type NewChatCreatedEventDetail = {
   chatItem: DihChatListItem;
 };
 
-export type DataVisualizationChartDataEventDetail = {
+export type VisualizationChartDataEventDetail = {
   chartType: string;
   option: unknown;
   rawData?: unknown;
@@ -103,9 +131,18 @@ export type DataVisualizationChartDataEventDetail = {
 };
 
 export type DihEventPayloadMap = {
-  [DATA_ACCESS_RECORD_EVENT]: DataAccessRecordEventDetail;
-  [DATA_VISUALIZATION_RECORD_EVENT]: DataVisualizationRecordEventDetail;
-  [DATA_VISUALIZATION_EXTRA_DATA_CHANGED_EVENT]: DataVisualizationExtraDataChangedEventDetail;
+  [DATA_METADATA_CONFIG_RECORD_EVENT]: MetadataConfigRecordEventDetail;
+  [DATA_METADATA_CONFIG_RECORD_REQUEST_EVENT]: undefined;
+  [DATA_PUSH_SERVICE_RECORD_EVENT]: DataPushServiceRecordEventDetail;
+  [DATA_PUSH_SERVICE_RECORD_REQUEST_EVENT]: undefined;
+  [DATA_VISUALIZATION_CHART_RECORD_EVENT]: VisualizationChartRecordEventDetail;
+  [DATA_VISUALIZATION_CHART_RECORD_REQUEST_EVENT]: undefined;
+  [DATA_VISUALIZATION_CHART_EXTRA_DATA_CHANGED_EVENT]:
+    VisualizationChartExtraDataChangedEventDetail;
+  [DATA_VISUALIZATION_APP_RECORD_EVENT]: VisualizationAppRecordEventDetail;
+  [DATA_VISUALIZATION_APP_RECORD_REQUEST_EVENT]: undefined;
+  [DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT]: VisualizationDashboardRecordEventDetail;
+  [DATA_VISUALIZATION_DASHBOARD_RECORD_REQUEST_EVENT]: undefined;
   [DATA_ANALYSIS_RECORD_EVENT]: DataAnalysisRecordEventDetail;
   [DATA_ANALYSIS_RECORD_REQUEST_EVENT]: undefined;
   [CONFIG_RECORD_EVENT]: ConfigRecordEventDetail;
@@ -117,7 +154,7 @@ export type DihEventPayloadMap = {
   [REPORT_EXTRA_DATA_CHANGED_EVENT]: ReportExtraDataChangedEventDetail;
   [REPORT_SELECTION_REWRITE_COMPLETED_EVENT]: SelectionRewriteCompletedEventDetail;
   [NEW_CHAT_CREATED_EVENT]: NewChatCreatedEventDetail;
-  [DATA_VISUALIZATION_CHART_DATA_EVENT]: DataVisualizationChartDataEventDetail;
+  [VISUALIZATION_CHART_DATA_EVENT]: VisualizationChartDataEventDetail;
 };
 
 type DihEventName = keyof DihEventPayloadMap;

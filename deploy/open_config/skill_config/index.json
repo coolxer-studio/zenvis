@@ -47,8 +47,11 @@
                       "joinValues": false,
                       "extractValue": true,
                       "options": [
-                        { "label": "数据接入智能体", "value": "agent_data_access" },
-                        { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                        { "label": "元数据配置智能体", "value": "agent_metadata_config" },
+                        { "label": "数据推送服务智能体", "value": "agent_data_push_service" },
+                        { "label": "临时图表智能体", "value": "agent_visualization_chart" },
+                        { "label": "可视化应用智能体", "value": "agent_visualization_app" },
+                        { "label": "数据大屏智能体", "value": "agent_visualization_dashboard" },
                         { "label": "报表制作智能体", "value": "agent_report" },
                         { "label": "通用 Skill 会话", "value": "agent_skill" },
                         { "label": "普通问答", "value": "ask" }
@@ -220,8 +223,11 @@
                       "visibleOn": "this.chat_enabled",
                       "options": [
                         { "label": "通用 Skill 会话", "value": "agent_skill" },
-                        { "label": "数据接入智能体", "value": "agent_data_access" },
-                        { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                        { "label": "元数据配置智能体", "value": "agent_metadata_config" },
+                        { "label": "数据推送服务智能体", "value": "agent_data_push_service" },
+                        { "label": "临时图表智能体", "value": "agent_visualization_chart" },
+                        { "label": "可视化应用智能体", "value": "agent_visualization_app" },
+                        { "label": "数据大屏智能体", "value": "agent_visualization_dashboard" },
                         { "label": "报表制作智能体", "value": "agent_report" }
                       ],
                       "description": "不选时按智能体类型自动推断"
@@ -281,15 +287,15 @@
     },
     {
       "type": "button",
-      "label": "数据接入 Prompt",
+      "label": "元数据配置 Prompt",
       "icon": "fa fa-file-text-o",
       "actionType": "dialog",
       "dialog": {
-        "title": "数据接入智能体 Skill Prompt",
+        "title": "元数据配置智能体 Skill Prompt",
         "size": "lg",
         "body": {
           "type": "service",
-          "api": "/zenvis/api/v1/dih/skills/agent/agent_data_access/prompt",
+          "api": "/zenvis/api/v1/dih/skills/agent/agent_metadata_config/prompt",
           "body": {
             "type": "code",
             "language": "markdown",
@@ -300,15 +306,72 @@
     },
     {
       "type": "button",
-      "label": "数据可视化 Prompt",
+      "label": "数据推送服务 Prompt",
       "icon": "fa fa-file-text-o",
       "actionType": "dialog",
       "dialog": {
-        "title": "数据可视化智能体 Skill Prompt",
+        "title": "数据推送服务智能体 Skill Prompt",
         "size": "lg",
         "body": {
           "type": "service",
-          "api": "/zenvis/api/v1/dih/skills/agent/agent_data_visualization/prompt",
+          "api": "/zenvis/api/v1/dih/skills/agent/agent_data_push_service/prompt",
+          "body": {
+            "type": "code",
+            "language": "markdown",
+            "value": "${value|default:'暂无已启用 Skill'}"
+          }
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "临时图表 Prompt",
+      "icon": "fa fa-file-text-o",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "临时图表智能体 Skill Prompt",
+        "size": "lg",
+        "body": {
+          "type": "service",
+          "api": "/zenvis/api/v1/dih/skills/agent/agent_visualization_chart/prompt",
+          "body": {
+            "type": "code",
+            "language": "markdown",
+            "value": "${value|default:'暂无已启用 Skill'}"
+          }
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "可视化应用 Prompt",
+      "icon": "fa fa-file-text-o",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "可视化应用智能体 Skill Prompt",
+        "size": "lg",
+        "body": {
+          "type": "service",
+          "api": "/zenvis/api/v1/dih/skills/agent/agent_visualization_app/prompt",
+          "body": {
+            "type": "code",
+            "language": "markdown",
+            "value": "${value|default:'暂无已启用 Skill'}"
+          }
+        }
+      }
+    },
+    {
+      "type": "button",
+      "label": "数据大屏 Prompt",
+      "icon": "fa fa-file-text-o",
+      "actionType": "dialog",
+      "dialog": {
+        "title": "数据大屏智能体 Skill Prompt",
+        "size": "lg",
+        "body": {
+          "type": "service",
+          "api": "/zenvis/api/v1/dih/skills/agent/agent_visualization_dashboard/prompt",
           "body": {
             "type": "code",
             "language": "markdown",
@@ -378,12 +441,24 @@
             "clearable": true,
             "options": [
               {
-                "label": "数据接入智能体",
-                "value": "agent_data_access"
+                "label": "元数据配置智能体",
+                "value": "agent_metadata_config"
               },
               {
-                "label": "数据可视化智能体",
-                "value": "agent_data_visualization"
+                "label": "数据推送服务智能体",
+                "value": "agent_data_push_service"
+              },
+              {
+                "label": "临时图表智能体",
+                "value": "agent_visualization_chart"
+              },
+              {
+                "label": "可视化应用智能体",
+                "value": "agent_visualization_app"
+              },
+              {
+                "label": "数据大屏智能体",
+                "value": "agent_visualization_dashboard"
               },
               {
                 "label": "报表制作智能体",
@@ -646,8 +721,11 @@
                             "joinValues": false,
                             "extractValue": true,
                             "options": [
-                              { "label": "数据接入智能体", "value": "agent_data_access" },
-                              { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                              { "label": "元数据配置智能体", "value": "agent_metadata_config" },
+                              { "label": "数据推送服务智能体", "value": "agent_data_push_service" },
+                        { "label": "临时图表智能体", "value": "agent_visualization_chart" },
+                        { "label": "可视化应用智能体", "value": "agent_visualization_app" },
+                        { "label": "数据大屏智能体", "value": "agent_visualization_dashboard" },
                               { "label": "报表制作智能体", "value": "agent_report" },
                               { "label": "通用 Skill 会话", "value": "agent_skill" },
                               { "label": "普通问答", "value": "ask" }
@@ -817,8 +895,11 @@
                             "visibleOn": "this.chat_enabled",
                             "options": [
                               { "label": "通用 Skill 会话", "value": "agent_skill" },
-                              { "label": "数据接入智能体", "value": "agent_data_access" },
-                              { "label": "数据可视化智能体", "value": "agent_data_visualization" },
+                              { "label": "元数据配置智能体", "value": "agent_metadata_config" },
+                              { "label": "数据推送服务智能体", "value": "agent_data_push_service" },
+                              { "label": "临时图表智能体", "value": "agent_visualization_chart" },
+                              { "label": "可视化应用智能体", "value": "agent_visualization_app" },
+                              { "label": "数据大屏智能体", "value": "agent_visualization_dashboard" },
                               { "label": "报表制作智能体", "value": "agent_report" }
                             ],
                             "description": "不选时按智能体类型自动推断"

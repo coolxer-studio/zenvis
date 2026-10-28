@@ -4,6 +4,7 @@ import com.coolxer.model.dih.vo.SkillRuntimeConfigVo;
 import com.coolxer.model.dih.vo.SkillRuntimeLimitsVo;
 import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.agent.VisualizationAgentTypes;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.mcp.McpToolUtils;
 import org.springframework.ai.tool.ToolCallback;
@@ -34,8 +35,6 @@ public class AgentMcpToolService {
 
     private static final String ALL_SCOPE = "*";
 
-    private static final String DATA_VISUALIZATION_AGENT_TYPE = "agent_data_visualization";
-
     private static final int DEFAULT_MAX_TOOL_CALLS = 8;
 
     private static final int DEFAULT_MAX_REPEATED_FAILURES = 2;
@@ -51,6 +50,18 @@ public class AgentMcpToolService {
     private static final Set<String> DATA_VISUALIZATION_ONLY_TOOLS = Set.of(
             "entity_aggregate", "entity_histogram", "entity_scatter");
 
+    private static final Set<String> VISUALIZATION_RETRIEVAL_WRITE_TOOLS = Set.of(
+            "retrieval_create_rule", "retrieval_update_rule", "retrieval_delete_rule");
+
+    private static final Set<String> VISUALIZATION_CONFIG_TOOLS = Set.of(
+            "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read");
+
+    private static final Set<String> VISUALIZATION_MENU_TOOLS = Set.of(
+            "menu_create", "menu_list", "menu_view", "menu_type_options", "menu_parent_options");
+
+    private static final Set<String> VISUALIZATION_DASHBOARD_TOOLS = Set.of(
+            "dashboard_create", "dashboard_list", "dashboard_view");
+
     private static final String MCP_TOOL_USAGE_PROMPT = """
             【MCP工具使用规则】
             当前业务 Agent 可以使用下列 MCP 工具获取外部系统信息或执行操作。
@@ -60,9 +71,11 @@ public class AgentMcpToolService {
             不要在调用前额外进行一轮自然语言确认。用户拒绝或审批超时后，根据工具返回的结构化状态继续说明结果。
             工具返回后，请用中文归纳结果，保留关键字段、异常信息和下一步建议。
             只能调用下方“可用 MCP 工具”中明确列出的工具名。`zenvis:*` 是前端 UI 代码块协议，
-            例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-analysis-record`、`zenvis:config-record`、`zenvis:data-access-decision`、`zenvis:meta-config-record`、
-            `zenvis:vectum-task-record`、`zenvis:visualization-chart-preview`、`zenvis:visualization-chart-record`、`zenvis:visualization-config-record`、
-            `zenvis:dashboard-config-record`、`zenvis:menu-config-record`，必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
+            例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-analysis-record`、`zenvis:config-record`、`zenvis:metadata-config-decision`、`zenvis:data-push-service-decision`、`zenvis:meta-config-record`、
+            `zenvis:vectum-task-record`、`zenvis:visualization-chart-preview`、`zenvis:visualization-chart-decision`、
+            `zenvis:visualization-app-decision`、`zenvis:visualization-dashboard-decision`、
+            `zenvis:visualization-chart-record`、`zenvis:visualization-app-record`、`zenvis:visualization-dashboard-record`，
+            必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
 
             【可用 MCP 工具】
             %s
@@ -130,12 +143,12 @@ public class AgentMcpToolService {
         }
 
         String normalizedAgentType = normalizeAgentType(agentType);
-        boolean dataVisualizationAgent = DATA_VISUALIZATION_AGENT_TYPE.equals(normalizedAgentType);
+        boolean visualizationAgent = VisualizationAgentTypes.isVisualization(normalizedAgentType);
         SkillRuntimeToolsVo runtimeTools = runtime == null ? null : runtime.getTools();
         boolean selectedSkillMissingToolBoundary =
                 selectedSkillIds != null && !selectedSkillIds.isEmpty() && runtimeTools == null;
         Map<String, Set<String>> localAllowlist = runtimeTools == null
-                ? (dataVisualizationAgent || selectedSkillMissingToolBoundary ? Map.of() : null)
+                ? (visualizationAgent || selectedSkillMissingToolBoundary ? Map.of() : null)
                 : normalizeLocalToolNames(runtimeTools);
         Map<String, Set<String>> externalAllowlist = selectedSkillMissingToolBoundary
                 ? Map.of()
@@ -145,10 +158,10 @@ public class AgentMcpToolService {
         Set<String> addedToolNames = new LinkedHashSet<>();
         StringBuilder mcpPrompt = new StringBuilder();
         appendLocalTools(toolCallbacks, addedToolNames, mcpPrompt, localAllowlist,
-                dataVisualizationAgent);
+                normalizedAgentType);
         if (runtimeTools != null) {
             appendExternalTools(scope, toolCallbacks, addedToolNames, mcpPrompt, externalAllowlist);
-        } else if (!dataVisualizationAgent && !selectedSkillMissingToolBoundary) {
+        } else if (!visualizationAgent && !selectedSkillMissingToolBoundary) {
             appendExternalTools(scope, toolCallbacks, addedToolNames, mcpPrompt, null);
         }
         if (StringUtils.isBlank(mcpPrompt)) {
@@ -165,7 +178,7 @@ public class AgentMcpToolService {
                                   Set<String> addedToolNames,
                                   StringBuilder prompt,
                                   Map<String, Set<String>> allowedToolsByService,
-                                  boolean dataVisualizationAgent) {
+                                  String agentType) {
         ToolCallback[] callbacks = localToolCallbackProvider == null ? null : localToolCallbackProvider.getToolCallbacks();
         if (callbacks == null || callbacks.length == 0) {
             return;
@@ -202,8 +215,12 @@ public class AgentMcpToolService {
                 if (callback == null) {
                     continue;
                 }
-                if (!dataVisualizationAgent
+                if (!VisualizationAgentTypes.isVisualization(agentType)
                         && DATA_VISUALIZATION_ONLY_TOOLS.contains(toolName)) {
+                    continue;
+                }
+                if (VisualizationAgentTypes.isVisualization(agentType)
+                        && !isVisualizationToolAllowed(agentType, service, toolName)) {
                     continue;
                 }
                 if (!allowAll && !allowedToolNames.contains(toolName)) {
@@ -231,6 +248,30 @@ public class AgentMcpToolService {
                 prompt.append(localPrompt).append("\n");
             }
         }
+    }
+
+    private boolean isVisualizationToolAllowed(
+            String agentType,
+            BuiltinMcpServiceDefinition service,
+            String toolName) {
+        if (service == BuiltinMcpServiceDefinition.RETRIEVAL) {
+            return !VISUALIZATION_RETRIEVAL_WRITE_TOOLS.contains(toolName);
+        }
+        if (service == BuiltinMcpServiceDefinition.CONFIG) {
+            return VISUALIZATION_CONFIG_TOOLS.contains(toolName);
+        }
+        if (service != BuiltinMcpServiceDefinition.VISUALIZATION) {
+            return false;
+        }
+        if (VisualizationAgentTypes.isChart(agentType)) {
+            return false;
+        }
+        if (VisualizationAgentTypes.isApp(agentType)) {
+            return VISUALIZATION_MENU_TOOLS.contains(toolName);
+        }
+        return VisualizationAgentTypes.isDashboard(agentType)
+                && (VISUALIZATION_DASHBOARD_TOOLS.contains(toolName)
+                || VISUALIZATION_MENU_TOOLS.contains(toolName));
     }
 
     private void appendExternalTools(Scope scope,

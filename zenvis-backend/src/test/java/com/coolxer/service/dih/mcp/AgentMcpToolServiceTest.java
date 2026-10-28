@@ -41,7 +41,7 @@ class AgentMcpToolServiceTest {
                 ToolCallbackProvider.from(localTool)
         );
 
-        McpToolContext context = service.resolve("agent_data_access");
+        McpToolContext context = service.resolve("agent_metadata_config");
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
@@ -71,7 +71,7 @@ class AgentMcpToolServiceTest {
                 ToolCallbackProvider.from(new FakeToolCallback("retrieval_search", "检索"))
         );
 
-        McpToolContext context = service.resolve("agent_data_access");
+        McpToolContext context = service.resolve("agent_metadata_config");
 
         assertThat(context.toolRuntimeContext()).isNotNull();
         assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(5);
@@ -89,8 +89,8 @@ class AgentMcpToolServiceTest {
                 ToolCallbackProvider.from(new FakeToolCallback("config_tree", "获取配置文件树"))
         );
 
-        assertThat(service.resolve("agent_data_access").hasTools()).isFalse();
-        assertThat(service.resolve("agent_data_visualization").hasTools()).isFalse();
+        assertThat(service.resolve("agent_metadata_config").hasTools()).isFalse();
+        assertThat(service.resolve("agent_visualization_chart").hasTools()).isFalse();
     }
 
     @Test
@@ -124,17 +124,16 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void resolveDataVisualizationAgentUsesRetrievalAndControlledWriteTools() {
+    void visualizationChartSkillExposesOnlyReadOnlyRetrievalTools() {
         SkillService skillService = mock(SkillService.class);
         List<String> allowedTools = List.of(
                 "retrieval_search", "entity_view",
-                "entity_aggregate", "entity_histogram", "entity_scatter",
-                "config_apply", "dashboard_create", "menu_create");
-        when(skillService.resolveRuntimeConfig(List.of("data-visualization-agent")))
+                "entity_aggregate", "entity_histogram", "entity_scatter");
+        when(skillService.resolveRuntimeConfig(List.of("visualization-chart-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
                         new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
-                        new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
+                        new SkillRuntimeLimitsVo(16, 2, 8000, 32000, 24000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
                 new MockEnvironment(),
@@ -158,18 +157,130 @@ class AgentMcpToolServiceTest {
         );
 
         McpToolContext context = service.resolve(
-                "agent_data_visualization", List.of("data-visualization-agent"));
+                "agent_visualization_chart", List.of("visualization-chart-agent"));
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
-                .contains("retrieval_search", "entity_view", "config_apply", "dashboard_create", "menu_create")
-                .doesNotContain("retrieval_create_rule", "entity_update", "config_delete", "dashboard_delete", "menu_update", "external_write");
+                .contains("retrieval_search", "entity_view")
+                .doesNotContain(
+                        "config_apply",
+                        "config_tree",
+                        "dashboard_create",
+                        "menu_create",
+                        "push_task_create_and_start",
+                        "retrieval_create_rule",
+                        "entity_update",
+                        "config_delete",
+                        "dashboard_delete",
+                        "menu_update",
+                        "external_write");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
                 .containsExactly(
                         "retrieval_search", "entity_view",
-                        "entity_aggregate", "entity_histogram", "entity_scatter",
-                        "config_apply", "dashboard_create", "menu_create");
+                        "entity_aggregate", "entity_histogram", "entity_scatter");
+        assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(16);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(32_000);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(24_000);
+    }
+
+    @Test
+    void visualizationAppSkillExposesConfigAndMenuButNoDashboardTools() {
+        SkillService skillService = mock(SkillService.class);
+        List<String> allowedTools = List.of(
+                "retrieval_search", "entity_view",
+                "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read",
+                "menu_create", "menu_list", "menu_view");
+        when(skillService.resolveRuntimeConfig(List.of("visualization-app-agent")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
+                        new SkillRuntimeLimitsVo(32, 2, 8000, 64000, 48000)));
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("retrieval_search", "根据条件检索数据"),
+                        new FakeToolCallback("entity_view", "获取指定实体的单条记录详情"),
+                        new FakeToolCallback("config_tree", "配置树"),
+                        new FakeToolCallback("config_ensure_root", "确保配置根目录"),
+                        new FakeToolCallback("config_add", "新增配置"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("config_read", "读取配置"),
+                        new FakeToolCallback("menu_create", "创建菜单"),
+                        new FakeToolCallback("menu_list", "查询菜单"),
+                        new FakeToolCallback("menu_view", "查看菜单"),
+                        new FakeToolCallback("dashboard_create", "创建看板"),
+                        new FakeToolCallback("dashboard_view", "查看看板"),
+                        new FakeToolCallback("push_task_create_and_start", "创建推送任务"),
+                        new FakeToolCallback("entity_update", "更新实体")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_visualization_app", List.of("visualization-app-agent"));
+
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactlyElementsOf(allowedTools);
+        assertThat(context.systemPrompt())
+                .contains(allowedTools.toArray(String[]::new))
+                .doesNotContain(
+                        "dashboard_create",
+                        "dashboard_view",
+                        "push_task_create_and_start",
+                        "entity_update",
+                        "external_write");
+    }
+
+    @Test
+    void visualizationDashboardSkillExposesDashboardMenuAndConfigTools() {
+        SkillService skillService = mock(SkillService.class);
+        List<String> allowedTools = List.of(
+                "retrieval_search", "entity_view",
+                "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read",
+                "dashboard_create", "dashboard_list", "dashboard_view",
+                "menu_create", "menu_list", "menu_view");
+        when(skillService.resolveRuntimeConfig(List.of("visualization-dashboard-agent")))
+                .thenReturn(new SkillRuntimeConfigVo(
+                        null,
+                        new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
+                        new SkillRuntimeLimitsVo(32, 2, 8000, 64000, 48000)));
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入工具")),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("retrieval_search", "根据条件检索数据"),
+                        new FakeToolCallback("entity_view", "获取指定实体的单条记录详情"),
+                        new FakeToolCallback("config_tree", "配置树"),
+                        new FakeToolCallback("config_ensure_root", "确保配置根目录"),
+                        new FakeToolCallback("config_add", "新增配置"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("config_read", "读取配置"),
+                        new FakeToolCallback("dashboard_create", "创建看板"),
+                        new FakeToolCallback("dashboard_list", "查询看板"),
+                        new FakeToolCallback("dashboard_view", "查看看板"),
+                        new FakeToolCallback("menu_create", "创建菜单"),
+                        new FakeToolCallback("menu_list", "查询菜单"),
+                        new FakeToolCallback("menu_view", "查看菜单"),
+                        new FakeToolCallback("push_task_create_and_start", "创建推送任务"),
+                        new FakeToolCallback("entity_update", "更新实体")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_visualization_dashboard", List.of("visualization-dashboard-agent"));
+
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactlyElementsOf(allowedTools);
+        assertThat(context.systemPrompt())
+                .contains(allowedTools.toArray(String[]::new))
+                .doesNotContain("push_task_create_and_start", "entity_update", "external_write");
     }
 
     @Test
@@ -184,7 +295,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("entity_scatter", "散点图"))
         );
 
-        McpToolContext context = service.resolve("agent_data_access");
+        McpToolContext context = service.resolve("agent_metadata_config");
 
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
@@ -194,19 +305,21 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void resolveDataVisualizationAgentCanUseControlledWriteToolsWithoutRetrievalTools() {
+    void visualizationAppSkillCannotEscalateToDashboardTools() {
         SkillService skillService = mock(SkillService.class);
-        when(skillService.resolveRuntimeConfig(List.of("data-visualization-agent")))
+        when(skillService.resolveRuntimeConfig(List.of("visualization-app-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
                         new SkillRuntimeToolsVo(
-                                localTools(List.of("config_tree", "dashboard_create")), Map.of()),
+                                localTools(List.of("config_tree", "menu_create", "dashboard_create")),
+                                Map.of()),
                         new SkillRuntimeLimitsVo(8, 2, 8000, 24000, 12000)));
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),
                 ToolCallbackProvider.from(
                         new FakeToolCallback("config_tree", "获取配置文件树"),
+                        new FakeToolCallback("menu_create", "创建菜单"),
                         new FakeToolCallback("dashboard_create", "创建看板")
                 ),
                 null,
@@ -214,16 +327,17 @@ class AgentMcpToolServiceTest {
         );
 
         McpToolContext context = service.resolve(
-                "agent_data_visualization", List.of("data-visualization-agent"));
+                "agent_visualization_app", List.of("visualization-app-agent"));
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.toolCallbackProvider().getToolCallbacks())
                 .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("config_tree", "dashboard_create");
+                .containsExactly("config_tree", "menu_create");
+        assertThat(context.systemPrompt()).doesNotContain("dashboard_create");
     }
 
     @Test
-    void resolveNonDataVisualizationAgentKeepsLocalAndExternalTools() {
+    void resolveNonVisualizationAgentKeepsLocalAndExternalTools() {
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_search", "外部查询工具")),
                 new MockEnvironment(),
@@ -233,7 +347,7 @@ class AgentMcpToolServiceTest {
                 )
         );
 
-        McpToolContext context = service.resolve("agent_data_access");
+        McpToolContext context = service.resolve("agent_metadata_config");
 
         assertThat(context.hasTools()).isTrue();
         assertThat(context.systemPrompt())
@@ -259,7 +373,7 @@ class AgentMcpToolServiceTest {
                 policyService
         );
 
-        McpToolContext context = service.resolve("agent_data_access");
+        McpToolContext context = service.resolve("agent_metadata_config");
 
         assertThat(context.systemPrompt())
                 .contains("config_apply", "调用前需要用户审批")
@@ -331,11 +445,65 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void resolveDataAccessSkillExposesOnlyConfiguredWorkflowTools() {
+    void metadataConfigSkillExposesOnlyMetadataTools() {
         List<String> allowedTools = List.of(
                 "config_tree",
+                "config_read",
                 "config_add",
-                "config_apply",
+                "config_apply"
+        );
+        SkillService skillService = mock(SkillService.class);
+        SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
+                null,
+                new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
+                new SkillRuntimeLimitsVo(32, 2, 8000, 64000, 48000)
+        );
+        when(skillService.resolveRuntimeConfig(List.of("metadata-config-agent")))
+                .thenReturn(runtime);
+        AgentMcpToolService service = new AgentMcpToolService(
+                new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入")),
+                new MockEnvironment(),
+                ToolCallbackProvider.from(
+                        new FakeToolCallback("config_tree", "配置树"),
+                        new FakeToolCallback("config_read", "读取配置"),
+                        new FakeToolCallback("config_add", "新增配置"),
+                        new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("push_task_detect_format", "检测格式"),
+                        new FakeToolCallback("push_task_list_by_source_mark", "查询推送任务"),
+                        new FakeToolCallback("push_task_create_and_start", "创建并启动推送任务"),
+                        new FakeToolCallback("push_task_get_log", "读取推送任务日志"),
+                        new FakeToolCallback("entity_update", "更新实体")
+                ),
+                null,
+                skillService
+        );
+
+        McpToolContext context = service.resolve(
+                "agent_metadata_config",
+                List.of("metadata-config-agent")
+        );
+
+        assertThat(context.toolCallbackProvider().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactlyElementsOf(allowedTools);
+        assertThat(context.systemPrompt())
+                .contains(allowedTools.toArray(String[]::new))
+                .doesNotContain(
+                        "push_task_detect_format",
+                        "push_task_list_by_source_mark",
+                        "push_task_create_and_start",
+                        "push_task_get_log",
+                        "entity_update",
+                        "external_write");
+        assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(32);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(64_000);
+        assertThat(context.toolRuntimeContext().maxAccumulatedToolResultTokens()).isEqualTo(48_000);
+    }
+
+    @Test
+    void dataPushSkillExposesOnlyReadMetaAndPushTaskTools() {
+        List<String> allowedTools = List.of(
+                "config_tree",
                 "config_read",
                 "push_task_detect_format",
                 "push_task_list_by_source_mark",
@@ -350,7 +518,8 @@ class AgentMcpToolServiceTest {
                 new SkillRuntimeToolsVo(localTools(allowedTools), Map.of()),
                 new SkillRuntimeLimitsVo(32, 2, 8000, 64000, 48000)
         );
-        when(skillService.resolveRuntimeConfig(List.of("data-access-agent"))).thenReturn(runtime);
+        when(skillService.resolveRuntimeConfig(List.of("data-push-service-agent")))
+                .thenReturn(runtime);
         AgentMcpToolService service = new AgentMcpToolService(
                 new ExternalMcpClientService(new FakeToolCallback("external_write", "外部写入")),
                 new MockEnvironment(),
@@ -373,8 +542,8 @@ class AgentMcpToolServiceTest {
         );
 
         McpToolContext context = service.resolve(
-                "agent_data_access",
-                List.of("data-access-agent")
+                "agent_data_push_service",
+                List.of("data-push-service-agent")
         );
 
         assertThat(context.toolCallbackProvider().getToolCallbacks())
@@ -383,6 +552,8 @@ class AgentMcpToolServiceTest {
         assertThat(context.systemPrompt())
                 .contains(allowedTools.toArray(String[]::new))
                 .doesNotContain(
+                        "config_add",
+                        "config_apply",
                         "push_task_vector_capabilities",
                         "push_task_vector_component_schema",
                         "push_task_generate_config",

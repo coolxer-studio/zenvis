@@ -77,7 +77,7 @@ class ReportDocumentServiceTest {
         session.setId(11);
         session.setCreateBy(7);
         session.setExtraData("""
-                {"dataVisualization":{"chartLibrary":[{"id":"chart-1"}]},"workflow":{"state":"running"}}
+                {"visualizationChart":{"chartLibrary":[{"id":"chart-1"}]},"workflow":{"state":"running"}}
                 """);
         user = new User();
         user.setId(7);
@@ -108,7 +108,7 @@ class ReportDocumentServiceTest {
         Map<String, Object> extraData = JacksonUtil.toMap(
                 workspace.getExtraData(),
                 new TypeReference<Map<String, Object>>() {});
-        assertThat(extraData).containsKeys("dataVisualization", "workflow", "report");
+        assertThat(extraData).containsKeys("visualizationChart", "workflow", "report");
         Map<String, Object> report = castMap(extraData.get("report"));
         assertThat(castMap(report.get("currentDocument"))).doesNotContainKey("content");
         assertThat((List<?>) report.get("artifacts")).isEmpty();
@@ -219,7 +219,7 @@ class ReportDocumentServiceTest {
                 .build()));
         analysisSession.setMessages(JacksonUtil.toJson(List.of(message)));
         analysisSession.setExtraData("""
-                {"dataVisualization":{"chartLibrary":[{"id":"chart-2","name":"夜间趋势"}]},
+                {"visualizationChart":{"chartLibrary":[{"id":"chart-2","name":"夜间趋势"}]},
                  "dataAnalysis":{"records":[{"recordId":"analysis-2","title":"异常检测"}]}}
                 """);
         when(chatSessionRepository.findTop50ByCreateByOrderByUpdateTimeDesc(7))

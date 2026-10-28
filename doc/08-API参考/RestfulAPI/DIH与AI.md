@@ -118,7 +118,7 @@
 
 未使用 `response_format=events` 时，工具调用继续以旧 Markdown 日志拼接在文本流中，兼容已有第三方调用；不会输出 `tool_call` 或 `rag_search` 事件，RAG 记录也不会混入正文。
 
-普通工作流动作要求 `chat_id`、`message_id`、`part_id`、`workflow_id`、`action`，并按动作提供 `answers` 或 `revision`。服务端校验会话归属、消息/part 精确匹配、状态版本、允许动作和严格候选快照。遥测接口当前只接受数据可视化工作流的 `chart_render_failed`。
+普通工作流动作要求 `chat_id`、`message_id`、`part_id`、`workflow_id`、`action`，并按动作提供 `answers` 或 `revision`。服务端校验会话归属、消息/part 精确匹配、状态版本、允许动作和严格候选快照。临时图表、可视化应用和数据大屏各自的决策卡、成功记录、动作前缀与 `extraData` 分区见[业务智能体与工作流](/04-AI与数据智能/业务智能体与工作流.md)。遥测接口当前只接受临时图表工作流的 `chart_render_failed`。
 
 ### 聊天附件
 

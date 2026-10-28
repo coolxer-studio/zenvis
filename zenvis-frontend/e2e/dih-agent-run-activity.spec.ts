@@ -2,6 +2,9 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 
 const RUN_ID = 'run-activity-1'
 const CHAT_ID = 'e2e-agent-activity'
+const PUSH_CHAT_ID = 'e2e-agent-push-activity'
+const METADATA_CONFIG_TYPE = 'agent_metadata_config'
+const DATA_PUSH_SERVICE_TYPE = 'agent_data_push_service'
 
 const ok = (data: unknown) => ({
   status: 0,
@@ -19,15 +22,15 @@ const fulfillJson = (route: Route, data: unknown) => route.fulfill({
 const baseRun = (lastEventSequence: number, status = 'RUNNING') => ({
   run_id: RUN_ID,
   chat_id: CHAT_ID,
-  chat_type: 'agent_data_access',
-  agent_type: 'agent_data_access',
+  chat_type: METADATA_CONFIG_TYPE,
+  agent_type: METADATA_CONFIG_TYPE,
   status,
   status_label: status === 'SUCCEEDED'
     ? '已完成'
     : (status === 'WAITING_USER' ? '等待补充信息' : (status === 'QUEUED' ? '等待执行' : '执行中')),
-  goal: '核对数据接入链路并给出结论',
+  goal: '核对元数据配置链路并给出结论',
   plan: {
-    goal: '核对数据接入链路并给出结论',
+    goal: '核对元数据配置链路并给出结论',
     steps: [{
       id: '1',
       title: '检索接入规范并核验配置',
@@ -66,14 +69,14 @@ const mixedEvents = (includeCompaction = true) => {
       created_at: '2026-10-23T10:00:01+08:00',
       data: {
         searchId: 'rag-1',
-        query: '数据接入规范',
+        query: '元数据配置规范',
         mode: 'agent',
         scopeType: 'bound',
         status: 'succeeded',
         hitCount: 2,
         durationMillis: 43,
         results: [
-          { fileName: 'ingestion.md', title: '数据接入规范', score: 0.92 },
+          { fileName: 'ingestion.md', title: '元数据配置规范', score: 0.92 },
           { fileName: 'policy.md', title: '接入策略', score: 0.81 },
         ],
       },
@@ -141,6 +144,9 @@ const installMocks = async (
     initialRun?: Record<string, unknown>
     runs?: Array<Record<string, unknown>>
     messageList?: Array<Record<string, unknown>>
+    chatType?: string
+    title?: string
+    extraData?: string
   },
 ) => {
   const activityListRequests: string[] = []
@@ -155,10 +161,17 @@ const installMocks = async (
     if (path.endsWith('/skills/chat-entries')) {
       await fulfillJson(route, ok([
         {
-          skill_id: 'data-access',
-          chat_type: 'agent_data_access',
-          agent_type: 'agent_data_access',
-          label: '数据接入',
+          skill_id: 'metadata-config-agent',
+          chat_type: METADATA_CONFIG_TYPE,
+          agent_type: METADATA_CONFIG_TYPE,
+          label: '元数据配置',
+          icon: 'operation',
+        },
+        {
+          skill_id: 'data-push-service-agent',
+          chat_type: DATA_PUSH_SERVICE_TYPE,
+          agent_type: DATA_PUSH_SERVICE_TYPE,
+          label: '数据推送服务',
           icon: 'connection',
         },
         {
@@ -183,10 +196,10 @@ const installMocks = async (
       await fulfillJson(route, ok({
         id: '201',
         session_id: CHAT_ID,
-        title: '数据接入任务验收',
-        type: 'agent_data_access',
+        title: options.title || '元数据配置任务验收',
+        type: options.chatType || METADATA_CONFIG_TYPE,
         message_list: options.messageList || [],
-        extra_data: '',
+        extra_data: options.extraData || '',
       }))
       return
     }
@@ -232,9 +245,107 @@ const installMocks = async (
 }
 
 const openRunWorkspace = async (page: Page) => {
-  await page.goto(`/#/service/dih?type=agent_data_access&chatSessionId=${CHAT_ID}&token=e2e-token`)
+  await page.goto(`/#/service/dih?type=${METADATA_CONFIG_TYPE}&chatSessionId=${CHAT_ID}&token=e2e-token`)
   await expect(page.locator('.agent-run-card').first()).toBeVisible({ timeout: 15_000 })
 }
+
+const hashQuery = (page: Page, key: string) => page.evaluate((name) => {
+  const query = window.location.hash.split('?')[1] || ''
+  return new URLSearchParams(query).get(name)
+}, key)
+
+test('底部入口只展示两个独立智能体且结果面板互不混入记录', async ({ page }) => {
+  const extraData = JSON.stringify({
+    metadataConfig: {
+      records: [{
+        id: 'user_event.json',
+        name: '用户事件数据',
+        fileName: 'user_event.json',
+        tableName: 'zenvis.msg_user_event',
+        fieldCount: 8,
+        status: 'applied',
+      }],
+    },
+    dataPushService: {
+      records: [{
+        id: '12',
+        taskId: '12',
+        name: '用户事件推送服务',
+        sourceMark: 'data-push-demo:user-event:e2e',
+        status: 'running',
+      }],
+    },
+  })
+  await installMocks(page, {
+    lastEventSequence: 0,
+    streamEvents: [],
+    historyEvents: [],
+    extraData,
+    runs: [],
+  })
+
+  await page.goto(`/#/service/dih?type=${METADATA_CONFIG_TYPE}&chatSessionId=${CHAT_ID}&token=e2e-token`)
+  await expect(page.locator('.suggestions')).toBeVisible({ timeout: 15_000 })
+  const entries = page.locator('.suggestions .suggestion-btn')
+  await expect(entries.filter({ hasText: '元数据配置' })).toHaveCount(1, { timeout: 15_000 })
+  await expect(entries.filter({ hasText: '数据推送服务' })).toHaveCount(1, { timeout: 15_000 })
+  await expect(entries.filter({ hasText: /^数据接入$/ })).toHaveCount(0, { timeout: 15_000 })
+  await expect(page.locator('.workspace-result')).toContainText('元数据配置结果')
+  await expect(page.locator('.workspace-result')).toContainText('user_event.json')
+  await expect(page.locator('.workspace-result')).not.toContainText('用户事件推送服务')
+
+  await page.goto(`/#/service/dih?type=${DATA_PUSH_SERVICE_TYPE}&chatSessionId=${PUSH_CHAT_ID}&token=e2e-token`)
+  await expect(page.locator('.workspace-result')).toContainText('数据推送服务结果')
+  await expect(page.locator('.workspace-result')).toContainText('用户事件推送服务')
+  await expect(page.locator('.workspace-result')).not.toContainText('user_event.json')
+})
+
+test('推送缺失 Meta 卡通过新会话深链预填元数据配置提示词', async ({ page }) => {
+  const prompt = '请为 user_event.json 创建并发布 Meta 配置：实体 user_event，目标表 zenvis.msg_user_event。'
+  await installMocks(page, {
+    lastEventSequence: 0,
+    streamEvents: [],
+    historyEvents: [],
+    chatType: DATA_PUSH_SERVICE_TYPE,
+    title: '数据推送服务验收',
+    runs: [],
+    messageList: [{
+      id: 'message-missing-meta',
+      sender: 'ai',
+      content: '缺少已发布 Meta，数据推送服务流程已停止。',
+      time: '2026-10-23 10:00:00',
+      type: 'text',
+      parts: [{
+        id: 'missing-meta-part',
+        type: 'data-push-service-decision',
+        status: 'pending',
+        title: '缺少已发布 Meta，无法创建数据推送服务',
+        content: '请先前往元数据配置智能体完成并发布 Meta。',
+        metadata: {
+          kind: 'missing_meta',
+          handoff: {
+            targetAgentType: METADATA_CONFIG_TYPE,
+            label: '前往元数据配置',
+            prompt,
+          },
+          actions: [],
+        },
+      }],
+    }],
+  })
+
+  await page.goto(`/#/service/dih?type=${DATA_PUSH_SERVICE_TYPE}&chatSessionId=${PUSH_CHAT_ID}&token=e2e-token`)
+  await page.getByRole('button', { name: '前往元数据配置' }).click()
+
+  await expect.poll(() => hashQuery(page, 'type'))
+    .toBe(METADATA_CONFIG_TYPE)
+  await expect.poll(() => hashQuery(page, 'createSession'))
+    .toBe('1')
+  await expect.poll(() => hashQuery(page, 'msgRef'))
+    .toBeTruthy()
+  await expect.poll(() => page.locator('.input-container textarea').inputValue())
+    .toBe(prompt)
+})
 
 test('运行中的任务卡实时汇总检索、工具与压缩活动', async ({ page }) => {
   await installMocks(page, {
@@ -379,7 +490,7 @@ test('无活动时显示空状态，任务中心保留折叠的原始事件', as
   await page.getByRole('button', { name: '智能体运行' }).click()
   const drawer = page.locator('.agent-run-drawer')
   await expect(drawer).toBeVisible()
-  await drawer.getByText('核对数据接入链路并给出结论').first().click()
+  await drawer.getByText('核对元数据配置链路并给出结论').first().click()
 
   const detail = page.locator('.run-detail-dialog')
   await expect(detail).toBeVisible()

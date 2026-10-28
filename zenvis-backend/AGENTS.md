@@ -2,7 +2,7 @@
 
 ## 概述
 
-ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置构建。当前数据可视化智能体不生成 SQL、不执行数据库查询；分析过程只通过只读 retrieval MCP 工具获取数据并输出文本或 Markdown 分析。
+ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置构建。当前内置业务智能体包括元数据配置、数据推送服务、临时图表、可视化应用、数据大屏和报表制作。所有智能体都不生成或执行任意 SQL。
 
 ## DIH 执行边界
 
@@ -15,25 +15,30 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 
 ## 核心 Agent
 
-### DataVisualizationAgent（数据可视化 Agent）
+### 可视化智能体
 
-**位置**: `com.coolxer.service.dih.agent.DataVisualizationAgent`
+**位置**:
+
+- `com.coolxer.service.dih.agent.VisualizationChartAgent`
+- `com.coolxer.service.dih.agent.VisualizationAppAgent`
+- `com.coolxer.service.dih.agent.VisualizationDashboardAgent`
 
 **核心能力**:
-- 使用 `PromptDrivenAgentRuntime` 驱动对话
-- 只调用只读 retrieval MCP 工具
-- 输出数据概览、统计说明、可视化建议和后续建议
-- 复用统一聊天流式响应与会话保存逻辑
+- 分别使用独立会话类型、Skill、Workflow、决策协议和结果分区
+- 使用 `PromptDrivenAgentRuntime` 驱动对话，并复用统一聊天流式响应与会话保存逻辑
+- 先通过只读 retrieval MCP 获取实体与字段 Meta，再执行已批准的安全查询
+- 临时图表只生成 ECharts 快照；可视化应用生成配置与菜单；数据大屏生成配置、Dashboard 与菜单
 
 **工具边界**:
-- 允许读取 retrieval 查询、列表、统计、趋势、详情类工具
-- 禁止规则写入、实体写入、菜单、看板、配置、任务等有副作用工具
-- 不追加外部 MCP tools
+- 临时图表只允许只读 retrieval、实体查询和 `add_to_library` 服务端动作，无配置、Dashboard、菜单或 Meta 写工具
+- 可视化应用允许 retrieval、配置写工具和 `menu_*`，无 Dashboard、推送或 Meta 写工具
+- 数据大屏允许 retrieval、配置写工具、Dashboard 工具和 `menu_*`，无推送或 Meta 写工具
+- 只有临时图表可产生图表库记录；三者都不追加外部 MCP tools
 - 尊重 `app.ai.mcp.enabled=false` 的全局禁用
 
 ### 其他业务 Agent
 
-- 数据接入和报表 Agent 通过各自类型接入 `PromptDrivenAgentRuntime`
+- 元数据配置、数据推送服务和报表 Agent 通过各自类型接入 `PromptDrivenAgentRuntime`
 - 动态 `agent_skill` 会话仅在 Skill manifest 显式声明 `runtime.tools` 时获得对应工具白名单
 - MCP 工具由 `AgentMcpToolService` 按 agent 类型解析
 - Skill 由 `SkillService` 加载后拼入 system prompt
@@ -56,7 +61,7 @@ RAG 相关能力位于 `com.coolxer.service.dih.rag`，服务于普通问答、�
 
 ## 开发注意事项
 
-- 数据可视化 Agent 新能力应优先通过 retrieval MCP 工具扩展，而不是在 Agent 内直接访问数据库。
+- 可视化 Agent 新能力应优先通过 retrieval MCP 工具扩展，而不是在 Agent 内直接访问数据库。
 - 不要恢复 SQL 生成、SQL 执行或 SQL 校验链路。
 - 新增工具时需要在 `AgentMcpToolService` 中明确 agent 可见范围。
-- 会产生副作用的工具必须避免暴露给 `agent_data_visualization`。
+- 会产生副作用的工具必须按领域分别暴露：临时图表不获得任何写工具，应用不获得 Dashboard 工具，大屏不获得 Meta 或推送写工具。

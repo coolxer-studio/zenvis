@@ -78,7 +78,7 @@ class AnalysisTaskServiceImplTest {
     @Test
     void taskSkillSelectionOnlyAcceptsEnabledSkillsRegardlessOfAgentType() throws Exception {
         createSkill("enabled-any-agent", true, "agent_report", "已启用 Skill Prompt");
-        createSkill("disabled-skill", false, "agent_data_access", "不应加载");
+        createSkill("disabled-skill", false, "agent_metadata_config", "不应加载");
         createSkill("matching-but-not-selected", true, "agent_analysis_task", "同类型但未选中");
 
         SkillService skillService = createSkillService();

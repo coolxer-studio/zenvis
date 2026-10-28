@@ -51,11 +51,35 @@
           :part="part"
           :interactive="interactive"
         />
-        <DataAccessMessagePart
-          v-else-if="isDataAccessPart(part)"
+        <MetadataConfigDecisionMessagePart
+          v-else-if="part.type === 'metadata-config-decision'"
           :part="part"
           :interactive="interactive"
-          @choose-data-access-decision="emit('chooseDataAccessDecision', $event)"
+          @choose-metadata-config-decision="emit('chooseMetadataConfigDecision', $event)"
+        />
+        <DataPushServiceDecisionMessagePart
+          v-else-if="part.type === 'data-push-service-decision'"
+          :part="part"
+          :interactive="interactive"
+          @choose-data-push-decision="emit('chooseDataPushDecision', $event)"
+        />
+        <VisualizationChartDecisionMessagePart
+          v-else-if="part.type === 'visualization-chart-decision'"
+          :part="part"
+          :interactive="interactive"
+          @choose-visualization-chart-decision="emit('chooseVisualizationChartDecision', $event)"
+        />
+        <VisualizationAppDecisionMessagePart
+          v-else-if="part.type === 'visualization-app-decision'"
+          :part="part"
+          :interactive="interactive"
+          @choose-visualization-app-decision="emit('chooseVisualizationAppDecision', $event)"
+        />
+        <VisualizationDashboardDecisionMessagePart
+          v-else-if="part.type === 'visualization-dashboard-decision'"
+          :part="part"
+          :interactive="interactive"
+          @choose-visualization-dashboard-decision="emit('chooseVisualizationDashboardDecision', $event)"
         />
         <ConfigRecordMessagePart v-else-if="part.type === 'config-record'" :part="part" />
         <NoticeMessagePart v-else-if="part.type === 'notice'" :part="part" />
@@ -79,7 +103,11 @@ import AgentRunCard from './message-parts/agent-run-card.vue';
 import ConfigRecordMessagePart from './message-parts/config-record-message-part.vue';
 import ConfigMessagePart from './message-parts/config-message-part.vue';
 import DataAnalysisMessagePart from './message-parts/data-analysis-message-part.vue';
-import DataAccessMessagePart from './message-parts/data-access-message-part.vue';
+import MetadataConfigDecisionMessagePart from './message-parts/metadata-config-decision-message-part.vue';
+import DataPushServiceDecisionMessagePart from './message-parts/data-push-service-decision-message-part.vue';
+import VisualizationAppDecisionMessagePart from './message-parts/visualization-app-decision-message-part.vue';
+import VisualizationChartDecisionMessagePart from './message-parts/visualization-chart-decision-message-part.vue';
+import VisualizationDashboardDecisionMessagePart from './message-parts/visualization-dashboard-decision-message-part.vue';
 import NoticeMessagePart from './message-parts/notice-message-part.vue';
 import RagSearchPart from './message-parts/rag-search-part.vue';
 import TextMessagePart from './message-parts/text-message-part.vue';
@@ -133,7 +161,39 @@ const emit = defineEmits<{
   (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
   (e: 'resumeAgentRun', runId: string): void;
   (
-    e: 'chooseDataAccessDecision',
+    e: 'chooseMetadataConfigDecision',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+      detail?: string;
+    },
+  ): void;
+  (
+    e: 'chooseDataPushDecision',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+      detail?: string;
+    },
+  ): void;
+  (
+    e: 'chooseVisualizationChartDecision',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+      detail?: string;
+    },
+  ): void;
+  (
+    e: 'chooseVisualizationAppDecision',
+    payload: {
+      part: ChatMessagePart;
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+      detail?: string;
+    },
+  ): void;
+  (
+    e: 'chooseVisualizationDashboardDecision',
     payload: {
       part: ChatMessagePart;
       decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
@@ -260,23 +320,14 @@ const CONFIG_PART_TYPES = new Set(['config', 'report-document']);
 const VISUALIZATION_PART_TYPES = new Set([
   'visualization-chart-preview',
   'visualization-chart-record',
-  'visualization-config-record',
-  'dashboard-config-record',
-  'menu-config-record',
+  'visualization-app-record',
+  'visualization-dashboard-record',
   'chart',
 ]);
-const DATA_ACCESS_PART_TYPES = new Set([
-  'data-access-decision',
-  'metadata-config-record',
-  'data-push-service-record',
-]);
-
 const isTextPart = (part: ChatMessagePart) => TEXT_PART_TYPES.has(part.type);
 const isApprovalPart = (part: ChatMessagePart) => APPROVAL_PART_TYPES.has(part.type);
 const isConfigPart = (part: ChatMessagePart) => CONFIG_PART_TYPES.has(part.type);
 const isVisualizationPart = (part: ChatMessagePart) => VISUALIZATION_PART_TYPES.has(part.type);
-const isDataAccessPart = (part: ChatMessagePart) => DATA_ACCESS_PART_TYPES.has(part.type);
-
 const agentRunFromPart = (part: ChatMessagePart): AgentRun | null => {
   const run = part.metadata?.run;
   return run && typeof run === 'object' ? (run as AgentRun) : null;

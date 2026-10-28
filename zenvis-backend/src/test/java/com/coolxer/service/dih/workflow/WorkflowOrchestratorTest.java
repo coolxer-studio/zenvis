@@ -17,7 +17,7 @@ class WorkflowOrchestratorTest {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
-                .setType("agent_data_visualization");
+                .setType("agent_visualization_chart");
         Map<String, Object> step = new LinkedHashMap<>();
         step.put("id", "analysis_entity");
         step.put("title", "选择实体");
@@ -30,7 +30,7 @@ class WorkflowOrchestratorTest {
                 .title("请选择实体")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.select_entity_from_meta",
+                        "action", "visualization_chart.select_entity_from_meta",
                         "steps", List.of(step))))
                 .build();
         List<Map<String, Object>> evidence = List.of(Map.of(
@@ -51,7 +51,7 @@ class WorkflowOrchestratorTest {
         assertThat(normalizedStep)
                 .containsEntry("strictOptions", true)
                 .containsEntry("sourceEvidenceId", "call-1");
-        assertThat(store.loadActive(session, "agent_data_visualization"))
+        assertThat(store.loadActive(session, "agent_visualization_chart"))
                 .get()
                 .satisfies(state -> {
                     assertThat(state.getMessageId()).isEqualTo("message-1");
@@ -60,11 +60,11 @@ class WorkflowOrchestratorTest {
     }
 
     @Test
-    void dataAccessPlanLocksCandidateAndRequiresRealConfigTreeEvidence() {
+    void metadataConfigPlanLocksCandidateAndRequiresRealConfigTreeEvidence() {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
-                .setType("agent_data_access");
+                .setType("agent_metadata_config");
         ChatMessagePart candidate = ChatMessagePart.builder()
                 .id("config-1")
                 .type("config")
@@ -77,7 +77,7 @@ class WorkflowOrchestratorTest {
                 .build();
         ChatMessagePart decision = ChatMessagePart.builder()
                 .id("decision-1")
-                .type("data-access-decision")
+                .type("metadata-config-decision")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
                         "configKind", "meta",
@@ -101,11 +101,11 @@ class WorkflowOrchestratorTest {
                 .containsEntry("validationStatus", "success");
         assertThat(decision.getMetadata().get("candidateDigest"))
                 .isNotNull();
-        assertThat(store.loadActive(session, "agent_data_access"))
+        assertThat(store.loadActive(session, "agent_metadata_config"))
                 .get()
                 .satisfies(state -> {
                     assertThat(state.getWorkflowType())
-                            .isEqualTo("data_access");
+                            .isEqualTo("metadata_config");
                     assertThat(state.getContext())
                             .containsEntry("fileName", "probe_message.json")
                             .containsKey("candidate");
@@ -113,11 +113,11 @@ class WorkflowOrchestratorTest {
     }
 
     @Test
-    void dataAccessPlanWithoutConfigTreeEvidenceIsBlocked() {
+    void metadataConfigPlanWithoutConfigTreeEvidenceIsBlocked() {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
-                .setType("agent_data_access");
+                .setType("agent_metadata_config");
         ChatMessagePart candidate = ChatMessagePart.builder()
                 .id("config-1")
                 .type("config")
@@ -127,7 +127,7 @@ class WorkflowOrchestratorTest {
                 .build();
         ChatMessagePart decision = ChatMessagePart.builder()
                 .id("decision-1")
-                .type("data-access-decision")
+                .type("metadata-config-decision")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
                         "configKind", "meta",
@@ -141,10 +141,66 @@ class WorkflowOrchestratorTest {
                 .containsEntry("step", "BLOCKED")
                 .containsEntry("validationStatus", "blocked");
         AgentWorkflowState blocked = store.loadActive(
-                session, "agent_data_access").orElseThrow();
-        assertThat(new DataAccessWorkflowDefinition()
+                session, "agent_metadata_config").orElseThrow();
+        assertThat(new MetadataConfigWorkflowDefinition()
                 .transition(blocked, "retry"))
                 .isEqualTo(AgentWorkflowStep.META_DISCOVERY);
+    }
+
+    @Test
+    void dataPushPlanRequiresMetaReferenceAndReadEvidence() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession session = new ChatSession()
+                .setType("agent_data_push_service");
+        ChatMessagePart candidate = ChatMessagePart.builder()
+                .id("code-1")
+                .type("code")
+                .language("toml")
+                .content("[sources.demo]\ntype = \"demo_logs\"")
+                .build();
+        ChatMessagePart decision = ChatMessagePart.builder()
+                .id("decision-1")
+                .type("data-push-service-decision")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "data_push.confirm_plan",
+                        "configKind", "push_task",
+                        "sourceMark", "data-push:chat-1:probe",
+                        "metaRef", Map.of(
+                                "fileName", "user_event.json",
+                                "contentDigest", "digest-meta"),
+                        "request", Map.of("name", "探针推送"))))
+                .build();
+
+        orchestrator.prepareParts(
+                session,
+                List.of(candidate, decision),
+                List.of(
+                        Map.of(
+                                "evidenceId", "config-tree-1",
+                                "tool", "config_tree",
+                                "status", "succeeded"),
+                        Map.of(
+                                "evidenceId", "config-read-1",
+                                "tool", "config_read",
+                                "status", "succeeded")),
+                "message-1");
+
+        assertThat(decision.getMetadata())
+                .containsEntry("source", "workflow")
+                .containsEntry("step", "PUSH_PLAN_CONFIRMATION")
+                .containsEntry("validationStatus", "success")
+                .containsKey("candidateDigest");
+        assertThat(store.loadActive(session, "agent_data_push_service"))
+                .get()
+                .satisfies(state -> {
+                    assertThat(state.getWorkflowType()).isEqualTo("data_push");
+                    assertThat(state.getContext())
+                            .containsEntry("sourceMark", "data-push:chat-1:probe")
+                            .containsKey("metaRef")
+                            .containsKey("candidate");
+                });
     }
 
     @Test
@@ -152,14 +208,15 @@ class WorkflowOrchestratorTest {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
-                .setType("agent_data_visualization");
-        ChatMessagePart preview = ChatMessagePart.builder()
-                .id("artifact-1")
-                .type("visualization-chart-preview")
-                .status("completed")
-                .metadata(new LinkedHashMap<>(Map.of(
-                        "artifactId", "artifact-1")))
-                .build();
+                .setType("agent_visualization_dashboard");
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("wf-dashboard")
+                .setWorkflowType("visualization_dashboard")
+                .setAgentType("agent_visualization_dashboard")
+                .setStep(AgentWorkflowStep.ARTIFACT_READY)
+                .setStatus("active")
+                .setStateRevision(1)
+                .setContext(new LinkedHashMap<>()));
         Map<String, Object> dashboardRequest = Map.of(
                 "name", "探针消息看板",
                 "code", "probe-message-dashboard",
@@ -168,29 +225,45 @@ class WorkflowOrchestratorTest {
                 "source", "workflow");
         ChatMessagePart confirmation = ChatMessagePart.builder()
                 .id("persist-1")
-                .type("confirm")
+                .type("visualization-dashboard-decision")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.apply_config",
+                        "action", "visualization_dashboard.confirm_plan",
+                        "configType", "probe-message",
+                        "configIndex", "probe-message",
+                        "fileName", "index.json",
                         "dashboard", Map.of("request", dashboardRequest))))
+                .build();
+        ChatMessagePart candidate = ChatMessagePart.builder()
+                .id("config-1")
+                .type("config")
+                .status("completed")
+                .content("{\"type\":\"page\",\"body\":[]}")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "configKind", "low-code-page",
+                        "configType", "probe-message",
+                        "fileName", "index.json")))
                 .build();
 
         orchestrator.prepareParts(
                 session,
-                List.of(preview, confirmation),
+                List.of(candidate, confirmation),
                 List.of(),
                 "message-1");
 
         assertThat(confirmation.getMetadata())
                 .containsEntry("step", "PERSIST_CONFIRMATION")
                 .containsEntry("validationStatus", "success");
-        assertThat(store.loadActive(session, "agent_data_visualization"))
+        assertThat(store.loadActive(session, "agent_visualization_dashboard"))
                 .get()
                 .satisfies(state -> assertThat(state.getContext())
                         .containsEntry(
                                 "persistencePlan",
-                                Map.of("dashboard",
-                                        Map.of("request", dashboardRequest))));
+                                Map.of(
+                                        "configType", "probe-message",
+                                        "configIndex", "probe-message",
+                                        "fileName", "index.json",
+                                        "dashboard", Map.of("request", dashboardRequest))));
     }
 
     @Test
@@ -198,23 +271,17 @@ class WorkflowOrchestratorTest {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
-                .setType("agent_data_visualization");
-        ChatMessagePart preview = ChatMessagePart.builder()
-                .id("artifact-1")
-                .type("visualization-chart-preview")
-                .metadata(new LinkedHashMap<>(Map.of(
-                        "artifactId", "artifact-1")))
-                .build();
+                .setType("agent_visualization_dashboard");
         ChatMessagePart confirmation = ChatMessagePart.builder()
                 .id("persist-1")
-                .type("confirm")
+                .type("visualization-dashboard-decision")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.apply_config")))
+                        "action", "visualization_dashboard.confirm_plan")))
                 .build();
 
         orchestrator.prepareParts(
                 session,
-                List.of(preview, confirmation),
+                List.of(confirmation),
                 List.of(),
                 "message-1");
 
@@ -228,13 +295,14 @@ class WorkflowOrchestratorTest {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
-                .setType("agent_data_visualization");
+                .setType("agent_visualization_chart");
         ChatMessagePart failure = ChatMessagePart.builder()
                 .id("query-failure")
-                .type("confirm")
+                .type("visualization-chart-decision")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(Map.of(
-                        "action", "data_visualization.execute_approved_query",
+                        "action", "visualization_chart.execute_approved_query",
+                        "validationStatus", "blocked",
                         "query", Map.of(
                                 "tool", "entity_aggregate",
                                 "request", Map.of("entity", "user_event")),
@@ -249,8 +317,84 @@ class WorkflowOrchestratorTest {
                 .containsEntry("step", "BLOCKED")
                 .containsEntry("validationStatus", "blocked")
                 .containsEntry("blockedAction",
-                        "data_visualization.execute_approved_query")
+                        "visualization_chart.execute_approved_query")
                 .containsEntry("allowedActions", List.of("retry", "revise"))
                 .doesNotContainKey("action");
+    }
+
+    @Test
+    void appMenuCardCanResumeOnlyAfterAConfigRecordExistsInTheSession() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession session = new ChatSession()
+                .setType("agent_visualization_app")
+                .setExtraData("""
+                        {"visualizationApp":{"configs":[{"id":"page:index.json"}]}}
+                        """);
+        ChatMessagePart card = ChatMessagePart.builder()
+                .id("menu-1")
+                .type("visualization-app-decision")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_app.confirm_menu",
+                        "menu", Map.of("request", Map.of("name", "用户事件入口")))))
+                .build();
+
+        orchestrator.prepareParts(
+                session, List.of(card), List.of(), "message-1");
+
+        assertThat(card.getMetadata())
+                .containsEntry("step", "MENU_CONFIRMATION")
+                .containsEntry("validationStatus", "success");
+        assertThat(store.loadActive(session, "agent_visualization_app"))
+                .get()
+                .satisfies(state -> assertThat(state.getContext())
+                        .containsEntry("verifiedPersistedConfig", true));
+    }
+
+    @Test
+    void dashboardMenuCardRequiresBothConfigAndDashboardRecords() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession configOnly = new ChatSession()
+                .setType("agent_visualization_dashboard")
+                .setExtraData("""
+                        {"visualizationDashboard":{"configs":[{"id":"config-1"}]}}
+                        """);
+        ChatSession complete = new ChatSession()
+                .setType("agent_visualization_dashboard")
+                .setExtraData("""
+                        {"visualizationDashboard":{
+                          "configs":[{"id":"config-1"}],
+                          "dashboards":[{"id":"dashboard-1"}]
+                        }}
+                        """);
+
+        ChatMessagePart blocked = menuCard("visualization-dashboard-decision",
+                "visualization_dashboard.confirm_menu");
+        orchestrator.prepareParts(
+                configOnly, List.of(blocked), List.of(), "message-1");
+        assertThat(blocked.getMetadata())
+                .containsEntry("step", "BLOCKED")
+                .containsEntry("validationStatus", "blocked");
+
+        ChatMessagePart allowed = menuCard("visualization-dashboard-decision",
+                "visualization_dashboard.confirm_menu");
+        orchestrator.prepareParts(
+                complete, List.of(allowed), List.of(), "message-2");
+        assertThat(allowed.getMetadata())
+                .containsEntry("step", "MENU_CONFIRMATION")
+                .containsEntry("validationStatus", "success");
+    }
+
+    private ChatMessagePart menuCard(String partType, String action) {
+        return ChatMessagePart.builder()
+                .id("menu-" + action)
+                .type(partType)
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", action,
+                        "menu", Map.of("request", Map.of("name", "用户事件入口")))))
+                .build();
     }
 }

@@ -539,7 +539,7 @@ const confirmRevisePlaceholder = computed(() => {
   if (action === 'config.confirm_trial' || action === 'config.confirm_apply') {
     return '输入需要补充的配置调整要求，例如：修改字段值、约束条件或目标文件';
   }
-  if (action === 'data_visualization.confirm_query_plan') {
+  if (typeof action === 'string' && action.endsWith('.confirm_query_plan')) {
     return '输入要调整的实体、时间字段、指标、维度、过滤条件、排序或图表类型';
   }
   return '输入需要调整的内容，例如：改成静态 HTML、增加趋势图、调整菜单名称或看板指标';

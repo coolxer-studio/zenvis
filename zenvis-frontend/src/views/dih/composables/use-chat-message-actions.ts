@@ -28,10 +28,15 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'analysis.confirm_service_result',
   'config.confirm_trial',
   'config.confirm_apply',
-  'data_access.generate_demo_push_config',
-  'data_access.create_demo_push_task',
-  'data_visualization.confirm_query_plan',
-  'data_visualization.apply_config',
+  'visualization_chart.confirm_query_plan',
+  'visualization_app.confirm_query_plan',
+  'visualization_dashboard.confirm_query_plan',
+  'visualization_app.confirm_plan',
+  'visualization_dashboard.confirm_plan',
+  'visualization_app.confirm_overwrite',
+  'visualization_dashboard.confirm_overwrite',
+  'visualization_app.confirm_menu',
+  'visualization_dashboard.confirm_menu',
 ]);
 
 const AUTO_REJECT_ACTIONS = new Set([
@@ -39,10 +44,15 @@ const AUTO_REJECT_ACTIONS = new Set([
   'analysis.confirm_service_result',
   'config.confirm_trial',
   'config.confirm_apply',
-  'data_access.generate_demo_push_config',
-  'data_access.create_demo_push_task',
-  'data_visualization.confirm_query_plan',
-  'data_visualization.apply_config',
+  'visualization_chart.confirm_query_plan',
+  'visualization_app.confirm_query_plan',
+  'visualization_dashboard.confirm_query_plan',
+  'visualization_app.confirm_plan',
+  'visualization_dashboard.confirm_plan',
+  'visualization_app.confirm_overwrite',
+  'visualization_dashboard.confirm_overwrite',
+  'visualization_app.confirm_menu',
+  'visualization_dashboard.confirm_menu',
 ]);
 
 const asObject = (value: unknown): Record<string, unknown> => {
@@ -80,18 +90,7 @@ const errorMessage = (error: unknown, fallback: string) => {
 
 const confirmAction = (part: ChatMessagePart) => {
   const action = part.metadata?.action || part.metadata?.blockedAction;
-  if (typeof action === 'string' && action) {
-    return action;
-  }
-  const query = asObject(part.metadata?.query);
-  if (
-    part.type === 'confirm'
-    && textValue(part.metadata?.planId)
-    && textValue(query.tool)
-  ) {
-    return 'data_visualization.confirm_query_plan';
-  }
-  return '';
+  return typeof action === 'string' ? action : '';
 };
 
 const workflowId = (part: ChatMessagePart) => textValue(part.metadata?.workflowId);
@@ -113,17 +112,24 @@ const autoConfirmMessage = (action: string) => {
   if (action === 'analysis.create_continuous_task') {
     return '我已确认持续分析任务方案，请根据上一条确认卡和配置开始创建数据推送服务与通用数据分析任务。';
   }
-  if (action === 'data_access.generate_demo_push_config') {
-    return '我已确认继续生成用户事件数据推送服务配置。请先生成完整的数据推送服务配置并展示给我确认，不要创建或启动数据推送服务。';
+  if (action === 'visualization_chart.confirm_query_plan') {
+    return '我已确认上一轮 Meta 查询得到的实体、字段角色、统计口径和查询参数。请严格按该 planId 调用卡片中的数据工具；成功后仅使用真实返回的 echarts.option 生成临时图表预览，不得入库、写配置或改用示例数据。';
   }
-  if (action === 'data_access.create_demo_push_task') {
-    return '我已确认创建用户事件数据推送服务，请根据上一条确认卡和数据推送配置创建并启动数据推送服务。';
+  if (action === 'visualization_app.confirm_query_plan'
+    || action === 'visualization_dashboard.confirm_query_plan') {
+    return '我已确认本轮 Meta 查询方案。请严格按锁定 planId 和数据工具参数执行只读查询；查询结果只用于生成配置，不得写入临时图表库。';
   }
-  if (action === 'data_visualization.apply_config') {
-    return '我已确认并授权应用上一轮数据可视化配置。请根据上一条确认卡和已生成的配置内容，按需调用配置、看板和菜单 MCP 工具写入系统；写入或创建成功后，请输出 zenvis:visualization-config-record、zenvis:dashboard-config-record、zenvis:menu-config-record 等记录围栏。';
+  if (action === 'visualization_app.confirm_plan'
+    || action === 'visualization_app.confirm_overwrite') {
+    return '我已确认写入锁定的可视化应用配置。请按确认卡中的目标文件和内容执行配置写入与读回校验；配置成功后再单独确认菜单发布，不得在本轮直接创建菜单，也不得创建 Dashboard。';
   }
-  if (action === 'data_visualization.confirm_query_plan') {
-    return '我已确认上一轮 Meta 查询得到的实体、字段角色、统计口径和查询参数。请严格按该 planId 调用卡片中的数据 MCP 工具；成功后直接使用返回的 meta、result 和 echarts.option 生成可视化产物，不得改用示例数据。';
+  if (action === 'visualization_dashboard.confirm_plan'
+    || action === 'visualization_dashboard.confirm_overwrite') {
+    return '我已确认写入锁定的大屏配置。请按确认卡执行配置写入与读回，再由平台按锁定 Dashboard 参数创建并读回 Dashboard；配置或 Dashboard 参数变化时必须重新确认。';
+  }
+  if (action === 'visualization_app.confirm_menu'
+    || action === 'visualization_dashboard.confirm_menu') {
+    return '我已确认发布锁定菜单。请调用 menu_create 并接受高风险 MCP 审批，随后调用 menu_view 读回校验；只在读回一致时输出菜单记录。';
   }
   return '我已确认本次操作，请继续执行下一阶段。';
 };
@@ -135,30 +141,18 @@ const autoRejectMessage = (action: string) => {
   if (action === 'config.confirm_trial' || action === 'config.confirm_apply') {
     return '我已取消当前配置管理流程，请暂停配置操作，不要进入下一阶段。';
   }
-  if (action === 'data_access.generate_demo_push_config') {
-    return '我已取消生成用户事件数据推送服务配置。请记录本次演示到元数据配置阶段结束，不要生成数据推送配置，也不要创建数据推送服务。';
+  if (action === 'visualization_chart.confirm_query_plan') {
+    return '我取消当前临时图表查询方案。请不要调用数据查询工具，也不要生成或保存图表。';
   }
-  if (action === 'data_access.create_demo_push_task') {
-    return '我已取消创建用户事件数据推送服务。请记录数据推送配置已生成但未添加到系统，不要创建或启动数据推送服务。';
+  if (action.startsWith('visualization_app.')) {
+    return '我取消当前可视化应用步骤。不要创建或修改配置、Dashboard 或菜单，也不要写入临时图表库。';
   }
-  if (action === 'data_visualization.apply_config') {
-    return '我选择放弃本次数据可视化配置。请记录本次配置已放弃，不要写入 open_config，不要创建菜单，也不要创建看板。';
-  }
-  if (action === 'data_visualization.confirm_query_plan') {
-    return '我取消当前实体与字段查询方案。请不要调用数据查询工具，也不要生成或保存图表。';
+  if (action.startsWith('visualization_dashboard.')) {
+    return '我取消当前数据大屏步骤。不要创建或修改配置、Dashboard 或菜单，也不要写入临时图表库。';
   }
   return '我已取消本次操作。';
 };
 
-const dataVisualizationDecisionMessage = (detail?: string) => {
-  const focus = detail?.trim() || '请基于上一轮数据可视化配置继续优化展示字段、图表布局、菜单或看板配置。';
-  return `我需要补充信息继续更新数据可视化配置。调整要求如下：\n${focus}\n请基于上一轮数据可视化配置重新生成完整配置，并再次展示完整配置和后续选择。`;
-};
-
-const dataVisualizationDecisionDisplayMessage = (detail?: string) => {
-  const focus = detail?.trim() || '继续优化数据可视化配置。';
-  return `我已补充数据可视化配置调整要求：\n${focus}`;
-};
 
 const analysisConfirmReviseMessage = (action: string, detail?: string) => {
   const focus = detail?.trim() || '请基于上一阶段结果补充必要信息。';
@@ -192,38 +186,10 @@ const configConfirmReviseDisplayMessage = (detail?: string) => {
   return `我已补充配置调整要求：\n${focus}`;
 };
 
-const dataAccessDecisionKind = (part: ChatMessagePart): 'meta' | 'push_task' => {
-  const explicitKind = String(part.metadata?.configKind || '')
-    .trim()
-    .toLowerCase()
-    .replaceAll('-', '_');
-  if (explicitKind === 'meta' || explicitKind === 'meta_config') {
-    return 'meta';
-  }
-  if (['push_task', 'pushtask', 'vectum', 'vector'].includes(explicitKind)) {
-    return 'push_task';
-  }
-
-  const decisionContext = `${part.title || ''}\n${part.content || ''}`;
-  return /(数据推送|push\s*task|vectum|vector)/i.test(decisionContext) ? 'push_task' : 'meta';
-};
-
-const dataAccessDecisionMessage = (
-  part: ChatMessagePart,
+const metadataConfigDecisionMessage = (
   decision: 'apply_config' | 'abandon' | 'revise',
   detail?: string,
 ) => {
-  if (dataAccessDecisionKind(part) === 'push_task') {
-    if (decision === 'apply_config') {
-      return '我已明确确认创建并启动上一轮展示的完整数据推送服务配置。当前操作对象是 PushTask/Vectum，不是 Meta；允许跳过元数据创建，禁止调用 config_tree、config_add、config_apply 或 config_read，也不得因当前会话没有 Meta 配置而停止。请直接执行数据推送状态机：调用 push_task_detect_format，按 sourceMark 检查冲突，调用 push_task_create_and_start 并接受平台 MCP 审批，审批通过后继续查询任务状态和 system 日志；仅在任务真实运行成功后输出 zenvis:vectum-task-record。';
-    }
-    if (decision === 'abandon') {
-      return '我已取消创建本次数据推送服务。不要创建或启动 PushTask，也不要转入 Meta 配置流程。';
-    }
-    const focus = detail?.trim() || '请基于上一轮完整数据推送配置继续调整。';
-    return `我需要补充信息继续更新数据推送配置。调整要求如下：\n${focus}\n请保留上一轮配置中的已确认信息，重新展示完整 PushTask/Vectum 配置并再次让我确认；不要转入 Meta 配置流程。`;
-  }
-
   if (decision === 'apply_config') {
     return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才用 Markdown 围栏代码块输出 zenvis:meta-config-record 记录；zenvis:meta-config-record 不是工具名，请不要调用它。';
   }
@@ -234,22 +200,10 @@ const dataAccessDecisionMessage = (
   return `我需要补充信息继续更新元数据配置。调整要求如下：\n${focus}\n请基于上一轮 meta 配置重新生成完整配置，并再次展示完整配置和后续选择。`;
 };
 
-const dataAccessDecisionDisplayMessage = (
-  part: ChatMessagePart,
+const metadataConfigDecisionDisplayMessage = (
   decision: 'apply_config' | 'abandon' | 'revise',
   detail?: string,
 ) => {
-  if (dataAccessDecisionKind(part) === 'push_task') {
-    if (decision === 'apply_config') {
-      return '我已确认创建并启动数据推送服务。';
-    }
-    if (decision === 'abandon') {
-      return '我已取消创建本次数据推送服务。';
-    }
-    const focus = detail?.trim() || '继续优化数据推送配置。';
-    return `我已补充数据推送配置调整要求：\n${focus}`;
-  }
-
   if (decision === 'apply_config') {
     return '我已确认添加配置到系统。';
   }
@@ -258,6 +212,87 @@ const dataAccessDecisionDisplayMessage = (
   }
   const focus = detail?.trim() || '继续优化元数据配置。';
   return `我已补充配置调整要求：\n${focus}`;
+};
+
+const dataPushDecisionMessage = (
+  decision: 'apply_config' | 'abandon' | 'revise',
+  detail?: string,
+) => {
+  if (decision === 'apply_config') {
+    return '我已确认创建并启动上一轮展示的数据推送服务配置。当前只允许读取已发布 Meta，不得调用 config_add、config_apply 或任何修改 Meta 的工具。请调用 push_task_detect_format，按锁定 sourceMark 检查冲突，再调用 push_task_create_and_start 并接受平台 MCP 审批；审批通过后必须查询任务状态和 system 日志，仅在任务真实运行成功后输出 zenvis:vectum-task-record。';
+  }
+  if (decision === 'abandon') {
+    return '我已取消创建本次数据推送服务。不要创建或启动 PushTask，也不要调用任何写工具。';
+  }
+  const focus = detail?.trim() || '请基于上一轮完整数据推送配置继续调整。';
+  return `我需要补充信息继续更新数据推送配置。调整要求如下：\n${focus}\n请保留已确认的只读 Meta 引用，重新展示完整 PushTask/Vectum 配置并再次让我确认；不得创建或修改 Meta。`;
+};
+
+const dataPushDecisionDisplayMessage = (
+  decision: 'apply_config' | 'abandon' | 'revise',
+  detail?: string,
+) => {
+  if (decision === 'apply_config') {
+    return '我已确认创建并启动数据推送服务。';
+  }
+  if (decision === 'abandon') {
+    return '我已取消创建本次数据推送服务。';
+  }
+  const focus = detail?.trim() || '继续优化数据推送配置。';
+  return `我已补充数据推送配置调整要求：\n${focus}`;
+};
+
+type VisualizationDomain = 'chart' | 'app' | 'dashboard';
+
+const visualizationDomainLabel = (domain: VisualizationDomain) => {
+  if (domain === 'chart') return '临时图表';
+  if (domain === 'app') return '可视化应用';
+  return '数据大屏';
+};
+
+const visualizationDomainFromAction = (action: string): VisualizationDomain | undefined => {
+  if (action.startsWith('visualization_chart.')) return 'chart';
+  if (action.startsWith('visualization_app.')) return 'app';
+  if (action.startsWith('visualization_dashboard.')) return 'dashboard';
+  return undefined;
+};
+
+const isWorkflowOwnedAction = (action: string) =>
+  action.startsWith('metadata_config.')
+  || action.startsWith('data_push.')
+  || Boolean(visualizationDomainFromAction(action));
+
+const visualizationDecisionMessage = (
+  domain: VisualizationDomain,
+  decision: 'apply_config' | 'abandon' | 'revise',
+  detail?: string,
+) => {
+  const label = visualizationDomainLabel(domain);
+  if (decision === 'apply_config') {
+    if (domain === 'chart') {
+      return '我已确认并授权按上一轮查询方案生成临时图表。请执行锁定查询并仅使用真实 echarts.option 生成预览，不要写入图表库、配置、Dashboard 或菜单。';
+    }
+    if (domain === 'app') {
+      return '我已确认并授权应用上一轮可视化应用配置。请按锁定目标文件和内容写入配置并读回；配置成功后单独请求菜单发布确认，不要创建 Dashboard，也不要写入临时图表库。';
+    }
+    return '我已确认并授权应用上一轮数据大屏配置。请按锁定目标文件和内容写入配置并读回，再按锁定参数创建并读回 Dashboard；菜单发布必须单独确认，不要写入临时图表库。';
+  }
+  if (decision === 'abandon') {
+    return `我选择放弃本次${label}配置。请记录本次操作已放弃，不要执行任何写入或创建动作。`;
+  }
+  const focus = detail?.trim() || `请基于上一轮${label}方案继续调整。`;
+  return `我需要补充信息继续更新${label}配置。调整要求如下：\n${focus}\n请重新校验 Meta 并生成新的完整方案与确认卡；Meta 摘要变化时必须重新确认。`;
+};
+
+const visualizationDecisionDisplayMessage = (
+  domain: VisualizationDomain,
+  decision: 'apply_config' | 'abandon' | 'revise',
+  detail?: string,
+) => {
+  const label = visualizationDomainLabel(domain);
+  if (decision === 'apply_config') return `我已确认${label}当前步骤。`;
+  if (decision === 'abandon') return `我已取消${label}当前步骤。`;
+  return `我已补充${label}调整要求：\n${detail?.trim() || '继续调整当前方案。'}`;
 };
 
 const infoStepsDisplayMessage = (part: ChatMessagePart, answers: InfoStepAnswer[]) => {
@@ -383,7 +418,7 @@ export const useChatMessageActions = ({
     const action = confirmAction(payload.part);
     if (
       !demoId(payload.part)
-      && (action.startsWith('data_visualization.') || action.startsWith('data_access.'))
+      && isWorkflowOwnedAction(action)
     ) {
       ElMessage.error('普通业务卡片缺少共享工作流标识，请重新发起流程');
       return;
@@ -459,7 +494,7 @@ export const useChatMessageActions = ({
     const action = confirmAction(payload.part);
     if (
       !demoId(payload.part)
-      && (action.startsWith('data_visualization.') || action.startsWith('data_access.'))
+      && isWorkflowOwnedAction(action)
     ) {
       ElMessage.error('普通业务卡片缺少共享工作流标识，请重新发起流程');
       return;
@@ -476,24 +511,31 @@ export const useChatMessageActions = ({
       console.error('记录确认结果失败:', error);
     }
     payload.part.status = payload.decision;
-    if (payload.decision === 'revise' && action === 'data_visualization.apply_config') {
-      ElMessage.success('已提交配置调整要求');
-      await nextTick();
-      await sendMessage({
-        content: dataVisualizationDecisionDisplayMessage(payload.detail),
-        requestContent: dataVisualizationDecisionMessage(payload.detail),
-      });
-      return;
-    }
-    if (payload.decision === 'revise' && action === 'data_visualization.confirm_query_plan') {
+    if (payload.decision === 'revise' && action.endsWith('.confirm_query_plan')) {
       ElMessage.success('已提交查询方案调整要求');
       await nextTick();
       const detail = payload.detail?.trim() || '请重新选择实体、字段角色或统计口径。';
       await sendMessage({
         content: `我已补充查询方案调整要求：\n${detail}`,
-        requestContent: `我需要调整上一轮数据可视化查询方案：\n${detail}\n请重新调用实体和字段 Meta MCP 核验，并输出新的 data_visualization.confirm_query_plan 确认卡；本轮不要调用数据工具。`,
+        requestContent: `我需要调整上一轮可视化查询方案：\n${detail}\n请重新调用实体和字段 Meta MCP 核验，并输出新的 ${action} 确认卡；本轮不要调用数据工具，也不得复用旧查询结果。`,
       });
       return;
+    }
+    if (payload.decision === 'revise' && (
+      action.endsWith('.confirm_plan')
+      || action.endsWith('.confirm_overwrite')
+      || action.endsWith('.confirm_menu')
+    )) {
+      const domain = visualizationDomainFromAction(action);
+      if (domain) {
+        ElMessage.success('已提交调整要求');
+        await nextTick();
+        await sendMessage({
+          content: visualizationDecisionDisplayMessage(domain, 'revise', payload.detail),
+          requestContent: visualizationDecisionMessage(domain, 'revise', payload.detail),
+        });
+        return;
+      }
     }
     if (payload.decision === 'revise' && (
       action === 'analysis.confirm_dataset'
@@ -531,7 +573,7 @@ export const useChatMessageActions = ({
 
   const handleAddChartLibrary = async (message: ChatMessage, part: ChatMessagePart) => {
     const action = confirmAction(part);
-    if (action !== 'data_visualization.add_chart_library') {
+    if (action !== 'visualization_chart.add_chart_library') {
       ElMessage.warning('当前图表不支持加入图表库');
       return;
     }
@@ -578,16 +620,20 @@ export const useChatMessageActions = ({
     ElMessage.error('普通图表缺少共享工作流标识，不能加入图表库');
   };
 
-  const handleDataAccessDecision = async (
+  type ConfigDecisionPayload = {
+    part: ChatMessagePart;
+    decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+    detail?: string;
+  };
+
+  const handleConfigDecision = async (
     message: ChatMessage,
-    payload: {
-      part: ChatMessagePart;
-      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
-      detail?: string;
-    },
+    payload: ConfigDecisionPayload,
+    domain: 'metadata' | 'push',
   ) => {
+    const domainLabel = domain === 'metadata' ? '元数据配置' : '数据推送服务';
     if (!chatSessionId.value || !message.id || !payload.part.id) {
-      ElMessage.warning('缺少数据接入选择记录标识，无法记录操作结果');
+      ElMessage.warning(`缺少${domainLabel}选择记录标识，无法记录操作结果`);
       return;
     }
 
@@ -605,21 +651,20 @@ export const useChatMessageActions = ({
           actionMap[payload.decision],
           { revision: payload.detail },
         );
-        const isPushTaskDecision = dataAccessDecisionKind(payload.part) === 'push_task';
         ElMessage.success(
           payload.decision === 'apply_config'
-            ? isPushTaskDecision
+            ? domain === 'push'
               ? '已确认创建数据推送服务'
               : '已确认应用元数据配置'
             : payload.decision === 'abandon'
-              ? '已取消当前数据接入流程'
+              ? `已取消当前${domainLabel}流程`
               : payload.decision === 'retry'
                 ? '已开始重试当前阶段'
-              : '已提交配置调整要求',
+                : '已提交配置调整要求',
         );
       } catch (error) {
-        console.error('执行数据接入工作流动作失败:', error);
-        ElMessage.error(errorMessage(error, '执行数据接入工作流失败'));
+        console.error(`执行${domainLabel}工作流动作失败:`, error);
+        ElMessage.error(errorMessage(error, `执行${domainLabel}工作流失败`));
       }
       return;
     }
@@ -630,7 +675,7 @@ export const useChatMessageActions = ({
     }
 
     if (!demoId(payload.part)) {
-      ElMessage.error('普通数据接入卡片缺少共享工作流标识，请重新发起流程');
+      ElMessage.error(`普通${domainLabel}卡片缺少共享工作流标识，请重新发起流程`);
       return;
     }
 
@@ -642,11 +687,10 @@ export const useChatMessageActions = ({
         decision: payload.decision,
       });
     } catch (error) {
-      console.error('记录数据接入后续选择失败:', error);
+      console.error(`记录${domainLabel}后续选择失败:`, error);
     }
     payload.part.status = payload.decision;
-    const isPushTaskDecision = dataAccessDecisionKind(payload.part) === 'push_task';
-    const toastMap = isPushTaskDecision
+    const toastMap = domain === 'push'
       ? {
           apply_config: '已确认创建数据推送服务',
           abandon: '已取消创建数据推送服务',
@@ -660,10 +704,106 @@ export const useChatMessageActions = ({
     ElMessage.success(toastMap[payload.decision]);
     await nextTick();
     await sendMessage({
-      content: dataAccessDecisionDisplayMessage(payload.part, payload.decision, payload.detail),
-      requestContent: dataAccessDecisionMessage(payload.part, payload.decision, payload.detail),
+      content: domain === 'push'
+        ? dataPushDecisionDisplayMessage(payload.decision, payload.detail)
+        : metadataConfigDecisionDisplayMessage(payload.decision, payload.detail),
+      requestContent: domain === 'push'
+        ? dataPushDecisionMessage(payload.decision, payload.detail)
+        : metadataConfigDecisionMessage(payload.decision, payload.detail),
     });
   };
+
+  const handleMetadataConfigDecision = (message: ChatMessage, payload: ConfigDecisionPayload) =>
+    handleConfigDecision(message, payload, 'metadata');
+
+  const handleDataPushDecision = (message: ChatMessage, payload: ConfigDecisionPayload) =>
+    handleConfigDecision(message, payload, 'push');
+
+  const handleVisualizationDecision = async (
+    message: ChatMessage,
+    payload: ConfigDecisionPayload,
+    domain: VisualizationDomain,
+  ) => {
+    const label = visualizationDomainLabel(domain);
+    if (!chatSessionId.value || !message.id || !payload.part.id) {
+      ElMessage.warning(`缺少${label}选择记录标识，无法记录操作结果`);
+      return;
+    }
+
+    if (workflowId(payload.part)) {
+      const actionMap: Record<typeof payload.decision, WorkflowActionName> = {
+        apply_config: 'approve',
+        abandon: 'reject',
+        revise: 'revise',
+        retry: 'retry',
+      };
+      try {
+        await performWorkflowAction(
+          message,
+          payload.part,
+          actionMap[payload.decision],
+          { revision: payload.detail },
+        );
+        ElMessage.success(
+          payload.decision === 'apply_config'
+            ? `已确认${label}当前步骤`
+            : payload.decision === 'abandon'
+              ? `已取消${label}当前步骤`
+              : payload.decision === 'retry'
+                ? '已开始重试当前阶段'
+                : '已提交调整要求',
+        );
+      } catch (error) {
+        console.error(`执行${label}工作流动作失败:`, error);
+        ElMessage.error(errorMessage(error, `执行${label}工作流失败`));
+      }
+      return;
+    }
+
+    if (payload.decision === 'retry') {
+      ElMessage.error('只有共享工作流阻塞卡支持重试');
+      return;
+    }
+    if (!demoId(payload.part)) {
+      ElMessage.error(`普通${label}卡片缺少共享工作流标识，请重新发起流程`);
+      return;
+    }
+
+    try {
+      await DihService.recordActionDecision({
+        chat_id: chatSessionId.value,
+        message_id: message.id,
+        part_id: payload.part.id,
+        decision: payload.decision,
+      });
+    } catch (error) {
+      console.error(`记录${label}选择失败:`, error);
+    }
+    payload.part.status = payload.decision;
+    ElMessage.success(
+      visualizationDecisionDisplayMessage(domain, payload.decision, payload.detail),
+    );
+    await nextTick();
+    await sendMessage({
+      content: visualizationDecisionDisplayMessage(domain, payload.decision, payload.detail),
+      requestContent: visualizationDecisionMessage(domain, payload.decision, payload.detail),
+    });
+  };
+
+  const handleVisualizationChartDecision = (
+    message: ChatMessage,
+    payload: ConfigDecisionPayload,
+  ) => handleVisualizationDecision(message, payload, 'chart');
+
+  const handleVisualizationAppDecision = (
+    message: ChatMessage,
+    payload: ConfigDecisionPayload,
+  ) => handleVisualizationDecision(message, payload, 'app');
+
+  const handleVisualizationDashboardDecision = (
+    message: ChatMessage,
+    payload: ConfigDecisionPayload,
+  ) => handleVisualizationDecision(message, payload, 'dashboard');
 
   const handleChartRenderFailure = async (
     payload: { part: ChatMessagePart; error: string },
@@ -686,7 +826,11 @@ export const useChatMessageActions = ({
     handleInfoStepsSubmit,
     handleActionDecision,
     handleAddChartLibrary,
-    handleDataAccessDecision,
+    handleMetadataConfigDecision,
+    handleDataPushDecision,
+    handleVisualizationChartDecision,
+    handleVisualizationAppDecision,
+    handleVisualizationDashboardDecision,
     handleChartRenderFailure,
   };
 };

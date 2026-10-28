@@ -141,7 +141,7 @@ class SkillServiceTest {
         service.reload();
 
         assertThat(service.buildEnabledSkillPrompt("ask")).contains("插件问答提示词");
-        assertThat(service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS))
+        assertThat(service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG))
                 .doesNotContain("插件问答提示词");
 
         SkillSearchDto askSearch = new SkillSearchDto();
@@ -151,7 +151,7 @@ class SkillServiceTest {
                 .contains("custom-ask-skill");
 
         SkillSearchDto agentSearch = new SkillSearchDto();
-        agentSearch.setAgentType(BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS);
+        agentSearch.setAgentType(BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG);
         assertThat(service.getPageList(agentSearch).getRows())
                 .extracting("id")
                 .doesNotContain("custom-ask-skill");
@@ -505,9 +505,9 @@ class SkillServiceTest {
 
     @Test
     void builtinChatSkillKeepsBuiltinAgentType() throws Exception {
-        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-visualization-agent");
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/visualization-chart-agent");
         writeSkill(
-                skillRoot.resolve("data-visualization-agent"),
+                skillRoot.resolve("visualization-chart-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
                 Files.readString(repoSkill.resolve("SKILL.md"))
         );
@@ -518,8 +518,8 @@ class SkillServiceTest {
         assertThat(service.getChatEntries(true))
                 .singleElement()
                 .satisfies(entry -> {
-                    assertThat(entry.getChatType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
-                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION);
+                    assertThat(entry.getChatType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART);
+                    assertThat(entry.getAgentType()).isEqualTo(BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART);
                 });
     }
 
@@ -586,13 +586,13 @@ class SkillServiceTest {
     @Test
     void disabledBuiltinSkillIsHiddenAndNotLoadedIntoPrompt() throws Exception {
         writeSkill(
-                skillRoot.resolve("data-access-agent"),
+                skillRoot.resolve("metadata-config-agent"),
                 """
                         {
-                          "id": "data-access-agent",
-                          "name": "数据接入",
+                          "id": "metadata-config-agent",
+                          "name": "元数据配置",
                           "enabled": false,
-                          "agentTypes": ["agent_data_access"],
+                          "agentTypes": ["agent_metadata_config"],
                           "entry": "SKILL.md"
                         }
                         """,
@@ -604,31 +604,35 @@ class SkillServiceTest {
 
         assertThat(service.getBuiltinAgentSkills(true))
                 .extracting("agentType")
-                .doesNotContain(BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS);
+                .doesNotContain(BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG);
         assertThat(service.getBuiltinAgentSkills(null))
-                .filteredOn(agent -> BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS.equals(agent.getAgentType()))
+                .filteredOn(agent -> BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG
+                        .equals(agent.getAgentType()))
                 .singleElement()
                 .satisfies(agent -> assertThat(agent.getEnabled()).isFalse());
-        assertThat(service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS))
+        assertThat(service.buildEnabledSkillPrompt(BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG))
                 .doesNotContain("停用的内置 Skill 提示词");
     }
 
     @Test
-    void allThreeBuiltinAgentTypesAreRecognized() {
+    void allBuiltinAgentTypesAreRecognized() {
         SkillService service = newSkillService();
 
         assertThat(List.of(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS,
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
+                BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG,
+                BuiltinAgentSkillRegistry.AGENT_DATA_PUSH_SERVICE,
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_APP,
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_DASHBOARD,
                 BuiltinAgentSkillRegistry.AGENT_REPORT
         )).allSatisfy(agentType -> assertThat(service.isBuiltinAgentType(agentType)).isTrue());
     }
 
     @Test
-    void builtinDataAccessSkillDocumentsCheckedMetadataAndVectumWorkflow() throws Exception {
-        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-access-agent");
+    void builtinMetadataSkillDocumentsOnlyMetadataWorkflow() throws Exception {
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/metadata-config-agent");
         writeSkill(
-                skillRoot.resolve("data-access-agent"),
+                skillRoot.resolve("metadata-config-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
                 Files.readString(repoSkill.resolve("SKILL.md"))
         );
@@ -637,103 +641,83 @@ class SkillServiceTest {
         service.reload();
 
         String prompt = service.buildAgentSkillPrompt(
-                BuiltinAgentSkillRegistry.AGENT_DATA_ACCESS,
-                List.of("data-access-agent")
+                BuiltinAgentSkillRegistry.AGENT_METADATA_CONFIG,
+                List.of("metadata-config-agent")
         );
 
         assertThat(prompt)
-                .contains("创建元数据配置")
-                .contains("数据推送服务分支")
-                .contains("意图路由（最高优先级）")
-                .contains("用户明确要求创建、添加、启动、修复、重启或查看数据推送服务")
-                .contains("允许跳过元数据配置创建")
-                .contains("直接进入“数据推送任务执行与自动修复状态机”")
-                .contains("不得仅因缺少 Meta 配置而阻塞")
-                .contains("Meta 尚未生成或应用不构成阻塞条件")
-                .contains("确认回传以最近可见卡片的对象为准")
-                .contains("不得改判 Meta 或以未生成 Meta 为由阻塞")
-                .contains("演示示例审批边界（最高优先级）")
-                .contains("后端确定性演示编排器完成全过程")
-                .contains("不进入本 Skill 的模型执行循环")
-                .contains("不依赖任何 AI 模型配置")
-                .contains("`config_add` 和 `config_apply` 分别触发平台 MCP 审批")
-                .contains("创建新任务时 `push_task_create_and_start` 触发平台 MCP 审批")
-                .contains("不调用模型补救或编造结果")
-                .contains("元数据配置执行状态机（最高优先级）")
-                .contains("审批通过并得到工具返回值后，必须立即进入状态机下一步")
-                .contains("禁止虚假进度")
-                .contains("严禁声称“流程已启动”")
-                .contains("元数据配置检查提醒")
-                .contains("数据推送配置检查提醒")
-                .contains("zenvis:notice")
-                .contains("\"fileName\":\"<最终文件名>.json\"")
-                .contains("\"configKind\":\"meta\"")
+                .contains("元数据配置智能体")
+                .contains("METADATA_INPUT_COLLECTION")
+                .contains("META_OVERWRITE_CONFIRMATION")
+                .contains("config_tree")
                 .contains("config_add")
                 .contains("config_apply")
                 .contains("config_read")
-                .contains("数据推送任务执行与自动修复状态机（最高优先级）")
-                .contains("直接创建与运行诊断")
-                .contains("用户配置优先")
-                .contains("首次创建必须逐字使用该配置")
-                .contains("不做启动前预检")
-                .contains("创建后必查")
-                .contains("无论返回 `true`、`false`、空值或异常")
-                .contains("创建工具返回失败不等于任务未落库")
-                .contains("push_task_get_log")
-                .contains("push_task_repair_and_restart")
-                .contains("历史任务优先")
-                .contains("直接复用该 `taskId` 调用 `push_task_get_log`")
-                .contains("不得为了再次取得同一个 ID 而先调用 `push_task_list_by_source_mark`")
-                .contains("由真实查询/日志结果生成的完整诊断卡")
-                .contains("sourceMark：<真实 sourceMark>")
-                .contains("日志调用成功后补做无意义的列表查询")
-                .contains("数据推送任务运行失败（第 <n>/5 轮）")
-                .contains("数据推送任务日志（第 <n>/5 轮）")
-                .contains("失败原因与配置修改（第 <n>/5 轮）")
-                .contains("修复前置门槛")
-                .contains("`taskId`、`sourceMark`、轮次、状态、失败阶段、日志类型、日志证据")
-                .contains("配置路径、旧值、新值和日志依据")
-                .contains("每次 `push_task_repair_and_restart` 调用必须对应且仅对应一个轮次")
-                .contains("最终可见回复必须按轮次顺序重放每轮的三张完整卡片")
-                .contains("先重放全部诊断卡，再输出成功记录")
-                .contains("修复审批通过且工具返回后，必须在当前工具循环中直接复用该 `taskId`")
-                .contains("最多自动修复 5 轮")
-                .contains("DNS/网络不可达")
-                .contains("状态严格为 `running`")
-                .contains("最终必须调用 `push_task_get_log")
-                .contains("Vectum 数据推送服务")
-                .contains("Vector 仅作为 Vectum 任务配置");
-        assertThat(prompt)
+                .contains("zenvis:meta-config-record")
                 .doesNotContain(
-                        "工作固定为两步：创建元数据配置（必须）",
-                        "元数据配置是必做步骤",
-                        "只有 meta 元数据配置已生成并经用户选择添加/确认后",
-                        "推送到 ZenVis ClickHouse 的字段必须与第一步已确认 meta 配置一致",
-                        "哪个已确认实体",
-                        "push_task_vector_",
-                        "push_task_vector_capabilities",
-                        "push_task_vector_component_schema",
-                        "push_task_generate_config",
-                        "push_task_validate_config",
-                        "validationId",
-                        "vectorVersion",
-                        "schemaFingerprint",
-                        "configFingerprint",
-                        "metaFingerprint",
-                        "testsStatus")
-                .doesNotContain("menu_create")
-                .doesNotContain("菜单 MCP")
-                .doesNotContain("amis")
-                .doesNotContain("可视化配置流程")
-                .doesNotContain("validate_vector_config.sh");
+                        "数据推送服务分支",
+                        "意图路由（最高优先级）",
+                        "允许跳过元数据配置创建",
+                        "PUSH_INPUT_COLLECTION",
+                        "push_task_repair_and_restart");
 
-        var runtime = service.resolveRuntimeConfig(List.of("data-access-agent"));
+        var runtime = service.resolveRuntimeConfig(List.of("metadata-config-agent"));
         assertThat(runtime).isNotNull();
         assertThat(runtime.getPromptMode()).isNull();
         assertThat(runtime.getTools().getLocal().get("config")).containsExactly(
                 "config_tree",
+                "config_read",
                 "config_add",
-                "config_apply",
+                "config_apply"
+        );
+        assertThat(runtime.getTools().getLocal()).doesNotContainKey("push-task");
+        assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(32);
+        assertThat(runtime.getLimits().getMaxRepeatedFailures()).isEqualTo(2);
+        assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(8_000);
+        assertThat(runtime.getLimits().getMaxAccumulatedToolResultChars()).isEqualTo(64_000);
+        assertThat(runtime.getLimits().getMaxAccumulatedToolResultTokens()).isEqualTo(48_000);
+    }
+
+    @Test
+    void builtinDataPushSkillDocumentsOnlyPushWorkflow() throws Exception {
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-push-service-agent");
+        writeSkill(
+                skillRoot.resolve("data-push-service-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildAgentSkillPrompt(
+                BuiltinAgentSkillRegistry.AGENT_DATA_PUSH_SERVICE,
+                List.of("data-push-service-agent")
+        );
+
+        assertThat(prompt)
+                .contains("数据推送服务智能体")
+                .contains("Meta 只读契约（最高优先级）")
+                .contains("kind=missing_meta")
+                .contains("agent_metadata_config")
+                .contains("PUSH_INPUT_COLLECTION")
+                .contains("push_task_detect_format")
+                .contains("push_task_list_by_source_mark")
+                .contains("push_task_create_and_start")
+                .contains("push_task_get_log")
+                .contains("push_task_repair_and_restart")
+                .contains("最多 5 轮")
+                .contains("zenvis:vectum-task-record")
+                .doesNotContain(
+                        "意图路由（最高优先级）",
+                        "允许跳过元数据配置创建",
+                        "METADATA_INPUT_COLLECTION");
+
+        var runtime = service.resolveRuntimeConfig(List.of("data-push-service-agent"));
+        assertThat(runtime).isNotNull();
+        assertThat(runtime.getPromptMode()).isNull();
+        assertThat(runtime.getTools().getLocal().get("config")).containsExactly(
+                "config_tree",
                 "config_read"
         );
         assertThat(runtime.getTools().getLocal().get("push-task")).containsExactly(
@@ -753,10 +737,10 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinDataVisualizationSkillDocumentsVisualizationWorkflow() throws Exception {
-        Path repoSkill = Path.of("../deploy/open_config/skill_config/data-visualization-agent");
+    void builtinVisualizationChartSkillDocumentsOnlyChartWorkflow() throws Exception {
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/visualization-chart-agent");
         writeSkill(
-                skillRoot.resolve("data-visualization-agent"),
+                skillRoot.resolve("visualization-chart-agent"),
                 Files.readString(repoSkill.resolve("skill.json")),
                 Files.readString(repoSkill.resolve("SKILL.md"))
         );
@@ -765,14 +749,11 @@ class SkillServiceTest {
         service.reload();
 
         String prompt = service.buildAgentSkillPrompt(
-                BuiltinAgentSkillRegistry.AGENT_DATA_VISUALIZATION,
-                List.of("data-visualization-agent"));
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_CHART,
+                List.of("visualization-chart-agent"));
 
         assertThat(prompt)
-                .contains("意图确认")
-                .contains("amis")
-                .contains("静态 HTML")
-                .contains("open_config")
+                .contains("INTENT_CONFIRMATION")
                 .contains("retrieval_list_display_entity")
                 .contains("retrieval_search")
                 .contains("entity_distribution")
@@ -780,19 +761,83 @@ class SkillServiceTest {
                 .contains("entity_aggregate")
                 .contains("entity_histogram")
                 .contains("entity_scatter")
-                .contains("config_ensure_root")
-                .contains("dashboard_create")
-                .contains("menu_create")
-                .contains("示例入口处理规则")
                 .contains("zenvis:visualization-chart-preview")
                 .contains("zenvis:visualization-chart-record")
-                .contains("zenvis:visualization-config-record")
-                .contains("zenvis:dashboard-config-record")
-                .contains("zenvis:menu-config-record")
-                .contains("不生成 SQL")
-                .contains("data_visualization.confirm_query_plan")
-                .contains("data_visualization.add_chart_library")
-                .contains("data_visualization.apply_config");
+                .contains("禁止生成 SQL")
+                .contains("visualization_chart.confirm_query_plan")
+                .contains("visualization_chart.add_chart_library")
+                .doesNotContain("zenvis:visualization-app-record")
+                .doesNotContain("zenvis:visualization-dashboard-record");
+
+        var runtime = service.resolveRuntimeConfig(List.of("visualization-chart-agent"));
+        assertThat(runtime.getTools().getLocal()).containsOnlyKeys("retrieval");
+        assertThat(runtime.getTools().getLocal().get("retrieval"))
+                .doesNotContain("config_apply", "dashboard_create", "menu_create",
+                        "push_task_create_and_start");
+    }
+
+    @Test
+    void builtinVisualizationAppSkillDocumentsAppAndMenuWorkflow() throws Exception {
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/visualization-app-agent");
+        writeSkill(
+                skillRoot.resolve("visualization-app-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildAgentSkillPrompt(
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_APP,
+                List.of("visualization-app-agent"));
+
+        assertThat(prompt)
+                .contains("低代码单页")
+                .contains("侧边栏")
+                .contains("静态 HTML")
+                .contains("config_ensure_root")
+                .contains("menu_create")
+                .contains("zenvis:visualization-app-record")
+                .contains("visualization_app.confirm_query_plan")
+                .contains("visualization_app.confirm_plan")
+                .contains("visualization_app.confirm_overwrite")
+                .contains("visualization_app.confirm_menu")
+                .doesNotContain("dashboard_create")
+                .doesNotContain("```zenvis:visualization-chart-preview")
+                .doesNotContain("visualization-dashboard-record");
+    }
+
+    @Test
+    void builtinVisualizationDashboardSkillDocumentsDashboardAndMenuWorkflow() throws Exception {
+        Path repoSkill = Path.of("../deploy/open_config/skill_config/visualization-dashboard-agent");
+        writeSkill(
+                skillRoot.resolve("visualization-dashboard-agent"),
+                Files.readString(repoSkill.resolve("skill.json")),
+                Files.readString(repoSkill.resolve("SKILL.md"))
+        );
+
+        SkillService service = newSkillService();
+        service.reload();
+
+        String prompt = service.buildAgentSkillPrompt(
+                BuiltinAgentSkillRegistry.AGENT_VISUALIZATION_DASHBOARD,
+                List.of("visualization-dashboard-agent"));
+
+        assertThat(prompt)
+                .contains("数据大屏")
+                .contains("config_ensure_root")
+                .contains("dashboard_create")
+                .contains("dashboard_view")
+                .contains("menu_create")
+                .contains("zenvis:visualization-dashboard-record")
+                .contains("visualization_dashboard.confirm_query_plan")
+                .contains("visualization_dashboard.confirm_plan")
+                .contains("visualization_dashboard.confirm_overwrite")
+                .contains("visualization_dashboard.confirm_menu")
+                .contains("不得写入图表库")
+                .doesNotContain("```zenvis:visualization-chart-preview")
+                .doesNotContain("visualization-app-record");
         assertThat(prompt)
                 .doesNotContain("config_modify")
                 .doesNotContain("使用系统预置的固定结果")

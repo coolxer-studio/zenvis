@@ -68,7 +68,7 @@ public class AIChatService {
 
     private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 102_400;
 
-    private static final int DEFAULT_OUTPUT_RESERVE_TOKENS = 4_096;
+    private static final int DEFAULT_OUTPUT_RESERVE_TOKENS = 16_384;
 
     /**
      * Internal marker appended after model content when the provider stops
@@ -142,7 +142,7 @@ public class AIChatService {
             @Value("${spring.ai.openai.api-key:}") String openAiApiKey,
             @Value("${spring.ai.openai.chat.options.model:}") String defaultChatModel,
             @Value("${app.ai.dih.context.window-tokens:102400}") int contextWindowTokens,
-            @Value("${app.ai.dih.context.output-reserve-tokens:4096}") int outputReserveTokens,
+            @Value("${app.ai.dih.context.output-reserve-tokens:16384}") int outputReserveTokens,
             @Value("${app.ai.dih.context.safety-margin-tokens:4096}") int contextSafetyMarginTokens,
             @Value("${app.ai.dih.context.max-history-tokens:24000}") int maxHistoryTokens,
             @Value("${app.ai.dih.context.summary-tokens:2048}") int maxSummaryTokens,
@@ -269,13 +269,35 @@ public class AIChatService {
                                List<ChatAttachment> attachments,
                                User user,
                                boolean deepThinking) {
+        return qaChat(chatId, model, prompt, attachments, user, deepThinking,
+                McpToolContext.empty());
+    }
+
+    public Flux<String> qaChat(String chatId,
+                               String model,
+                               String prompt,
+                               List<ChatAttachment> attachments,
+                               User user,
+                               boolean deepThinking,
+                               McpToolContext attachmentToolContext) {
         String mode = deepThinking ? "deep_think" : "ask";
+        McpToolContext resolvedToolContext = attachmentToolContext == null
+                ? McpToolContext.empty() : attachmentToolContext;
         RagContext ragContext = ragContextService.retrieve(prompt, mode);
         String systemPrompt = buildQaSystemPrompt(model, deepThinking, ragContext.systemPrompt());
+        if (resolvedToolContext.hasTools()) {
+            systemPrompt = appendSystemPrompt(systemPrompt, resolvedToolContext.systemPrompt());
+        }
         PreparedChatInput preparedInput = prepareChatInput(
-                chatId, systemPrompt, prompt, null, null);
+                chatId,
+                systemPrompt,
+                prompt,
+                resolvedToolContext.hasTools() ? resolvedToolContext.toolCallbackProvider() : null,
+                resolvedToolContext.hasTools() ? resolvedToolContext.toolRuntimeContext() : null,
+                resolveOutputTokenBudget(resolvedToolContext));
 
-        if (canUseNativeQaStream(model, attachments, deepThinking)) {
+        if (!resolvedToolContext.hasTools()
+                && canUseNativeQaStream(model, attachments, deepThinking)) {
             return withRagSearchEvent(finalizeModelMemory(nativeOpenAiChat(
                     chatId,
                     model,
@@ -305,16 +327,35 @@ public class AIChatService {
                         ragContext.used(),
                         ragContext.documentCount(),
                         systemPrompt,
-                        false
+                        resolvedToolContext.hasTools(),
+                        resolveOutputTokenBudget(resolvedToolContext)
                 ));
 
         var promptSpec = systemPromptChatClient.prompt()
-                .options(buildRuntimeOptions(model, false))
+                .options(buildRuntimeOptions(model, resolvedToolContext.hasTools(),
+                        resolveOutputTokenBudget(resolvedToolContext)))
                 .system(systemPrompt)
                 .user(preparedInput.prompt())
                 .advisors(memoryAdvisor -> memoryAdvisor
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                 );
+
+        if (resolvedToolContext.hasTools()) {
+            promptSpec = promptSpec.toolCallbacks(resolvedToolContext.toolCallbackProvider());
+            Map<String, Object> toolContext = new HashMap<>();
+            if (resolvedToolContext.invocationContext() != null) {
+                toolContext.put(McpInvocationContext.TOOL_CONTEXT_KEY,
+                        resolvedToolContext.invocationContext());
+            }
+            if (resolvedToolContext.toolRuntimeContext() != null
+                    && resolvedToolContext.toolRuntimeContext().hasLimits()) {
+                toolContext.put(ToolRuntimeContext.TOOL_CONTEXT_KEY,
+                        resolvedToolContext.toolRuntimeContext());
+            }
+            if (!toolContext.isEmpty()) {
+                promptSpec = promptSpec.toolContext(toolContext);
+            }
+        }
 
         if (deepThinking || supportsReasoningContent(model)) {
             promptSpec = promptSpec.advisors(reasoningContentAdvisor);

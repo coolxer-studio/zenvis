@@ -72,6 +72,11 @@ public class MysqlFinalTableName {
     public static final String T_AI_CHAT_SESSION = TABLE_PREFIX + "ai_chat_session";
 
     /**
+     * DIH 聊天附件与异步解析状态
+     */
+    public static final String T_AI_CHAT_ATTACHMENT = TABLE_PREFIX + "ai_chat_attachment";
+
+    /**
      * 持久化 DIH Agent Run
      */
     public static final String T_AI_AGENT_RUN = TABLE_PREFIX + "ai_agent_run";

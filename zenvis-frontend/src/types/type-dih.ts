@@ -27,6 +27,26 @@ export type ChatAttachment = {
   fileUrl?: string;
   parse_status?: string;
   parseStatus?: string;
+  parse_progress?: number;
+  parseProgress?: number;
+  parse_message?: string;
+  parseMessage?: string;
+  download_url?: string;
+  downloadUrl?: string;
+  page_count?: number;
+  pageCount?: number;
+  sheet_count?: number;
+  sheetCount?: number;
+  slide_count?: number;
+  slideCount?: number;
+  row_count?: number;
+  rowCount?: number;
+  text_chars?: number;
+  textChars?: number;
+  chunk_count?: number;
+  chunkCount?: number;
+  truncated?: boolean;
+  warning?: string;
   message?: string;
 };
 

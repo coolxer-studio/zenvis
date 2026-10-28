@@ -20,5 +20,16 @@ public class ChatAttachment {
     private String kind;
     private String fileUrl;
     private String parseStatus;
+    private Integer parseProgress;
+    private String parseMessage;
+    private String downloadUrl;
+    private Integer pageCount;
+    private Integer sheetCount;
+    private Integer slideCount;
+    private Long rowCount;
+    private Long textChars;
+    private Integer chunkCount;
+    private Boolean truncated;
+    private String warning;
     private String message;
 }

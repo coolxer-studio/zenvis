@@ -4,9 +4,11 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 合并 MCP 工具与 Run 内部控制工具，并以工具名去重。
@@ -16,7 +18,9 @@ public class CompositeToolCallbackProvider implements ToolCallbackProvider {
     private final List<ToolCallbackProvider> delegates;
 
     public CompositeToolCallbackProvider(ToolCallbackProvider... delegates) {
-        this.delegates = List.of(delegates);
+        this.delegates = delegates == null
+                ? List.of()
+                : Arrays.stream(delegates).filter(Objects::nonNull).toList();
     }
 
     @Override

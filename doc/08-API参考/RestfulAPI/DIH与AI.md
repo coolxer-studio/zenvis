@@ -12,7 +12,11 @@
 | POST | `/api/v1/dih/suggest` | `SuggestDto` | 编辑器补全建议 |
 | GET | `/api/v1/dih/model/list` | 无 | 当前可用模型 |
 | GET | `/api/v1/dih/health` | 无 | DIH 健康检查 |
-| POST | `/api/v1/dih/upload` | multipart `file` | 上传聊天附件 |
+| POST | `/api/v1/dih/upload` | multipart `file`，可选 `chatId` | 上传聊天附件并立即返回解析状态 |
+| GET | `/api/v1/dih/upload/{fileId}/status` | 当前用户的附件 ID | 查询解析状态与统计 |
+| POST | `/api/v1/dih/upload/{fileId}/reparse` | 当前用户的附件 ID | 重新解析失败的附件 |
+| DELETE | `/api/v1/dih/upload/{fileId}` | 当前用户的附件 ID | 删除原文件、派生数据和索引 |
+| GET | `/api/v1/dih/upload/{fileId}/download` | 当前用户的附件 ID | 鉴权下载原文件 |
 | GET | `/api/v1/dih/upload/{fileId}/preview` | 当前用户的附件 ID | 图片二进制预览 |
 | POST | `/api/v1/dih/chat/action-decision` | `ChatActionDecisionDto` | 保存内置演示或旧卡片决定 |
 | POST | `/api/v1/dih/chat/workflow/action` | `WorkflowActionDto` | 执行普通 DIH 工作流动作 |
@@ -116,9 +120,33 @@
 
 普通工作流动作要求 `chat_id`、`message_id`、`part_id`、`workflow_id`、`action`，并按动作提供 `answers` 或 `revision`。服务端校验会话归属、消息/part 精确匹配、状态版本、允许动作和严格候选快照。遥测接口当前只接受数据可视化工作流的 `chart_render_failed`。
 
-附件上传结果应原样放入下一次 Chat 请求的 `attachments`。上传接口把内容流式写入 `zenvis-chat` 的 `chat/{userId}/{fileId}/{sanitizedFileName}`，返回结构和 `fileUrl` 保持不变；调用方不应自行拼接或解析对象键。
+### 聊天附件
 
-预览与上下文读取只允许访问当前用户上传的附件，服务端按 `userId` 前缀校验归属。预览接口还要求对象实际媒体类型为图片，并在上传时通过文件头识别 PNG、JPEG、WebP、GIF 或 BMP。下载由后端鉴权后流式返回，不返回 presigned URL；MinIO 不可用或对象缺失时请求失败，不回退读取本地 `chat-uploads` 或默认 Bucket。
+`POST /api/v1/dih/upload` 接收 multipart `file`，可选 `chatId`。单个文件最大 100 MB，单条消息最多 10 个附件。上传立即返回，不等待解析；调用方应把返回结果原样放入下一次 Chat 请求的 `attachments`。上传请求建议单独设置 10 分钟超时，避免 100 MB 文件被普通 60 秒超时中断。
+
+原文件流式写入 `zenvis-chat` 的 `chat/{userId}/{fileId}/{sanitizedFileName}`；派生数据写入 `chat-derived/{userId}/{fileId}/`，包含 `manifest.json` 和 `chunks.jsonl`，可选的向量索引使用独立的 `zenvis_attachment_vector`。调用方不应自行拼接或解析对象键。
+
+`ChatAttachment` 的增量字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `parseStatus` | `pending`、`processing`、`ready`、`partial`、`failed`、`unsupported` |
+| `parseProgress` | 解析进度百分比 |
+| `parseMessage` | 当前解析步骤或失败原因 |
+| `downloadUrl` | 鉴权下载地址；图片的 `fileUrl` 仍指向 `/preview` |
+| `pageCount`、`sheetCount`、`slideCount`、`rowCount` | 页、工作表、幻灯片和数据行统计 |
+| `textChars`、`chunkCount` | 可检索正文字符数与分块数 |
+| `truncated`、`warning` | 是否因上限截断及覆盖范围提示 |
+
+状态约束：`pending`、`processing`、`failed` 禁止发送；`ready` 可发送；`partial`、`unsupported` 可发送，但客户端必须显示明确警告。图片通过文件头校验后直接为 `ready`。失败附件可通过 `/reparse` 重试；删除接口同时清理原文件、派生对象和向量索引。
+
+支持 PDF、DOCX、XLSX、PPTX、CSV/TSV、现有 35 类文本/代码扩展名和 PNG/JPEG/WebP/GIF/BMP。扫描 PDF 不执行 OCR，仅返回 `partial`；旧版 Office、压缩包、音视频和未知二进制正文返回 `unsupported`，但仍保留元信息。旧消息中的 `readable/image/unsupported` 继续兼容，旧附件首次访问时按需补建记录并异步解析。
+
+所有附件接口只允许当前用户访问，服务端按 `userId` 前缀校验归属。`/preview` 只内联实际文件头校验通过的图片；非图片统一使用 `/download` 鉴权流式下载，不返回 presigned URL。MinIO 不可用或对象缺失时请求失败，不回退读取本地 `chat-uploads` 或默认 Bucket。
+
+附件只读工具对所有会话开放，但只能访问当前用户、当前会话或当前 Run 允许的附件：`attachment_list`、`attachment_outline`、`attachment_search`、`attachment_read`、`attachment_table_query`。`ask` 仍不加载业务 MCP/Skill 工具，仅在存在附件时加载附件工具。工具调用沿用 `tool_call` 事件和审计，默认每轮 6 次、单次结果 8,000 字符、累计 24,000 字符。
+
+大文件上下文由结构化目录、统计、首段和 Top 8 混合检索片段组成，总附件上下文不超过 24,000 字符。关键词检索始终启用，向量检索依赖 `app.ai.embedding.enabled=true` 和 Redis；不可用时自动降级。附件正文按不可信资料处理，引用必须包含文件名与 page/sheet/slide/lines locator。
 
 ## AgentRunController
 

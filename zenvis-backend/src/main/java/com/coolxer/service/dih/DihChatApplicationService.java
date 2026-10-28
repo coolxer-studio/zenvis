@@ -20,6 +20,8 @@ import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.agentrun.AgentRunService;
+import com.coolxer.service.dih.agentrun.CompositeToolCallbackProvider;
+import com.coolxer.service.dih.attachment.AttachmentToolProviderFactory;
 import com.coolxer.service.dih.demo.AgentDemoStateStore;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -27,6 +29,7 @@ import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.dih.mcp.McpApprovalEvent;
 import com.coolxer.service.dih.mcp.McpApprovalService;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.workflow.AgentWorkflowState;
 import com.coolxer.service.dih.workflow.AgentWorkflowStep;
 import com.coolxer.service.dih.workflow.WorkflowEvidenceService;
@@ -49,6 +52,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -127,6 +131,9 @@ public class DihChatApplicationService {
     private final PushTaskService pushTaskService;
     private final DashboardService dashboardService;
     private final MenuService menuService;
+
+    @Autowired(required = false)
+    private AttachmentToolProviderFactory attachmentToolProviderFactory;
 
     @Autowired(required = false)
     private McpApprovalService mcpApprovalService;
@@ -231,6 +238,13 @@ public class DihChatApplicationService {
         }
         if (!StringUtils.hasText(userMessage)) {
             return errorResponse(eventStream, "消息内容或附件不能为空。");
+        }
+        if (chatAttachmentService != null) {
+            try {
+                chatAttachmentService.ensureSendable(chatDto.getAttachments(), currentUser);
+            } catch (IllegalArgumentException e) {
+                return errorResponse(eventStream, e.getMessage());
+            }
         }
         ChatSession existingChatSession = chatSessionService.getChatSessionBySessionId(chatId, currentUser);
         McpToolLogStream builtinDemoToolStream = McpToolLogStream.disabled();
@@ -351,7 +365,7 @@ public class DihChatApplicationService {
             return errorResponse(eventStream, "Input model not support.");
         }
 
-        boolean hasImageAttachment = chatAttachmentService.hasImageAttachment(chatDto.getAttachments());
+        boolean hasImageAttachment = hasImageAttachment(chatDto.getAttachments());
         model = baseService.resolveChatModel(
                 model,
                 effectiveDeepThink,
@@ -360,6 +374,8 @@ public class DihChatApplicationService {
         McpToolContext mcpToolContext = executionPolicy.toolsAllowed()
                 ? agentMcpToolService.resolve(executionPolicy.agentType(), executionPolicy.skillIds())
                 : McpToolContext.empty();
+        mcpToolContext = attachAttachmentTools(
+                mcpToolContext, currentUser, chatId, null, chatDto.getAttachments());
         McpToolLogStream mcpToolLogStream = McpToolLogStream.disabled();
         String turnId = UUID.randomUUID().toString();
         if (mcpToolContext.hasTools()) {
@@ -379,10 +395,15 @@ public class DihChatApplicationService {
             );
         }
 
-        String attachmentPrompt = chatAttachmentService.appendAttachmentContext(
-                userMessage, chatDto.getAttachments(), currentUser);
+        String attachmentPrompt = chatAttachmentService == null
+                ? userMessage
+                : chatAttachmentService.appendAttachmentContext(
+                        userMessage, chatDto.getAttachments(), currentUser, chatId);
         ChatSession chatSession = appendUserMessage(
                 chatDto, chatType, userMessage, currentUser, effectiveDeepThink);
+        if (chatAttachmentService != null) {
+            chatAttachmentService.bindToChat(chatDto.getAttachments(), currentUser, chatId);
+        }
         if (reportDocumentService != null
                 && chatDto.getReportAction() != null
                 && chatDto.getReportAction().getSourceRefs() != null) {
@@ -1910,6 +1931,37 @@ public class DihChatApplicationService {
         return null;
     }
 
+    private McpToolContext attachAttachmentTools(McpToolContext base,
+                                                 User user,
+                                                 String chatId,
+                                                 String runId,
+                                                 List<ChatAttachment> attachments) {
+        McpToolContext resolved = base == null ? McpToolContext.empty() : base;
+        if (attachmentToolProviderFactory == null
+                || (!StringUtils.hasText(chatId) && (attachments == null || attachments.isEmpty()))) {
+            return resolved;
+        }
+        AttachmentToolProviderFactory.AttachmentToolBundle bundle =
+                attachmentToolProviderFactory.create(user, chatId, runId, attachments);
+        if (!bundle.hasTools()) {
+            return resolved;
+        }
+        ToolCallbackProvider provider = new CompositeToolCallbackProvider(
+                resolved.toolCallbackProvider(), bundle.provider());
+        String systemPrompt = resolved.systemPrompt();
+        systemPrompt = StringUtils.hasText(systemPrompt)
+                ? systemPrompt + "\n" + bundle.systemPrompt() : bundle.systemPrompt();
+        ToolRuntimeContext runtime = resolved.toolRuntimeContext() == null
+                ? bundle.runtime() : resolved.toolRuntimeContext();
+        return new McpToolContext(provider, systemPrompt, resolved.invocationContext(),
+                resolved.skillRuntime(), runtime);
+    }
+
+    private boolean hasImageAttachment(List<ChatAttachment> attachments) {
+        return chatAttachmentService != null
+                && chatAttachmentService.hasImageAttachment(attachments);
+    }
+
     public boolean isEventStream(ChatDto chatDto) {
         return chatDto != null && RESPONSE_FORMAT_EVENTS.equals(chatDto.getResponseFormat());
     }
@@ -2022,7 +2074,8 @@ public class DihChatApplicationService {
                 prompt,
                 chatDto.getAttachments(),
                 currentUser,
-                effectiveDeepThink
+                effectiveDeepThink,
+                mcpToolContext
         );
     }
 

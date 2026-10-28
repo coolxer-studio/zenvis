@@ -1,4 +1,8 @@
-import axios, { AxiosRequestConfig, type AxiosResponse } from 'axios';
+import axios, {
+  AxiosRequestConfig,
+  type AxiosProgressEvent,
+  type AxiosResponse,
+} from 'axios';
 // 引入el 提示框，这个项目里用什么组件库这里引什么
 import { newMessageError } from '@/utils/tool';
 import { apiResponse } from '@u/util-common';
@@ -8,6 +12,8 @@ type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 type RequestOptions = {
   silent?: boolean;
   signal?: AbortSignal;
+  timeout?: number;
+  onUploadProgress?: (event: AxiosProgressEvent) => void;
 };
 
 const requestClient = axios.create({
@@ -74,6 +80,8 @@ export function request<R>(
     url,
     silent: options.silent,
     signal: options.signal,
+    timeout: options.timeout,
+    onUploadProgress: options.onUploadProgress,
   };
   if (method === 'GET') {
     config.params = params;
@@ -97,6 +105,24 @@ export function download(
     responseType: 'blob',
     silent: options.silent,
     signal: options.signal,
+  };
+  return requestClient.request<Blob>(config);
+}
+
+/** Request an authenticated binary response with GET. */
+export function downloadGet(
+  url: string,
+  params: unknown = {},
+  options: RequestOptions = {},
+): Promise<AxiosResponse<Blob>> {
+  const config: AxiosRequestConfig & { silent?: boolean } = {
+    method: 'GET',
+    url,
+    params,
+    responseType: 'blob',
+    silent: options.silent,
+    signal: options.signal,
+    timeout: options.timeout,
   };
   return requestClient.request<Blob>(config);
 }

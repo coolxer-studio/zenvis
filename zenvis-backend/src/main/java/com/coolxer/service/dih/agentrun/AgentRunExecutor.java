@@ -30,6 +30,7 @@ import com.coolxer.service.dih.DihChatApplicationService;
 import com.coolxer.service.dih.DihChatApplicationService.McpToolLogStream;
 import com.coolxer.service.dih.DihChatExecutionPolicy;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.attachment.AttachmentToolProviderFactory;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpApprovalEvent;
 import com.coolxer.service.dih.mcp.McpApprovalPendingException;
@@ -113,6 +114,9 @@ public class AgentRunExecutor {
     private final DihChatApplicationService chatApplicationService;
     private final ReportDraftService reportDraftService;
     private final ChatAttachmentService chatAttachmentService;
+
+    @Autowired(required = false)
+    private AttachmentToolProviderFactory attachmentToolProviderFactory;
     private final AgentRunContextAssembler contextAssembler;
     private final ScheduledExecutorService heartbeatExecutor;
 
@@ -211,10 +215,11 @@ public class AgentRunExecutor {
 
         McpToolLogStream toolEvidence = McpToolLogStream.createEvidenceOnly(
                 "run:" + runId + ":" + stepId);
-        McpToolContext toolContext = buildToolContext(
-                run, policy, user, state, stepId, toolCalls, toolEvidence);
         ContextCompactionObserver compactionObserver = compactionObserver(run, stepId);
         AgentRunPrompt preparedPrompt = buildPrompt(run, stepId, user, compactionObserver);
+        McpToolContext toolContext = buildToolContext(
+                run, policy, user, state, stepId, toolCalls, toolEvidence,
+                preparedPrompt.attachments());
         ChatDto chatDto = buildChatDto(run, preparedPrompt.text(), preparedPrompt.attachments());
         long startedAt = System.nanoTime();
         try {
@@ -421,16 +426,26 @@ public class AgentRunExecutor {
                                             AgentRunExecutionState state,
                                             String stepId,
                                             AtomicInteger toolCalls,
-                                            McpToolLogStream toolEvidence) {
+                                            McpToolLogStream toolEvidence,
+                                            List<ChatAttachment> attachments) {
         McpToolContext resolved = policy.toolsAllowed()
                 ? agentMcpToolService.resolve(policy.agentType(), policy.skillIds())
                 : McpToolContext.empty();
+        AttachmentToolProviderFactory.AttachmentToolBundle attachmentTools =
+                attachmentToolProviderFactory == null
+                        || (run.getChatId() == null || run.getChatId().isBlank())
+                        && (attachments == null || attachments.isEmpty())
+                        ? AttachmentToolProviderFactory.AttachmentToolBundle.empty()
+                        : attachmentToolProviderFactory.create(
+                        user, run.getChatId(), run.getRunId(), attachments);
         AgentRunInternalToolProvider internal = new AgentRunInternalToolProvider(
                 runService, reportDraftService, state, user, policy.agentType());
         ToolCallbackProvider merged = new CompositeToolCallbackProvider(
                 resolved.hasTools() ? resolved.toolCallbackProvider() : null,
+                attachmentTools.hasTools() ? attachmentTools.provider() : null,
                 internal);
         String systemPrompt = StringUtils.defaultString(resolved.systemPrompt())
+                + (attachmentTools.hasTools() ? "\n" + attachmentTools.systemPrompt() : "")
                 + RUN_INSTRUCTIONS
                 + ("agent_report".equals(policy.agentType()) ? REPORT_INSTRUCTIONS : "");
         McpInvocationContext invocation = new McpInvocationContext(
@@ -467,9 +482,11 @@ public class AgentRunExecutor {
                     "tool." + call.status(), stepId, payload);
         });
         ToolRuntimeContext runtime = resolved.toolRuntimeContext() == null
+                ? (attachmentTools.runtime() == null
                 ? new ToolRuntimeContext(resolved.skillRuntime() == null
                 ? new SkillRuntimeLimitsVo(15, 2, 8_000, 48_000, null)
                 : resolved.skillRuntime().getLimits())
+                : attachmentTools.runtime())
                 : resolved.toolRuntimeContext();
         return new McpToolContext(logging, systemPrompt, invocation,
                 resolved.skillRuntime(), runtime);

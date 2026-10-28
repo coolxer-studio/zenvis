@@ -33,11 +33,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -52,6 +54,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 
 /**
  * AI对答聊天服务
@@ -149,14 +152,87 @@ public class ChatController extends BaseController {
 
     @PostMapping("/upload")
     @Operation(summary = "上传聊天附件")
-    public ResponseWrap<ChatAttachment> upload(@RequestParam("file") MultipartFile file) {
+    public ResponseWrap<ChatAttachment> upload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "chatId", required = false) String chatId) {
         try {
-            return ResponseWrap.success(chatAttachmentService.upload(file, getSessionUser()));
+            return ResponseWrap.success(chatAttachmentService.upload(file, getSessionUser(), chatId));
         } catch (IllegalArgumentException e) {
             return ResponseWrap.fail(400, e.getMessage());
         } catch (Exception e) {
             log.error("上传聊天附件失败: {}", e.getMessage(), e);
             return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/upload/{fileId}/status")
+    @Operation(summary = "查询聊天附件解析状态")
+    public ResponseWrap<ChatAttachment> attachmentStatus(@PathVariable("fileId") String fileId) {
+        try {
+            Optional<ChatAttachment> status = chatAttachmentService.status(fileId, getSessionUser());
+            return status.map(ResponseWrap::success)
+                    .orElseGet(() -> ResponseWrap.fail(404, "附件不存在或无权访问"));
+        } catch (Exception e) {
+            log.error("查询附件状态失败: fileId={}, error={}", fileId, e.getMessage(), e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @PostMapping("/upload/{fileId}/reparse")
+    @Operation(summary = "重新解析聊天附件")
+    public ResponseWrap<ChatAttachment> reparseAttachment(@PathVariable("fileId") String fileId) {
+        try {
+            Optional<ChatAttachment> status = chatAttachmentService.reparse(fileId, getSessionUser());
+            return status.map(ResponseWrap::success)
+                    .orElseGet(() -> ResponseWrap.fail(404, "附件不存在或无权访问"));
+        } catch (Exception e) {
+            log.error("重新解析附件失败: fileId={}, error={}", fileId, e.getMessage(), e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @DeleteMapping("/upload/{fileId}")
+    @Operation(summary = "删除聊天附件")
+    public ResponseWrap<String> deleteAttachment(@PathVariable("fileId") String fileId) {
+        try {
+            return chatAttachmentService.deleteAttachment(fileId, getSessionUser())
+                    ? ResponseWrap.success("删除成功")
+                    : ResponseWrap.fail(404, "附件不存在或无权访问");
+        } catch (Exception e) {
+            log.error("删除附件失败: fileId={}, error={}", fileId, e.getMessage(), e);
+            return ResponseWrap.fail(e);
+        }
+    }
+
+    @GetMapping("/upload/{fileId}/download")
+    @Operation(summary = "鉴权下载聊天附件")
+    public ResponseEntity<Resource> downloadAttachment(@PathVariable("fileId") String fileId) {
+        try {
+            Optional<ChatAttachmentService.AttachmentStream> attachment =
+                    chatAttachmentService.openAttachment(fileId, getSessionUser());
+            if (attachment.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            ChatAttachmentService.AttachmentStream stream = attachment.get();
+            MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+            if (StringUtils.hasText(stream.contentType())) {
+                try {
+                    mediaType = MediaType.parseMediaType(stream.contentType());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            ContentDisposition disposition = ContentDisposition.attachment()
+                    .filename(stream.fileName(), StandardCharsets.UTF_8)
+                    .build();
+            return ResponseEntity.ok()
+                    .contentType(mediaType)
+                    .contentLength(stream.size())
+                    .cacheControl(CacheControl.noStore())
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                    .body(new InputStreamResource(stream.inputStream()));
+        } catch (Exception e) {
+            log.error("下载聊天附件失败: fileId={}, error={}", fileId, e.getMessage(), e);
+            return ResponseEntity.notFound().build();
         }
     }
 

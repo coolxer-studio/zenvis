@@ -40,6 +40,9 @@ type UseChatStreamOptions = {
   inputMessage: Ref<string>;
   pendingAttachments: Ref<ChatAttachment[]>;
   isUploadingAttachment: Ref<boolean>;
+  isAttachmentParsing: Ref<boolean>;
+  hasUnreadyAttachments: Ref<boolean>;
+  hasWarningAttachments: Ref<boolean>;
   isDeepThinking: Ref<boolean>;
   selectedModel: Ref<string>;
   isChatUnavailable: Ref<boolean>;
@@ -64,6 +67,9 @@ export const useChatStream = ({
   inputMessage,
   pendingAttachments,
   isUploadingAttachment,
+  isAttachmentParsing,
+  hasUnreadyAttachments,
+  hasWarningAttachments,
   isDeepThinking,
   selectedModel,
   isChatUnavailable,
@@ -93,6 +99,8 @@ export const useChatStream = ({
   const canSendMessage = computed(() => {
     return !isChatUnavailable.value
       && !isUploadingAttachment.value
+      && !isAttachmentParsing.value
+      && !hasUnreadyAttachments.value
       && !isStreamingResponse.value
       && (inputMessage.value.trim().length > 0 || pendingAttachments.value.length > 0);
   });
@@ -584,6 +592,13 @@ export const useChatStream = ({
   };
 
   const sendMessage = async (options: SendMessageOptions = {}) => {
+    if (!options.content && hasUnreadyAttachments.value) {
+      ElMessage.warning('附件尚未解析完成或解析失败，请等待完成或移除后再发送');
+      return;
+    }
+    if (!options.content && hasWarningAttachments.value) {
+      ElMessage.warning('存在仅部分可用或仅元信息的附件，本轮只能使用已解析内容');
+    }
     if (isChatUnavailable.value) {
       ElMessage.warning('当前 Skill 已停用或不存在，请选择其他可用技能');
       return;

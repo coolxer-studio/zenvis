@@ -173,6 +173,7 @@
                   :key="attachmentFileId(attachment)"
                   class="message-attachment"
                   :class="{ 'image-attachment': isImageAttachment(attachment) }"
+                  @click="openAttachmentPreview(attachment)"
                 >
                   <img
                     v-if="isImageAttachment(attachment)"
@@ -183,10 +184,19 @@
                   />
                   <template v-else>
                     <el-icon><Paperclip /></el-icon>
-                    <span class="attachment-name">{{ attachmentFileName(attachment) }}</span>
-                    <span class="attachment-size">{{
-                      formatFileSize(attachment.file_size ?? attachment.fileSize)
-                    }}</span>
+                    <span class="attachment-copy">
+                      <span class="attachment-name">{{ attachmentFileName(attachment) }}</span>
+                      <span class="attachment-meta">
+                        {{ attachmentTypeLabel(attachment) }}
+                        <template v-if="attachment.file_size ?? attachment.fileSize">
+                          · {{ formatFileSize(attachment.file_size ?? attachment.fileSize) }}
+                        </template>
+                        · {{ attachmentStatusText(attachment) }}
+                      </span>
+                      <span v-if="attachmentWarning(attachment)" class="attachment-warning">
+                        {{ attachmentWarning(attachment) }}
+                      </span>
+                    </span>
                   </template>
                 </div>
               </div>
@@ -245,6 +255,7 @@
             :key="attachmentFileId(attachment)"
             class="pending-attachment"
             :class="{ 'pending-image-attachment': isImageAttachment(attachment) }"
+            @click="!isImageAttachment(attachment) && openAttachmentPreview(attachment)"
           >
             <img
               v-if="isImageAttachment(attachment)"
@@ -255,23 +266,48 @@
             />
             <template v-else>
               <el-icon><Paperclip /></el-icon>
-              <span class="attachment-name">{{ attachmentFileName(attachment) }}</span>
-              <span class="attachment-size">{{
-                formatFileSize(attachment.file_size ?? attachment.fileSize)
-              }}</span>
+              <span class="attachment-copy">
+                <span class="attachment-name">{{ attachmentFileName(attachment) }}</span>
+                <span class="attachment-meta">
+                  {{ attachmentTypeLabel(attachment) }}
+                  <template v-if="attachment.file_size ?? attachment.fileSize">
+                    · {{ formatFileSize(attachment.file_size ?? attachment.fileSize) }}
+                  </template>
+                  · {{ attachmentStatusText(attachment) }}
+                </span>
+                <span
+                  v-if="attachmentStatus(attachment) === 'pending' || attachmentStatus(attachment) === 'processing'"
+                  class="attachment-progress"
+                  :aria-label="attachmentStatusText(attachment)"
+                >
+                  <span :style="{ width: `${attachmentProgress(attachment)}%` }"></span>
+                </span>
+                <span v-if="attachmentWarning(attachment)" class="attachment-warning">
+                  {{ attachmentWarning(attachment) }}
+                </span>
+              </span>
+              <el-button
+                v-if="attachmentStatus(attachment) === 'failed'"
+                class="attachment-retry-btn"
+                text
+                size="small"
+                @click.stop="reparsePendingAttachment(attachment)"
+              >
+                重试
+              </el-button>
             </template>
             <el-tooltip content="移除附件" placement="top">
               <el-button
                 class="attachment-remove-btn"
                 :icon="Close"
                 circle
-                @click="removePendingAttachment(index)"
+                @click.stop="removePendingAttachment(index)"
               />
             </el-tooltip>
           </div>
           <div v-if="isUploadingAttachment" class="pending-attachment uploading">
             <el-icon><Loading /></el-icon>
-            <span>正在上传...</span>
+            <span>正在上传 {{ uploadProgress }}%</span>
           </div>
         </div>
 
@@ -539,13 +575,23 @@ const taskQueueTooltip = computed(() => {
 const {
   pendingAttachments,
   isUploadingAttachment,
+  uploadProgress,
+  hasUnreadyAttachments,
+  hasWarningAttachments,
+  isParsingAttachment: isAttachmentParsing,
   attachmentFileId,
   attachmentFileName,
+  attachmentStatus,
+  attachmentStatusText,
+  attachmentProgress,
+  attachmentWarning,
+  attachmentTypeLabel,
   formatFileSize,
   isImageAttachment,
   attachmentPreviewUrl,
   openAttachmentPreview,
   removePendingAttachment,
+  reparsePendingAttachment,
   uploadFile,
 } = useChatAttachments();
 
@@ -840,6 +886,9 @@ const {
   inputMessage,
   pendingAttachments,
   isUploadingAttachment,
+  isAttachmentParsing,
+  hasUnreadyAttachments,
+  hasWarningAttachments,
   isDeepThinking,
   selectedModel: computed(() => modelSelectData.value.period),
   chatSessionId,
@@ -1696,6 +1745,16 @@ onBeforeUnmount(() => {
   border-radius: var(--zv-radius-round);
 }
 
+.message-attachment:not(.image-attachment),
+.pending-attachment:not(.pending-image-attachment):not(.uploading) {
+  cursor: pointer;
+}
+
+.message-attachment:not(.image-attachment):hover,
+.pending-attachment:not(.pending-image-attachment):not(.uploading):hover {
+  border-color: var(--zv-primary);
+}
+
 .pending-image-attachment {
   position: relative;
   width: 66px;
@@ -1730,6 +1789,49 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.attachment-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-meta,
+.attachment-warning {
+  color: var(--zv-text-placeholder);
+  font-size: 11px;
+}
+
+.attachment-warning {
+  color: var(--zv-warning);
+  white-space: normal;
+}
+
+.attachment-progress {
+  display: block;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  background: var(--zv-fill-color);
+  border-radius: 999px;
+}
+
+.attachment-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--zv-primary);
+  transition: width 0.2s ease;
+}
+
+.attachment-retry-btn {
+  min-height: 20px;
+  padding: 0 2px;
+  flex-shrink: 0;
+  color: var(--zv-primary);
+  font-size: 11px;
 }
 
 .attachment-size {

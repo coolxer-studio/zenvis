@@ -176,9 +176,9 @@ class AIChatServiceExecutionBoundaryTest {
 
         assertThat(toolOptions.getTemperature()).isEqualTo(0.1);
         assertThat(toolOptions.getParallelToolCalls()).isFalse();
-        assertThat(toolOptions.getMaxTokens()).isEqualTo(4096);
+        assertThat(toolOptions.getMaxTokens()).isEqualTo(16384);
         assertThat(qaOptions.getTemperature()).isEqualTo(0.8);
-        assertThat(qaOptions.getMaxTokens()).isEqualTo(4096);
+        assertThat(qaOptions.getMaxTokens()).isEqualTo(16384);
     }
 
     @Test
@@ -346,7 +346,7 @@ class AIChatServiceExecutionBoundaryTest {
                 service, "chat-over-budget", "系统提示", "开始执行", null, runtimeContext))
                 .hasRootCauseInstanceOf(AgentCapabilityUnavailableException.class)
                 .hasRootCauseMessage(
-                        "智能体固定上下文预算不足：最大输入 94208 Token，固定占用 94132 Token"
+                        "智能体固定上下文预算不足：最大输入 81920 Token，固定占用 94132 Token"
                                 + "（系统提示词 4、工具定义 0、工具结果预留 94000）。"
                                 + "请降低 Skill 的 maxAccumulatedToolResultTokens，"
                                 + "或精简 Skill/工具定义；不要通过增大字符预算替代 Token 预算。");

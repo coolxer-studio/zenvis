@@ -38,6 +38,19 @@ public final class StorageObjectKey {
                 + "/" + segment(fileId, "文件ID");
     }
 
+    public static String chatDerivedPrefix(Integer userId, String fileId) {
+        return "chat-derived/" + segment(String.valueOf(requirePositive(userId, "用户ID")), "用户ID")
+                + "/" + segment(fileId, "文件ID");
+    }
+
+    public static String chatDerivedManifest(Integer userId, String fileId) {
+        return chatDerivedPrefix(userId, fileId) + "/manifest.json";
+    }
+
+    public static String chatDerivedChunks(Integer userId, String fileId) {
+        return chatDerivedPrefix(userId, fileId) + "/chunks.jsonl";
+    }
+
     public static String pluginPackage(String packageName, String sha256) {
         return "packages/" + segment(packageName, "插件包名")
                 + "/" + segment(sha256, "包摘要").toLowerCase(Locale.ROOT) + ".tar.gz";

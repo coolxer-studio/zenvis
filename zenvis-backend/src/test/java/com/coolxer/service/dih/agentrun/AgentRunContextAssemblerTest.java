@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +43,8 @@ class AgentRunContextAssemblerTest {
         when(inputRepository.findByRunIdOrderByCreateTimeAsc(anyString())).thenReturn(List.of());
         when(invocationRepository.findByAgentRunIdAndTurnIdOrderByCreateTimeDesc(
                 anyString(), anyString())).thenReturn(List.of());
-        when(attachmentService.appendAttachmentContext(anyString(), anyList(), any(User.class)))
+        when(attachmentService.appendAttachmentContext(
+                anyString(), anyList(), any(User.class), nullable(String.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 

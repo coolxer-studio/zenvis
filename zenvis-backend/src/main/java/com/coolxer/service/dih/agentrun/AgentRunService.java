@@ -25,6 +25,7 @@ import com.coolxer.model.dih.dto.ChatSessionDto;
 import com.coolxer.model.dih.vo.AgentRunEventVo;
 import com.coolxer.model.dih.vo.AgentRunVo;
 import com.coolxer.service.dih.ChatSessionService;
+import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.DihChatExecutionPolicy;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.demo.BuiltinDemoRequestDetector;
@@ -113,6 +114,9 @@ public class AgentRunService {
     @Autowired(required = false)
     private AgentRunMetrics metrics;
 
+    @Autowired(required = false)
+    private ChatAttachmentService chatAttachmentService;
+
     public AgentRunService(AgentRunRepository runRepository,
                            AgentRunEventRepository eventRepository,
                            AgentRunInputRepository inputRepository,
@@ -178,6 +182,11 @@ public class AgentRunService {
         }
         if (StringUtils.isBlank(message)) {
             message = "请分析上传的附件内容。";
+        }
+        if (chatAttachmentService != null) {
+            chatAttachmentService.ensureSendable(request.getAttachments(), currentUser);
+            chatAttachmentService.bindToChat(
+                    request.getAttachments(), currentUser, request.getChatId());
         }
         DihChatExecutionPolicy policy = DihChatExecutionPolicy
                 .resolve(StringUtils.trimToEmpty(request.getType()), skillService)
@@ -312,6 +321,11 @@ public class AgentRunService {
         }
         if (StringUtils.isBlank(message)) {
             message = "请分析追加的附件内容。";
+        }
+        if (chatAttachmentService != null) {
+            chatAttachmentService.ensureSendable(request.getAttachments(), currentUser);
+            chatAttachmentService.bindToChat(
+                    request.getAttachments(), currentUser, run.getChatId());
         }
         ChatSession session = chatSessionRepository
                 .findBySessionIdAndCreateByForUpdate(run.getChatId(), currentUser.getId())

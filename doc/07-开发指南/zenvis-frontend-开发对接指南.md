@@ -297,12 +297,12 @@ DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、数�
 | `src/views/dih/composables/agent-run-activity.ts` | 把 Run 事件按 `searchId`、`callId`、`compactionId` 归并为检索、工具和压缩时间线 |
 | `src/components/dih-message/message-parts/agent-run-card.vue` | 可折叠运行卡 |
 | `src/components/dih-message/message-parts/agent-run-activity.vue` | 默认收起的执行过程、三类摘要和活动详情 |
-| `src/components/dih-message/message-parts/agent-run-user-input-dialog.vue` | `WAITING_USER` 补充信息弹窗和多行输入 |
 
 交互约束：
 
 - 组件卸载只关闭 NDJSON 事件连接，不能调用取消接口；停止按钮才表示用户主动取消。
 - 新建消息时先查找会话活动 Run；存在则调用 steer，不存在才创建新 Run。
+- `WAITING_USER` 统一通过聊天页主输入框继续，不额外弹出补充信息对话框。
 - 订阅前从 `lastEventSequence` 和 `localStorage` 游标取较大值，使用 `after` 续订。
 - 事件按 `sequence` 严格递增应用，最终状态以 Run 快照为准。
 - 会话消息必须保留接口返回的 `runId`。刷新或重载消息后，分页读取会话全部 Run，只把消息实际引用的 Run 恢复到对应 AI 消息；不能用当前 Run 覆盖历史卡，也不能把卡片挂到用户消息。
@@ -311,6 +311,12 @@ DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、数�
 - 补充信息提交统一走 `steerAgentRun`，成功后刷新 Run、追加用户消息并重新订阅事件；任务中心和运行卡共用同一弹窗组件。
 - 执行过程只请求 `rag.search`、工具生命周期、`tool.approval_*` 和 `context.compacted`。按 `sequence` 去重，按稳定 ID 合并；查询满 500 条时以最后一条 `sequence` 继续分页。
 - 对话头部入口与桌面的响应式规则一致，窄屏只显示图标和可访问名称。
+
+### 附件交互
+
+- 非图片附件卡片点击后通过鉴权 `/download` 接口下载；图片卡片点击后打开 `/preview`。
+- “移除”“重试”等卡片内操作必须阻止点击冒泡，不能复用卡片级下载/预览处理。移除只能触发删除请求，重试只能触发重新解析和状态轮询。
+- 上传、解析轮询、未就绪禁用发送、`partial/unsupported` 警告以及上述事件隔离由 `src/views/dih/composables/use-chat-attachments.ts`、`src/views/dih/components/view-center.vue` 和 `e2e/dih-attachment.spec.ts` 共同保证，修改时需同步更新回归用例。
 
 ### 富消息手工测试
 

@@ -6,7 +6,8 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 
 ## DIH 执行边界
 
-- 普通问答 `ask` 不加载 Skill，不解析或调用 MCP/本地工具，并在所有未删除知识库中自动执行 RAG。
+- 普通问答 `ask` 不加载 Skill，不解析或调用业务 MCP/本地工具，并在所有未删除知识库中自动执行 RAG。
+- `ask` 仅在本轮存在附件时加载 `attachment_*` 只读附件工具；工具访问范围严格限制为当前用户、当前会话和本轮明确引用的附件，不改变 `ask` 不加载业务 MCP 的边界。
 - `ask + deep_think=true` 与普通问答使用同一全库 RAG 范围，并保留原生模型 reasoning 流。
 - 业务 Agent / Skill 只加载显式绑定且已启用的 Skill，并在 Skill 绑定知识库的并集内自动执行 RAG；未绑定知识库时不检索，也不回退全库。
 - RAG 参考资料由平台在每轮请求自动注入，不占用 MCP 工具名额、工具调用预算或审批流程。

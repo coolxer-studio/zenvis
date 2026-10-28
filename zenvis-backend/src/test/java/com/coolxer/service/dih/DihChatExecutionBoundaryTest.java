@@ -1,6 +1,7 @@
 package com.coolxer.service.dih;
 
 import com.coolxer.dao.mysql.entity.ChatSession;
+import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ChatDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
@@ -10,6 +11,7 @@ import com.coolxer.model.dih.vo.SkillRuntimeToolsVo;
 import com.coolxer.service.dih.agent.DataVisualizationAgent;
 import com.coolxer.service.dih.agent.skill.BuiltinAgentSkillRegistry;
 import com.coolxer.service.dih.agent.skill.SkillService;
+import com.coolxer.service.dih.attachment.AttachmentToolProviderFactory;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,9 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import com.coolxer.service.dih.ContextCompactionObserver;
+import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -44,7 +49,8 @@ class DihChatExecutionBoundaryTest {
     void askDeepThinkingUsesQaWithoutResolvingMcp() {
         Fixture fixture = fixture();
         when(fixture.chatService.qaChat(
-                anyString(), anyString(), anyString(), anyList(), isNull(), eq(true)
+                anyString(), anyString(), anyString(), anyList(), isNull(), eq(true),
+                any(McpToolContext.class)
         )).thenReturn(Flux.just("深度回答"));
 
         List<String> response = fixture.service.chat(
@@ -55,10 +61,125 @@ class DihChatExecutionBoundaryTest {
         assertThat(response).containsExactly("深度回答");
         verifyNoInteractions(fixture.agentMcpToolService);
         verify(fixture.chatService).qaChat(
-                "chat-1", "model-1", "问题", List.of(), null, true
+                "chat-1", "model-1", "问题", List.of(), null, true, McpToolContext.empty()
         );
         verify(fixture.baseService).resolveChatModel("model-1", true, false);
         assertThat(capturedSessionDefaults(fixture).getDeepThink()).isTrue();
+    }
+
+    @Test
+    void askWithAttachmentEmitsToolCallEventAndKeepsBusinessMcpDisabled() {
+        Fixture fixture = fixture();
+        ChatAttachment attachment = ChatAttachment.builder()
+                .fileId("3ab0c6d7-2907-45a3-bd8f-8f9754b386dd")
+                .fileName("report.pdf")
+                .parseStatus("ready")
+                .build();
+        ToolCallback attachmentList = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("attachment_list")
+                        .description("列出附件")
+                        .inputSchema("{\"type\":\"object\"}")
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "{\"status\":\"ok\",\"data\":{\"count\":1}}";
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                return call(toolInput);
+            }
+        };
+        AttachmentToolProviderFactory.AttachmentToolBundle bundle =
+                new AttachmentToolProviderFactory.AttachmentToolBundle(
+                        ToolCallbackProvider.from(attachmentList),
+                        "附件工具提示",
+                        List.of(attachment.getFileId()),
+                        null);
+        when(fixture.attachmentToolProviderFactory.create(
+                isNull(), eq("chat-1"), isNull(), anyList())).thenReturn(bundle);
+        when(fixture.chatService.qaChat(
+                anyString(), anyString(), anyString(), anyList(), isNull(), eq(false),
+                any(McpToolContext.class)))
+                .thenAnswer(invocation -> {
+                    McpToolContext context = invocation.getArgument(6);
+                    ToolCallback callback = context.toolCallbackProvider().getToolCallbacks()[0];
+                    assertThat(callback.call("{}")).contains("\"count\":1");
+                    return Flux.just("附件回答");
+                });
+        ChatDto dto = chatDto("ask", false);
+        dto.setAttachments(List.of(attachment));
+        dto.setResponseFormat(DihChatApplicationService.RESPONSE_FORMAT_EVENTS);
+
+        List<String> response = fixture.service.chat(dto, null).collectList().block();
+
+        assertThat(response).isNotNull();
+        assertThat(response).anySatisfy(chunk -> assertThat(chunk)
+                .contains("\"event\":\"tool_call\"", "attachment_list", "\"status\":\"succeeded\""));
+        assertThat(String.join("", response)).contains("附件回答");
+        verifyNoInteractions(fixture.agentMcpToolService);
+    }
+
+    @Test
+    void imageEvidenceRunsBeforeToolizedAttachmentAnswerWithoutNativeImageToolConflict() {
+        Fixture fixture = fixture();
+        ChatAttachment image = ChatAttachment.builder()
+                .fileId("4ab0c6d7-2907-45a3-bd8f-8f9754b386dd")
+                .fileName("chart.png")
+                .contentType("image/png")
+                .kind("image")
+                .parseStatus("ready")
+                .build();
+        ToolCallback attachmentList = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("attachment_list")
+                        .description("列出附件")
+                        .inputSchema("{\"type\":\"object\"}")
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "{\"status\":\"ok\"}";
+            }
+        };
+        AttachmentToolProviderFactory.AttachmentToolBundle bundle =
+                new AttachmentToolProviderFactory.AttachmentToolBundle(
+                        ToolCallbackProvider.from(attachmentList),
+                        "附件工具提示",
+                        List.of(image.getFileId()),
+                        null);
+        when(fixture.attachmentToolProviderFactory.create(
+                isNull(), eq("chat-1"), isNull(), anyList())).thenReturn(bundle);
+        when(fixture.attachmentService.hasImageAttachment(anyList())).thenReturn(true);
+        when(fixture.baseService.resolveChatModel("model-1", false, true))
+                .thenReturn("vision-model");
+        when(fixture.chatService.analyzeImageAttachments(
+                any(), any(), any(), anyList(), any()))
+                .thenReturn(Mono.just("图中显示收入 18%"));
+        when(fixture.chatService.qaChat(
+                anyString(), anyString(), anyString(), anyList(), isNull(), eq(false),
+                any(McpToolContext.class)))
+                .thenAnswer(invocation -> {
+                    String prompt = invocation.getArgument(2);
+                    assertThat(prompt).contains("平台图片取证阶段结果", "图中显示收入 18%");
+                    return Flux.just("结合图片与附件的回答");
+                });
+        ChatDto dto = chatDto("ask", false);
+        dto.setAttachments(List.of(image));
+
+        List<String> response = fixture.service.chat(dto, null).collectList().block();
+
+        assertThat(response).contains("结合图片与附件的回答");
+        verify(fixture.chatService).analyzeImageAttachments(
+                eq("chat-1"), eq("vision-model"), eq("问题"), eq(List.of(image)), isNull());
     }
 
     @Test
@@ -86,7 +207,8 @@ class DihChatExecutionBoundaryTest {
                 List.of("data-visualization-agent")
         )).thenReturn(McpToolContext.empty());
         when(fixture.visualizationAgent.chat(
-                anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyList(), isNull(), anyList(),
+                any(McpToolContext.class), any(ContextCompactionObserver.class)
         )).thenReturn(Flux.just("智能体回答"));
 
         List<String> response = fixture.service.chat(
@@ -107,11 +229,13 @@ class DihChatExecutionBoundaryTest {
                 eq(List.of()),
                 isNull(),
                 eq(List.of("data-visualization-agent")),
-                eq(McpToolContext.empty())
+                eq(McpToolContext.empty()),
+                any(ContextCompactionObserver.class)
         );
         verify(fixture.baseService).resolveChatModel("model-1", false, false);
         verify(fixture.chatService, never()).qaChat(
-                anyString(), anyString(), anyString(), anyList(), any(), anyBoolean()
+                anyString(), anyString(), anyString(), anyList(), any(), anyBoolean(),
+                any(McpToolContext.class)
         );
         assertThat(capturedSessionDefaults(fixture).getDeepThink()).isFalse();
     }
@@ -155,7 +279,7 @@ class DihChatExecutionBoundaryTest {
         )).thenReturn(toolContext);
         when(fixture.visualizationAgent.chat(
                 anyString(), anyString(), anyString(), anyList(), isNull(),
-                anyList(), any(McpToolContext.class)
+                anyList(), any(McpToolContext.class), any(ContextCompactionObserver.class)
         )).thenReturn(Flux.just("实体选择结果"));
 
         List<String> response = fixture.service.chat(
@@ -175,7 +299,8 @@ class DihChatExecutionBoundaryTest {
                 eq(List.of()),
                 isNull(),
                 eq(List.of("data-visualization-agent")),
-                any(McpToolContext.class)
+                any(McpToolContext.class),
+                any(ContextCompactionObserver.class)
         );
         assertThat(promptCaptor.getValue())
                 .contains("平台已执行实体 Meta MCP",
@@ -204,7 +329,8 @@ class DihChatExecutionBoundaryTest {
         ))
                 .thenReturn(McpToolContext.empty());
         when(fixture.visualizationAgent.chat(
-                anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyList(), isNull(), anyList(),
+                any(McpToolContext.class), any(ContextCompactionObserver.class)
         )).thenReturn(Flux.just("专项研判回答"));
 
         List<String> response = fixture.service.chat(chatDto(chatType, true), null).collectList().block();
@@ -221,7 +347,8 @@ class DihChatExecutionBoundaryTest {
                 eq(List.of()),
                 isNull(),
                 eq(List.of("jmr-analysis")),
-                any(McpToolContext.class)
+                any(McpToolContext.class),
+                any(ContextCompactionObserver.class)
         );
         verify(fixture.skillService, never()).isBuiltinAgentEnabled(anyString());
         assertThat(capturedSessionDefaults(fixture).getType()).isEqualTo(chatType);
@@ -249,7 +376,8 @@ class DihChatExecutionBoundaryTest {
         when(fixture.skillService.resolveKnowledgeBaseIds(List.of("generic")))
                 .thenReturn(List.of(21));
         when(fixture.chatService.agentChat(
-                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(),
+                any(McpToolContext.class), any(ContextCompactionObserver.class)
         )).thenReturn(Flux.just("通用技能回答"));
 
         List<String> response = fixture.service.chat(chatDto(chatType, false), null).collectList().block();
@@ -264,10 +392,12 @@ class DihChatExecutionBoundaryTest {
                 eq(List.of()),
                 isNull(),
                 eq(List.of(21)),
-                any(McpToolContext.class)
+                any(McpToolContext.class),
+                any(ContextCompactionObserver.class)
         );
         verify(fixture.chatService, never()).qaChat(
-                anyString(), anyString(), anyString(), anyList(), isNull(), anyBoolean()
+                anyString(), anyString(), anyString(), anyList(), isNull(), anyBoolean(),
+                any(McpToolContext.class)
         );
     }
 
@@ -308,7 +438,8 @@ class DihChatExecutionBoundaryTest {
                 List.of("jmr-analysis")
         )).thenReturn(toolContext);
         when(fixture.chatService.agentChat(
-                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(), any(McpToolContext.class)
+                anyString(), anyString(), anyString(), anyString(), anyList(), isNull(), anyList(),
+                any(McpToolContext.class), any(ContextCompactionObserver.class)
         )).thenReturn(Flux.just("专项回答"));
 
         List<String> response = fixture.service.chat(chatDto(chatType, false), null).collectList().block();
@@ -328,7 +459,8 @@ class DihChatExecutionBoundaryTest {
                 eq(List.of()),
                 isNull(),
                 eq(List.of(22)),
-                any(McpToolContext.class)
+                any(McpToolContext.class),
+                any(ContextCompactionObserver.class)
         );
     }
 
@@ -336,7 +468,8 @@ class DihChatExecutionBoundaryTest {
     void legacyMcpAgentBecomesAskWithoutTools() {
         Fixture fixture = fixture();
         when(fixture.chatService.qaChat(
-                anyString(), anyString(), anyString(), anyList(), isNull(), eq(false)
+                anyString(), anyString(), anyString(), anyList(), isNull(), eq(false),
+                any(McpToolContext.class)
         )).thenReturn(Flux.just("普通回答"));
 
         List<String> response = fixture.service.chat(
@@ -353,7 +486,8 @@ class DihChatExecutionBoundaryTest {
     void historicalLegacyMcpAgentAliasAlsoBecomesAskWithoutTools() {
         Fixture fixture = fixture();
         when(fixture.chatService.qaChat(
-                anyString(), anyString(), anyString(), anyList(), isNull(), eq(false)
+                anyString(), anyString(), anyString(), anyList(), isNull(), eq(false),
+                any(McpToolContext.class)
         )).thenReturn(Flux.just("普通回答"));
 
         List<String> response = fixture.service.chat(
@@ -426,6 +560,8 @@ class DihChatExecutionBoundaryTest {
         AIBaseService baseService = mock(AIBaseService.class);
         ChatSessionService chatSessionService = mock(ChatSessionService.class);
         ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        AttachmentToolProviderFactory attachmentToolProviderFactory =
+                mock(AttachmentToolProviderFactory.class);
         ChatTitleService titleService = mock(ChatTitleService.class);
         AgentMcpToolService agentMcpToolService = mock(AgentMcpToolService.class);
         SkillService skillService = mock(SkillService.class);
@@ -437,8 +573,12 @@ class DihChatExecutionBoundaryTest {
         when(baseService.isModelSupported("model-1")).thenReturn(true);
         when(baseService.resolveChatModel(eq("model-1"), anyBoolean(), eq(false)))
                 .thenReturn("model-1");
+        when(attachmentToolProviderFactory.create(
+                any(), anyString(), any(), anyList()))
+                .thenReturn(AttachmentToolProviderFactory.AttachmentToolBundle.empty());
         when(attachmentService.hasImageAttachment(anyList())).thenReturn(false);
-        when(attachmentService.appendAttachmentContext(eq("问题"), anyList(), isNull()))
+        when(attachmentService.appendAttachmentContext(
+                eq("问题"), anyList(), isNull(), eq("chat-1")))
                 .thenReturn("问题");
         when(titleService.generateTitle("问题")).thenReturn("问题");
         when(chatSessionService.appendMessage(
@@ -458,7 +598,7 @@ class DihChatExecutionBoundaryTest {
                 null,
                 null,
                 visualizationAgent,
-                null,
+                new ChatMessagePartParser(),
                 attachmentService,
                 titleService,
                 agentMcpToolService,
@@ -468,6 +608,8 @@ class DihChatExecutionBoundaryTest {
                 null,
                 null
         );
+        ReflectionTestUtils.setField(service, "attachmentToolProviderFactory",
+                attachmentToolProviderFactory);
         return new Fixture(
                 service,
                 chatService,
@@ -475,7 +617,9 @@ class DihChatExecutionBoundaryTest {
                 chatSessionService,
                 agentMcpToolService,
                 skillService,
-                visualizationAgent
+                visualizationAgent,
+                attachmentToolProviderFactory,
+                attachmentService
         );
     }
 
@@ -486,7 +630,9 @@ class DihChatExecutionBoundaryTest {
             ChatSessionService chatSessionService,
             AgentMcpToolService agentMcpToolService,
             SkillService skillService,
-            DataVisualizationAgent visualizationAgent
+            DataVisualizationAgent visualizationAgent,
+            AttachmentToolProviderFactory attachmentToolProviderFactory,
+            ChatAttachmentService attachmentService
     ) {
     }
 }

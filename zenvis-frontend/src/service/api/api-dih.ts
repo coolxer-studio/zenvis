@@ -1,4 +1,4 @@
-import { request } from '../request-wrapper';
+import { downloadGet, request } from '../request-wrapper';
 import {
   ChatSession,
   ModelInfo,
@@ -64,6 +64,26 @@ type RawAttachment = {
   fileUrl?: string;
   parse_status?: string;
   parseStatus?: string;
+  parse_progress?: number;
+  parseProgress?: number;
+  parse_message?: string;
+  parseMessage?: string;
+  download_url?: string;
+  downloadUrl?: string;
+  page_count?: number;
+  pageCount?: number;
+  sheet_count?: number;
+  sheetCount?: number;
+  slide_count?: number;
+  slideCount?: number;
+  row_count?: number;
+  rowCount?: number;
+  text_chars?: number;
+  textChars?: number;
+  chunk_count?: number;
+  chunkCount?: number;
+  truncated?: boolean;
+  warning?: string;
   message?: string;
 };
 
@@ -286,6 +306,17 @@ const normalizeAttachment = (item: RawAttachment) => ({
   kind: item?.kind || '',
   file_url: item?.file_url || item?.fileUrl || '',
   parse_status: item?.parse_status || item?.parseStatus || '',
+  parse_progress: item?.parse_progress ?? item?.parseProgress ?? 0,
+  parse_message: item?.parse_message || item?.parseMessage || '',
+  download_url: item?.download_url || item?.downloadUrl || '',
+  page_count: item?.page_count ?? item?.pageCount,
+  sheet_count: item?.sheet_count ?? item?.sheetCount,
+  slide_count: item?.slide_count ?? item?.slideCount,
+  row_count: item?.row_count ?? item?.rowCount,
+  text_chars: item?.text_chars ?? item?.textChars,
+  chunk_count: item?.chunk_count ?? item?.chunkCount,
+  truncated: Boolean(item?.truncated),
+  warning: item?.warning || '',
   message: item?.message || '',
 });
 
@@ -566,11 +597,64 @@ export class DihService {
    * @param file 文件对象
    * @returns 上传结果
    */
-  static async uploadFile(file: File): Promise<UploadFileResponse> {
+  static async uploadFile(
+    file: File,
+    chatId?: string,
+    onProgress?: (percent: number) => void,
+  ): Promise<UploadFileResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await request<UploadFileResponse>(`${prefix}/upload`, formData, 'POST');
+    if (chatId) {
+      formData.append('chatId', chatId);
+    }
+    const response = await request<UploadFileResponse>(`${prefix}/upload`, formData, 'POST', {
+      timeout: 10 * 60 * 1000,
+      onUploadProgress: event => {
+        if (!onProgress) return;
+        const total = event.total || file.size;
+        if (!total) return;
+        onProgress(Math.max(0, Math.min(100, Math.round((event.loaded / total) * 100))));
+      },
+    });
     return normalizeAttachment(response) as UploadFileResponse;
+  }
+
+  static async getAttachmentStatus(fileId: string): Promise<UploadFileResponse> {
+    const response = await request<UploadFileResponse>(
+      `${prefix}/upload/${encodeURIComponent(fileId)}/status`,
+      {},
+      'GET',
+      { silent: true },
+    );
+    return normalizeAttachment(response) as UploadFileResponse;
+  }
+
+  static async reparseAttachment(fileId: string): Promise<UploadFileResponse> {
+    const response = await request<UploadFileResponse>(
+      `${prefix}/upload/${encodeURIComponent(fileId)}/reparse`,
+      {},
+      'POST',
+      { timeout: 60000 },
+    );
+    return normalizeAttachment(response) as UploadFileResponse;
+  }
+
+  static async deleteAttachment(fileId: string): Promise<string> {
+    return request<string>(
+      `${prefix}/upload/${encodeURIComponent(fileId)}`,
+      {},
+      'DELETE',
+      { silent: true },
+    );
+  }
+
+  static async downloadAttachment(fileId: string): Promise<Blob> {
+    const response = await downloadGet(
+      `${prefix}/upload/${encodeURIComponent(fileId)}/download`,
+      {},
+      { timeout: 10 * 60 * 1000 },
+    );
+    return response.data;
   }
 
   /**

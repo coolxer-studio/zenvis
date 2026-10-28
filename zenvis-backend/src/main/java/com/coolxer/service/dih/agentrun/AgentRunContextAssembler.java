@@ -135,7 +135,8 @@ public class AgentRunContextAssembler {
                             .build());
         }
         return new PromptContext(
-                chatAttachmentService.appendAttachmentContext(bounded, attachments, user),
+                chatAttachmentService.appendAttachmentContext(
+                        bounded, attachments, user, run.getChatId()),
                 attachments, pendingInputIds);
     }
 

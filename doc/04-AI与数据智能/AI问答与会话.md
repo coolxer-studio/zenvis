@@ -125,7 +125,7 @@ ZenVis 同时维护两类数据：
 | 配置 | 默认值 | 作用 |
 | --- | ---: | --- |
 | `app.ai.dih.context.window-tokens` | `102400` | 模型上下文窗口预算 |
-| `app.ai.dih.context.output-reserve-tokens` | `4096` | 为模型输出预留 |
+| `app.ai.dih.context.output-reserve-tokens` | `16384` | 为模型输出预留 |
 | `app.ai.dih.context.safety-margin-tokens` | `4096` | 安全余量 |
 | `app.ai.dih.context.max-history-tokens` | `24000` | 历史消息预算 |
 | `app.ai.dih.context.summary-tokens` | `2048` | 历史摘要预算 |
@@ -149,21 +149,56 @@ Skill 可通过 `runtime.limits.maxOutputTokens` 覆盖本轮最大输出 Token�
 
 ### 上传与类型
 
-- 单个聊天附件最大 30 MB。
-- 上传直接流式写入 `zenvis-chat`，对象键为 `chat/{userId}/{fileId}/{sanitizedFileName}`；不再在 `sessionWorkspace/chat-uploads` 创建持久文件。
-- 文本类附件按 UTF-8 读取，非法字节使用替换字符。
-- 图片支持 PNG、JPEG、WebP、GIF 和 BMP，并检查实际文件内容。
-- 其他文件只向模型提供文件名、大小和类型，不会伪装成已经读取正文。
-
-平台级 multipart 上限可以更大，但聊天附件服务仍执行独立的 30 MB 限制。
+- 单个聊天附件最大 100 MB，单条消息最多 10 个附件；平台 multipart 仍保留 300 MB 上限，附件服务独立执行 100 MB 限制。
+- 上传直接流式写入 `zenvis-chat`，原文件对象键为 `chat/{userId}/{fileId}/{sanitizedFileName}`；派生数据写入独立的 `chat-derived/{userId}/{fileId}/`，不会破坏“附件前缀下只有一个原文件”的旧读取逻辑。
+- 上传接口立即返回，不等待正文解析。客户端轮询 `GET /api/v1/dih/upload/{fileId}/status`，存在 `pending`、`processing` 或 `failed` 附件时禁止发送。
+- 支持 PDF、DOCX、XLSX、PPTX、CSV/TSV、现有 35 类文本/代码扩展名，以及 PNG、JPEG、WebP、GIF、BMP 图片。
+- 不执行扫描件 OCR，不支持旧版 `.doc/.xls/.ppt`、压缩包、音视频和未知二进制正文。此类文件仍可上传，但只提供元信息并标记为 `unsupported`。
+- 格式由扩展名、Content-Type 和文件头共同判断；PDF、现代 Office 和图片的伪装文件会被拒绝或解析失败。PDF 加密、损坏 Office 文件和无法解码的压缩包会返回明确失败原因。
+- 图片通过 PNG/JPEG/WebP/GIF/BMP 魔数校验后直接为 `ready`。单张图片进入视觉模型前还有 20 MB 上限；超过上限时仍可下载和查看元信息，但不会编码成 `image_url` 发送给模型。
 
 文件名只保留 basename，并清洗路径分隔符、控制字符和不允许的字符。对象的实际 `contentType` 根据文件头与类型判断写入；图片扩展名或浏览器声明不能单独决定媒体类型。
 
-### 文本上下文
+### 解析状态与生命周期
 
-默认每个文本附件最多读取前 12,000 字符，本轮所有文本附件合计最多 24,000 字符。被截断的附件会带明确提示。
+统一状态为 `pending`、`processing`、`ready`、`partial`、`failed`、`unsupported`：
 
-页面历史和 Chat Memory 只保留稳定附件引用与元信息，不持续保存每轮展开后的完整附件正文。文本上下文读取时从 MinIO 流式获取对象；对象缺失时本轮附件读取失败，不回退到本地 `chat-uploads` 文件。
+- `pending`、`processing`、`failed` 禁止发送；失败附件可在页面重试或重新上传。
+- `ready` 可发送；`partial` 和 `unsupported` 可发送，但页面必须提示“仅能使用已解析内容/元信息”。
+- 解析失败自动重试 2 次。服务重启后会回收心跳超时的 `pending/processing` 任务；未被任何会话引用的附件在 24 小时后删除原文件和派生数据。
+- 旧消息里没有附件记录的 `readable/image/unsupported` 继续兼容；首次被状态接口或工具访问时按需补建记录并异步解析。
+
+默认解析上限为 1,000 页、500 张幻灯片、100 个工作表、每表 1,000,000 行、50,000 个分块和 10 分钟超时。超限统一标记为 `partial`，并在 `warning` 中说明截断范围。
+
+### 页面交互
+
+- 点击待发送区或历史消息中的非图片附件卡片，使用鉴权下载接口获取原文件；点击图片附件卡片打开受保护的图片预览。
+- 附件卡片上的“移除”“重试”按钮只执行对应操作，点击事件不得继续冒泡触发卡片下载或预览。移除成功后只调用删除接口，不应发起附件下载请求。
+- 解析中的附件显示上传/解析进度；`pending`、`processing`、`failed` 禁用发送，`partial` 和 `unsupported` 在发送前显示覆盖范围警告。
+
+### 大文件上下文
+
+- 小文本仍可直接注入，保留单文件 12,000 字符、本轮合计 24,000 字符预算。
+- 大文件默认注入结构化目录、文件统计、表格表头、首页/首节摘要和 Top 8 命中片段；所有附件上下文合计不超过 24,000 字符。
+- 文本按约 1,800 字符、约 10% 重叠切块；PDF 按页、PPT 按幻灯片、Word 按章节、表格按约 300 行切块，每个片段都带可回查 locator。
+- 关键词检索始终可用，使用 CJK bigram + ASCII 分词和 BM25。`app.ai.embedding.enabled=true` 且 Redis 可用时，额外使用独立索引 `zenvis_attachment_vector`；向量结果与关键词结果通过 RRF 融合，向量不可用时自动降级。
+- 附件正文始终按“不可信资料”注入，模型不得执行文档中的指令、代码、链接或工具调用要求。回答引用附件时必须同时给出文件名和页码、工作表、幻灯片或行号。
+
+### 只读附件工具
+
+所有会话都可以使用附件只读工具，但工具闭包只包含当前用户、当前会话或当前 Run 允许的附件：
+
+- `attachment_list`：附件、状态、类型、大小和页/表/幻灯片数量。
+- `attachment_outline`：目录、页码、章节、工作表和行列范围。
+- `attachment_search`：在允许附件内执行混合检索并返回 locator 与分数。
+- `attachment_read`：按 `page:3`、`slide:2`、`section:1.2`、`sheet:Sheet1!rows:100-200` 或 `lines:1200-1400` 回查正文。
+- `attachment_table_query`：对 CSV/TSV/XLSX 做列选择、过滤、排序、分组和 `count/sum/avg/min/max` 聚合。
+
+`ask` 仍不加载业务 MCP/Skill 工具；只有存在附件时才加载附件工具。业务 Agent 会把附件工具与既有 MCP/Run 工具按名称去重合并。附件工具不进入审批流程，但沿用 `tool_call` 事件、工具调用预算和审计。默认每轮 6 次调用、单次 8,000 字符、累计 24,000 字符。
+
+图片与文档同时存在时，先执行图片取证阶段，再把取证结果交给带附件工具的回答阶段，避免图片原生输入和工具调用冲突。深度思考请求若必须调用附件工具，会保留深度思考系统提示，但改走支持工具调用的执行路径。
+
+页面历史和 Chat Memory 只保留稳定附件引用与元信息，不持续保存每轮展开后的完整附件正文。附件读取从 MinIO 流式获取对象；对象缺失时本轮读取失败，不回退到本地 `chat-uploads` 文件。
 
 ### 图片输入
 

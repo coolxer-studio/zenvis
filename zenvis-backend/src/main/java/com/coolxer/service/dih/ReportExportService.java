@@ -37,6 +37,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -55,6 +57,7 @@ public class ReportExportService {
 
     private static final String DOCUMENT_FONT = "Microsoft YaHei";
     private static final String EXPORTER_VERSION = "v1";
+    private static final double DOCX_CONTENT_WIDTH_PT = 468.0;
 
     private final ReportDocumentService reportDocumentService;
     private final MinioService minioService;
@@ -160,7 +163,7 @@ public class ReportExportService {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             firstAvailableFont().ifPresent(font ->
                     builder.useFont(font, "ZenVis CJK"));
-            builder.withHtmlContent(pdfDocument(title, bodyHtml), null);
+            builder.withHtmlContent(pdfDocument(title, xhtmlBody(bodyHtml)), null);
             builder.toStream(output);
             builder.useFastMode();
             builder.run();
@@ -168,6 +171,12 @@ public class ReportExportService {
         } catch (Exception e) {
             throw new IllegalStateException("PDF 导出失败。", e);
         }
+    }
+
+    private String xhtmlBody(String bodyHtml) {
+        Document document = Jsoup.parseBodyFragment(bodyHtml);
+        document.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
+        return document.body().html();
     }
 
     private byte[] exportDocx(String title, String bodyHtml) {
@@ -381,13 +390,19 @@ public class ReportExportService {
                     : mediaType.contains("gif")
                     ? XWPFDocument.PICTURE_TYPE_GIF
                     : XWPFDocument.PICTURE_TYPE_JPEG;
+            double widthPt = DOCX_CONTENT_WIDTH_PT;
+            double heightPt = 300;
+            BufferedImage imageSize = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (imageSize != null && imageSize.getWidth() > 0) {
+                heightPt = widthPt * imageSize.getHeight() / imageSize.getWidth();
+            }
             XWPFRun run = paragraph.createRun();
             run.addPicture(
                     new ByteArrayInputStream(bytes),
                     pictureType,
                     StringUtils.hasText(image.attr("alt")) ? image.attr("alt") : "report-image",
-                    Units.toEMU(500),
-                    Units.toEMU(300));
+                    Units.toEMU(widthPt),
+                    Units.toEMU(heightPt));
         } catch (Exception e) {
             XWPFRun fallback = paragraph.createRun();
             fallback.setText("[图片解析失败：" + image.attr("alt") + "]");

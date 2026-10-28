@@ -302,7 +302,7 @@ const rightPanelMeta: Record<ResultAgentType, { title: string; description: stri
   agent_config_management: { title: '配置工作区', description: '配置记录、试验和正式生效' },
   agent_metadata_config: { title: '元数据配置结果', description: '已发布的 Meta 配置记录' },
   agent_data_push_service: { title: '数据推送服务结果', description: '已创建并运行的推送任务' },
-  agent_report: { title: '报表工作台', description: '文档、素材与交付产物' },
+  agent_report: { title: '报表工作台', description: '报表文档与图表库快照' },
 };
 
 const routeChatType = computed(() => String(route.query.type || 'ask'));

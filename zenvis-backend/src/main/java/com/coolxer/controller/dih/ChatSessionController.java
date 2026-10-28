@@ -159,7 +159,7 @@ public class ChatSessionController extends BaseController {
     private static final String PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词。";
     private static final String PROLOGUE_AGENT_REPORT = "我是报告智能体，专注于高效生成专业分析报告。\n" +
             " 通过智能编辑器，快速整合分析过程中的数据、图表与结论，实现内容自动生成与文案优化。\n" +
-            " 支持一键导入分析素材，助您快速产出结构清晰、内容详实的高质量分析报告。";
+            " 支持从图表库一键插入临时图表高清快照，助您快速产出结构清晰、内容详实的高质量分析报告。";
     private static final String PROLOGUE_AGENT_REPORT_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词，并生成可编辑报表草稿。";
 
     @GetMapping({"/{sessionId}/session"})

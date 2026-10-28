@@ -213,41 +213,6 @@ export const usePanelRecordSync = ({
     const storedDocument = asObject(report.currentDocument);
     const messageDocument = extractLatestMessageReportDocument(messages.value);
     const currentDocument = mergeStoredAndMessageReportDocument(storedDocument, messageDocument);
-    const visualizationChart = asObject(parseSessionExtraData().visualizationChart);
-    const dataAnalysis = asObject(parseSessionExtraData().dataAnalysis);
-    const materials: DihPanelRecord[] = [];
-    messages.value.forEach(message => {
-      (message.attachments || []).forEach(attachment => {
-        materials.push({
-          type: 'attachment',
-          id: textValue(attachment.file_id || attachment.fileId),
-          name: textValue(attachment.file_name || attachment.fileName, '附件'),
-          status: textValue(attachment.parse_status || attachment.parseStatus, 'uploaded'),
-          parseStatus: textValue(attachment.parse_status || attachment.parseStatus),
-          truncated: textValue(attachment.message).includes('截断'),
-          messageId: message.id,
-          sessionRecordId: chatSessionRecordId.value,
-        });
-      });
-    });
-    asRecordList(visualizationChart.chartLibrary).forEach(record => {
-      materials.push({
-        ...record,
-        type: 'chart',
-        id: textValue(record.id || record.recordId),
-        name: textValue(record.name || record.title, '图表'),
-        sessionRecordId: chatSessionRecordId.value,
-      });
-    });
-    asRecordList(dataAnalysis.records).forEach(record => {
-      materials.push({
-        ...record,
-        type: record.serviceTaskId ? 'analysis_task' : 'analysis_record',
-        id: textValue(record.serviceTaskId || record.recordId || record.id),
-        name: textValue(record.title, '分析产物'),
-        sessionRecordId: chatSessionRecordId.value,
-      });
-    });
     return {
       currentDocument,
       documents: Object.keys(currentDocument).length
@@ -258,7 +223,6 @@ export const usePanelRecordSync = ({
         ...record,
         revision: Number(record.revision || 0),
       })) as ReportRevision[],
-      materials,
       extraData: chatSessionExtraData.value,
       sessionRecordId: chatSessionRecordId.value,
       sessionId: chatSessionId.value,

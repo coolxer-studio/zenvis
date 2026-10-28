@@ -14,8 +14,6 @@ import com.coolxer.dao.mysql.repository.ReportArtifactRepository;
 import com.coolxer.dao.mysql.repository.ReportDocumentRepository;
 import com.coolxer.dao.mysql.repository.ReportRevisionRepository;
 import com.coolxer.model.dih.ChatMessagePart;
-import com.coolxer.model.dih.ChatAttachment;
-import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ReportActionDto;
 import com.coolxer.model.dih.dto.ReportArchiveDto;
 import com.coolxer.model.dih.dto.ReportArtifactRenameDto;
@@ -37,8 +35,11 @@ import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -148,13 +149,28 @@ public class ReportDocumentService {
     }
 
     /**
-     * 汇总当前用户最近会话中的附件、结构化 Agent 产物、报表和归档，供报表素材选择器使用。
-     * 返回的是受限长度的引用和摘要，正文仍由原始会话/报表存储负责。
+     * 兼容旧会话级素材入口，当前只返回当前用户的图表库记录。
      */
     @Transactional(readOnly = true, transactionManager = "mysqlTransactionManager")
     public List<Map<String, Object>> materials(Long chatSessionId, User currentUser) {
         ownedSession(chatSessionId, currentUser);
-        return availableMaterials(currentUser);
+        return chartLibrary(currentUser);
+    }
+
+    @Transactional(readOnly = true, transactionManager = "mysqlTransactionManager")
+    public List<Map<String, Object>> materials(User currentUser) {
+        return chartLibrary(currentUser);
+    }
+
+    /**
+     * 汇总当前用户所有会话中已经执行“加入图表库”的临时图表。
+     */
+    @Transactional(readOnly = true, transactionManager = "mysqlTransactionManager")
+    public List<Map<String, Object>> chartLibrary(User currentUser) {
+        if (currentUser == null) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        return availableChartLibrary(currentUser);
     }
 
     @Transactional(readOnly = true, transactionManager = "mysqlTransactionManager")
@@ -170,50 +186,26 @@ public class ReportDocumentService {
         return validatedSourceRefs(current, requested, currentUser);
     }
 
-    private List<Map<String, Object>> availableMaterials(User currentUser) {
-        Map<String, Map<String, Object>> materials = new LinkedHashMap<>();
+    private List<Map<String, Object>> availableChartLibrary(User currentUser) {
+        Map<String, Map<String, Object>> charts = new LinkedHashMap<>();
         List<ChatSession> sourceSessions = Optional.ofNullable(chatSessionRepository
-                        .findTop50ByCreateByOrderByUpdateTimeDesc(currentUser.getId()))
+                        .findAllByCreateByOrderByUpdateTimeDesc(currentUser.getId()))
                 .orElseGet(List::of);
-        Map<Integer, ChatSession> sessionsById = new LinkedHashMap<>();
         for (ChatSession sourceSession : sourceSessions) {
-            sessionsById.put(sourceSession.getId(), sourceSession);
-            collectMessageMaterials(materials, sourceSession);
-            collectStructuredMaterials(materials, sourceSession);
+            if (sourceSession == null
+                    || !Objects.equals(sourceSession.getCreateBy(), currentUser.getId())) {
+                continue;
+            }
+            collectChartLibrary(charts, sourceSession);
         }
-        for (ReportDocument document : Optional.ofNullable(documentRepository
-                        .findTop50ByCreateByOrderByUpdateTimeDesc(currentUser.getId()))
-                .orElseGet(List::of)) {
-            Map<String, Object> ref = baseMaterial(
-                    "report_document",
-                    document.getDocumentId(),
-                    document.getTitle(),
-                    document.getChatSessionId());
-            ref.put("documentId", document.getDocumentId());
-            ref.put("revision", document.getCurrentRevision());
-            ref.put("contentHash", document.getContentHash());
-            ref.put("contentExcerpt", excerpt(document.getContent(), 2_000));
-            addSessionMetadata(ref, sessionsById.get(document.getChatSessionId()));
-            putMaterial(materials, ref);
-        }
-        for (ReportArtifact artifact : Optional.ofNullable(artifactRepository
-                        .findTop100ByCreateByOrderByCreateTimeDesc(currentUser.getId()))
-                .orElseGet(List::of)) {
-            Map<String, Object> ref = baseMaterial(
-                    "report_artifact",
-                    artifact.getArtifactId(),
-                    artifact.getName(),
-                    artifact.getChatSessionId());
-            ref.put("artifactId", artifact.getArtifactId());
-            ref.put("documentId", artifact.getDocumentId());
-            ref.put("revision", artifact.getRevision());
-            ref.put("contentHash", artifact.getContentHash());
-            ref.put("contentExcerpt", excerpt(readRevisionContent(
-                    artifact.getDocumentId(), artifact.getRevision(), artifact.getFormat()), 2_000));
-            addSessionMetadata(ref, sessionsById.get(artifact.getChatSessionId()));
-            putMaterial(materials, ref);
-        }
-        return materials.values().stream().limit(300).toList();
+        return charts.values().stream()
+                .sorted(Comparator
+                        .comparingLong(this::chartAddedAt)
+                        .reversed()
+                        .thenComparing(
+                                chart -> stringValue(chart.get("addedAt")),
+                                Comparator.reverseOrder()))
+                .toList();
     }
 
     @Transactional(transactionManager = "mysqlTransactionManager")
@@ -431,60 +423,137 @@ public class ReportDocumentService {
         normalizeFormat(request.getFormat());
     }
 
-    private void collectMessageMaterials(
-            Map<String, Map<String, Object>> materials,
+    private void collectChartLibrary(
+            Map<String, Map<String, Object>> charts,
             ChatSession session) {
-        if (StringUtils.isBlank(session.getMessages())) {
+        Map<String, Object> extraData;
+        try {
+            extraData = parseObject(session.getExtraData());
+        } catch (RuntimeException e) {
+            // 历史会话可能存在旧版或损坏 JSON；跳过该会话，不影响其余图表。
             return;
         }
-        try {
-            List<Message> messages = JacksonUtil.toList(
-                    session.getMessages(), new TypeReference<List<Message>>() {});
-            for (Message message : messages == null ? List.<Message>of() : messages) {
-                if (message == null) {
-                    continue;
-                }
-                for (ChatAttachment attachment : message.getAttachments() == null
-                        ? List.<ChatAttachment>of() : message.getAttachments()) {
-                    if (attachment == null || StringUtils.isBlank(attachment.getFileId())) {
-                        continue;
-                    }
-                    Map<String, Object> ref = baseMaterial(
-                            "attachment",
-                            attachment.getFileId(),
-                            firstNonBlank(attachment.getFileName(), "附件"),
-                            session.getId());
-                    ref.put("messageId", message.getId());
-                    ref.put("contentType", attachment.getContentType());
-                    ref.put("parseStatus", attachment.getParseStatus());
-                    ref.put("truncated", StringUtils.contains(attachment.getMessage(), "截断"));
-                    ref.put("status", firstNonBlank(attachment.getParseStatus(), "uploaded"));
-                    addSessionMetadata(ref, session);
-                    putMaterial(materials, ref);
-                }
-                for (ChatMessagePart part : message.getParts() == null
-                        ? List.<ChatMessagePart>of() : message.getParts()) {
-                    if (part == null
-                            || StringUtils.isBlank(part.getId())
-                            || List.of("thinking", "notice", "approval").contains(part.getType())) {
-                        continue;
-                    }
-                    Map<String, Object> ref = baseMaterial(
-                            "agent_output",
-                            part.getId(),
-                            firstNonBlank(part.getTitle(), "智能体产物"),
-                            session.getId());
-                    ref.put("messageId", message.getId());
-                    ref.put("partId", part.getId());
-                    ref.put("partType", part.getType());
-                    ref.put("status", firstNonBlank(part.getStatus(), "available"));
-                    ref.put("contentExcerpt", excerpt(part.getContent(), 2_000));
-                    addSessionMetadata(ref, session);
-                    putMaterial(materials, ref);
-                }
+        Map<String, Object> visualization = mapValue(extraData.get("visualizationChart"));
+        for (Map<String, Object> source : listOfMaps(visualization.get("chartLibrary"))) {
+            Map<String, Object> chart = chartLibraryMaterial(source, session);
+            String key = chartLibraryKey(chart);
+            Map<String, Object> existing = charts.get(key);
+            if (existing == null || chartAddedAt(chart) >= chartAddedAt(existing)) {
+                charts.put(key, chart);
             }
-        } catch (RuntimeException e) {
-            // 历史会话可能存在旧版或损坏 JSON；跳过该会话，不影响其余素材。
+        }
+    }
+
+    private Map<String, Object> chartLibraryMaterial(
+            Map<String, Object> source,
+            ChatSession session) {
+        String artifactId = stringValue(source.get("artifactId"));
+        String id = firstNonBlank(
+                stringValue(source.get("recordId")),
+                stringValue(source.get("id")),
+                artifactId,
+                sha256(JacksonUtil.toJson(source)));
+        Map<String, Object> echarts = mapValue(source.get("echarts"));
+        Map<String, Object> chart = new LinkedHashMap<>();
+        chart.put("type", "chart");
+        chart.put("id", id);
+        if (StringUtils.isNotBlank(artifactId)) {
+            chart.put("artifactId", artifactId);
+        }
+        chart.put("name", firstNonBlank(
+                stringValue(source.get("name")),
+                stringValue(source.get("title")),
+                "图表"));
+        chart.put("chartType", firstNonBlank(
+                stringValue(source.get("chartType")),
+                stringValue(source.get("chart_type")),
+                stringValue(echarts.get("chart_type")),
+                stringValue(echarts.get("chartType")),
+                "chart"));
+        chart.put("description", firstNonBlank(
+                stringValue(source.get("description")),
+                stringValue(source.get("content")),
+                ""));
+        chart.put("status", firstNonBlank(
+                stringValue(source.get("status")),
+                "available"));
+        chart.put("origin", "chart_library");
+        for (String field : List.of("source", "addedAt", "queriedAt")) {
+            if (StringUtils.isNotBlank(stringValue(source.get(field)))) {
+                chart.put(field, source.get(field));
+            }
+        }
+        chart.put("echartsOption", chartOption(source));
+        addSessionMetadata(chart, session);
+        return chart;
+    }
+
+    private Map<String, Object> chartOption(Map<String, Object> source) {
+        Map<String, Object> echarts = mapValue(source.get("echarts"));
+        List<Object> candidates = new ArrayList<>();
+        candidates.add(source.get("echartsOption"));
+        candidates.add(echarts.get("option"));
+        candidates.add(source.get("option"));
+        for (Object candidate : candidates) {
+            Map<String, Object> option = optionValue(candidate);
+            if (!option.isEmpty()) {
+                return option;
+            }
+        }
+        for (String field : List.of("config", "amisConfig")) {
+            Map<String, Object> config = mapValue(source.get(field));
+            if (!"chart".equals(stringValue(config.get("type")))) {
+                continue;
+            }
+            Map<String, Object> option = optionValue(firstNonBlankObject(
+                    config.get("config"), config.get("option")));
+            if (!option.isEmpty()) {
+                return option;
+            }
+        }
+        return Map.of();
+    }
+
+    private Object firstNonBlankObject(Object first, Object second) {
+        return first instanceof Map<?, ?> map && !map.isEmpty() ? first : second;
+    }
+
+    private Map<String, Object> optionValue(Object value) {
+        if (value instanceof Map<?, ?>) {
+            return mapValue(value);
+        }
+        if (value instanceof String text && StringUtils.isNotBlank(text)) {
+            try {
+                Map<String, Object> parsed = JacksonUtil.toMap(
+                        text, new TypeReference<Map<String, Object>>() {});
+                return parsed == null ? Map.of() : new LinkedHashMap<>(parsed);
+            } catch (RuntimeException ignored) {
+                return Map.of();
+            }
+        }
+        return Map.of();
+    }
+
+    private String chartLibraryKey(Map<String, Object> chart) {
+        return firstNonBlank(
+                stringValue(chart.get("artifactId")),
+                stringValue(chart.get("id")),
+                sha256(JacksonUtil.toJson(chart)));
+    }
+
+    private long chartAddedAt(Map<String, Object> chart) {
+        String value = stringValue(chart.get("addedAt"));
+        if (StringUtils.isBlank(value)) {
+            return Long.MIN_VALUE;
+        }
+        try {
+            return Instant.parse(value).toEpochMilli();
+        } catch (DateTimeParseException ignored) {
+            try {
+                return OffsetDateTime.parse(value).toInstant().toEpochMilli();
+            } catch (DateTimeParseException ignoredAgain) {
+                return Long.MIN_VALUE;
+            }
         }
     }
 
@@ -498,7 +567,8 @@ public class ReportDocumentService {
         Map<String, Map<String, Object>> allowed = new LinkedHashMap<>();
         if (current != null) {
             for (Map<String, Object> ref : parseList(current.getSourceRefs())) {
-                allowed.put(sourceRefKey(ref), ref);
+                Map<String, Object> compact = compactSourceRef(ref);
+                allowed.put(sourceRefKey(compact), compact);
             }
         }
         List<Map<String, Object>> limitedRequested = requested.stream().limit(300).toList();
@@ -506,8 +576,12 @@ public class ReportDocumentService {
                 .map(this::sourceRefKey)
                 .anyMatch(key -> !allowed.containsKey(key));
         if (containsNewReference) {
-            for (Map<String, Object> ref : availableMaterials(currentUser)) {
-                allowed.put(sourceRefKey(ref), ref);
+            for (Map<String, Object> chart : availableChartLibrary(currentUser)) {
+                if (!"chart".equals(stringValue(chart.get("type")))) {
+                    continue;
+                }
+                Map<String, Object> compact = chartSourceRef(chart);
+                allowed.put(sourceRefKey(compact), compact);
             }
         }
         Map<String, Map<String, Object>> verified = new LinkedHashMap<>();
@@ -518,6 +592,31 @@ public class ReportDocumentService {
             }
         }
         return new ArrayList<>(verified.values());
+    }
+
+    private Map<String, Object> compactSourceRef(Map<String, Object> ref) {
+        if (ref == null) {
+            return new LinkedHashMap<>();
+        }
+        if ("chart".equals(stringValue(ref.get("type")))) {
+            return chartSourceRef(ref);
+        }
+        return new LinkedHashMap<>(ref);
+    }
+
+    private Map<String, Object> chartSourceRef(Map<String, Object> chart) {
+        Map<String, Object> ref = new LinkedHashMap<>();
+        ref.put("type", "chart");
+        for (String field : List.of(
+                "id", "artifactId", "name", "title", "chartType", "description",
+                "status", "origin", "source", "addedAt", "queriedAt",
+                "sessionRecordId", "chatSessionId", "sessionTitle", "agentType")) {
+            Object value = chart.get(field);
+            if (value != null && StringUtils.isNotBlank(stringValue(value))) {
+                ref.put(field, value);
+            }
+        }
+        return ref;
     }
 
     private String sourceRefKey(Map<String, Object> ref) {
@@ -533,78 +632,6 @@ public class ReportDocumentService {
                         "");
     }
 
-    private void collectStructuredMaterials(
-            Map<String, Map<String, Object>> materials,
-            ChatSession session) {
-        Map<String, Object> extraData;
-        try {
-            extraData = parseObject(session.getExtraData());
-        } catch (RuntimeException e) {
-            return;
-        }
-        Map<String, Object> visualization = mapValue(extraData.get("visualizationChart"));
-        for (Map<String, Object> chart : listOfMaps(visualization.get("chartLibrary"))) {
-            Map<String, Object> ref = structuredMaterial(
-                    "chart", chart, session, "图表", "recordId");
-            ref.put("contentExcerpt", excerpt(JacksonUtil.toJson(chart), 2_000));
-            addSessionMetadata(ref, session);
-            putMaterial(materials, ref);
-        }
-        Map<String, Object> analysis = mapValue(extraData.get("dataAnalysis"));
-        for (Map<String, Object> record : listOfMaps(analysis.get("records"))) {
-            String type = StringUtils.isNotBlank(stringValue(record.get("serviceTaskId")))
-                    ? "analysis_task" : "analysis_record";
-            Map<String, Object> ref = structuredMaterial(
-                    type, record, session, "分析产物", "serviceTaskId", "recordId", "taskId");
-            ref.put("contentExcerpt", excerpt(JacksonUtil.toJson(record), 2_000));
-            addSessionMetadata(ref, session);
-            putMaterial(materials, ref);
-        }
-    }
-
-    private Map<String, Object> structuredMaterial(
-            String type,
-            Map<String, Object> source,
-            ChatSession session,
-            String fallbackName,
-            String... idFields) {
-        List<String> candidates = new ArrayList<>();
-        for (String field : idFields) {
-            candidates.add(stringValue(source.get(field)));
-        }
-        candidates.add(stringValue(source.get("id")));
-        String id = firstNonBlank(candidates.toArray(String[]::new));
-        Map<String, Object> ref = baseMaterial(
-                type,
-                firstNonBlank(id, sha256(JacksonUtil.toJson(source))),
-                firstNonBlank(
-                        stringValue(source.get("name")),
-                        stringValue(source.get("title")),
-                        fallbackName),
-                session.getId());
-        for (String field : List.of(
-                "recordId", "serviceTaskId", "taskId", "stage", "queriedAt",
-                "completedAt", "dataTime", "query", "queryMeta", "validationStatus")) {
-            if (source.containsKey(field)) {
-                ref.put(field, source.get(field));
-            }
-        }
-        ref.put("type", type);
-        ref.put("id", firstNonBlank(id, stringValue(ref.get("id"))));
-        return ref;
-    }
-
-    private Map<String, Object> baseMaterial(
-            String type, String id, String name, Integer sessionRecordId) {
-        Map<String, Object> ref = new LinkedHashMap<>();
-        ref.put("type", type);
-        ref.put("id", id);
-        ref.put("name", name);
-        ref.put("sessionRecordId", sessionRecordId);
-        ref.put("status", "available");
-        return ref;
-    }
-
     private void addSessionMetadata(Map<String, Object> ref, ChatSession session) {
         if (session == null) {
             return;
@@ -613,24 +640,6 @@ public class ReportDocumentService {
         ref.put("chatSessionId", session.getSessionId());
         ref.put("sessionTitle", session.getTitle());
         ref.put("agentType", session.getType());
-    }
-
-    private void putMaterial(
-            Map<String, Map<String, Object>> materials,
-            Map<String, Object> ref) {
-        String key = firstNonBlank(
-                stringValue(ref.get("type")),
-                "material") + ":" + firstNonBlank(
-                stringValue(ref.get("sessionRecordId")),
-                "") + ":" + firstNonBlank(
-                stringValue(ref.get("id")),
-                stringValue(ref.get("partId")),
-                sha256(JacksonUtil.toJson(ref)));
-        materials.putIfAbsent(key, ref);
-    }
-
-    private String excerpt(String value, int maxChars) {
-        return StringUtils.abbreviate(StringUtils.defaultString(value), maxChars);
     }
 
     private Map<String, Object> mapValue(Object value) {

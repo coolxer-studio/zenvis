@@ -5,10 +5,17 @@ import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.model.dih.vo.ReportWorkspaceVo;
 import com.coolxer.service.core.MinioService;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFPicture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -117,5 +124,50 @@ class ReportExportServiceTest {
         assertThat(second.content().readAllBytes()).isEqualTo(sentinel);
         assertThat(second.size()).isEqualTo(sentinel.length);
         assertThat(objects).hasSize(1);
+    }
+
+    @Test
+    void exportsChartDataUriAtItsOriginalAspectRatio() throws Exception {
+        BufferedImage chartImage = new BufferedImage(400, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = chartImage.createGraphics();
+        graphics.setColor(Color.WHITE);
+        graphics.fillRect(0, 0, 400, 200);
+        graphics.setColor(Color.BLUE);
+        graphics.fillRect(40, 40, 320, 120);
+        graphics.dispose();
+        ByteArrayOutputStream imageBytes = new ByteArrayOutputStream();
+        ImageIO.write(chartImage, "png", imageBytes);
+        String dataUri = "data:image/png;base64,"
+                + java.util.Base64.getEncoder().encodeToString(imageBytes.toByteArray());
+        when(reportDocumentService.workspace(11L, user)).thenReturn(new ReportWorkspaceVo(
+                Map.of(
+                        "documentId", "document-chart",
+                        "revision", 1L,
+                        "title", "图表周报",
+                        "format", "markdown",
+                        "contentHash", "chart-content-hash",
+                        "content", "# 图表周报\n\n![趋势图](" + dataUri + ")"),
+                List.of(),
+                List.of(),
+                "{}"));
+
+        ReportExportService.ExportedReport exported = service.export(11L, "docx", user);
+
+        try (XWPFDocument document = new XWPFDocument(exported.content())) {
+            List<XWPFPicture> pictures = document.getParagraphs().stream()
+                    .flatMap(paragraph -> paragraph.getRuns().stream())
+                    .flatMap(run -> run.getEmbeddedPictures().stream())
+                    .toList();
+            assertThat(pictures).hasSize(1);
+            XWPFPicture picture = pictures.get(0);
+            assertThat(picture.getWidth()).isEqualTo(468.0);
+            assertThat(picture.getDepth()).isEqualTo(234.0);
+        }
+
+        ReportExportService.ExportedReport pdf = service.export(11L, "pdf", user);
+        byte[] pdfBytes = pdf.content().readAllBytes();
+        assertThat(pdf.contentType()).isEqualTo("application/pdf");
+        assertThat(pdf.size()).isGreaterThan(1_000);
+        assertThat(new String(pdfBytes, 0, 4, StandardCharsets.US_ASCII)).isEqualTo("%PDF");
     }
 }

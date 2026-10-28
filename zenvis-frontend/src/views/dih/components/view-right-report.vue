@@ -14,10 +14,10 @@
       <el-tag
         data-testid="report-save-status"
         size="small"
-        :type="saveConflict ? 'danger' : isDirty ? 'warning' : 'success'"
+        :type="saveStatusType"
         effect="plain"
       >
-        {{ saveConflict ? '版本冲突' : isSaving ? '保存中…' : isDirty ? '未保存' : '已保存' }}
+        {{ saveStatusText }}
       </el-tag>
       <el-tag v-if="currentDocument?.revision" size="small" effect="plain">
         {{ currentDocument.version || `v${currentDocument.revision}` }}
@@ -25,7 +25,7 @@
       <el-tag
         v-if="currentDocument?.source === 'demo'
           || currentDocument?.raw?.demo
-          || currentDocument?.sourceRefs?.some(ref => ref.type === 'demo')"
+          || documentSourceRefs.some(ref => ref.type === 'demo')"
         size="small"
         type="warning"
       >
@@ -65,13 +65,13 @@
             </ul>
             <div class="catalogue-title">来源</div>
             <el-empty
-              v-if="!currentDocument?.sourceRefs?.length"
+              v-if="!documentSourceRefs.length"
               description="暂无来源"
               :image-size="42"
             />
             <button
-              v-for="source in currentDocument?.sourceRefs || []"
-              :key="materialKey(source)"
+              v-for="source in documentSourceRefs"
+              :key="sourceRefKey(source)"
               type="button"
               class="source-ref"
               @click="openSourceRef(source)"
@@ -106,8 +106,14 @@
               <el-button size="small" :icon="RefreshLeft" @click="undoEdit">
                 撤销
               </el-button>
-              <el-button size="small" :icon="Collection" @click="materialDialogVisible = true">
-                素材 {{ selectedMaterialIds.length }}
+              <el-button
+                data-testid="chart-library-button"
+                size="small"
+                :icon="Collection"
+                :loading="chartLibraryLoading"
+                @click="openChartLibraryDialog"
+              >
+                图表库 {{ chartLibrary.length }}
               </el-button>
               <el-button size="small" :icon="Files" :disabled="isDirty" @click="archiveDocument">
                 归档
@@ -193,30 +199,15 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="materialDialogVisible" title="选择报表素材" width="620px">
-      <el-empty v-if="!materials.length" description="当前会话暂无可引用素材" />
-      <el-checkbox-group v-else v-model="selectedMaterialIds" class="material-list">
-        <el-checkbox
-          v-for="material in materials"
-          :key="materialKey(material)"
-          :value="materialKey(material)"
-          class="material-item"
-        >
-          <span>{{ material.name || material.title || material.id || '未命名素材' }}</span>
-          <el-tag size="small" effect="plain">{{ material.type || 'material' }}</el-tag>
-          <span v-if="material.sessionTitle" class="material-session">
-            {{ material.sessionTitle }}
-          </span>
-          <el-tag
-            v-if="sourceNeedsConfirmation(material)"
-            size="small"
-            type="warning"
-          >
-            待确认
-          </el-tag>
-        </el-checkbox>
-      </el-checkbox-group>
-    </el-dialog>
+    <ReportChartLibraryDialog
+      v-model="chartLibraryDialogVisible"
+      :charts="chartLibrary"
+      :loading="chartLibraryLoading"
+      :inserting="chartInserting"
+      :error="chartLibraryError"
+      @refresh="refreshChartLibrary"
+      @insert="insertChartAtCursor"
+    />
 
     <el-dialog v-model="compareDialogVisible" title="当前版本与归档对比" width="88%">
       <div class="version-compare">
@@ -257,6 +248,7 @@ import { copyTextToClipboard } from '@/utils/clipboard'
 import { withBaseUrl } from '@/utils/url'
 import type {
   ReportArtifact,
+  ReportChartLibraryItem,
   ReportDocument,
   ReportRevision,
   ReportSourceRef,
@@ -267,10 +259,19 @@ import {
   canApplyReportFragment,
   documentContentToEditorHtml,
   editorHtmlToCanonical,
+  escapeHtml,
   htmlToMarkdown,
   sanitizeHtml,
   sha256Text,
 } from '@/utils/report-document-format'
+import {
+  buildChartImageHtml,
+  chartImageFitsReport,
+  chartOptionFromLibraryItem,
+  chartSourceRef,
+  mergeReportSourceRefs,
+} from '@/utils/report-chart-library'
+import { renderChartImageDataUrl } from '@/utils/report-chart-image'
 import {
   DATA_REPORT_RECORD_EVENT,
   DATA_REPORT_RECORD_REQUEST_EVENT,
@@ -281,6 +282,7 @@ import {
   useDihEventListener,
 } from '../events'
 import { shouldApplyIncomingReportDocument } from './report-document-sync'
+import ReportChartLibraryDialog from './report-chart-library-dialog.vue'
 import type {
   ReportRecordEventDetail,
   SelectionRewriteCompletedEventDetail,
@@ -323,8 +325,7 @@ const currentDocument = ref<ReportDocument | null>(null)
 const documents = ref<ReportDocument[]>([])
 const artifacts = ref<ReportArtifact[]>([])
 const revisions = ref<ReportRevision[]>([])
-const materials = ref<ReportSourceRef[]>([])
-const selectedMaterialIds = ref<string[]>([])
+const documentSourceRefs = ref<ReportSourceRef[]>([])
 const outline = ref<OutlineItem[]>([])
 const activeOutlineIndex = ref(0)
 const extraDataText = ref('')
@@ -332,6 +333,7 @@ const sessionRecordId = ref('')
 const isDirty = ref(false)
 const isSaving = ref(false)
 const saveConflict = ref(false)
+const saveError = ref(false)
 const isApplyingExternalDocument = ref(false)
 const persistedEditorHtml = ref('')
 const persistedReportTitle = ref('未命名报表')
@@ -339,18 +341,26 @@ const workspaceHydrated = ref(false)
 const selectionMenuVisible = ref(false)
 const selectionMenuPosition = ref({ x: 0, y: 0 })
 const pendingSelectionRewrite = ref<PendingSelectionRewrite | null>(null)
-const materialDialogVisible = ref(false)
+const chartLibrary = ref<ReportChartLibraryItem[]>([])
+const chartLibraryDialogVisible = ref(false)
+const chartLibraryLoading = ref(false)
+const chartLibraryError = ref('')
+const chartInserting = ref(false)
+const chartInsertRange = ref<any>(null)
 const compareDialogVisible = ref(false)
 const comparedArtifact = ref<ReportArtifact | null>(null)
 let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
+let lastEditorRange: any = null
+let lastEditorBrowserRange: Range | null = null
+let chartInsertBrowserRange: Range | null = null
 
 const quickActions: QuickAction[] = [
   {
     key: 'draft',
     label: '生成初稿',
-    description: '根据当前会话和附件生成完整报表',
+    description: '根据当前会话、附件和图表库快照生成完整报表',
     icon: MagicStick,
-    prompt: '请基于当前会话、附件和可用素材生成一份结构完整、可交付的专业分析报表。',
+    prompt: '请基于当前会话、附件以及从图表库插入的临时图表生成一份结构完整、可交付的专业分析报表。',
   },
   {
     key: 'continue',
@@ -415,7 +425,7 @@ const selectionRewriteActions: SelectionRewriteAction[] = [
 
 const toolbarConfig = {}
 const editorConfig = {
-  placeholder: 'AI 生成的报表会自动同步到这里，也可以直接编辑。',
+  placeholder: 'AI 生成的报表会自动同步到这里，也可以从图表库插入临时图表高清快照。',
 }
 
 const hasMeaningfulEditorContent = (html: string) => {
@@ -428,16 +438,23 @@ const hasMeaningfulEditorContent = (html: string) => {
 }
 
 const hasDocument = computed(() => hasMeaningfulEditorContent(valueHtml.value))
+const saveStatusText = computed(() => {
+  if (saveConflict.value) return '版本冲突'
+  if (saveError.value) return '保存失败'
+  if (isSaving.value) return '保存中…'
+  return isDirty.value ? '未保存' : '已保存'
+})
+const saveStatusType = computed(() => {
+  if (saveConflict.value || saveError.value) return 'danger'
+  return isDirty.value ? 'warning' : 'success'
+})
 const canonicalFormat = computed<'markdown' | 'html'>(() => {
   return currentDocument.value?.format === 'html' ? 'html' : 'markdown'
 })
 const canonicalDocumentContent = computed(() => {
   return editorHtmlToCanonical(valueHtml.value, canonicalFormat.value)
 })
-const selectedSourceRefs = computed(() => {
-  const selected = new Set(selectedMaterialIds.value)
-  return materials.value.filter(material => selected.has(materialKey(material)))
-})
+const selectedSourceRefs = computed(() => documentSourceRefs.value)
 
 const asObject = (value: unknown): Record<string, unknown> => {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -449,9 +466,9 @@ const artifactKey = (artifact: ReportArtifact) => {
   return artifact.id || artifact.artifactId || artifact.documentId || artifact.name || artifact.title || 'artifact'
 }
 
-const materialKey = (material: ReportSourceRef) => {
-  const id = material.id || material.auditId || material.partId || material.name || ''
-  return `${String(material.type || 'material')}:${String(id)}`
+const sourceRefKey = (source: ReportSourceRef) => {
+  const id = source.id || source.auditId || source.partId || source.name || ''
+  return `${String(source.type || 'source')}:${String(id)}`
 }
 
 const sourceNeedsConfirmation = (source: ReportSourceRef) => {
@@ -462,13 +479,25 @@ const sourceNeedsConfirmation = (source: ReportSourceRef) => {
     || ['failed', 'partial', 'truncated'].includes(parseStatus)
 }
 
-const mergeMaterials = (...sources: ReportSourceRef[][]) => {
-  const merged = new Map<string, ReportSourceRef>()
-  sources.flat().forEach(material => {
-    const key = materialKey(material)
-    if (key && !key.endsWith('::')) merged.set(key, material)
-  })
-  return [...merged.values()]
+const refreshChartLibrary = async () => {
+  chartLibraryLoading.value = true
+  chartLibraryError.value = ''
+  try {
+    chartLibrary.value = await DihService.getReportChartLibrary()
+  } catch (error) {
+    console.warn('读取图表库失败，将保留当前图表列表:', error)
+    chartLibraryError.value = '读取图表库失败，请稍后重试'
+  } finally {
+    chartLibraryLoading.value = false
+  }
+}
+
+const openChartLibraryDialog = () => {
+  captureEditorSelection()
+  chartInsertRange.value = cloneEditorRange() || lastEditorRange
+  chartInsertBrowserRange = lastEditorBrowserRange?.cloneRange() || null
+  chartLibraryDialogVisible.value = true
+  void refreshChartLibrary()
 }
 
 const openSourceRef = (source: ReportSourceRef) => {
@@ -559,7 +588,12 @@ const applyDocument = (document: ReportDocument | ReportArtifact) => {
   generateOutline()
   isDirty.value = false
   saveConflict.value = false
-  selectedMaterialIds.value = (document.sourceRefs || []).map(materialKey).filter(Boolean)
+  saveError.value = false
+  documentSourceRefs.value = document.sourceRefs || []
+  lastEditorRange = null
+  lastEditorBrowserRange = null
+  chartInsertRange.value = null
+  chartInsertBrowserRange = null
   activeTab.value = 'document'
   nextTick(() => {
     persistedReportTitle.value = reportTitle.value
@@ -593,13 +627,15 @@ const applyWorkspace = (workspace: ReportWorkspace, applyIncomingDocument = true
 }
 
 const loadWorkspace = async (applyIncomingDocument = true) => {
-  if (!sessionRecordId.value) return
+  if (!sessionRecordId.value) {
+    await refreshChartLibrary()
+    return
+  }
   try {
-    const [workspace, availableMaterials] = await Promise.all([
+    const [workspace] = await Promise.all([
       DihService.getReportWorkspace(sessionRecordId.value),
-      DihService.getReportMaterials(sessionRecordId.value).catch(() => []),
+      refreshChartLibrary(),
     ])
-    materials.value = mergeMaterials(materials.value, availableMaterials)
     applyWorkspace(workspace, applyIncomingDocument)
   } catch (error) {
     console.warn('读取报表工作区失败，将使用会话摘要:', error)
@@ -615,7 +651,6 @@ const handleReportRecordsUpdated = async (detail: ReportRecordEventDetail) => {
   documents.value = detail.documents || []
   artifacts.value = detail.artifacts || []
   revisions.value = detail.revisions || []
-  materials.value = mergeMaterials(materials.value, detail.materials || [])
   const incomingDocument = detail.currentDocument
   const shouldApplyIncoming = shouldApplyIncomingReportDocument(
     currentDocument.value,
@@ -654,6 +689,7 @@ const markDirty = () => {
     isDirty.value = valueHtml.value !== persistedEditorHtml.value
       || reportTitle.value !== persistedReportTitle.value
     saveConflict.value = false
+    saveError.value = false
     if (isDirty.value) scheduleAutoSave()
   }
 }
@@ -693,6 +729,100 @@ const cloneEditorRange = () => {
     return JSON.parse(JSON.stringify(range))
   } catch {
     return range
+  }
+}
+
+const captureEditorSelection = () => {
+  const container = getEditableContainer()
+  const selection = window.getSelection()
+  if (!container || !selection || selection.rangeCount === 0) return
+  const browserRange = selection.getRangeAt(0)
+  if (!container.contains(browserRange.commonAncestorContainer)) return
+  const editorRange = cloneEditorRange()
+  if (editorRange) lastEditorRange = editorRange
+  lastEditorBrowserRange = browserRange.cloneRange()
+}
+
+const insertChartHtml = (html: string) => {
+  const editor = editorRef.value
+  if (!editor) return false
+  if (chartInsertRange.value && typeof editor.select === 'function') {
+    try {
+      editor.focus?.()
+      editor.select(chartInsertRange.value)
+      if (typeof editor.dangerouslyInsertHtml !== 'function') {
+        throw new Error('编辑器不支持插入 HTML')
+      }
+      editor.dangerouslyInsertHtml(html)
+      return true
+    } catch (error) {
+      console.warn('恢复图表插入光标失败，将追加到文档末尾:', error)
+    }
+  }
+  if (chartInsertBrowserRange) {
+    const container = getEditableContainer()
+    if (container?.contains(chartInsertBrowserRange.commonAncestorContainer)) {
+      try {
+        editor.focus?.()
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(chartInsertBrowserRange)
+        if (typeof editor.dangerouslyInsertHtml !== 'function') {
+          throw new Error('编辑器不支持插入 HTML')
+        }
+        editor.dangerouslyInsertHtml(html)
+        return true
+      } catch (error) {
+        console.warn('恢复浏览器光标失败，将追加到文档末尾:', error)
+      }
+    }
+  }
+  if (typeof editor.setHtml === 'function') {
+    const currentHtml = editor.getHtml?.() || valueHtml.value
+    editor.setHtml(`${currentHtml}${html}`)
+    valueHtml.value = editor.getHtml?.() || `${currentHtml}${html}`
+    return true
+  }
+  return false
+}
+
+const insertChartAtCursor = async (chart: ReportChartLibraryItem) => {
+  if (chartInserting.value) return
+  if (!chartOptionFromLibraryItem(chart)) {
+    ElMessage.warning('该图表缺少可渲染的 ECharts 配置，无法插入')
+    return
+  }
+  const chartName = String(chart.name || chart.title || '图表').trim() || '图表'
+  const caption = `图表：${chartName}`
+  chartInserting.value = true
+  try {
+    const imageDataUrl = await renderChartImageDataUrl(chart.echartsOption)
+    if (!chartImageFitsReport(canonicalDocumentContent.value, imageDataUrl, caption)) {
+      ElMessage.error('图表快照过大，超出当前报表剩余容量，未执行插入')
+      return
+    }
+    const html = buildChartImageHtml(chart, imageDataUrl)
+    if (!insertChartHtml(html)) {
+      ElMessage.error('未找到可用的报表编辑器，图表插入失败')
+      return
+    }
+    await nextTick()
+    valueHtml.value = editorRef.value?.getHtml?.() || valueHtml.value
+    documentSourceRefs.value = mergeReportSourceRefs(
+      documentSourceRefs.value,
+      [chartSourceRef(chart)],
+    )
+    generateOutline()
+    markDirty()
+    chartLibraryDialogVisible.value = false
+    chartInsertRange.value = null
+    chartInsertBrowserRange = null
+    ElMessage.success('图表已插入，正在保存')
+  } catch (error) {
+    console.error('插入图表失败:', error)
+    ElMessage.error(error instanceof Error ? error.message : '图表渲染失败，未执行插入')
+  } finally {
+    chartInserting.value = false
   }
 }
 
@@ -913,6 +1043,7 @@ const conflictDocumentFromError = (error: unknown): ReportDocument | undefined =
 
 const handleSaveConflict = async (error: unknown, silent: boolean) => {
   saveConflict.value = true
+  saveError.value = false
   const remote = conflictDocumentFromError(error)
   if (silent) {
     ElMessage.warning('自动保存遇到版本冲突，编辑内容仍保留在本地')
@@ -973,6 +1104,7 @@ const saveDocument = async (options: { silent?: boolean } = {}) => {
     isDirty.value = valueHtml.value !== persistedEditorHtml.value
       || reportTitle.value !== persistedReportTitle.value
     saveConflict.value = false
+    saveError.value = false
     if (!options.silent) ElMessage.success('报表已保存')
     if (isDirty.value) scheduleAutoSave()
   } catch (error) {
@@ -980,8 +1112,11 @@ const saveDocument = async (options: { silent?: boolean } = {}) => {
     const payload = asObject(error)
     if (Number(payload.status) === 409) {
       await handleSaveConflict(error, Boolean(options.silent))
-    } else if (!options.silent) {
-      ElMessage.error(String(payload.msg || '保存报表失败'))
+    } else {
+      saveError.value = true
+      if (!options.silent) {
+        ElMessage.error(String(payload.msg || '保存报表失败'))
+      }
     }
   } finally {
     isSaving.value = false
@@ -1218,11 +1353,13 @@ useDihEventListener(REPORT_SELECTION_REWRITE_COMPLETED_EVENT, handleSelectionRew
 onMounted(() => {
   emitDihEvent(DATA_REPORT_RECORD_REQUEST_EVENT)
   window.addEventListener('click', hideSelectionMenu)
+  document.addEventListener('selectionchange', captureEditorSelection)
 })
 
 onBeforeUnmount(() => {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   window.removeEventListener('click', hideSelectionMenu)
+  document.removeEventListener('selectionchange', captureEditorSelection)
   if (editorRef.value && !editorRef.value.isDestroyed) {
     editorRef.value.destroy()
   }
@@ -1465,6 +1602,11 @@ onBeforeUnmount(() => {
   padding: 18px 22px;
 }
 
+:deep(.w-e-scroll img) {
+  max-width: 100%;
+  height: auto;
+}
+
 .artifacts-container {
   height: 100%;
   padding: 12px;
@@ -1519,42 +1661,6 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   flex: 0 0 auto;
-}
-
-.material-list {
-  display: flex;
-  max-height: 420px;
-  flex-direction: column;
-  gap: 8px;
-  overflow: auto;
-}
-
-.material-item {
-  display: flex;
-  width: 100%;
-  min-height: 38px;
-  align-items: center;
-  margin-right: 0;
-  padding: 6px 10px;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-
-  :deep(.el-checkbox__label) {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-}
-
-.material-session {
-  min-width: 0;
-  color: #909399;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .version-compare {

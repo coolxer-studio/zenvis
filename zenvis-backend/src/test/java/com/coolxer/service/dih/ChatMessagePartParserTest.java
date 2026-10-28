@@ -380,6 +380,35 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("三类可视化决策围栏应解析为待确认片段")
+    void parseVisualizationDecisionFences() {
+        String content = """
+                ```zenvis:visualization-chart-decision
+                {"title":"确认图表查询方案","action":"visualization_chart.confirm_query_plan","planId":"chart-plan-001"}
+                ```
+                ```zenvis:visualization-app-decision
+                {"title":"确认应用写入方案","action":"visualization_app.confirm_plan","planId":"app-plan-001"}
+                ```
+                ```zenvis:visualization-dashboard-decision
+                {"title":"确认大屏写入方案","action":"visualization_dashboard.confirm_plan","planId":"dashboard-plan-001"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(3, parts.size());
+        assertEquals("visualization-chart-decision", parts.get(0).getType());
+        assertEquals("visualization-app-decision", parts.get(1).getType());
+        assertEquals("visualization-dashboard-decision", parts.get(2).getType());
+        assertEquals("pending", parts.get(0).getStatus());
+        assertEquals("pending", parts.get(1).getStatus());
+        assertEquals("pending", parts.get(2).getStatus());
+        assertEquals("chart-plan-001", parts.get(0).getMetadata().get("planId"));
+        assertEquals("app-plan-001", parts.get(1).getMetadata().get("planId"));
+        assertEquals("dashboard-plan-001", parts.get(2).getMetadata().get("planId"));
+    }
+
+    @Test
     @DisplayName("补充信息步骤围栏应解析为待提交片段")
     void parseInfoStepsFence() {
         String content = """

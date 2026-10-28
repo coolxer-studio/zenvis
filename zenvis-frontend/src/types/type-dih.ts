@@ -290,12 +290,37 @@ export type ReportArtifact = {
 export type ReportSourceRef = Record<string, unknown> & {
   type?: 'attachment' | 'message' | 'chart' | 'analysis_task' | 'mcp_audit' | string;
   id?: string;
+  artifactId?: string;
   name?: string;
+  title?: string;
+  chartType?: string;
+  description?: string;
   status?: string;
   parseStatus?: string;
   truncated?: boolean;
+  sessionTitle?: string;
+  source?: string;
+  origin?: string;
+  addedAt?: string;
   queriedAt?: string;
   dataTime?: string;
+};
+
+export type ReportChartLibraryItem = Record<string, unknown> & {
+  type: 'chart';
+  id: string;
+  artifactId?: string;
+  name?: string;
+  title?: string;
+  chartType?: string;
+  description?: string;
+  source?: string;
+  addedAt?: string;
+  queriedAt?: string;
+  sessionRecordId?: string | number;
+  chatSessionId?: string;
+  sessionTitle?: string;
+  echartsOption?: unknown;
 };
 
 export type ReportRevision = {

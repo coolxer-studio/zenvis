@@ -54,6 +54,11 @@ public interface ChatSessionRepository extends BaseRepository<ChatSession, Integ
     List<ChatSession> findTop50ByCreateByOrderByUpdateTimeDesc(Integer createBy);
 
     /**
+     * 报表图表库需要汇总当前用户所有会话中的已入库图表。
+     */
+    List<ChatSession> findAllByCreateByOrderByUpdateTimeDesc(Integer createBy);
+
+    /**
      * 报表写操作先锁定会话，保证首次建文档、保存和归档不会并发覆盖。
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

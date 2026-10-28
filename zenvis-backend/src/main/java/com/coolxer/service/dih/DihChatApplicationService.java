@@ -2975,11 +2975,8 @@ public class DihChatApplicationService {
     }
 
     private boolean isInteractiveDecisionPart(ChatMessagePart part) {
-        if (part == null || !Set.of(
-                "confirm",
-                "info-steps",
-                "metadata-config-decision",
-                "data-push-service-decision")
+        if (part == null
+                || !ChatMessagePartParser.INTERACTIVE_DECISION_PART_TYPES
                 .contains(part.getType())) {
             return false;
         }
@@ -4327,11 +4324,10 @@ public class DihChatApplicationService {
     }
 
     private boolean isVisualizationDecisionPart(ChatMessagePart part) {
-        return part != null && Set.of(
-                "confirm",
-                "visualization-chart-decision",
-                "visualization-app-decision",
-                "visualization-dashboard-decision").contains(part.getType());
+        return part != null && ("confirm".equals(part.getType())
+                || VisualizationAgentTypes.ALL.stream()
+                        .map(VisualizationAgentTypes::decisionPartType)
+                        .anyMatch(part.getType()::equals));
     }
 
     private boolean isVisualizationEntitySelection(

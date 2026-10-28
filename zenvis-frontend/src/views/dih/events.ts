@@ -7,7 +7,6 @@ import type {
   ReportArtifact,
   ReportDocument,
   ReportRevision,
-  ReportSourceRef,
   ReportAction,
 } from '@/types/type-dih';
 
@@ -87,7 +86,6 @@ export type ReportRecordEventDetail = {
   documents?: ReportDocument[];
   artifacts?: ReportArtifact[];
   revisions?: ReportRevision[];
-  materials?: ReportSourceRef[];
   extraData?: string;
   sessionRecordId?: string;
   sessionId?: string;

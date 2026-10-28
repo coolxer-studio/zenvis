@@ -9,9 +9,6 @@ import com.coolxer.dao.mysql.repository.ChatSessionRepository;
 import com.coolxer.dao.mysql.repository.ReportArtifactRepository;
 import com.coolxer.dao.mysql.repository.ReportDocumentRepository;
 import com.coolxer.dao.mysql.repository.ReportRevisionRepository;
-import com.coolxer.model.dih.ChatAttachment;
-import com.coolxer.model.dih.ChatMessagePart;
-import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.dto.ReportArchiveDto;
 import com.coolxer.model.dih.dto.ReportDocumentSaveDto;
 import com.coolxer.model.dih.vo.ReportWorkspaceVo;
@@ -197,48 +194,68 @@ class ReportDocumentServiceTest {
     }
 
     @Test
-    void materialsIncludeOnlyOwnedCrossAgentOutputsWithBoundedContent() {
-        ChatSession analysisSession = new ChatSession();
-        analysisSession.setId(22);
-        analysisSession.setCreateBy(7);
-        analysisSession.setSessionId("analysis-session");
-        analysisSession.setTitle("异常分析");
-        analysisSession.setType("agent_data_analysis");
-        Message message = new Message("ai", "已完成分析");
-        message.setAttachments(List.of(ChatAttachment.builder()
-                .fileId("file-2")
-                .fileName("告警.csv")
-                .parseStatus("success")
-                .build()));
-        message.setParts(List.of(ChatMessagePart.builder()
-                .id("part-2")
-                .type("data-analysis-record")
-                .title("异常结论")
-                .content("高风险事件集中在夜间。")
-                .status("completed")
-                .build()));
-        analysisSession.setMessages(JacksonUtil.toJson(List.of(message)));
-        analysisSession.setExtraData("""
-                {"visualizationChart":{"chartLibrary":[{"id":"chart-2","name":"夜间趋势"}]},
-                 "dataAnalysis":{"records":[{"recordId":"analysis-2","title":"异常检测"}]}}
+    void chartLibraryAggregatesOwnedSessionsDeduplicatesAndKeepsFullOptions() {
+        session.setSessionId("report-session");
+        session.setTitle("报表会话");
+        session.setExtraData("""
+                {"visualizationChart":{"chartLibrary":[
+                  {"id":"chart-1","name":"旧趋势","addedAt":"2026-10-29T05:00:00Z",
+                   "echartsOption":{"series":[{"type":"line","data":[1]}]}}
+                ]}}
                 """);
-        when(chatSessionRepository.findTop50ByCreateByOrderByUpdateTimeDesc(7))
-                .thenReturn(List.of(analysisSession));
-        when(documentRepository.findTop50ByCreateByOrderByUpdateTimeDesc(7))
-                .thenReturn(List.of());
-        when(artifactRepository.findTop100ByCreateByOrderByCreateTimeDesc(7))
-                .thenReturn(List.of());
 
-        List<Map<String, Object>> materials = service.materials(11L, user);
+        String largeMarker = "x".repeat(2_500);
+        ChatSession chartSession = new ChatSession();
+        chartSession.setId(22);
+        chartSession.setCreateBy(7);
+        chartSession.setSessionId("chart-session");
+        chartSession.setTitle("临时图表演示");
+        chartSession.setExtraData("""
+                {"visualizationChart":{"chartLibrary":[
+                  {"id":"chart-1","name":"最新趋势","addedAt":"2026-10-29T07:00:00Z",
+                   "echartsOption":{"series":[{"type":"bar","data":[2]}]}},
+                  {"id":"chart-2","artifactId":"artifact-2","name":"配置快照",
+                   "addedAt":"2026-10-29T06:00:00Z",
+                   "config":{"type":"chart","config":{"series":[{"type":"pie","data":[3]}]}}},
+                  {"id":"chart-3","name":"嵌套快照","addedAt":"2026-10-29T04:00:00Z",
+                   "echarts":{"chart_type":"line","option":{"marker":"%s"}}}
+                ]}}
+                """.formatted(largeMarker));
 
-        assertThat(materials)
-                .extracting(item -> item.get("type"))
-                .contains("attachment", "agent_output", "chart", "analysis_record");
-        assertThat(materials)
-                .allSatisfy(item -> {
-                    assertThat(item).containsEntry("sessionRecordId", 22);
-                    assertThat(item).containsEntry("sessionTitle", "异常分析");
-                });
+        ChatSession otherUserSession = new ChatSession();
+        otherUserSession.setId(33);
+        otherUserSession.setCreateBy(8);
+        otherUserSession.setExtraData("""
+                {"visualizationChart":{"chartLibrary":[{"id":"other-chart"}]}}
+                """);
+        ChatSession corruptSession = new ChatSession();
+        corruptSession.setId(44);
+        corruptSession.setCreateBy(7);
+        corruptSession.setExtraData("{broken");
+
+        when(chatSessionRepository.findAllByCreateByOrderByUpdateTimeDesc(7))
+                .thenReturn(List.of(session, chartSession, otherUserSession, corruptSession));
+
+        List<Map<String, Object>> charts = service.chartLibrary(user);
+
+        assertThat(charts).hasSize(3);
+        assertThat(charts).extracting(item -> item.get("id"))
+                .containsExactly("chart-1", "chart-2", "chart-3");
+        assertThat(charts).allSatisfy(item -> {
+            assertThat(item).containsEntry("type", "chart")
+                    .containsEntry("origin", "chart_library");
+        });
+        assertThat(charts.get(0))
+                .containsEntry("name", "最新趋势")
+                .containsEntry("sessionRecordId", 22);
+        assertThat((List<?>) castMap(charts.get(0).get("echartsOption")).get("series"))
+                .hasSize(1);
+        assertThat(castMap(charts.get(1).get("echartsOption")))
+                .containsKey("series");
+        assertThat(String.valueOf(castMap(charts.get(2).get("echartsOption"))
+                .get("marker"))).hasSize(2_500);
+        assertThat(service.materials(11L, user)).isEqualTo(charts);
+        assertThat(service.materials(user)).isEqualTo(charts);
 
         List<Map<String, Object>> verified = service.validateSourceRefs(
                 11L,
@@ -249,7 +266,32 @@ class ReportDocumentServiceTest {
         assertThat(verified).hasSize(1);
         assertThat(verified.get(0))
                 .containsEntry("type", "chart")
-                .containsEntry("id", "chart-2");
+                .containsEntry("id", "chart-2")
+                .containsEntry("artifactId", "artifact-2")
+                .doesNotContainKey("echartsOption");
+    }
+
+    @Test
+    void validateSourceRefsPreservesHistoricalNonChartSourcesButRejectsNewOnes() {
+        ReportDocument current = document(3L, "正文");
+        current.setSourceRefs(JacksonUtil.toJson(List.of(
+                Map.of("type", "attachment", "id", "file-old", "name", "历史附件"),
+                Map.of("type", "analysis_record", "id", "analysis-old", "name", "历史分析"))));
+        when(documentRepository.findFirstByChatSessionIdAndCreateByOrderByUpdateTimeDesc(11, 7))
+                .thenReturn(Optional.of(current));
+        when(chatSessionRepository.findAllByCreateByOrderByUpdateTimeDesc(7))
+                .thenReturn(List.of());
+
+        List<Map<String, Object>> verified = service.validateSourceRefs(
+                11L,
+                List.of(
+                        Map.of("type", "attachment", "id", "file-old"),
+                        Map.of("type", "analysis_record", "id", "analysis-old"),
+                        Map.of("type", "attachment", "id", "file-new")),
+                user);
+
+        assertThat(verified).extracting(item -> item.get("id"))
+                .containsExactly("file-old", "analysis-old");
     }
 
     private ReportDocumentSaveDto saveRequest(

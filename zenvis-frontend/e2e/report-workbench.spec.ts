@@ -14,25 +14,39 @@ const documentV3 = {
   source_refs: [],
 }
 
-const workspace = (currentDocument = documentV3) => ({
-  current_document: currentDocument,
-  revisions: [{
-    revision: currentDocument.revision,
-    version: currentDocument.version,
+const workspace = (currentDocument = documentV3) => {
+  const sourceRefs = Array.isArray(currentDocument.source_refs)
+    ? currentDocument.source_refs
+    : []
+  const reportDocument = {
+    documentId: currentDocument.document_id,
     title: currentDocument.title,
     format: currentDocument.format,
-    content_hash: currentDocument.content_hash,
-    source_refs: [],
-  }],
-  artifacts: [],
-  extra_data: JSON.stringify({
-    report: {
-      documentId: currentDocument.document_id,
+    revision: currentDocument.revision,
+    version: currentDocument.version,
+    content: currentDocument.content,
+    contentHash: currentDocument.content_hash,
+    sourceRefs,
+  }
+  return {
+    current_document: currentDocument,
+    revisions: [{
       revision: currentDocument.revision,
       version: currentDocument.version,
-    },
-  }),
-})
+      title: currentDocument.title,
+      format: currentDocument.format,
+      content_hash: currentDocument.content_hash,
+      source_refs: sourceRefs,
+    }],
+    artifacts: [],
+    extra_data: JSON.stringify({
+      report: {
+        currentDocument: reportDocument,
+        documents: [reportDocument],
+      },
+    }),
+  }
+}
 
 const ok = (data: unknown) => ({
   status: 0,
@@ -41,10 +55,32 @@ const ok = (data: unknown) => ({
   data,
 })
 
+const chartLibraryChart = (overrides: Record<string, unknown> = {}) => ({
+  type: 'chart',
+  id: 'chart-1',
+  artifactId: 'artifact-1',
+  name: '用户事件趋势',
+  chartType: 'line',
+  description: '按日期统计的真实用户事件趋势。',
+  source: 'temporary',
+  sessionTitle: '用户事件临时图表演示',
+  addedAt: '2026-10-29T06:39:22Z',
+  queriedAt: '2026-10-29T06:39:20Z',
+  sessionRecordId: 1256,
+  echartsOption: {
+    xAxis: { type: 'category', data: ['10-27', '10-28'] },
+    yAxis: { type: 'value' },
+    series: [{ type: 'line', data: [12, 28] }],
+  },
+  ...overrides,
+})
+
 type MockOptions = {
   saveMode?: 'success' | 'conflict'
   onSave?: (payload: Record<string, unknown>) => void
   onChat?: (payload: Record<string, any>, route: Route) => Promise<void>
+  chartLibrary?: () => unknown[]
+  sessionRecordId?: string | null
 }
 
 const fulfillJson = (route: Route, data: unknown, status = 200) => route.fulfill({
@@ -55,6 +91,7 @@ const fulfillJson = (route: Route, data: unknown, status = 200) => route.fulfill
 
 const installApiMocks = async (page: Page, options: MockOptions = {}) => {
   let serverDocument = { ...documentV3 }
+  let chartLibraryRequestCount = 0
   await page.route('**/api/v1/**', async route => {
     const request = route.request()
     const path = new URL(request.url()).pathname
@@ -80,7 +117,7 @@ const installApiMocks = async (page: Page, options: MockOptions = {}) => {
     }
     if (path.endsWith('/chat-session/e2e-session/session') && method === 'GET') {
       await fulfillJson(route, ok({
-        id: '101',
+        id: options.sessionRecordId === null ? undefined : options.sessionRecordId || '101',
         session_id: 'e2e-session',
         title: '报表并发验收',
         type: 'agent_report',
@@ -89,8 +126,9 @@ const installApiMocks = async (page: Page, options: MockOptions = {}) => {
       }))
       return
     }
-    if (path.endsWith('/chat-session/101/report/materials')) {
-      await fulfillJson(route, ok([]))
+    if (path.endsWith('/dih/report/chart-library')) {
+      chartLibraryRequestCount += 1
+      await fulfillJson(route, ok(options.chartLibrary?.() ?? []))
       return
     }
     if (path.endsWith('/chat-session/101/report') && method === 'GET') {
@@ -123,6 +161,7 @@ const installApiMocks = async (page: Page, options: MockOptions = {}) => {
         revision: 4,
         version: 'v4',
         content_hash: 'hash-v4',
+        source_refs: Array.isArray(payload.source_refs) ? payload.source_refs : [],
       }
       await fulfillJson(route, ok(workspace(serverDocument)))
       return
@@ -134,6 +173,7 @@ const installApiMocks = async (page: Page, options: MockOptions = {}) => {
 
     await fulfillJson(route, ok({}))
   })
+  return { chartLibraryRequestCount: () => chartLibraryRequestCount }
 }
 
 const openReportWorkbench = async (page: Page) => {
@@ -149,7 +189,6 @@ const openReportWorkbench = async (page: Page) => {
         documents: [currentDocument],
         revisions: [],
         artifacts: [],
-        materials: [],
       },
     }))
   }, {
@@ -209,6 +248,140 @@ test('旧版本保存显示冲突并保留本地编辑', async ({ page }) => {
   await page.getByRole('button', { name: '保留本地内容' }).click()
   await expect(page.locator('.report-header .el-tag').first()).toContainText('版本冲突')
   await expect(title).toHaveValue('保留在本地的标题')
+})
+
+test('打开图表库时刷新刚加入的临时图表并展示空状态', async ({ page }) => {
+  let charts: unknown[] = []
+  const controls = await installApiMocks(page, { chartLibrary: () => charts })
+  await openReportWorkbench(page)
+  await expect.poll(controls.chartLibraryRequestCount).toBeGreaterThan(0)
+
+  await page.getByTestId('chart-library-button').click()
+  let dialog = page.getByRole('dialog', { name: '插入图表库图表' })
+  await expect(dialog).toContainText('图表库暂无图表')
+  await dialog.getByRole('button', { name: '取消' }).click()
+
+  charts = [chartLibraryChart()]
+  const requestCountBeforeOpen = controls.chartLibraryRequestCount()
+  await page.getByTestId('chart-library-button').click()
+
+  await expect.poll(controls.chartLibraryRequestCount)
+    .toBeGreaterThan(requestCountBeforeOpen)
+  dialog = page.getByRole('dialog', { name: '插入图表库图表' })
+  await expect(dialog).toContainText('用户事件趋势')
+  await expect(dialog).toContainText('折线图')
+  await expect(dialog).toContainText('用户事件临时图表演示')
+  await expect(dialog).toContainText('加入于')
+})
+
+test('图表库支持搜索、预览并禁用缺少快照的图表', async ({ page }) => {
+  await installApiMocks(page, {
+    chartLibrary: () => [
+      chartLibraryChart(),
+      chartLibraryChart({
+        id: 'chart-2',
+        artifactId: 'artifact-2',
+        name: '事件分类占比',
+        chartType: 'pie',
+        echartsOption: undefined,
+      }),
+    ],
+  })
+  await openReportWorkbench(page)
+  await page.getByTestId('chart-library-button').click()
+
+  const dialog = page.getByRole('dialog', { name: '插入图表库图表' })
+  await expect(dialog.locator('.safe-echarts-canvas canvas')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '插入到光标' })).toBeEnabled()
+
+  const search = dialog.getByPlaceholder('搜索图表名称、会话或类型')
+  await search.fill('折线图')
+  await expect(dialog).toContainText('用户事件趋势')
+  await expect(dialog).not.toContainText('事件分类占比')
+
+  await search.fill('饼图')
+  await expect(dialog).toContainText('事件分类占比')
+  await expect(dialog).toContainText('该图表没有可渲染的 ECharts 快照')
+  await expect(dialog.getByRole('button', { name: '插入到光标' })).toBeDisabled()
+
+  await search.fill('不存在')
+  await expect(dialog).toContainText('没有匹配的图表')
+})
+
+test('新建报表会话未落库时仍可加载用户图表库', async ({ page }) => {
+  const controls = await installApiMocks(page, {
+    sessionRecordId: null,
+    chartLibrary: () => [chartLibraryChart()],
+  })
+  await page.goto('/#/service/dih?type=agent_report&chatSessionId=e2e-session&token=e2e-token')
+  await expect(page.locator('.report-workbench')).toBeVisible()
+
+  await page.getByTestId('chart-library-button').click()
+
+  await expect.poll(controls.chartLibraryRequestCount).toBeGreaterThan(0)
+  const dialog = page.getByRole('dialog', { name: '插入图表库图表' })
+  await expect(dialog).toContainText('用户事件趋势')
+  await expect(dialog).toContainText('折线图')
+})
+
+test('从图表库在光标处插入静态快照并保存图表来源', async ({ page }) => {
+  const savePayloads: Array<Record<string, unknown>> = []
+  await installApiMocks(page, {
+    chartLibrary: () => [chartLibraryChart()],
+    onSave: payload => savePayloads.push(payload),
+  })
+  await openReportWorkbench(page)
+
+  const editor = page.locator('.w-e-text-container [contenteditable="true"]')
+  const conclusion = editor.locator('p').filter({ hasText: '原始关键结论' })
+  await conclusion.click()
+  await editor.press('End')
+
+  await page.getByTestId('chart-library-button').click()
+  const dialog = page.getByRole('dialog', { name: '插入图表库图表' })
+  await expect(dialog.locator('.safe-echarts-canvas canvas')).toBeVisible()
+
+  const saved = page.waitForResponse(response => (
+    new URL(response.url()).pathname.endsWith('/report/save')
+  ), { timeout: 15_000 })
+  await dialog.getByRole('button', { name: '插入到光标' }).click()
+  await saved
+
+  const image = editor.locator('img[src^="data:image/"]')
+  await expect(image).toHaveCount(1)
+  await expect(editor).toContainText('图表：用户事件趋势')
+  await expect(page.getByTestId('report-save-status')).toContainText('已保存')
+  expect(await editor.evaluate(element => {
+    const imageElement = element.querySelector('img[src^="data:image/"]')
+    const sourceParagraph = [...element.querySelectorAll('p')]
+      .find(paragraph => paragraph.textContent?.includes('原始关键结论'))
+    return Boolean(
+      imageElement
+      && sourceParagraph
+      && sourceParagraph.compareDocumentPosition(imageElement) & Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })).toBe(true)
+
+  await expect.poll(() => savePayloads.length).toBeGreaterThan(0)
+  const payload = savePayloads[savePayloads.length - 1]
+  expect(String(payload.content)).toContain('data:image/')
+  const sourceRefs = payload.source_refs as Array<Record<string, unknown>>
+  expect(sourceRefs).toHaveLength(1)
+  expect(sourceRefs[0]).toMatchObject({
+    type: 'chart',
+    id: 'chart-1',
+    artifactId: 'artifact-1',
+    name: '用户事件趋势',
+    origin: 'chart_library',
+  })
+  expect(sourceRefs[0]).not.toHaveProperty('echartsOption')
+
+  await page.reload()
+  await expect(page.locator('.report-workbench')).toBeVisible()
+  const reloadedEditor = page.locator('.w-e-text-container [contenteditable="true"]')
+  await expect(reloadedEditor).toContainText('图表：用户事件趋势')
+  await expect(reloadedEditor.locator('img[src^="data:image/"]')).toHaveCount(1)
+  await expect(page.locator('.catalogue')).toContainText('用户事件趋势')
 })
 
 test('用户继续编辑后，迟到的选区改写只展示预览且不覆盖正文', async ({ page }) => {

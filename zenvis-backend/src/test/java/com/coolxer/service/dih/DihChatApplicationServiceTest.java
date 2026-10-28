@@ -22,6 +22,7 @@ import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.service.dih.agent.DataPushServiceAgent;
 import com.coolxer.service.dih.agent.MetadataConfigAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
+import com.coolxer.service.dih.agent.VisualizationAgentTypes;
 import com.coolxer.service.dih.agent.VisualizationAppAgent;
 import com.coolxer.service.dih.agent.VisualizationChartAgent;
 import com.coolxer.service.dih.agent.VisualizationDashboardAgent;
@@ -79,20 +80,48 @@ class DihChatApplicationServiceTest {
     @Test
     void interactiveWorkflowCardsPauseAPersistentRunForUserInput() {
         DihChatApplicationService service = streamingService();
-        String confirm = """
-                ```zenvis:confirm
-                {"title":"确认执行","content":"准备写入系统","action":"visualization_chart.confirm_query_plan"}
-                ```
-                """;
+        List<String> interactiveTypes = new ArrayList<>(List.of(
+                "confirm",
+                "info-steps",
+                "metadata-config-decision",
+                "data-push-service-decision"));
+        VisualizationAgentTypes.ALL.stream()
+                .map(VisualizationAgentTypes::decisionPartType)
+                .forEach(interactiveTypes::add);
+        for (String type : interactiveTypes) {
+            String card = "```zenvis:" + type + "\n"
+                    + "{\"title\":\"需要确认\",\"content\":\"请处理当前卡片\"}\n"
+                    + "```\n";
+            assertThat(service.requiresUserDecision(card))
+                    .as("interactive card type %s", type)
+                    .isTrue();
+        }
+
         String notice = """
                 ```zenvis:notice
                 {"title":"说明","content":"只是提示","level":"info"}
                 ```
                 """;
+        String preview = """
+                ```zenvis:visualization-chart-preview
+                {"title":"趋势图","chartType":"line","echartsOption":{"series":[]}}
+                ```
+                """;
 
-        assertThat(service.requiresUserDecision(confirm)).isTrue();
         assertThat(service.requiresUserDecision(notice)).isFalse();
         assertThat(service.requiresUserDecision("普通文本回答")).isFalse();
+        assertThat(service.requiresUserDecision(preview)).isFalse();
+        for (String type : List.of(
+                "visualization-chart-record",
+                "visualization-app-record",
+                "visualization-dashboard-record")) {
+            String record = "```zenvis:" + type + "\n"
+                    + "{\"title\":\"记录\",\"name\":\"记录\"}\n"
+                    + "```\n";
+            assertThat(service.requiresUserDecision(record))
+                    .as("non-interactive record type %s", type)
+                    .isFalse();
+        }
     }
 
     @Test

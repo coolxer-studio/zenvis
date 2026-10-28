@@ -30,6 +30,7 @@ import {
   ReportDocumentSaveParams,
   ReportRevision,
   ReportSourceRef,
+  ReportChartLibraryItem,
   ReportWorkspace,
   AgentRun,
   AgentRunCreateParams,
@@ -1027,14 +1028,18 @@ export class DihService {
     return normalizeReportWorkspace(response);
   }
 
-  static async getReportMaterials(sessionRecordId: string): Promise<ReportSourceRef[]> {
+  static async getReportMaterials(): Promise<ReportSourceRef[]> {
+    return this.getReportChartLibrary();
+  }
+
+  static async getReportChartLibrary(): Promise<ReportChartLibraryItem[]> {
     const response = await request<Array<Record<string, unknown>>>(
-      `${prefixChatSession}/${sessionRecordId}/report/materials`,
+      `${prefix}/report/chart-library`,
       {},
       'GET',
       { silent: true },
     );
-    return Array.isArray(response) ? response as ReportSourceRef[] : [];
+    return Array.isArray(response) ? response as ReportChartLibraryItem[] : [];
   }
 
   static async saveReportDocument(

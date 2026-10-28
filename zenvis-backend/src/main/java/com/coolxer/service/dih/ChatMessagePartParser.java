@@ -12,12 +12,26 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
 public class ChatMessagePartParser {
+
+    /**
+     * Structured parts that require a user decision before a persistent Run may continue.
+     * Keep this as the single source of truth shared by parsing and Run pausing.
+     */
+    public static final Set<String> INTERACTIVE_DECISION_PART_TYPES = Set.of(
+            "confirm",
+            "info-steps",
+            "metadata-config-decision",
+            "data-push-service-decision",
+            "visualization-chart-decision",
+            "visualization-app-decision",
+            "visualization-dashboard-decision");
 
     private static final Pattern FENCE_PATTERN = Pattern.compile("```([^\\r\\n]*)\\R([\\s\\S]*?)\\R?```");
     private static final Pattern THINK_PATTERN = Pattern.compile("<think>([\\s\\S]*?)</think>", Pattern.CASE_INSENSITIVE);
@@ -150,13 +164,7 @@ public class ChatMessagePartParser {
                             "configIndex", "dashboardId", "dashboardCode", "menuId"))
                     .level(firstTextValue(node, "level", "type"))
                     .metadata(metadata);
-            if ("confirm".equals(type)
-                    || "info-steps".equals(type)
-                    || "metadata-config-decision".equals(type)
-                    || "data-push-service-decision".equals(type)
-                    || "visualization-chart-decision".equals(type)
-                    || "visualization-app-decision".equals(type)
-                    || "visualization-dashboard-decision".equals(type)) {
+            if (INTERACTIVE_DECISION_PART_TYPES.contains(type)) {
                 builder.status("pending");
             } else if ("mcp-approval".equals(type) || "tool-call".equals(type)) {
                 builder.id(textValue(node, "id"))

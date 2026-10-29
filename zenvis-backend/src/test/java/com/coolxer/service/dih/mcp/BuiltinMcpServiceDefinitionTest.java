@@ -19,15 +19,15 @@ class BuiltinMcpServiceDefinitionTest {
                         "visualization", "analysis-task");
         assertThat(BuiltinMcpServiceDefinition.orderedValues())
                 .extracting(service -> service.toolNames().size())
-                .containsExactly(22, 5, 7, 6, 21, 16);
+                .containsExactly(22, 5, 9, 6, 21, 16);
 
         List<String> tools = BuiltinMcpServiceDefinition.orderedValues().stream()
                 .flatMap(service -> service.toolNames().stream())
                 .toList();
         Set<String> unique = new LinkedHashSet<>(tools);
 
-        assertThat(tools).hasSize(77);
-        assertThat(unique).hasSize(77);
+        assertThat(tools).hasSize(79);
+        assertThat(unique).hasSize(79);
         assertThat(BuiltinMcpServiceDefinition.allToolNames()).containsExactlyInAnyOrderElementsOf(unique);
     }
 

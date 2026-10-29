@@ -7,6 +7,7 @@ import type {
   WorkflowActionName,
   WorkflowActionResult,
 } from '@/types/type-dih';
+import { workflowActionForConfigDecision } from '@/components/dih-message/config-decision-actions';
 import type { SendMessageOptions } from './use-chat-stream';
 
 export type InfoStepAnswer = {
@@ -95,6 +96,10 @@ const confirmAction = (part: ChatMessagePart) => {
 
 const workflowId = (part: ChatMessagePart) => textValue(part.metadata?.workflowId);
 const demoId = (part: ChatMessagePart) => textValue(part.metadata?.demoId);
+const metadataPathOperation = (part: ChatMessagePart) => {
+  const operation = textValue(part.metadata?.operation);
+  return operation === 'rename' || operation === 'delete' ? operation : '';
+};
 
 const autoConfirmMessage = (action: string) => {
   if (action === 'analysis.confirm_dataset') {
@@ -187,28 +192,61 @@ const configConfirmReviseDisplayMessage = (detail?: string) => {
 };
 
 const metadataConfigDecisionMessage = (
-  decision: 'apply_config' | 'abandon' | 'revise',
+  decision: 'apply_config' | 'abandon' | 'revise' | 'force_approve',
   detail?: string,
+  part?: ChatMessagePart,
 ) => {
+  const operation = part ? metadataPathOperation(part) : '';
+  if (operation && decision === 'apply_config') {
+    const sourcePath = textValue(part?.metadata?.sourcePath, '锁定的源路径');
+    if (operation === 'rename') {
+      return `我已确认执行锁定的元数据重命名操作：${sourcePath} → ${textValue(part?.metadata?.targetPath)}。请只使用服务端锁定参数调用 config_rename，不得改写正文、跨目录移动或覆盖已有目标；平台完成路径核验和 Meta 严格重载后再输出摘要。`;
+    }
+    return `我已确认执行锁定的元数据删除操作：${sourcePath}。请只使用服务端锁定参数调用 config_delete${part?.metadata?.recursive === true ? ' 并传递 recursive=true' : ''}；不得调用 config_add/config_apply 或重写正文。平台完成路径核验和 Meta 严格重载后再输出摘要。`;
+  }
+  if (operation && decision === 'abandon') {
+    return '我选择取消本次元数据重命名或删除操作。不要执行路径变更，也不要调用 config_add/config_apply。';
+  }
+  if (operation && decision === 'revise') {
+    const focus = detail?.trim() || '请重新确认源路径和目标。';
+    return `我需要调整本次元数据目录操作：\n${focus}\n请重新调用 config_tree(type="meta") 读取真实配置树，再输出新的元数据操作确认卡；不得执行旧目标。`;
+  }
   if (decision === 'apply_config') {
     return '我已确认并授权添加上一轮已生成并展示的 meta 元数据配置到系统。本条消息就是写入授权：请不要再次询问是否添加配置。请立即按顺序调用元数据配置 MCP：1. config_tree(type="meta") 检查目标文件是否存在；2. 如果目标文件不存在，调用 config_add(type="meta", configDto={"fileName":"<目标文件名>"}) 创建文件；3. 调用 config_apply(type="meta", configDto={"fileName":"<目标文件名>","text":"<上一轮完整 meta json>"}) 写入并应用；4. 调用 config_read(type="meta", fileName="<目标文件名>") 读回校验文件确实存在且内容已写入；5. 只有在目标文件已存在且需要覆盖时，才先读取旧文件、说明差异并等待我确认覆盖。只有 MCP 返回成功且读回校验通过后，才用 Markdown 围栏代码块输出 zenvis:meta-config-record 记录；zenvis:meta-config-record 不是工具名，请不要调用它。';
   }
   if (decision === 'abandon') {
     return '我选择放弃本次元数据配置。请记录本次配置已放弃，不要写入系统，也不要继续创建或更新相关配置。';
   }
+  if (decision === 'force_approve') {
+    return '我已明确知悉校验风险并确认强制写入上一轮锁定的元数据配置。请只使用工作流锁定候选调用 config_apply，并传入 force=true；写入后必须执行真实 Meta 加载与 config_read 读回，失败时不得输出成功记录。';
+  }
   const focus = detail?.trim() || '请基于上一轮配置继续优化字段、实体或展示规则。';
   return `我需要补充信息继续更新元数据配置。调整要求如下：\n${focus}\n请基于上一轮 meta 配置重新生成完整配置，并再次展示完整配置和后续选择。`;
 };
 
 const metadataConfigDecisionDisplayMessage = (
-  decision: 'apply_config' | 'abandon' | 'revise',
+  decision: 'apply_config' | 'abandon' | 'revise' | 'force_approve',
   detail?: string,
+  part?: ChatMessagePart,
 ) => {
+  const operation = part ? metadataPathOperation(part) : '';
+  if (operation && decision === 'apply_config') {
+    return operation === 'rename' ? '我已确认执行元数据重命名。' : '我已确认执行元数据删除。';
+  }
+  if (operation && decision === 'abandon') {
+    return '我已取消本次元数据目录操作。';
+  }
+  if (operation && decision === 'revise') {
+    return `我已补充元数据目录操作调整要求：\n${detail?.trim() || '重新确认源路径和目标。'}`;
+  }
   if (decision === 'apply_config') {
     return '我已确认添加配置到系统。';
   }
   if (decision === 'abandon') {
     return '我已放弃本次元数据配置。';
+  }
+  if (decision === 'force_approve') {
+    return '我已确认忽略校验并强制写入。';
   }
   const focus = detail?.trim() || '继续优化元数据配置。';
   return `我已补充配置调整要求：\n${focus}`;
@@ -620,17 +658,23 @@ export const useChatMessageActions = ({
     ElMessage.error('普通图表缺少共享工作流标识，不能加入图表库');
   };
 
+  type LegacyConfigDecision = 'apply_config' | 'abandon' | 'revise' | 'retry';
+  type MetadataConfigDecision = LegacyConfigDecision | 'force_approve';
   type ConfigDecisionPayload = {
     part: ChatMessagePart;
-    decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+    decision: LegacyConfigDecision;
     detail?: string;
+  };
+  type MetadataConfigDecisionPayload = Omit<ConfigDecisionPayload, 'decision'> & {
+    decision: MetadataConfigDecision;
   };
 
   const handleConfigDecision = async (
     message: ChatMessage,
-    payload: ConfigDecisionPayload,
+    payload: ConfigDecisionPayload | MetadataConfigDecisionPayload,
     domain: 'metadata' | 'push',
   ) => {
+    const decision = payload.decision;
     const domainLabel = domain === 'metadata' ? '元数据配置' : '数据推送服务';
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning(`缺少${domainLabel}选择记录标识，无法记录操作结果`);
@@ -638,27 +682,33 @@ export const useChatMessageActions = ({
     }
 
     if (workflowId(payload.part)) {
-      const actionMap: Record<typeof payload.decision, WorkflowActionName> = {
-        apply_config: 'approve',
-        abandon: 'reject',
-        revise: 'revise',
-        retry: 'retry',
-      };
+      if (domain !== 'metadata' && decision === 'force_approve') {
+        ElMessage.error('只有元数据配置候选支持强制写入');
+        return;
+      }
       try {
         await performWorkflowAction(
           message,
           payload.part,
-          actionMap[payload.decision],
+          workflowActionForConfigDecision(decision),
           { revision: payload.detail },
         );
+        const operation = domain === 'metadata'
+          ? metadataPathOperation(payload.part) : '';
         ElMessage.success(
-          payload.decision === 'apply_config'
+          decision === 'apply_config'
             ? domain === 'push'
               ? '已确认创建数据推送服务'
-              : '已确认应用元数据配置'
-            : payload.decision === 'abandon'
+              : operation === 'rename'
+                ? '已确认重命名，正在执行路径核验与 Meta 重载'
+                : operation === 'delete'
+                  ? '已确认删除，正在执行路径核验与 Meta 重载'
+                  : '已确认应用元数据配置'
+            : decision === 'force_approve'
+              ? '已强制确认写入，正在执行真实加载与读回'
+            : decision === 'abandon'
               ? `已取消当前${domainLabel}流程`
-              : payload.decision === 'retry'
+              : decision === 'retry'
                 ? '已开始重试当前阶段'
                 : '已提交配置调整要求',
         );
@@ -669,8 +719,8 @@ export const useChatMessageActions = ({
       return;
     }
 
-    if (payload.decision === 'retry') {
-      ElMessage.error('只有共享工作流阻塞卡支持重试');
+    if (decision === 'retry' || decision === 'force_approve') {
+      ElMessage.error('只有共享工作流卡片支持重试或强制写入');
       return;
     }
 
@@ -684,12 +734,12 @@ export const useChatMessageActions = ({
         chat_id: chatSessionId.value,
         message_id: message.id,
         part_id: payload.part.id,
-        decision: payload.decision,
+        decision,
       });
     } catch (error) {
       console.error(`记录${domainLabel}后续选择失败:`, error);
     }
-    payload.part.status = payload.decision;
+    payload.part.status = decision;
     const toastMap = domain === 'push'
       ? {
           apply_config: '已确认创建数据推送服务',
@@ -701,19 +751,19 @@ export const useChatMessageActions = ({
           abandon: '已放弃本次配置',
           revise: '已提交配置调整要求',
         };
-    ElMessage.success(toastMap[payload.decision]);
+    ElMessage.success(toastMap[decision]);
     await nextTick();
     await sendMessage({
       content: domain === 'push'
-        ? dataPushDecisionDisplayMessage(payload.decision, payload.detail)
-        : metadataConfigDecisionDisplayMessage(payload.decision, payload.detail),
+        ? dataPushDecisionDisplayMessage(decision, payload.detail)
+        : metadataConfigDecisionDisplayMessage(decision, payload.detail, payload.part),
       requestContent: domain === 'push'
-        ? dataPushDecisionMessage(payload.decision, payload.detail)
-        : metadataConfigDecisionMessage(payload.decision, payload.detail),
+        ? dataPushDecisionMessage(decision, payload.detail)
+        : metadataConfigDecisionMessage(decision, payload.detail, payload.part),
     });
   };
 
-  const handleMetadataConfigDecision = (message: ChatMessage, payload: ConfigDecisionPayload) =>
+  const handleMetadataConfigDecision = (message: ChatMessage, payload: MetadataConfigDecisionPayload) =>
     handleConfigDecision(message, payload, 'metadata');
 
   const handleDataPushDecision = (message: ChatMessage, payload: ConfigDecisionPayload) =>

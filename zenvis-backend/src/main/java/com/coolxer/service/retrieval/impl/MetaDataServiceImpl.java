@@ -78,22 +78,38 @@ public class MetaDataServiceImpl implements MetaDataService {
     public MetaData loadMetaData() {
         String metadataPath = customWebConfig.getRetrievalMetaFilePath();
         try {
-            LoadedMetadata loaded = readMetaData(metadataPath);
-            supplementBuiltInAttributes(loaded.metaData(), metadataPath, loaded.sourceByObject());
-            normalizeLinkTemplates(loaded.metaData());
-            normalizeLinkConditions(loaded.metaData());
-            supplementOperators(loaded.metaData());
-            MetadataSnapshot next = buildSnapshot(loaded.metaData(), metadataPath, loaded.sourceByObject());
-            snapshotRef.set(next);
-            log.info("retrieval metadata loaded, path={}, entities={}, attributes={}, operators={}",
-                    metadataPath, next.entities().size(), next.attributes().size(), next.operatorsByName().size());
-            return next.metaData();
+            return loadMetaDataOrThrow(metadataPath);
         } catch (Exception ex) {
             MetadataSnapshot previous = snapshotRef.get();
             log.error("retrieval metadata reload failed, keeping previous snapshot, path={}, reason={}",
                     metadataPath, ex.getMessage(), ex);
             return previous.isEmpty() ? null : previous.metaData();
         }
+    }
+
+    @Override
+    public MetaData reloadMetaDataOrThrow() {
+        String metadataPath = customWebConfig.getRetrievalMetaFilePath();
+        try {
+            return loadMetaDataOrThrow(metadataPath);
+        } catch (RuntimeException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("元数据加载失败: " + ex.getMessage(), ex);
+        }
+    }
+
+    private MetaData loadMetaDataOrThrow(String metadataPath) throws IOException {
+        LoadedMetadata loaded = readMetaData(metadataPath);
+        supplementBuiltInAttributes(loaded.metaData(), metadataPath, loaded.sourceByObject());
+        normalizeLinkTemplates(loaded.metaData());
+        normalizeLinkConditions(loaded.metaData());
+        supplementOperators(loaded.metaData());
+        MetadataSnapshot next = buildSnapshot(loaded.metaData(), metadataPath, loaded.sourceByObject());
+        snapshotRef.set(next);
+        log.info("retrieval metadata loaded, path={}, entities={}, attributes={}, operators={}",
+                metadataPath, next.entities().size(), next.attributes().size(), next.operatorsByName().size());
+        return next.metaData();
     }
 
     @Override

@@ -145,7 +145,7 @@
         <section v-if="detail.status === 'WAITING_USER'" class="detail-section supplement-section">
           <h3>需要补充信息</h3>
           <p>{{ resolveAgentRunWaitingQuestion(detail) || '任务正在等待你补充继续执行所需的信息。' }}</p>
-          <el-button type="primary" size="small" @click="openChat(detail)">去会话处理</el-button>
+          <el-button type="primary" size="small" @click="openSupplement(detail)">补充信息</el-button>
         </section>
 
         <section class="detail-section">
@@ -182,6 +182,12 @@
       </div>
     </el-dialog>
 
+    <AgentRunUserInputDialog
+      v-model="supplementVisible"
+      :question="supplementQuestion"
+      :submitting="supplementSubmitting"
+      @submit="submitSupplement"
+    />
   </div>
 </template>
 
@@ -190,6 +196,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ArrowDown, ArrowUp, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { DihService } from '@/service/api';
+import AgentRunUserInputDialog from '@/components/dih-message/message-parts/agent-run-user-input-dialog.vue';
 import AgentRunActivity from '@/components/dih-message/message-parts/agent-run-activity.vue';
 import {
   AGENT_RUN_ACTIVITY_EVENT_TYPES,
@@ -202,6 +209,7 @@ import type {
   AgentRunStatus,
   McpApprovalData,
 } from '@/types/type-dih';
+import { generateUUID } from '@/utils/util-common';
 
 const emit = defineEmits<{
   (event: 'open-chat', run: AgentRun): void;
@@ -222,6 +230,10 @@ const activities = computed(() => buildAgentRunActivities(activityEvents.value))
 const approval = ref<McpApprovalData | null>(null);
 const approvalDeciding = ref('');
 const runAction = ref<{ id: string; action: string }>({ id: '', action: '' });
+const supplementVisible = ref(false);
+const supplementQuestion = ref('');
+const supplementSubmitting = ref(false);
+const supplementRunId = ref('');
 let refreshTimer: number | null = null;
 
 const statusOptions = [
@@ -343,15 +355,43 @@ const openRun = async (run: AgentRun) => {
   detail.value = run;
   detailVisible.value = true;
   await Promise.all([loadEvents(run.runId), loadApproval(run)]);
+  if (run.status === 'WAITING_USER') openSupplement(run);
 };
 
 const openChat = (run: AgentRun) => {
   emit('open-chat', run);
 };
 
+const openSupplement = (run: AgentRun) => {
+  supplementRunId.value = run.runId;
+  supplementQuestion.value = resolveAgentRunWaitingQuestion(run);
+  supplementVisible.value = true;
+};
+
 const setRun = (updated: AgentRun) => {
   runs.value = runs.value.map(item => item.runId === updated.runId ? updated : item);
   if (detail.value?.runId === updated.runId) detail.value = updated;
+};
+
+const submitSupplement = async (message: string) => {
+  const runId = supplementRunId.value;
+  const answer = message.trim();
+  if (!runId || !answer) return;
+  supplementSubmitting.value = true;
+  try {
+    const updated = await DihService.steerAgentRun(runId, {
+      message: answer,
+      clientMessageId: generateUUID(),
+    });
+    setRun(updated);
+    supplementVisible.value = false;
+    ElMessage.success('补充信息已提交，任务将继续执行');
+    if (detail.value?.runId === runId) await loadEvents(runId);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
+  } finally {
+    supplementSubmitting.value = false;
+  }
 };
 
 const pauseRun = async (run: AgentRun) => {

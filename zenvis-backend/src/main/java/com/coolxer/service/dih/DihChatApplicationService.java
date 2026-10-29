@@ -32,6 +32,7 @@ import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.dih.mcp.McpApprovalEvent;
 import com.coolxer.service.dih.mcp.McpApprovalService;
+import com.coolxer.service.dih.mcp.McpApprovalPendingException;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.workflow.AgentWorkflowState;
@@ -43,6 +44,8 @@ import com.coolxer.service.dih.workflow.WorkflowMetrics;
 import com.coolxer.service.dih.workflow.VisualizationQueryNormalizer;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.commons.enums.McpInvocationChannel;
+import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigPathOperationResult;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
@@ -102,6 +105,19 @@ public class DihChatApplicationService {
             "模型服务无法加载当前智能体的工具定义，请联系管理员检查工具参数后重试。";
     private static final String REPORT_DOCUMENT_FENCE_INFO = "```zenvis:report-document-config";
     private static final String INCOMPLETE_REPORT_FALLBACK = "报表生成未完成，请重试。";
+    private static final String META_CONFIG_CONTRACT = """
+            【Meta 精简契约】
+            1. 顶层只允许 entity、attribute、operator 三个对象数组，字段名使用 snake_case。
+            2. entity 必填 name、label、description、table_name、data_source；
+               data_source 固定 clickhouse，table_name 固定 zenvis.<table_name>；
+               auto_create.engine 固定 MergeTree，order_by 至少一项，禁止 zenvis_id。
+            3. attribute 必填 entity、name、label、description、column_name、column_type、operators；
+               operators 引用顶层已定义的 operator.name；display_selected 可省略，平台补 true。
+            4. operator 使用 name + label，不使用 description；id 可省略。
+            5. 禁止生成或重复 zenvis_id、zenvis_insert_time，平台会自动注入。
+            6. 生成候选后必须调用 config_validate(type="meta", fileName, text)；
+               有错误时按 diagnostics[].path/repairHint 修订并复验，最多 3 轮。
+            """;
     private static final Set<String> VISUALIZATION_META_ENTITY_TOOLS = Set.of(
             "retrieval_list_display_entity", "retrieval_list_entity");
     private static final Set<String> VISUALIZATION_META_ATTRIBUTE_TOOLS = Set.of(
@@ -1079,7 +1095,11 @@ public class DihChatApplicationService {
         AgentWorkflowState workflow = workflowStateStore.loadActive(
                 chatSession, MetadataConfigAgent.AGENT_TYPE).orElse(null);
         if (workflow == null) {
-            return bootstrapMetadataMetaDiscovery(mcpToolContext, prompt);
+            return isMetadataPathOperationIntent(prompt)
+                    ? bootstrapMetadataOperationDiscovery(
+                    mcpToolContext, prompt,
+                    new AgentWorkflowState().setContext(new LinkedHashMap<>()))
+                    : bootstrapMetadataMetaDiscovery(mcpToolContext, prompt);
         }
         if (mcpToolContext == null || !mcpToolContext.hasTools()) {
             markWorkflowBlocked(
@@ -1095,8 +1115,14 @@ public class DihChatApplicationService {
                     """;
         }
         return switch (workflow.getStep()) {
-            case META_DISCOVERY -> bootstrapMetadataMetaDiscovery(
-                    mcpToolContext, prompt);
+            case META_DISCOVERY -> isMetadataPathOperationIntent(prompt)
+                    ? bootstrapMetadataOperationDiscovery(
+                    mcpToolContext, prompt, workflow)
+                    : bootstrapMetadataMetaDiscovery(mcpToolContext, prompt);
+            case META_OPERATION_DISCOVERY -> bootstrapMetadataOperationDiscovery(
+                    mcpToolContext, prompt, workflow);
+            case META_OPERATION_APPLY -> executeApprovedMetaOperation(
+                    mcpToolContext, prompt, chatSession, workflow);
             case META_PREWRITE_CHECK, META_APPLY -> executeApprovedMetaConfig(
                     mcpToolContext, prompt, chatSession, workflow);
             default -> prompt + "\n\n【平台工作流状态】\n当前阶段："
@@ -1104,6 +1130,19 @@ public class DihChatApplicationService {
                     + "。元数据目标文件、候选配置和 MCP 参数均以服务端锁定状态为准；"
                     + "本轮不得调用任何 push_task_* 工具，也不得声明未经读回的成功结果。";
         };
+    }
+
+    private boolean isMetadataPathOperationIntent(String prompt) {
+        String value = Objects.toString(prompt, "").toLowerCase(Locale.ROOT);
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        boolean rename = value.matches("(?s).*(重命名|改名|rename).*")
+                && value.matches("(?s).*(\\.json|目录|文件夹|配置文件|meta_config).*");
+        boolean delete = value.matches("(?s).*(删除|移除|delete|remove).*")
+                && value.matches("(?s).*(\\.json|目录|文件夹|配置文件|meta_config).*")
+                && !value.matches("(?s).*(删除|移除|delete|remove).*(字段|属性|列|operator|attribute|entity|实体).*");
+        return rename || delete;
     }
 
     private String bootstrapDataPushWorkflow(
@@ -1156,18 +1195,91 @@ public class DihChatApplicationService {
                     """;
         }
         String arguments = JacksonUtil.toJson(Map.of("type", "meta"));
+        String result;
         try {
-            String result = callTool(treeTool, arguments, mcpToolContext);
-            return prompt + "\n\n【平台已执行 Meta 配置树 MCP】\n"
-                    + "工具：config_tree\n参数：" + arguments
-                    + "\n真实返回：" + result
-                    + "\n请只基于该结果生成候选配置和确认卡；"
-                    + "确认前不得调用 config_add 或 config_apply。";
+            result = callTool(treeTool, arguments, mcpToolContext);
         } catch (RuntimeException e) {
             return prompt + "\n\n【平台 Meta 配置树 MCP 失败】\n真实错误："
                     + safeWorkflowError(e)
                     + "\n不得输出成功记录，请提供重试入口。";
         }
+
+        String schemaFileName = firstNonBlank(
+                extractMetaFileName(prompt), "candidate.json");
+        ToolCallback schemaTool = findToolCallback(mcpToolContext, "config_schema");
+        String schemaResult = "平台未暴露 config_schema；只能依据下方精简契约生成配置。";
+        String schemaFailure = "";
+        if (schemaTool != null) {
+            try {
+                schemaResult = callTool(
+                        schemaTool,
+                        JacksonUtil.toJson(Map.of(
+                                "type", "meta",
+                                "fileName", schemaFileName)),
+                        mcpToolContext);
+            } catch (RuntimeException e) {
+                schemaFailure = safeWorkflowError(e);
+            }
+        }
+        List<String> fileNames = configTreeFileNames(result);
+        String schemaSection = StringUtils.hasText(schemaFailure)
+                ? "\n\n【平台读取 Meta Schema 失败】\n"
+                + "工具：config_schema\n参数：{\"type\":\"meta\",\"fileName\":\""
+                + schemaFileName + "\"}\n真实错误：" + schemaFailure
+                + "\n不得臆造 Schema 字段；只能严格使用下方精简契约，"
+                + "并在 config_validate 后按真实诊断修订。"
+                : "\n\n【平台已读取 Meta Schema】\n"
+                    + "工具：config_schema\n参数：{\"type\":\"meta\",\"fileName\":\""
+                    + schemaFileName + "\"}"
+                    + "\n真实返回：" + schemaResult;
+        return prompt + "\n\n【平台已执行 Meta 配置树 MCP】\n"
+                + "工具：config_tree\n参数：" + arguments
+                + "\n真实返回：" + result
+                + "\n当前 Meta 文件列表：" + (fileNames.isEmpty()
+                ? "（无）" : String.join(", ", fileNames))
+                + schemaSection
+                + "\n\n" + META_CONFIG_CONTRACT
+                + "\n请只基于真实文件列表和 Schema 生成完整候选配置与确认卡；"
+                + "生成后先调用 config_validate(type=\"meta\")，通过后再输出确认卡；"
+                + "确认前不得调用 config_add 或 config_apply。";
+    }
+
+    private String bootstrapMetadataOperationDiscovery(
+            McpToolContext mcpToolContext,
+            String prompt,
+            AgentWorkflowState workflow) {
+        ToolCallback treeTool = findToolCallback(mcpToolContext, "config_tree");
+        if (treeTool == null) {
+            return prompt + """
+
+                    【平台元数据目录操作阻断】
+                    当前未暴露 config_tree，不能确认重命名或删除目标。
+                    """;
+        }
+        String arguments = JacksonUtil.toJson(Map.of("type", "meta"));
+        String result;
+        try {
+            result = callTool(treeTool, arguments, mcpToolContext);
+        } catch (RuntimeException e) {
+            return prompt + "\n\n【平台元数据目录检查失败】\n真实错误："
+                    + safeWorkflowError(e)
+                    + "\n不得输出操作成功记录，请提供重试入口。";
+        }
+        String revision = stringValue(
+                workflow.getContext() == null ? Map.of() : workflow.getContext(),
+                "revision", "");
+        return prompt + "\n\n【平台已执行元数据目录操作检查】\n"
+                + "工具：config_tree\n参数：" + arguments
+                + "\n真实返回：" + result
+                + (StringUtils.hasText(revision)
+                ? "\n用户调整要求：" + abbreviateWorkflowValue(revision, 1000) : "")
+                + "\n当前 Meta 文件列表：" + configTreeFileNames(result)
+                + "\n\n只允许执行配置文件或目录的重命名、删除；不得调用 config_add、"
+                + "config_apply，也不得重写配置正文。重命名必须保持同一父目录且目标未被占用；"
+                + "删除非空目录必须携带 recursive=true 并列出 affectedPaths。"
+                + "\n请基于真实配置树输出 zenvis:metadata-config-decision，携带 "
+                + "operation、sourcePath、targetPath、recursive、affectedPaths；"
+                + "平台会重新锁定路径和 operationDigest，用户确认后由平台执行。";
     }
 
     private String bootstrapDataPushMetaDiscovery(
@@ -1225,6 +1337,577 @@ public class DihChatApplicationService {
                 + "必须输出 kind=missing_meta 的 zenvis:data-push-service-decision，"
                 + "handoff.targetAgentType=agent_metadata_config，"
                 + "并提示用户前往元数据配置；不得自动调用另一个智能体。";
+    }
+
+    private String executeApprovedMetaOperation(
+            McpToolContext mcpToolContext,
+            String prompt,
+            ChatSession chatSession,
+            AgentWorkflowState workflow) {
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : workflow.getContext();
+        Map<String, Object> operation = mapValue(context.get("operation"));
+        String operationName = stringValue(operation, "operation", "");
+        String sourcePath = stringValue(operation, "sourcePath", "");
+        String targetPath = stringValue(operation, "targetPath", "");
+        boolean recursive = Boolean.TRUE.equals(operation.get("recursive"));
+        if (!Set.of("rename", "delete").contains(operationName)
+                || !StringUtils.hasText(sourcePath)) {
+            markWorkflowBlocked(
+                    chatSession,
+                    workflow,
+                    AgentWorkflowStep.META_OPERATION_APPLY,
+                    "",
+                    "已批准元数据操作缺少服务端锁定路径");
+            return prompt + """
+
+                    【平台元数据操作阻断】
+                    已批准操作缺少服务端锁定的 operation/sourcePath，不得重新解释路径。
+                    """;
+        }
+
+        ToolCallback treeTool = findToolCallback(mcpToolContext, "config_tree");
+        ToolCallback readTool = findToolCallback(mcpToolContext, "config_read");
+        ToolCallback operationTool = findToolCallback(
+                mcpToolContext, "rename".equals(operationName)
+                        ? "config_rename" : "config_delete");
+        if (treeTool == null || readTool == null || operationTool == null) {
+            markWorkflowBlocked(
+                    chatSession,
+                    workflow,
+                    AgentWorkflowStep.META_OPERATION_APPLY,
+                    "",
+                    "元数据目录操作、配置树或读回 MCP 工具未完整暴露");
+            return prompt + "\n\n【平台元数据操作阻断】\n"
+                    + "需要 config_tree、config_read 与 "
+                    + ("rename".equals(operationName) ? "config_rename" : "config_delete")
+                    + "，当前工具不完整；不得声明操作成功。";
+        }
+
+        if (Boolean.TRUE.equals(context.get("metaOperationChanged"))
+                && !Boolean.TRUE.equals(context.get("metaOperationApplied"))) {
+            return retryMetaOperationReload(
+                    mcpToolContext, prompt, chatSession, workflow,
+                    operation, treeTool, readTool);
+        }
+
+        ConfigPathOperationResult result;
+        try {
+            Map<String, Object> arguments = new LinkedHashMap<>();
+            arguments.put("type", "meta");
+            arguments.put("fileName", sourcePath);
+            if ("rename".equals(operationName)) {
+                arguments.put("newFileName", leafPath(targetPath));
+            } else {
+                arguments.put("recursive", recursive);
+            }
+            result = parseConfigPathOperationResult(callTool(
+                    operationTool,
+                    JacksonUtil.toJson(arguments),
+                    mcpToolContext));
+        } catch (McpApprovalPendingException pending) {
+            workflow.setContext(context);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            throw pending;
+        } catch (RuntimeException e) {
+            markWorkflowBlocked(
+                    chatSession,
+                    workflow,
+                    AgentWorkflowStep.META_OPERATION_APPLY,
+                    "config_path_operation",
+                    safeWorkflowError(e));
+            return prompt + "\n\n【平台元数据目录操作失败】\n"
+                    + "源路径：" + sourcePath
+                    + "\n真实错误：" + safeWorkflowError(e)
+                    + "\n文件系统操作未确认成功，不得输出成功记录；请提供 retry。";
+        }
+
+        Map<String, Object> effectiveOperation = new LinkedHashMap<>(operation);
+        effectiveOperation.put("sourcePath", firstNonBlank(
+                result.getSourcePath(), sourcePath));
+        effectiveOperation.put("targetPath", firstNonBlank(
+                result.getTargetPath(), targetPath));
+        effectiveOperation.put("affectedPaths", result.getAffectedPaths() == null
+                || result.getAffectedPaths().isEmpty()
+                ? operation.getOrDefault("affectedPaths", List.of())
+                : result.getAffectedPaths());
+        context.put("metaOperationChanged", result.isChanged());
+        context.put("metaOperationApplied", result.isApplied());
+        context.put("metaOperationResult", operationResultMap(result));
+        workflow.setContext(context);
+
+        if (!result.isSuccess()) {
+            return failMetaOperationAfterExecution(
+                    prompt, chatSession, workflow, mcpToolContext,
+                    effectiveOperation, result.isChanged(), result.isApplied(),
+                    firstNonBlank(result.getMessage(), "元数据目录操作失败"));
+        }
+        if (!result.isApplied()) {
+            return failMetaOperationAfterExecution(
+                    prompt, chatSession, workflow, mcpToolContext,
+                    effectiveOperation, true, false,
+                    "文件系统已变更，但 Meta 严格重载或 Schema 刷新未完成");
+        }
+        return finishVerifiedMetaOperation(
+                prompt, chatSession, workflow, mcpToolContext,
+                effectiveOperation, treeTool, readTool,
+                firstNonBlank(result.getMessage(), "元数据目录操作已完成"));
+    }
+
+    private String retryMetaOperationReload(
+            McpToolContext mcpToolContext,
+            String prompt,
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            Map<String, Object> operation,
+            ToolCallback treeTool,
+            ToolCallback readTool) {
+        if (configService == null) {
+            markWorkflowBlocked(
+                    chatSession,
+                    workflow,
+                    AgentWorkflowStep.META_OPERATION_APPLY,
+                    "config_apply",
+                    "配置服务不可用，无法重试 Meta 严格重载");
+            return prompt + "\n\n【平台 Meta 严格重载重试失败】\n配置服务不可用。";
+        }
+        try {
+            ConfigDto configDto = new ConfigDto();
+            configDto.setFileName(stringValue(operation, "targetPath", ""));
+            configService.applyConfig("meta", configDto);
+        } catch (RuntimeException e) {
+            markWorkflowBlocked(
+                    chatSession,
+                    workflow,
+                    AgentWorkflowStep.META_OPERATION_APPLY,
+                    "config_apply",
+                    safeWorkflowError(e));
+            return prompt + "\n\n【平台 Meta 严格重载重试失败】\n真实错误："
+                    + safeWorkflowError(e)
+                    + "\n文件操作结果继续保留，不得回滚或声称应用成功；请再次 retry。";
+        }
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : workflow.getContext();
+        context.put("metaOperationApplied", true);
+        workflow.setContext(context);
+        return finishVerifiedMetaOperation(
+                prompt, chatSession, workflow, mcpToolContext,
+                operation, treeTool, readTool, "Meta 严格重载重试成功");
+    }
+
+    private String finishVerifiedMetaOperation(
+            String prompt,
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            McpToolContext mcpToolContext,
+            Map<String, Object> operation,
+            ToolCallback treeTool,
+            ToolCallback readTool,
+            String message) {
+        String verificationError;
+        try {
+            String treeResult = callTool(
+                    treeTool,
+                    JacksonUtil.toJson(Map.of("type", "meta")),
+                    mcpToolContext);
+            verificationError = verifyMetaOperation(
+                    operation, treeResult, readTool, mcpToolContext);
+        } catch (McpApprovalPendingException pending) {
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            throw pending;
+        } catch (RuntimeException e) {
+            verificationError = safeWorkflowError(e);
+        }
+        if (StringUtils.hasText(verificationError)) {
+            return failMetaOperationAfterExecution(
+                    prompt, chatSession, workflow, mcpToolContext,
+                    operation, true, false,
+                    "文件系统已变更，但操作后核验失败：" + verificationError);
+        }
+
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : workflow.getContext();
+        context.put("metaOperationChanged", true);
+        context.put("metaOperationApplied", true);
+        context.put("metaOperationVerified", true);
+        workflow.setContext(context);
+        workflow.setStep(AgentWorkflowStep.META_VERIFIED);
+        workflow.setStatus("active");
+        workflow.setStateRevision(workflow.getStateRevision() + 1);
+        persistMetaOperationRecord(
+                chatSession, workflow, mcpToolContext, operation,
+                "rename".equals(stringValue(operation, "operation", ""))
+                        ? "renamed" : "deleted",
+                "success", true, true, message);
+        persistWorkflowState(chatSession, workflow, mcpToolContext);
+        return prompt + "\n\n【平台已完成元数据目录操作与读回核验】\n"
+                + "操作：" + stringValue(operation, "operation", "")
+                + "\n源路径：" + stringValue(operation, "sourcePath", "")
+                + ("rename".equals(stringValue(operation, "operation", ""))
+                ? "\n目标路径：" + stringValue(operation, "targetPath", "") : "")
+                + "\n结果：" + message
+                + "\n右侧元数据配置记录已由平台按真实路径核验结果写入。"
+                + "请只输出本次操作的简短确认摘要，不得伪造额外记录、路径或应用结果。";
+    }
+
+    private String failMetaOperationAfterExecution(
+            String prompt,
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            McpToolContext mcpToolContext,
+            Map<String, Object> operation,
+            boolean changed,
+            boolean applied,
+            String message) {
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : workflow.getContext();
+        context.put("metaOperationChanged", changed);
+        context.put("metaOperationApplied", applied);
+        workflow.setContext(context);
+        markWorkflowBlocked(
+                chatSession,
+                workflow,
+                AgentWorkflowStep.META_OPERATION_APPLY,
+                "config_path_operation",
+                message);
+        if (changed) {
+            persistMetaOperationRecord(
+                    chatSession, workflow, mcpToolContext, operation,
+                    "failed", "failed", true, false, message);
+        }
+        return prompt + "\n\n【平台元数据目录操作未完成】\n"
+                + "操作：" + stringValue(operation, "operation", "")
+                + "\n源路径：" + stringValue(operation, "sourcePath", "")
+                + "\n真实结果：" + message
+                + (changed
+                ? "\n文件系统已发生变更，平台保留现场并记录失败状态；"
+                + "不得回滚、伪造成功或声明 Meta 已生效。请使用 retry 重新执行严格重载核验。"
+                : "\n文件系统未发生变更；不得输出成功记录。");
+    }
+
+    private ConfigPathOperationResult parseConfigPathOperationResult(String result) {
+        Map<String, Object> value = toolResultObject(result);
+        if (value.isEmpty()) {
+            throw new IllegalStateException("config path operation 返回为空");
+        }
+        return JacksonConfig.OBJECT_MAPPER.convertValue(
+                value, ConfigPathOperationResult.class);
+    }
+
+    private Map<String, Object> operationResultMap(ConfigPathOperationResult result) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("success", result.isSuccess());
+        value.put("operation", result.getOperation());
+        value.put("kind", result.getKind());
+        value.put("sourcePath", result.getSourcePath());
+        value.put("targetPath", result.getTargetPath());
+        value.put("changed", result.isChanged());
+        value.put("applied", result.isApplied());
+        value.put("affectedPaths", result.getAffectedPaths() == null
+                ? List.of() : result.getAffectedPaths());
+        value.put("message", result.getMessage());
+        return value;
+    }
+
+    private String verifyMetaOperation(
+            Map<String, Object> operation,
+            String treeResult,
+            ToolCallback readTool,
+            McpToolContext mcpToolContext) {
+        String operationName = stringValue(operation, "operation", "");
+        String sourcePath = stringValue(operation, "sourcePath", "");
+        String targetPath = stringValue(operation, "targetPath", "");
+        Map<String, String> nodes = configTreeNodeKinds(treeResult);
+        Map<String, String> nodeKinds = stringMap(operation.get("nodeKinds"));
+        Map<String, String> fileDigests = stringMap(operation.get("fileDigests"));
+        List<String> affectedPaths = stringList(operation.get("affectedPaths"));
+        if (affectedPaths.isEmpty()) {
+            affectedPaths = List.of(sourcePath);
+        }
+        if ("rename".equals(operationName)) {
+            for (String path : affectedPaths) {
+                if (nodes.containsKey(path)) {
+                    return "重命名后源路径仍然存在：" + path;
+                }
+            }
+            if (!nodes.containsKey(targetPath)) {
+                return "重命名后目标路径不存在：" + targetPath;
+            }
+            for (String path : affectedPaths) {
+                String mapped = mappedOperationPath(path, sourcePath, targetPath);
+                if (!nodes.containsKey(mapped)) {
+                    return "重命名后目标路径缺少节点：" + mapped;
+                }
+                String expectedKind = nodeKinds.get(path);
+                String actualKind = nodes.get(mapped);
+                if (StringUtils.hasText(expectedKind)
+                        && !expectedKind.equals(actualKind)) {
+                    return "重命名后节点类型不一致：" + mapped;
+                }
+                String expectedDigest = fileDigests.get(path);
+                if (!StringUtils.hasText(expectedDigest)) {
+                    continue;
+                }
+                String readResult = callTool(
+                        readTool,
+                        JacksonUtil.toJson(Map.of(
+                                "type", "meta",
+                                "fileName", mapped)),
+                        mcpToolContext);
+                String actual = decodeToolString(readResult);
+                if (!expectedDigest.equals(sha256(actual == null ? "" : actual))) {
+                    return "重命名后文件内容不一致：" + mapped;
+                }
+            }
+            return "";
+        }
+        for (String path : affectedPaths) {
+            if (nodes.containsKey(path)) {
+                return "删除后路径仍然存在：" + path;
+            }
+        }
+        return "";
+    }
+
+    private Map<String, String> configTreeNodeKinds(String result) {
+        Map<String, String> nodes = new LinkedHashMap<>();
+        try {
+            Object value = JacksonConfig.OBJECT_MAPPER.readValue(result, Object.class);
+            collectConfigTreeNodeKinds(value, nodes);
+        } catch (Exception e) {
+            throw new IllegalStateException("config_tree 返回无法解析", e);
+        }
+        return nodes;
+    }
+
+    private void collectConfigTreeNodeKinds(Object value, Map<String, String> nodes) {
+        if (value instanceof Map<?, ?> map) {
+            String path = Objects.toString(map.get("relativePath"), "").trim();
+            if (StringUtils.hasText(path)) {
+                Object directory = firstNonNull(
+                        map.get("isDir"), map.get("dir"), map.get("directory"));
+                nodes.put(path, Boolean.TRUE.equals(directory)
+                        || "true".equalsIgnoreCase(Objects.toString(directory, ""))
+                        ? "directory" : "file");
+            }
+            map.values().forEach(item -> collectConfigTreeNodeKinds(item, nodes));
+        } else if (value instanceof List<?> list) {
+            list.forEach(item -> collectConfigTreeNodeKinds(item, nodes));
+        }
+    }
+
+    private Map<String, String> stringMap(Object value) {
+        Map<String, String> result = new LinkedHashMap<>();
+        mapValue(value).forEach((key, item) ->
+                result.put(key, Objects.toString(item, "")));
+        return result;
+    }
+
+    private List<String> stringList(Object value) {
+        return listValue(value).stream()
+                .map(item -> Objects.toString(item, "").trim())
+                .filter(StringUtils::hasText)
+                .toList();
+    }
+
+    private String mappedOperationPath(
+            String path,
+            String sourcePath,
+            String targetPath) {
+        if (path.equals(sourcePath)) {
+            return targetPath;
+        }
+        if (path.startsWith(sourcePath + "/")) {
+            return targetPath + path.substring(sourcePath.length());
+        }
+        return path;
+    }
+
+    private String leafPath(String path) {
+        String normalized = Objects.toString(path, "").replace('\\', '/').trim();
+        int index = normalized.lastIndexOf('/');
+        return index < 0 ? normalized : normalized.substring(index + 1);
+    }
+
+    private void persistMetaOperationRecord(
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            McpToolContext mcpToolContext,
+            Map<String, Object> operation,
+            String status,
+            String validationStatus,
+            boolean changed,
+            boolean applied,
+            String message) {
+        if (chatSession == null || workflow == null
+                || chatSessionService == null || operation.isEmpty()) {
+            return;
+        }
+        if (workflowStateStore != null) {
+            workflowStateStore.upsert(chatSession, workflow);
+        }
+        String operationName = stringValue(operation, "operation", "");
+        String sourcePath = stringValue(operation, "sourcePath", "");
+        String targetPath = stringValue(operation, "targetPath", "");
+        boolean recursive = Boolean.TRUE.equals(operation.get("recursive"));
+        String operationDigest = firstNonBlank(
+                stringValue(operation, "digest", ""),
+                stringValue(workflow.getContext(), "operationDigest", ""));
+        List<String> affectedPaths = stringList(operation.get("affectedPaths"));
+        Map<String, String> fileDigests = stringMap(operation.get("fileDigests"));
+        List<String> affectedFiles = new ArrayList<>();
+        if (!fileDigests.isEmpty()) {
+            if ("rename".equals(operationName)) {
+                fileDigests.keySet().stream()
+                        .sorted()
+                        .map(path -> mappedOperationPath(path, sourcePath, targetPath))
+                        .forEach(affectedFiles::add);
+            } else {
+                affectedFiles.addAll(fileDigests.keySet().stream().sorted().toList());
+            }
+        } else {
+            affectedPaths.forEach(path -> affectedFiles.add(
+                    "rename".equals(operationName)
+                            ? mappedOperationPath(path, sourcePath, targetPath)
+                            : path));
+        }
+        if (affectedFiles.isEmpty()) {
+            affectedFiles.add("rename".equals(operationName) ? targetPath : sourcePath);
+        }
+
+        Map<String, Object> extraData = new LinkedHashMap<>(
+                parseJsonObject(chatSession.getExtraData()));
+        Map<String, Object> section = mapValue(extraData.get("metadataConfig"));
+        List<Map<String, Object>> records = listOfMaps(section.get("records"));
+        List<String> handledPaths = new ArrayList<>();
+        for (Map<String, Object> record : records) {
+            String oldFileName = stringValue(record, "fileName", "");
+            String matchedSourcePath = operationRecordSourcePath(
+                    record, operationName, sourcePath, targetPath);
+            if (!StringUtils.hasText(matchedSourcePath)) {
+                continue;
+            }
+            handledPaths.add(matchedSourcePath);
+            String displayFileName = "rename".equals(operationName)
+                    ? mappedOperationPath(oldFileName, sourcePath, targetPath)
+                    : oldFileName;
+            if ("rename".equals(operationName)
+                    && !StringUtils.hasText(stringValue(record, "previousFileName", ""))) {
+                record.put("previousFileName", oldFileName);
+            }
+            record.put("fileName", displayFileName);
+            if (!StringUtils.hasText(stringValue(record, "name", ""))
+                    || leafPath(oldFileName).equals(stringValue(record, "name", ""))) {
+                record.put("name", leafPath(displayFileName));
+            }
+            decorateStoredOperationRecord(record, operationName, status,
+                    validationStatus, changed, applied, recursive,
+                    affectedFiles, operationDigest, message);
+        }
+
+        List<String> expectedPaths = fileDigests.isEmpty()
+                ? List.of(sourcePath) : fileDigests.keySet().stream().sorted().toList();
+        for (String oldPath : expectedPaths) {
+            if (handledPaths.stream().anyMatch(path -> operationPathMatches(path, oldPath))) {
+                continue;
+            }
+            String displayPath = "rename".equals(operationName)
+                    ? mappedOperationPath(oldPath, sourcePath, targetPath)
+                    : oldPath;
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("id", displayPath);
+            metadata.put("fileName", displayPath);
+            metadata.put("name", leafPath(displayPath));
+            metadata.put("status", status);
+            metadata.put("source", "workflow");
+            metadata.put("forced", false);
+            metadata.put("validationStatus", validationStatus);
+            metadata.put("operation", operationName);
+            metadata.put("previousFileName", oldPath);
+            metadata.put("affectedFiles", affectedFiles);
+            metadata.put("recursive", recursive);
+            metadata.put("changed", changed);
+            metadata.put("applied", applied);
+            metadata.put("operationDigest", operationDigest);
+            metadata.put("validationDigest", operationDigest);
+            metadata.put("validationErrors", "failed".equals(validationStatus)
+                    ? List.of(Map.of(
+                    "code", "META_OPERATION_INCOMPLETE",
+                    "severity", "ERROR",
+                    "message", message))
+                    : List.of());
+            ChatMessagePart recordPart = ChatMessagePart.builder()
+                    .type("metadata-config-record")
+                    .content("")
+                    .metadata(metadata)
+                    .build();
+            Map<String, Object> record = buildMetaConfigRecord(recordPart, status);
+            decorateStoredOperationRecord(record, operationName, status,
+                    validationStatus, changed, applied, recursive,
+                    affectedFiles, operationDigest, message);
+            records.add(record);
+        }
+        section.put("records", records);
+        extraData.put("metadataConfig", section);
+        chatSession.setExtraData(JacksonUtil.toJson(extraData));
+        saveChatSessionExtraData(chatSession, mcpToolContext);
+    }
+
+    private boolean operationPathMatches(String path, String sourcePath) {
+        return StringUtils.hasText(path)
+                && StringUtils.hasText(sourcePath)
+                && (path.equals(sourcePath)
+                || path.startsWith(sourcePath + "/"));
+    }
+
+    private String operationRecordSourcePath(
+            Map<String, Object> record,
+            String operation,
+            String sourcePath,
+            String targetPath) {
+        String fileName = stringValue(record, "fileName", "");
+        if (operationPathMatches(fileName, sourcePath)) {
+            return fileName;
+        }
+        if (!"rename".equals(operation)
+                || !operationPathMatches(fileName, targetPath)
+                || !operationPathMatches(
+                stringValue(record, "previousFileName", ""), sourcePath)) {
+            return "";
+        }
+        return sourcePath + fileName.substring(targetPath.length());
+    }
+
+    private void decorateStoredOperationRecord(
+            Map<String, Object> record,
+            String operation,
+            String status,
+            String validationStatus,
+            boolean changed,
+            boolean applied,
+            boolean recursive,
+            List<String> affectedFiles,
+            String operationDigest,
+            String message) {
+        record.put("operation", operation);
+        record.put("status", status);
+        record.put("validationStatus", validationStatus);
+        record.put("changed", changed);
+        record.put("applied", applied);
+        record.put("recursive", recursive);
+        record.put("affectedFiles", affectedFiles);
+        record.put("operationDigest", operationDigest);
+        record.put("validationDigest", operationDigest);
+        record.put("message", message);
+        record.put("source", "workflow");
+        if ("failed".equals(validationStatus)) {
+            record.put("validationErrors", List.of(Map.of(
+                    "code", "META_OPERATION_INCOMPLETE",
+                    "severity", "ERROR",
+                    "message", message)));
+        } else {
+            record.put("validationErrors", List.of());
+        }
     }
 
     private String extractMetaFileName(String prompt) {
@@ -1296,6 +1979,7 @@ public class DihChatApplicationService {
         Map<String, Object> candidate = mapValue(context.get("candidate"));
         String content = stringValue(candidate, "content", "");
         String fileName = stringValue(context, "fileName", "");
+        boolean forced = Boolean.TRUE.equals(context.get("forced"));
         AgentWorkflowStep retryStep = workflow.getStep();
         if (!StringUtils.hasText(content) || !isSafeMetaFileName(fileName)) {
             markWorkflowBlocked(
@@ -1329,12 +2013,15 @@ public class DihChatApplicationService {
                     + "不得声明写入成功。";
         }
 
+        boolean applyAttempted = false;
         try {
             String treeResult = callTool(
                     treeTool,
                     JacksonUtil.toJson(Map.of("type", "meta")),
                     mcpToolContext);
             boolean exists = configTreeContainsFile(treeResult, fileName);
+            boolean addedNow = false;
+            boolean applyAlreadyExecuted = false;
             if (workflow.getStep() == AgentWorkflowStep.META_PREWRITE_CHECK
                     && exists) {
                 String readResult = callTool(
@@ -1344,30 +2031,59 @@ public class DihChatApplicationService {
                                 "fileName", fileName)),
                         mcpToolContext);
                 String current = decodeToolString(readResult);
-                if (semanticContentEquals(content, current)) {
-                    context.put("candidateAlreadyApplied", true);
-                    context.remove("overwriteRequired");
+                boolean addRequested = Boolean.TRUE.equals(
+                        context.get("metaAddRequested"));
+                if (addRequested && !StringUtils.hasText(current)) {
+                    addedNow = true;
+                    context.remove("metaAddRequested");
+                    context.put("metaCandidateCreated", true);
                     workflow.setContext(context);
-                    workflowStateStore.upsert(chatSession, workflow);
-                    return prompt + "\n\n【平台 Meta 幂等读回通过】\n"
-                            + "工具顺序：config_tree → config_read\n目标文件：" + fileName
-                            + "\n现有内容与已批准候选 JSON 语义一致，未重复写入。"
-                            + "\n请输出 source=workflow、status=applied 的"
-                            + " zenvis:meta-config-record；记录中的 config 必须等于锁定候选。";
+                    persistMetaConfigCreatedRecord(
+                            chatSession, workflow, mcpToolContext,
+                            fileName, content);
                 }
-                context.put("overwriteRequired", true);
-                workflow.setContext(context);
-                workflow.setStep(AgentWorkflowStep.META_OVERWRITE_CONFIRMATION);
-                workflow.setStateRevision(workflow.getStateRevision() + 1);
-                workflowStateStore.upsert(chatSession, workflow);
-                return prompt + "\n\n【平台检测到同名不同内容配置】\n"
-                        + "工具顺序：config_tree → config_read\n目标文件：" + fileName
-                        + "\n尚未调用 config_apply。请输出单独的覆盖确认卡，"
-                        + "metadata 必须包含 configKind=meta、fileName、overwrite=true、"
-                        + "planId 和 candidateDigest；不得展示或使用新的候选配置。";
+                if (semanticContentEquals(content, current)) {
+                    boolean applyRequested = Boolean.TRUE.equals(
+                            context.get("metaApplyRequested"));
+                    if (!applyRequested) {
+                        context.put("candidateAlreadyApplied", true);
+                        context.remove("overwriteRequired");
+                        workflow.setContext(context);
+                        persistMetaConfigAppliedRecord(
+                                chatSession, workflow, mcpToolContext,
+                                fileName, content, forced);
+                        persistWorkflowState(chatSession, workflow, mcpToolContext);
+                        return prompt + "\n\n【平台 Meta 幂等读回通过】\n"
+                                + "工具顺序：config_tree → config_read\n目标文件：" + fileName
+                                + "\n现有内容与已批准候选 JSON 语义一致，未重复写入。"
+                                + "\n请输出 source=workflow、status=applied 的"
+                                + " zenvis:meta-config-record；记录中的 config 必须等于锁定候选。"
+                                + (forced
+                                ? "\n用户已显式忽略静态校验；记录必须携带 forced=true、"
+                                + "validationStatus=forced，不得描述为校验通过。" : "");
+                    } else {
+                        applyAlreadyExecuted = true;
+                    }
+                }
+                if (StringUtils.hasText(current)
+                        && !semanticContentEquals(content, current)) {
+                    context.put("overwriteRequired", true);
+                    workflow.setContext(context);
+                    workflow.setStep(AgentWorkflowStep.META_OVERWRITE_CONFIRMATION);
+                    workflow.setStateRevision(workflow.getStateRevision() + 1);
+                    persistWorkflowState(chatSession, workflow, mcpToolContext);
+                    return prompt + "\n\n【平台检测到同名不同内容配置】\n"
+                            + "工具顺序：config_tree → config_read\n目标文件：" + fileName
+                            + "\n尚未调用 config_apply。请输出单独的覆盖确认卡，"
+                            + "metadata 必须包含 configKind=meta、fileName、overwrite=true、"
+                            + "planId 和 candidateDigest；不得展示或使用新的候选配置。";
+                }
             }
 
             if (!exists) {
+                context.put("metaAddRequested", true);
+                workflow.setContext(context);
+                persistWorkflowState(chatSession, workflow, mcpToolContext);
                 String addResult = callTool(
                         addTool,
                         JacksonUtil.toJson(Map.of(
@@ -1375,16 +2091,33 @@ public class DihChatApplicationService {
                                 "configDto", Map.of("fileName", fileName))),
                         mcpToolContext);
                 requireSuccessfulBoolean("config_add", addResult);
+                addedNow = true;
+                context.remove("metaAddRequested");
+                context.put("metaCandidateCreated", true);
+                workflow.setContext(context);
+                persistMetaConfigCreatedRecord(
+                        chatSession, workflow, mcpToolContext,
+                        fileName, content);
             }
-            String applyResult = callTool(
-                    applyTool,
-                    JacksonUtil.toJson(Map.of(
-                            "type", "meta",
-                            "configDto", Map.of(
-                                    "fileName", fileName,
-                                    "text", content))),
-                    mcpToolContext);
-            requireSuccessfulBoolean("config_apply", applyResult);
+            if (!applyAlreadyExecuted) {
+                context.put("metaApplyRequested", true);
+                workflow.setContext(context);
+                persistWorkflowState(chatSession, workflow, mcpToolContext);
+                Map<String, Object> applyArguments = new LinkedHashMap<>();
+                applyArguments.put("type", "meta");
+                applyArguments.put("configDto", Map.of(
+                        "fileName", fileName,
+                        "text", content));
+                if (forced) {
+                    applyArguments.put("force", true);
+                }
+                applyAttempted = true;
+                String applyResult = callTool(
+                        applyTool,
+                        JacksonUtil.toJson(applyArguments),
+                        mcpToolContext);
+                requireSuccessfulBoolean("config_apply", applyResult);
+            }
             String readResult = callTool(
                     readTool,
                     JacksonUtil.toJson(Map.of(
@@ -1396,26 +2129,225 @@ public class DihChatApplicationService {
                 throw new IllegalStateException("config_read 与已批准候选配置语义不一致");
             }
             context.remove("overwriteRequired");
+            context.remove("metaApplyRequested");
+            context.put("metaCandidateCreated", true);
+            context.put("candidateAlreadyApplied", true);
             workflow.setContext(context);
-            workflowStateStore.upsert(chatSession, workflow);
+            persistMetaConfigAppliedRecord(
+                    chatSession, workflow, mcpToolContext,
+                    fileName, content, forced);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
             return prompt + "\n\n【平台已完成锁定 Meta 配置写入与读回】\n"
                     + "目标文件：" + fileName
                     + "\n已严格执行 config_tree"
-                    + (exists ? "" : " → config_add")
+                    + (addedNow ? " → config_add" : "")
                     + " → config_apply → config_read，读回与候选 JSON 语义一致。"
                     + "\n请输出 source=workflow、status=applied 的"
                     + " zenvis:meta-config-record；config 必须等于锁定候选，"
-                    + "不得改写文件名或内容。";
+                    + "不得改写文件名或内容。"
+                    + (forced
+                    ? "\n用户已显式忽略静态校验并强制写入；记录必须携带 forced=true、"
+                    + "validationStatus=forced 和校验摘要，不得描述为校验通过。"
+                    : "");
+        } catch (McpApprovalPendingException pending) {
+            workflow.setContext(context);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            throw pending;
         } catch (RuntimeException e) {
+            String writtenContent = applyAttempted
+                    ? readWrittenMetaCandidate(readTool, mcpToolContext, fileName, content)
+                    : "";
             markWorkflowBlocked(
                     chatSession,
                     workflow,
-                    retryStep,
+                    applyAttempted ? AgentWorkflowStep.META_APPLY : retryStep,
                     "config",
                     safeWorkflowError(e));
-            return prompt + "\n\n【平台 Meta 写入或读回失败】\n目标文件："
-                    + fileName + "\n真实错误：" + safeWorkflowError(e)
-                    + "\n不得生成成功记录；保留锁定候选并提供 retry。";
+            if (StringUtils.hasText(writtenContent)) {
+                persistMetaConfigWrittenRecord(
+                        chatSession, workflow, mcpToolContext,
+                        fileName, content, forced, "failed");
+            }
+            String writeStatus = StringUtils.hasText(writtenContent)
+                    ? "\nconfig_read 已确认真实文件包含锁定候选，但 config_apply"
+                    + " 或严格 Meta 加载未成功。必须先输出 source=workflow、"
+                    + "status=written 的 zenvis:meta-config-record；记录中的 config 必须等于"
+                    + "锁定候选，validationStatus 必须为 failed 或 blocked，"
+                    + "不得输出 applied 或声明应用成功。随后再说明应用失败并提供 retry。"
+                    : "\nconfig_read 未能确认真实文件包含锁定候选；不得输出"
+                    + " zenvis:meta-config-record。";
+            String failureTitle = StringUtils.hasText(writtenContent)
+                    ? "【平台 Meta 已写入，但应用或读回未完成】"
+                    : "【平台 Meta 写入或读回失败】";
+            return prompt + "\n\n" + failureTitle + "\n目标文件：" + fileName
+                    + "\n真实错误：" + safeWorkflowError(e)
+                    + writeStatus
+                    + "\n不得生成应用成功记录；保留锁定候选并提供 retry。";
+        }
+    }
+
+    private String readWrittenMetaCandidate(
+            ToolCallback readTool,
+            McpToolContext mcpToolContext,
+            String fileName,
+            String content) {
+        if (readTool == null || mcpToolContext == null) {
+            return "";
+        }
+        try {
+            String readResult = callTool(
+                    readTool,
+                    JacksonUtil.toJson(Map.of(
+                            "type", "meta",
+                            "fileName", fileName)),
+                    mcpToolContext);
+            String readBack = decodeToolString(readResult);
+            return semanticContentEquals(content, readBack) ? readBack : "";
+        } catch (RuntimeException ignored) {
+            return "";
+        }
+    }
+
+    private void persistWorkflowState(ChatSession chatSession,
+                                      AgentWorkflowState workflow,
+                                      McpToolContext mcpToolContext) {
+        if (chatSession == null || workflow == null) {
+            return;
+        }
+        if (workflowStateStore != null) {
+            workflowStateStore.upsert(chatSession, workflow);
+        }
+        saveChatSessionExtraData(chatSession, mcpToolContext);
+    }
+
+    private void persistMetaConfigCreatedRecord(ChatSession chatSession,
+                                                AgentWorkflowState workflow,
+                                                McpToolContext mcpToolContext,
+                                                String fileName,
+                                                String candidateContent) {
+        persistMetaConfigRecord(
+                chatSession, workflow, mcpToolContext,
+                fileName, candidateContent, "",
+                "created", "pending", false);
+    }
+
+    private void persistMetaConfigAppliedRecord(ChatSession chatSession,
+                                                AgentWorkflowState workflow,
+                                                McpToolContext mcpToolContext,
+                                                String fileName,
+                                                String content,
+                                                boolean forced) {
+        persistMetaConfigRecord(
+                chatSession, workflow, mcpToolContext,
+                fileName, content, content,
+                "applied", forced ? "forced" : null, forced);
+    }
+
+    private void persistMetaConfigWrittenRecord(ChatSession chatSession,
+                                                AgentWorkflowState workflow,
+                                                McpToolContext mcpToolContext,
+                                                String fileName,
+                                                String content,
+                                                boolean forced,
+                                                String validationStatusOverride) {
+        persistMetaConfigRecord(
+                chatSession, workflow, mcpToolContext,
+                fileName, content, content,
+                "written", validationStatusOverride, forced);
+    }
+
+    private void persistMetaConfigRecord(ChatSession chatSession,
+                                         AgentWorkflowState workflow,
+                                         McpToolContext mcpToolContext,
+                                         String fileName,
+                                         String candidateContent,
+                                         String recordContent,
+                                         String status,
+                                         String validationStatusOverride,
+                                         boolean forced) {
+        if (chatSession == null || workflow == null
+                || !StringUtils.hasText(fileName)
+                || chatSessionService == null) {
+            return;
+        }
+        if (workflowStateStore != null) {
+            workflowStateStore.upsert(chatSession, workflow);
+        }
+        Map<String, Object> context = workflow.getContext() == null
+                ? Map.of() : workflow.getContext();
+        Map<String, Object> candidate = mapValue(context.get("candidate"));
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("id", fileName);
+        metadata.put("fileName", fileName);
+        metadata.put("status", status);
+        metadata.put("source", "workflow");
+        metadata.put("forced", forced);
+        metadata.put("validationStatus", forced
+                ? "forced"
+                : firstNonBlank(
+                        validationStatusOverride,
+                        stringValue(context, "validationStatus", null),
+                        "created".equals(status) ? "pending" : "success"));
+        metadata.put("candidateDigest",
+                stringValue(candidate, "digest", ""));
+        metadata.put("validationDigest", firstNonBlank(
+                stringValue(context, "validationDigest", null),
+                stringValue(candidate, "digest", null),
+                ""));
+        metadata.put("validationErrors", context.getOrDefault(
+                "validationErrors", List.of()));
+        Map<String, Object> candidateConfig = parseJsonObject(candidateContent);
+        if (!candidateConfig.isEmpty()) {
+            metadata.put("config", candidateConfig);
+        }
+        ChatMessagePart recordPart = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content(recordContent)
+                .metadata(metadata)
+                .build();
+        Map<String, Object> record = buildMetaConfigRecord(recordPart, status);
+
+        Map<String, Object> extraData = new LinkedHashMap<>(
+                parseJsonObject(chatSession.getExtraData()));
+        Map<String, Object> section = mapValue(extraData.get("metadataConfig"));
+        List<Map<String, Object>> records = listOfMaps(section.get("records"));
+        upsertRecord(records, record);
+        section.put("records", records);
+        extraData.put("metadataConfig", section);
+        chatSession.setExtraData(JacksonUtil.toJson(extraData));
+        saveChatSessionExtraData(chatSession, mcpToolContext);
+    }
+
+    private void saveChatSessionExtraData(ChatSession chatSession,
+                                          McpToolContext mcpToolContext) {
+        if (chatSession == null || chatSessionService == null
+                || chatSession.getId() == null
+                || !StringUtils.hasText(chatSession.getExtraData())) {
+            return;
+        }
+        Integer ownerId = mcpToolContext != null
+                && mcpToolContext.invocationContext() != null
+                ? mcpToolContext.invocationContext().requesterUserId() : null;
+        if (ownerId == null) {
+            ownerId = chatSession.getCreateBy();
+        }
+        if (ownerId == null) {
+            return;
+        }
+        User owner = new User();
+        owner.setId(ownerId);
+        try {
+            Boolean updated = chatSessionService.updateWorkflowState(
+                    (long) chatSession.getId(),
+                    null,
+                    chatSession.getExtraData(),
+                    owner);
+            if (!Boolean.TRUE.equals(updated)) {
+                log.warn("持久化元数据写入记录失败: chatSessionId={}", chatSession.getId());
+            }
+        } catch (RuntimeException e) {
+            log.warn("持久化元数据写入记录异常: chatSessionId={}, error={}",
+                    chatSession.getId(), e.getMessage(), e);
         }
     }
 
@@ -1636,6 +2568,29 @@ public class DihChatApplicationService {
             return containsNamedConfig(value, fileName);
         } catch (Exception e) {
             throw new IllegalStateException("config_tree 返回无法解析", e);
+        }
+    }
+
+    private List<String> configTreeFileNames(String result) {
+        try {
+            Object value = JacksonConfig.OBJECT_MAPPER.readValue(result, Object.class);
+            LinkedHashSet<String> names = new LinkedHashSet<>();
+            collectConfigFileNames(value, names);
+            return List.copyOf(names);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private void collectConfigFileNames(Object value, Set<String> names) {
+        if (value instanceof Map<?, ?> map) {
+            Object fileName = map.get("fileName");
+            if (fileName != null && StringUtils.hasText(fileName.toString())) {
+                names.add(fileName.toString());
+            }
+            map.values().forEach(item -> collectConfigFileNames(item, names));
+        } else if (value instanceof List<?> list) {
+            list.forEach(item -> collectConfigFileNames(item, names));
         }
     }
 
@@ -5236,6 +6191,14 @@ public class DihChatApplicationService {
         List<Map<String, Object>> records = new ArrayList<>();
         for (ChatMessagePart part : parts) {
             if ("metadata-config-record".equals(part.getType())) {
+                Map<String, Object> raw = part.getMetadata() == null
+                        ? Map.of() : part.getMetadata();
+                if (Set.of("rename", "delete").contains(
+                        stringValue(raw, "operation", ""))) {
+                    log.warn("忽略模型生成的元数据目录操作记录；"
+                            + "操作记录只能由服务端路径核验后写入");
+                    continue;
+                }
                 Map<String, Object> record = buildMetaConfigRecord(part, stringValue(part.getMetadata(), "status", "applied"));
                 if (isMetaConfigRecordPresent(record)) {
                     records.add(record);
@@ -6040,6 +7003,8 @@ public class DihChatApplicationService {
         String fileName = firstNonBlank(
                 stringValue(metadata, "fileName", null),
                 stringValue(metadata, "targetFile", null),
+                stringValue(metadata, "targetPath", null),
+                stringValue(metadata, "sourcePath", null),
                 entityName == null ? null : entityName + ".json",
                 stringValue(metadata, "defaultFileName", "meta_config/<entity>.json")
         );
@@ -6051,11 +7016,32 @@ public class DihChatApplicationService {
         record.put("entityLabel", entityLabel);
         record.put("tableName", firstNonBlank(stringValue(metadata, "tableName", null), stringValue(entity, "table_name", null)));
         record.put("fieldCount", listSize(config.get("attribute")));
-        record.put("status", stringValue(metadata, "status", defaultStatus));
+        String validationStatus = stringValue(metadata, "validationStatus", "");
+        String status = stringValue(metadata, "status", defaultStatus);
+        if (Set.of("failed", "blocked").contains(validationStatus)
+                && "applied".equals(status)) {
+            status = "written";
+        }
+        record.put("status", status);
         record.put("source", firstNonBlank(
                 stringValue(metadata, "source", null), "message"));
-        record.put("validationStatus",
-                stringValue(metadata, "validationStatus", ""));
+        boolean forced = Boolean.TRUE.equals(metadata.get("forced"))
+                || "forced".equals(validationStatus);
+        record.put("validationStatus", validationStatus);
+        record.put("forced", forced);
+        record.put("candidateDigest",
+                stringValue(metadata, "candidateDigest", ""));
+        record.put("validationDigest",
+                stringValue(metadata, "validationDigest", ""));
+        record.put("validationErrors", listValue(metadata.get("validationErrors")));
+        record.put("operation", stringValue(metadata, "operation", ""));
+        record.put("previousFileName", stringValue(metadata, "previousFileName", ""));
+        record.put("affectedFiles", listValue(metadata.get("affectedFiles")));
+        record.put("recursive", Boolean.TRUE.equals(metadata.get("recursive")));
+        record.put("changed", Boolean.TRUE.equals(metadata.get("changed")));
+        record.put("applied", Boolean.TRUE.equals(metadata.get("applied")));
+        record.put("operationDigest", stringValue(metadata, "operationDigest", ""));
+        record.put("message", stringValue(metadata, "message", ""));
         record.put("content", part.getContent());
         if (!config.isEmpty()) {
             record.put("config", config);
@@ -6081,13 +7067,14 @@ public class DihChatApplicationService {
                 log.warn("忽略未验证的元数据配置记录：文件 {} 内容为空或不可读", fileName);
                 return false;
             }
-            if ("workflow".equals(stringValue(record, "source", ""))
-                    && !"success".equals(
-                    stringValue(record, "validationStatus", ""))) {
-                log.warn("忽略普通工作流元数据配置记录：缺少成功校验状态，fileName={}", fileName);
-                return false;
-            }
             if ("workflow".equals(stringValue(record, "source", ""))) {
+                boolean forced = Boolean.TRUE.equals(record.get("forced"));
+                String validationStatus = stringValue(record, "validationStatus", "");
+                if (forced && !"forced".equals(validationStatus)) {
+                    log.warn("忽略强制工作流元数据配置记录：状态必须为 forced，fileName={}, status={}",
+                            fileName, validationStatus);
+                    return false;
+                }
                 Object expected = record.get("config");
                 if (expected == null || !semanticContentEquals(expected, content)) {
                     log.warn("忽略普通工作流元数据配置记录：读回内容不一致，fileName={}", fileName);

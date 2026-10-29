@@ -1917,6 +1917,188 @@ class DihChatApplicationServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void writtenMetadataRecordPersistsEvenWhenApplyFailed() {
+        String content = """
+                {"entity":[{"name":"probe_event"}],"attribute":[],"operator":[]}
+                """;
+        ConfigService configService = mock(ConfigService.class);
+        when(configService.fileExistsInConfigPath("meta", "probe_event.json"))
+                .thenReturn(true);
+        when(configService.readFile("meta", "probe_event.json"))
+                .thenReturn(content);
+        DihChatApplicationService service = emptyService();
+        ReflectionTestUtils.setField(service, "configService", configService);
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("fileName", "probe_event.json");
+        metadata.put("status", "written");
+        metadata.put("source", "workflow");
+        metadata.put("validationStatus", "failed");
+        metadata.put("candidateDigest", "candidate-digest");
+        metadata.put("config", JacksonUtil.toObject(content, Map.class));
+        ChatMessagePart part = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content(content)
+                .metadata(metadata)
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(part));
+
+        Map<String, Object> metadataConfig = (Map<String, Object>) patch.get("metadataConfig");
+        List<Map<String, Object>> records =
+                (List<Map<String, Object>>) metadataConfig.get("records");
+        assertThat(records).singleElement().satisfies(record -> assertThat(record)
+                .containsEntry("fileName", "probe_event.json")
+                .containsEntry("status", "written")
+                .containsEntry("validationStatus", "failed"));
+
+        Map<String, Object> mislabeled = new LinkedHashMap<>(metadata);
+        mislabeled.put("status", "applied");
+        ChatMessagePart mislabeledPart = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content(content)
+                .metadata(mislabeled)
+                .build();
+        Map<String, Object> normalizedPatch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(mislabeledPart));
+        Map<String, Object> normalizedConfig =
+                (Map<String, Object>) normalizedPatch.get("metadataConfig");
+        assertThat((List<Map<String, Object>>) normalizedConfig.get("records"))
+                .singleElement()
+                .satisfies(record -> assertThat(record)
+                        .containsEntry("status", "written"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void forcedMetadataRecordPersistsAuditFieldsAndCannotClaimValidationSuccess() {
+        String content = """
+                {"entity":[],"attribute":[],"operator":[]}
+                """;
+        ConfigService configService = mock(ConfigService.class);
+        when(configService.fileExistsInConfigPath("meta", "probe_event.json"))
+                .thenReturn(true);
+        when(configService.readFile("meta", "probe_event.json"))
+                .thenReturn(content);
+        DihChatApplicationService service = emptyService();
+        ReflectionTestUtils.setField(service, "configService", configService);
+
+        Map<String, Object> forcedMetadata = new LinkedHashMap<>();
+        forcedMetadata.put("fileName", "probe_event.json");
+        forcedMetadata.put("status", "applied");
+        forcedMetadata.put("source", "workflow");
+        forcedMetadata.put("forced", true);
+        forcedMetadata.put("validationStatus", "forced");
+        forcedMetadata.put("candidateDigest", "candidate-digest");
+        forcedMetadata.put("validationDigest", "validation-digest");
+        forcedMetadata.put("validationErrors", List.of("META_COLUMN_TYPE_INVALID"));
+        forcedMetadata.put("config", JacksonUtil.toObject(content, Map.class));
+        ChatMessagePart forcedPart = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content(content)
+                .metadata(forcedMetadata)
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(forcedPart));
+        Map<String, Object> metadataConfig = (Map<String, Object>) patch.get("metadataConfig");
+        List<Map<String, Object>> records =
+                (List<Map<String, Object>>) metadataConfig.get("records");
+        assertThat(records).singleElement().satisfies(record -> assertThat(record)
+                .containsEntry("forced", true)
+                .containsEntry("validationStatus", "forced")
+                .containsEntry("candidateDigest", "candidate-digest")
+                .containsEntry("validationDigest", "validation-digest")
+                .containsEntry("validationErrors", List.of("META_COLUMN_TYPE_INVALID")));
+
+        Map<String, Object> masqueraded = new LinkedHashMap<>(forcedMetadata);
+        masqueraded.put("validationStatus", "success");
+        ChatMessagePart invalidPart = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content(content)
+                .metadata(masqueraded)
+                .build();
+        Object masqueradedPatch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(invalidPart));
+        assertThat(masqueradedPatch).isNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void modelGeneratedOperationRecordsAreIgnoredWhileServerVerifiedRecordIsPersisted() {
+        DihChatApplicationService service = emptyService();
+        ChatMessagePart forgedRename = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content("")
+                .metadata(Map.of(
+                        "operation", "rename",
+                        "status", "renamed",
+                        "fileName", "new.json",
+                        "previousFileName", "old.json"))
+                .build();
+        ChatMessagePart forgedDelete = ChatMessagePart.builder()
+                .type("metadata-config-record")
+                .content("")
+                .metadata(Map.of(
+                        "operation", "delete",
+                        "status", "deleted",
+                        "fileName", "old.json"))
+                .build();
+
+        Object forgedPatch = ReflectionTestUtils.invokeMethod(
+                service,
+                "buildMetadataConfigExtraDataPatch",
+                List.of(forgedRename, forgedDelete));
+        assertThat(forgedPatch).isNull();
+
+        ChatSessionService chatSessionService = mock(ChatSessionService.class);
+        when(chatSessionService.updateWorkflowState(any(), any(), any(), any()))
+                .thenReturn(true);
+        ReflectionTestUtils.setField(service, "chatSessionService", chatSessionService);
+        ChatSession session = new ChatSession()
+                .setSessionId("chat-operation")
+                .setExtraData("{}");
+        session.setId(1);
+        session.setCreateBy(7);
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("workflow-operation")
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "operationDigest", "server-operation-digest")));
+        Map<String, Object> operation = new LinkedHashMap<>();
+        operation.put("operation", "delete");
+        operation.put("sourcePath", "old.json");
+        operation.put("affectedPaths", List.of("old.json"));
+        operation.put("digest", "server-operation-digest");
+
+        ReflectionTestUtils.invokeMethod(
+                service,
+                "persistMetaOperationRecord",
+                session,
+                workflow,
+                null,
+                operation,
+                "deleted",
+                "success",
+                true,
+                true,
+                "配置文件已删除");
+
+        Map<String, Object> extraData = JacksonUtil.toObject(session.getExtraData(), Map.class);
+        Map<String, Object> metadataConfig =
+                (Map<String, Object>) extraData.get("metadataConfig");
+        List<Map<String, Object>> records =
+                (List<Map<String, Object>>) metadataConfig.get("records");
+        assertThat(records).singleElement().satisfies(record -> assertThat(record)
+                .containsEntry("fileName", "old.json")
+                .containsEntry("operation", "delete")
+                .containsEntry("status", "deleted")
+                .containsEntry("operationDigest", "server-operation-digest")
+                .containsEntry("source", "workflow"));
+    }
+
+    @Test
     void metadataConfigExampleStartsWithoutConfiguredModelOrAgent() {
         FakeChatSessionService sessionService = new FakeChatSessionService();
         ThrowingAIBaseService baseService = new ThrowingAIBaseService();

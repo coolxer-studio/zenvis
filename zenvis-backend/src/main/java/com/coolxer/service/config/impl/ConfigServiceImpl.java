@@ -7,6 +7,7 @@ import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigPathOperationResult;
 import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.model.retrieval.meta.MetaData;
 import com.coolxer.service.config.ConfigService;
@@ -27,10 +28,12 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 /**
  * 配置文件接口
@@ -178,7 +181,7 @@ public class ConfigServiceImpl implements ConfigService {
 
     @Override
     public boolean addFile(String type, String fileName) {
-        // 创建文件
+        // 创建空文件；正文由 config_apply 写入
         try {
             Path filePath = resolveConfigPath(type, fileName, false);
             Files.createFile(filePath);
@@ -191,27 +194,136 @@ public class ConfigServiceImpl implements ConfigService {
 
     @Override
     public boolean deleteFile(String type, String fileName) {
-        try {
-            Path filePath = resolveExistingConfigPath(type, fileName);
-            Files.deleteIfExists(filePath);
-            return true;
-        } catch (IOException e) {
-            log.error("delete config file failed!", e);
-        }
-        return false;
+        return deleteEntry(type, fileName, false).isSuccess();
     }
 
     @Override
     public boolean renameFile(String type, String originalFile, String newFile) {
         try {
-            Path originalFilePath = resolveExistingConfigPath(type, originalFile);
-            Path newFilePath = resolveConfigPath(type, newFile, false);
-            Files.move(originalFilePath, newFilePath, StandardCopyOption.REPLACE_EXISTING);
-            return true;
-        } catch (IOException e) {
-            log.error("delete config file failed!", e);
+            String sourcePath = normalizeRelativePath(originalFile);
+            String targetPath = normalizeRelativePath(newFile);
+            String targetName = leafName(targetPath);
+            String expectedTarget = siblingPath(sourcePath, targetName);
+            if (!expectedTarget.equals(targetPath)) {
+                return false;
+            }
+            return renameEntry(type, sourcePath, targetName).isSuccess();
+        } catch (ApiException e) {
+            return false;
         }
-        return false;
+    }
+
+    @Override
+    public ConfigPathOperationResult renameEntry(String type,
+                                                 String sourcePath,
+                                                 String targetName) {
+        String normalizedSource;
+        try {
+            normalizedSource = normalizeRelativePath(sourcePath);
+        } catch (ApiException e) {
+            return ConfigPathOperationResult.failure(
+                    "rename", sourcePath, "源路径不安全或为空");
+        }
+        String normalizedTarget = targetName == null ? "" : targetName.trim();
+        if (!isSafeLeafName(normalizedTarget)) {
+            return ConfigPathOperationResult.failure(
+                    "rename", normalizedSource,
+                    "新名称必须是当前目录下的单个文件或目录名，不能包含路径分隔符");
+        }
+        Path source;
+        try {
+            source = resolveExistingConfigPath(type, normalizedSource);
+        } catch (ApiException e) {
+            return ConfigPathOperationResult.failure(
+                    "rename", normalizedSource, "目标配置不存在或无权访问");
+        }
+        Path root = configRoot(type);
+        if (source.equals(root)) {
+            return ConfigPathOperationResult.failure(
+                    "rename", normalizedSource, "不能重命名配置类型根目录");
+        }
+        String targetPath = siblingPath(normalizedSource, normalizedTarget);
+        Path target;
+        try {
+            target = resolveConfigPath(type, targetPath, false);
+        } catch (ApiException e) {
+            return ConfigPathOperationResult.failure(
+                    "rename", normalizedSource, "目标路径不安全或无权访问");
+        }
+        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+            return operationFailure(
+                    type, "rename", source, normalizedSource, targetPath,
+                    "目标名称已存在，拒绝覆盖");
+        }
+
+        ConfigPathOperationResult result = new ConfigPathOperationResult()
+                .setOperation("rename")
+                .setKind(pathKind(source))
+                .setSourcePath(normalizedSource)
+                .setTargetPath(targetPath)
+                .setAffectedPaths(relativePaths(type, source));
+        try {
+            Files.move(source, target);
+            result.setSuccess(true)
+                    .setChanged(true)
+                    .setMessage("配置已重命名");
+            return applyMetaOperation(type, result);
+        } catch (IOException e) {
+            log.error("rename config path failed!", e);
+            return ConfigPathOperationResult.failure(
+                    "rename", normalizedSource, "重命名失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public ConfigPathOperationResult deleteEntry(String type,
+                                                 String sourcePath,
+                                                 boolean recursive) {
+        String normalizedSource;
+        try {
+            normalizedSource = normalizeRelativePath(sourcePath);
+        } catch (ApiException e) {
+            return ConfigPathOperationResult.failure(
+                    "delete", sourcePath, "源路径不安全或为空");
+        }
+        Path source;
+        try {
+            source = resolveExistingConfigPath(type, normalizedSource);
+        } catch (ApiException e) {
+            return ConfigPathOperationResult.failure(
+                    "delete", normalizedSource, "目标配置不存在或无权访问");
+        }
+        Path root = configRoot(type);
+        if (source.equals(root)) {
+            return ConfigPathOperationResult.failure(
+                    "delete", normalizedSource, "不能删除配置类型根目录");
+        }
+
+        List<String> affectedPaths = relativePaths(type, source);
+        boolean directory = Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS);
+        if (directory && affectedPaths.size() > 1 && !recursive) {
+            return operationFailure(
+                    type, "delete", source, normalizedSource, null,
+                    "目录非空，必须显式设置 recursive=true 才能递归删除")
+                    .setAffectedPaths(affectedPaths);
+        }
+
+        ConfigPathOperationResult result = new ConfigPathOperationResult()
+                .setOperation("delete")
+                .setKind(directory ? "directory" : "file")
+                .setSourcePath(normalizedSource)
+                .setAffectedPaths(affectedPaths);
+        try {
+            WalkFileUtil.delete(source);
+            result.setSuccess(true)
+                    .setChanged(true)
+                    .setMessage(directory ? "配置目录已删除" : "配置文件已删除");
+            return applyMetaOperation(type, result);
+        } catch (IOException e) {
+            log.error("delete config path failed!", e);
+            return ConfigPathOperationResult.failure(
+                    "delete", normalizedSource, "删除失败：" + e.getMessage());
+        }
     }
 
     /**
@@ -235,7 +347,7 @@ public class ConfigServiceImpl implements ConfigService {
         switch (type) {
             case "meta":
                 // 重新加载meta
-                MetaData metaData = metaDataService.loadMetaData();
+                MetaData metaData = metaDataService.reloadMetaDataOrThrow();
                 // 初始化Clickhouse表
                 clickhouseSchemeService.loadSchemeFromMetaData(metaData);
                 log.info("刷新Schema");
@@ -303,6 +415,123 @@ public class ConfigServiceImpl implements ConfigService {
 
     private Path resolveExistingConfigPath(String type, String fileName) {
         return resolveConfigPath(type, fileName, true);
+    }
+
+    private Path configRoot(String type) {
+        return Paths.get(configPath(type)).toAbsolutePath().normalize();
+    }
+
+    private ConfigPathOperationResult applyMetaOperation(
+            String type,
+            ConfigPathOperationResult result) {
+        if (!result.isSuccess()) {
+            return result;
+        }
+        if (!"meta".equals(type)) {
+            return result.setApplied(true);
+        }
+        try {
+            ConfigDto configDto = new ConfigDto();
+            configDto.setFileName(result.getSourcePath());
+            applyConfig(type, configDto);
+            return result.setApplied(true)
+                    .setMessage(result.getMessage() + "，Meta 已严格重载并刷新 Schema");
+        } catch (RuntimeException e) {
+            log.error("reload Meta after config {} failed!", result.getOperation(), e);
+            return result.setSuccess(false)
+                    .setApplied(false)
+                    .setMessage(result.getMessage()
+                            + "，但 Meta 严格重载或 Schema 刷新失败："
+                            + safeMessage(e));
+        }
+    }
+
+    private ConfigPathOperationResult operationFailure(String type,
+                                                       String operation,
+                                                       Path source,
+                                                       String sourcePath,
+                                                       String targetPath,
+                                                       String message) {
+        return new ConfigPathOperationResult()
+                .setSuccess(false)
+                .setOperation(operation)
+                .setKind(pathKind(source))
+                .setSourcePath(sourcePath)
+                .setTargetPath(targetPath)
+                .setChanged(false)
+                .setApplied(false)
+                .setAffectedPaths(relativePaths(type, source))
+                .setMessage(message);
+    }
+
+    private List<String> relativePaths(String type, Path source) {
+        Path root = configRoot(type);
+        if (root == null || source == null) {
+            return List.of();
+        }
+        try (Stream<Path> paths = Files.walk(source)) {
+            List<String> result = new ArrayList<>();
+            paths.sorted(Comparator.naturalOrder()).forEach(path -> {
+                if (path.equals(root)) {
+                    return;
+                }
+                result.add(root.relativize(path).toString()
+                        .replace(File.separatorChar, '/'));
+            });
+            return result;
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    private String pathKind(Path path) {
+        return path != null && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+                ? "directory" : "file";
+    }
+
+    private String normalizeRelativePath(String path) {
+        if (StringUtils.isBlank(path)) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        String normalized = path.trim().replace('\\', '/');
+        if (normalized.startsWith("/")) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        if (normalized.isBlank() || normalized.equals(".")) {
+            throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+        }
+        for (String segment : normalized.split("/")) {
+            if (segment.isBlank() || ".".equals(segment) || "..".equals(segment)) {
+                throw new ApiException(ResultCodeEnum.NO_AUTHORITY);
+            }
+        }
+        return normalized;
+    }
+
+    private boolean isSafeLeafName(String name) {
+        return StringUtils.isNotBlank(name)
+                && !name.contains("/")
+                && !name.contains("\\")
+                && !".".equals(name)
+                && !"..".equals(name);
+    }
+
+    private String leafName(String path) {
+        int index = path.lastIndexOf('/');
+        return index < 0 ? path : path.substring(index + 1);
+    }
+
+    private String siblingPath(String sourcePath, String targetName) {
+        int index = sourcePath.lastIndexOf('/');
+        return index < 0 ? targetName : sourcePath.substring(0, index + 1) + targetName;
+    }
+
+    private String safeMessage(RuntimeException error) {
+        String message = error.getMessage();
+        return StringUtils.isBlank(message) ? error.getClass().getSimpleName() : message;
     }
 
     private Path resolveConfigPath(String type, String fileName, boolean requireExisting) {

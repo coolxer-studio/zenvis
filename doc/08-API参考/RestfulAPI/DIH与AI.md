@@ -51,6 +51,24 @@
 
 客户端必须逐行解析，未知事件应忽略而不是终止整个流。同一轮可能产生多个审批请求，应按 `request_id` 分别维护。MCP 审批提交到 [MCP 服务管理接口](/08-API参考/RestfulAPI/MCP服务管理.md#审批与调用审计)，不能提交到 `action-decision`。
 
+### 工作流动作
+
+业务确认卡通过 `POST /api/v1/dih/chat/workflow/action` 提交，`WorkflowActionDto` 使用以下字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `chat_id` | 会话标识 |
+| `message_id` | 承载卡片的 AI 消息 ID |
+| `part_id` | 卡片部件 ID |
+| `workflow_id` | 服务端锁定的工作流 ID |
+| `action` | `submit`、`approve`、`force_approve`、`reject`、`revise`、`retry` 或 `add_to_library`；实际可选值以卡片 `allowedActions` 为准 |
+| `revision` | 修订要求或重试说明；按动作可选 |
+| `answers` | 信息补充卡的结构化回答 |
+
+服务端会校验会话、消息、部件、工作流、状态修订号和允许动作，旧卡片、被篡改摘要和不允许的跳步操作均会被拒绝。`add_to_library` 仅用于允许该动作的图表工作流。元数据候选校验失败时，普通 `approve` 不可用，只能 `reject`、`revise` 或经过二次确认的 `force_approve`；强制写入必须在结果中保留 `forced` 与真实校验状态。
+
+元数据重命名或删除使用同一卡片类型，`operation` 为 `rename` 或 `delete`，并携带 `sourcePath`、`targetPath`、`recursive`、`affectedPaths` 和 `operationDigest`。批准后前端必须使用服务端锁定的路径参数，不能重新解释文件路径；源文件、目录成员、目标占用或配置树证据变化后卡片失效。删除非空目录需要显式递归确认，操作成功后才由服务端写入右侧的 `renamed`/`deleted` 记录。
+
 当 `type` 属于 `app.ai.agent-run.enabled-types` 时，`POST /api/v1/dih/chat` 兼容适配器会创建 Agent Run，并把 Run 事件映射为 `delta`、`tool_call`、`approval_required`、`approval_updated`、`rag_search`、`done` 和 `error`。非事件流请求只返回“任务已创建”和 `runId`，不会等待任务完成。持久化运行、steer 和断线恢复应优先使用下节的 Run API。
 
 内置示例提示词优先走确定性示例流，不创建 Run；直接向 Run API 提交示例时返回业务码 `503`，客户端应回退到 `POST /api/v1/dih/chat`。

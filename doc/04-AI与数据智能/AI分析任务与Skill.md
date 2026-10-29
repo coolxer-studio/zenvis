@@ -229,6 +229,8 @@ skill_config/
 - 知识库 RAG 上下文由平台每轮自动注入，不是 MCP 工具，也不占用工具调用预算；其可检索范围固定为 Skill 绑定知识库的并集。
 - 全局 `DENY` 不能被 Skill、会话授权或任务授权覆盖。
 
+内置元数据配置 Skill 允许 `config_tree/config_schema/config_read/config_add/config_apply/config_validate/config_rename/config_delete`。其中 `config_rename/config_delete` 只授予元数据配置智能体，其他业务智能体不得获得目录或文件改名、删除能力；重命名和删除还必须经过元数据专用确认卡及 MCP 审批。
+
 修改工具范围后，可以通过 `/api/v1/dih/mcp/agent/prompt` 查看目标 Agent 的实际工具提示词。
 
 ### 资源预算

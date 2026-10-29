@@ -152,7 +152,13 @@ public class ConfigController {
     @Operation(summary = "修改文件名", description = "修改文件名")
     public ResponseWrap<String> renameFile(@PathVariable("type") String type, @RequestBody ConfigDto configDto) {
         if (configService.fileExistsInConfigPath(type, configDto.getOriginalFileName())) {
-            if (configService.renameFile(type, configDto.getOriginalFileName(), configDto.getFileName())) {
+            String targetName = configDto.getFileName();
+            int index = targetName == null ? -1 : targetName.lastIndexOf('/');
+            if (index >= 0) {
+                targetName = targetName.substring(index + 1);
+            }
+            if (configService.renameEntry(
+                    type, configDto.getOriginalFileName(), targetName).isSuccess()) {
                 return ResponseWrap.success();
             } else {
                 return ResponseWrap.fail(ResultCodeEnum.UNKNOWN_ERROR);
@@ -172,7 +178,7 @@ public class ConfigController {
     @Operation(summary = "文件名", description = "文件名")
     public ResponseWrap<String> deleteFile(@PathVariable("type") String type, @RequestBody ConfigDto configDto) {
         if (configService.fileExistsInConfigPath(type, configDto.getFileName())) {
-            if (configService.deleteFile(type, configDto.getFileName())) {
+            if (configService.deleteEntry(type, configDto.getFileName(), false).isSuccess()) {
                 return ResponseWrap.success();
             } else {
                 return ResponseWrap.fail(ResultCodeEnum.UNKNOWN_ERROR);

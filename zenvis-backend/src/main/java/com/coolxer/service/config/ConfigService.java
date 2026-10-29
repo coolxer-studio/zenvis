@@ -1,6 +1,7 @@
 package com.coolxer.service.config;
 
 import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigPathOperationResult;
 import com.coolxer.model.config.vo.ConfigVo;
 
 import java.util.List;
@@ -64,6 +65,11 @@ public interface ConfigService {
     boolean renameFile(String type, String originalFile, String newFile);
 
     /**
+     * Rename a configuration file or directory within the same parent directory.
+     */
+    ConfigPathOperationResult renameEntry(String type, String sourcePath, String targetName);
+
+    /**
      * 删除文件
      *
      * @param type
@@ -71,6 +77,11 @@ public interface ConfigService {
      * @return
      */
     boolean deleteFile(String type, String fileName);
+
+    /**
+     * Delete a configuration file or directory.
+     */
+    ConfigPathOperationResult deleteEntry(String type, String sourcePath, boolean recursive);
 
     /**
      * 获取配置文件路径

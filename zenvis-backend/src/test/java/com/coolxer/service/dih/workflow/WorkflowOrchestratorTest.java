@@ -2,6 +2,7 @@ package com.coolxer.service.dih.workflow;
 
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.model.dih.ChatMessagePart;
+import com.coolxer.service.config.MetaConfigValidationService;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -145,6 +146,55 @@ class WorkflowOrchestratorTest {
         assertThat(new MetadataConfigWorkflowDefinition()
                 .transition(blocked, "retry"))
                 .isEqualTo(AgentWorkflowStep.META_DISCOVERY);
+    }
+
+    @Test
+    void firstOverwriteDecisionCardStaysInteractiveWithItsServerOwnedPlanId() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession session = new ChatSession()
+                .setType("agent_metadata_config");
+        String content = """
+                {"entity":[{"name":"car_info"}],"attribute":[],"operator":[]}
+                """;
+        ChatMessagePart candidate = ChatMessagePart.builder()
+                .id("config-1")
+                .type("config")
+                .content(content)
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "configKind", "meta-config")))
+                .build();
+        ChatMessagePart decision = ChatMessagePart.builder()
+                .id("decision-1")
+                .type("metadata-config-decision")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "configKind", "meta",
+                        "fileName", "car_info.json",
+                        "overwrite", true,
+                        "planId", "meta-car_info-overwrite-1",
+                        "candidateDigest", MetaConfigValidationService.digest(content))))
+                .build();
+
+        orchestrator.prepareParts(
+                session,
+                List.of(candidate, decision),
+                List.of(Map.of(
+                        "evidenceId", "config-tree-1",
+                        "tool", "config_tree",
+                        "status", "succeeded")),
+                "message-1");
+
+        assertThat(decision.getStatus()).isEqualTo("pending");
+        assertThat(decision.getMetadata())
+                .containsEntry("step", "META_OVERWRITE_CONFIRMATION")
+                .containsEntry("validationStatus", "success")
+                .containsEntry("planId", "meta-car_info-overwrite-1")
+                .containsEntry("allowedActions", List.of("approve", "reject", "revise"));
+        assertThat(store.loadActive(session, "agent_metadata_config"))
+                .get()
+                .satisfies(state -> assertThat(state.getContext())
+                        .containsEntry("planId", "meta-car_info-overwrite-1"));
     }
 
     @Test

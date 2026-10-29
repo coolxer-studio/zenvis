@@ -13,6 +13,17 @@ public interface MetaDataService {
     MetaData loadMetaData();
 
     /**
+     * 重新加载 Meta；任何解析、冲突或合并错误都直接抛出，不沿用旧快照。
+     */
+    default MetaData reloadMetaDataOrThrow() {
+        MetaData metaData = loadMetaData();
+        if (metaData == null) {
+            throw new IllegalStateException("元数据加载失败");
+        }
+        return metaData;
+    }
+
+    /**
      * 校验并合并指定 Meta 文件，但不替换当前运行快照。
      */
     default MetaData validateMetaDataFiles(List<Path> metaFiles) {

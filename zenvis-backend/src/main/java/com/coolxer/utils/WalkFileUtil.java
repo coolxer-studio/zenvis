@@ -31,9 +31,6 @@ public class WalkFileUtil {
             return;
         }
 
-        if (file.isDirectory() && ArrayUtil.isEmpty(file.list())) {
-            return;
-        }
         // 不是config目录且为需要忽略的文件时需要跳过
         if (isIgnoredFile(file)) {
             return;
@@ -44,8 +41,9 @@ public class WalkFileUtil {
         if (file.isDirectory()) {
             // 文件夹中的文件列表
             File[] subFiles = file.listFiles();
-            // 如果是空文件夹则直接返回
+            // 空目录仍需要返回节点，供配置智能体识别并确认目录操作。
             if (ArrayUtil.isEmpty(subFiles)) {
+                walkFileVo.setNodes(List.of());
                 return;
             }
             List<ConfigVo> subFileInfos = new ArrayList<>(subFiles.length);

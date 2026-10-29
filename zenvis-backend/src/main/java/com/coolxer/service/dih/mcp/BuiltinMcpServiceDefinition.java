@@ -64,6 +64,8 @@ public enum BuiltinMcpServiceDefinition {
                     "config_read",
                     "config_apply",
                     "config_add",
+                    "config_rename",
+                    "config_delete",
                     "config_ensure_root",
                     "config_validate"
             )),

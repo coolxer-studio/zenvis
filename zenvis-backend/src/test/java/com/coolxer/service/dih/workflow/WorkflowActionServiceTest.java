@@ -24,6 +24,41 @@ import static org.mockito.Mockito.when;
 class WorkflowActionServiceTest {
 
     @Test
+    void failedMetadataCandidateCannotBeNormallyApprovedButCanBeForceApproved() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = metadataSession();
+        ChatMessagePart part = metadataDecisionPart(List.of(
+                "approve", "force_approve", "reject", "revise"));
+        session.setMessages(JacksonUtil.toJson(List.of(message("message-meta", part))));
+        store.upsert(session, metadataState(
+                AgentWorkflowStep.META_PLAN_CONFIRMATION, 2));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        assertThatThrownBy(() -> service.handle(request(
+                "chat-meta", "message-meta", "part-meta",
+                "workflow-meta", "approve"), user()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("未通过平台校验");
+
+        var result = service.handle(request(
+                "chat-meta", "message-meta", "part-meta",
+                "workflow-meta", "force_approve"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getState()).isEqualTo("META_PREWRITE_CHECK");
+        assertThat(result.getPartStatus()).isEqualTo("force_approved");
+        AgentWorkflowState forced = store.load(session, "workflow-meta").orElseThrow();
+        assertThat(forced.getStep()).isEqualTo(AgentWorkflowStep.META_PREWRITE_CHECK);
+        assertThat(forced.getContext()).containsEntry("forced", true);
+        List<Message> persisted = JacksonUtil.toList(
+                session.getMessages(), new com.fasterxml.jackson.core.type.TypeReference<List<Message>>() {});
+        assertThat(persisted.get(0).getParts().get(0).getMetadata())
+                .containsEntry("forced", true)
+                .containsEntry("validationStatus", "forced")
+                .containsEntry("candidateDigest", "digest-meta");
+    }
+
+    @Test
     void strictEntitySubmissionAcceptsOnlyCurrentMcpCandidate() {
         Fixture fixture = selectionFixture();
         WorkflowActionDto invalid = fixture.request("submit");
@@ -343,6 +378,54 @@ class WorkflowActionServiceTest {
         return new Fixture(
                 new WorkflowActionService(chatService(session), store),
                 user());
+    }
+
+    private ChatSession metadataSession() {
+        ChatSession session = new ChatSession()
+                .setSessionId("chat-meta")
+                .setType("agent_metadata_config");
+        session.setId(2);
+        session.setCreateBy(9);
+        return session;
+    }
+
+    private ChatMessagePart metadataDecisionPart(List<String> actions) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("workflowId", "workflow-meta");
+        metadata.put("step", "META_PLAN_CONFIRMATION");
+        metadata.put("stateRevision", 2);
+        metadata.put("configKind", "meta");
+        metadata.put("fileName", "probe_event.json");
+        metadata.put("candidateDigest", "digest-meta");
+        metadata.put("validationStatus", "failed");
+        metadata.put("forceAllowed", true);
+        metadata.put("validationErrors", List.of("非法字段类型"));
+        metadata.put("allowedActions", actions);
+        return ChatMessagePart.builder()
+                .id("part-meta")
+                .type("metadata-config-decision")
+                .status("pending")
+                .metadata(metadata)
+                .build();
+    }
+
+    private AgentWorkflowState metadataState(AgentWorkflowStep step, long revision) {
+        return new AgentWorkflowState()
+                .setWorkflowId("workflow-meta")
+                .setWorkflowType("metadata_config")
+                .setAgentType("agent_metadata_config")
+                .setStep(step)
+                .setStatus("active")
+                .setMessageId("message-meta")
+                .setPartId("part-meta")
+                .setStateRevision(revision)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "fileName", "probe_event.json",
+                        "validationStatus", "failed",
+                        "forceAllowed", true,
+                        "candidate", Map.of(
+                                "content", "{}",
+                                "digest", "digest-meta"))));
     }
 
     private ChatSessionService chatService(ChatSession session) {

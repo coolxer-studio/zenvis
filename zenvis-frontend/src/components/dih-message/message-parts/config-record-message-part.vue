@@ -48,6 +48,7 @@ const configRecordTagType = computed(() => {
   if (status === 'success') return 'success';
   if (status === 'failed') return 'danger';
   if (status === 'blocked') return 'warning';
+  if (status === 'forced') return 'danger';
   return 'info';
 });
 
@@ -56,6 +57,7 @@ const configRecordStatusText = computed(() => {
   if (status === 'success') return '验证成功';
   if (status === 'failed') return '验证失败';
   if (status === 'blocked') return '验证阻塞';
+  if (status === 'forced') return '强制写入';
   return '未验证';
 });
 </script>

@@ -89,8 +89,10 @@
         <span class="run-user-input-copy">
           <strong>需要补充信息</strong>
           <small>{{ waitingQuestion || '当前任务正在等待你补充继续执行所需的信息。' }}</small>
-          <small class="run-user-input-hint">请在页面底部输入框补充信息后发送。</small>
         </span>
+        <el-button size="small" type="primary" plain @click.stop="openUserInput">
+          补充信息
+        </el-button>
       </div>
 
       <div v-else-if="run?.pausedReason" class="run-paused-reason">
@@ -113,11 +115,18 @@
       </div>
     </template>
 
+    <AgentRunUserInputDialog
+      v-model="userInputVisible"
+      :question="waitingQuestion"
+      :submitting="userInputSubmitting"
+      @submit="submitUserInput"
+      @closed="handleUserInputClosed"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   ArrowDown,
   ArrowUp,
@@ -147,6 +156,7 @@ import {
   summarizeAgentRunActivities,
 } from '@/views/dih/composables/agent-run-activity';
 import AgentRunActivity from './agent-run-activity.vue';
+import AgentRunUserInputDialog from './agent-run-user-input-dialog.vue';
 
 const props = withDefaults(defineProps<{
   run?: AgentRun | null;
@@ -160,6 +170,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'resume', runId: string): void;
+  (e: 'reply', payload: { runId: string; message: string }): void;
 }>();
 
 const expanded = ref(true);
@@ -189,6 +200,56 @@ const allActivityEvents = computed(() => {
 const activities = computed(() => buildAgentRunActivities(allActivityEvents.value));
 const activitySummary = computed(() => summarizeAgentRunActivities(activities.value));
 const waitingQuestion = computed(() => resolveAgentRunWaitingQuestion(props.run));
+const waitingPromptKey = computed(() => {
+  if (props.run?.status !== 'WAITING_USER') return '';
+  return `${props.run.runId}:${waitingQuestion.value}`;
+});
+const userInputVisible = ref(false);
+const userInputSubmitting = ref(false);
+let dismissedPromptKey = '';
+let promptedKey = '';
+let submitResetTimer: number | null = null;
+
+const openUserInput = () => {
+  userInputVisible.value = true;
+};
+
+const submitUserInput = (message: string) => {
+  const runId = props.run?.runId || '';
+  const answer = message.trim();
+  if (!runId || !answer) return;
+  userInputSubmitting.value = true;
+  emit('reply', { runId, message: answer });
+  if (submitResetTimer !== null) window.clearTimeout(submitResetTimer);
+  submitResetTimer = window.setTimeout(() => {
+    userInputSubmitting.value = false;
+    submitResetTimer = null;
+  }, 5_000);
+};
+
+const handleUserInputClosed = () => {
+  if (props.run?.status === 'WAITING_USER') {
+    dismissedPromptKey = waitingPromptKey.value;
+  }
+};
+
+watch(waitingPromptKey, key => {
+  if (!key) {
+    userInputVisible.value = false;
+    userInputSubmitting.value = false;
+    dismissedPromptKey = '';
+    promptedKey = '';
+    return;
+  }
+  if (key !== dismissedPromptKey && key !== promptedKey) {
+    promptedKey = key;
+    userInputVisible.value = true;
+  }
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (submitResetTimer !== null) window.clearTimeout(submitResetTimer);
+});
 
 const loadActivityEvents = async () => {
   const runId = props.run?.runId || '';
@@ -581,12 +642,6 @@ button.run-activity-state {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-}
-
-.run-user-input-copy .run-user-input-hint {
-  display: block;
-  color: var(--zv-text-muted);
-  -webkit-line-clamp: unset;
 }
 
 .run-metrics {

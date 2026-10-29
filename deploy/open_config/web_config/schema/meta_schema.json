@@ -1,186 +1,110 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "entity": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "integer",
-            "description": "实体ID"
-          },
-          "name": {
-            "type": "string",
-            "description": "实体名称"
-          },
-          "label": {
-            "type": "string",
-            "description": "实体标签"
-          },
-          "description": {
-            "type": "string",
-            "description": "实体描述"
-          },
-          "table_name": {
-            "type": "string",
-            "description": "表名"
-          },
-          "data_source": {
-            "type": "string",
-            "description": "数据源"
-          },
+          "id": { "type": "integer", "minimum": 0, "description": "实体ID，可省略或为0" },
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "实体逻辑名" },
+          "label": { "type": "string", "minLength": 1, "description": "实体展示名" },
+          "description": { "type": "string", "minLength": 1, "description": "实体描述" },
+          "table_name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$", "description": "目标表，固定为 zenvis.<table_name>" },
+          "data_source": { "type": "string", "enum": ["clickhouse"] },
+          "sort_column": { "type": "string", "description": "默认排序字段物理列名" },
           "auto_create": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
-              "engine": {
-                "type": "string",
-                "description": "数据库引擎"
-              },
-              "order_by": {
-                "type": "array",
-                "items": {
-                  "type": "string"
+              "engine": { "type": "string", "enum": ["MergeTree"] },
+              "order_by": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "排序键，禁止使用 zenvis_id" },
+              "partition_by": { "type": "string", "description": "可选分区表达式" },
+              "ttl": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "column": { "type": "string", "description": "非 Nullable 的时间列" },
+                  "expire_after": { "type": "integer", "minimum": 1 },
+                  "unit": { "type": "string", "enum": ["HOUR", "DAY", "WEEK", "MONTH", "YEAR"] }
                 },
-                "description": "排序字段"
-              },
-              "partition_by": {
-                "type": "string",
-                "description": "分区字段"
+                "required": ["column", "expire_after", "unit"]
               }
             },
-            "required": [
-              "engine",
-              "order_by",
-              "partition_by"
-            ]
+            "required": ["engine", "order_by"]
           }
         },
-        "required": [
-          "id",
-          "name",
-          "label",
-          "description",
-          "table_name",
-          "data_source"
-        ]
+        "required": ["name", "label", "description", "table_name", "data_source"]
       }
     },
     "attribute": {
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "integer",
-            "description": "属性ID"
-          },
-          "entity": {
-            "type": "string",
-            "description": "所属实体"
-          },
-          "name": {
-            "type": "string",
-            "description": "属性名称"
-          },
-          "label": {
-            "type": "string",
-            "description": "属性标签"
-          },
-          "description": {
-            "type": "string",
-            "description": "属性描述"
-          },
-          "column_name": {
-            "type": "string",
-            "description": "列名"
-          },
-          "column_type": {
-            "type": "string",
-            "description": "列类型"
-          },
-          "operators": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "支持的操作符"
-          },
-          "display_selected": {
-            "type": "boolean",
-            "description": "是否显示"
-          },
-          "must_candidate": {
-            "type": "boolean",
-            "description": "是否必须候选",
-            "default": false
-          },
-          "mapping": {
-            "type": "object",
-            "description": "映射关系",
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "display_type": {
-            "type": "string",
-            "description": "显示类型",
-            "default": "string"
-          },
+          "id": { "type": "integer", "minimum": 0, "description": "属性ID，可省略或为0" },
+          "entity": { "type": "string", "description": "所属实体逻辑名" },
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "字段逻辑名" },
+          "label": { "type": "string", "minLength": 1, "description": "字段展示名" },
+          "description": { "type": "string", "minLength": 1, "description": "字段描述" },
+          "column_name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "字段物理列名" },
+          "column_type": { "type": "string", "minLength": 1, "description": "ClickHouse 字段类型" },
+          "operators": { "type": "array", "items": { "type": "string" }, "description": "支持的检索操作符" },
+          "display_selected": { "type": "boolean", "default": true, "description": "是否默认展示" },
+          "must_candidate": { "type": "boolean", "default": false },
+          "auto_complete": { "type": "boolean", "default": false },
+          "copyable": { "type": "boolean", "default": false },
+          "required": { "type": "boolean", "default": false },
+          "mapping": { "type": "object", "additionalProperties": true, "description": "数据字典映射" },
+          "enums": { "type": "array", "items": { "type": "string" }, "description": "候选枚举值" },
+          "display_type": { "type": "string", "description": "展示类型，例如 array、json" },
+          "display_name": { "type": "string", "description": "备用展示字段名" },
           "search_type": {
             "type": "string",
-            "enum": [
-              "string",
-              "date",
-              "datetime",
-              "number"
-            ],
-            "description": "检索输入组件类型：date 只到日期，datetime 到时分秒，number 为数字输入，string 为普通输入",
-            "default": "string"
+            "enum": ["string", "date", "datetime", "number"],
+            "default": "string",
+            "description": "检索输入组件类型"
+          },
+          "retrieval_type": { "type": "string", "description": "检索值类型" },
+          "link_template": { "type": "string", "description": "相对地址或 http/https 跳转模板" },
+          "link_condition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "field": { "type": "string", "description": "当前实体的字段逻辑名" },
+              "operator": { "type": "string", "enum": ["equal", "notequal", "greatthan", "greatequalthan", "lessthan", "lessequalthan", "isnull", "isnotnull"] },
+              "value": { "type": "string" }
+            },
+            "required": ["field", "operator"]
           }
         },
-        "required": [
-          "id",
-          "entity",
-          "name",
-          "label",
-          "description",
-          "column_name",
-          "column_type",
-          "operators"
-        ]
+        "required": ["entity", "name", "label", "description", "column_name", "column_type", "operators"],
+        "if": {
+          "required": ["link_condition"]
+        },
+        "then": {
+          "required": ["link_template"]
+        }
       }
     },
     "operator": {
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "integer",
-            "description": "操作符ID"
-          },
-          "name": {
-            "type": "string",
-            "description": "操作符名称"
-          },
-          "label": {
-            "type": "string",
-            "description": "操作符标签"
-          }
+          "id": { "type": "integer", "minimum": 0, "description": "操作符ID，可省略或为0" },
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "label": { "type": "string", "minLength": 1 }
         },
-        "required": [
-          "id",
-          "name",
-          "label"
-        ]
+        "required": ["name", "label"]
       }
     }
   },
-  "required": [
-    "entity",
-    "attribute",
-    "operator"
-  ]
+  "required": ["entity", "attribute", "operator"]
 }

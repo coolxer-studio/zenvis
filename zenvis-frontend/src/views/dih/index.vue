@@ -300,7 +300,7 @@ const rightPanelMeta: Record<ResultAgentType, { title: string; description: stri
   agent_visualization_dashboard: { title: '数据大屏结果', description: '看板、配置与看板入口' },
   agent_data_analysis: { title: '分析结果', description: '数据集、服务结果与分析报告' },
   agent_config_management: { title: '配置工作区', description: '配置记录、试验和正式生效' },
-  agent_metadata_config: { title: '元数据配置结果', description: '已发布的 Meta 配置记录' },
+  agent_metadata_config: { title: '元数据配置结果', description: 'Meta 配置创建、写入与应用记录' },
   agent_data_push_service: { title: '数据推送服务结果', description: '已创建并运行的推送任务' },
   agent_report: { title: '报表工作台', description: '报表文档与图表库快照' },
 };

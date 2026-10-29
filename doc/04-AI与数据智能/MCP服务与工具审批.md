@@ -8,7 +8,7 @@ ZenVis 同时具备：
 
 | 角色 | 用途 | 当前端点或来源 |
 | --- | --- | --- |
-| MCP Server | 按业务域向外部客户端暴露 77 个 ZenVis 本地工具 | 六组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
+| MCP Server | 按业务域向外部客户端暴露 79 个 ZenVis 本地工具 | 六组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
 | MCP Client | 连接数据库中配置的外部 MCP Server | 当前使用 SSE Client |
 | 工具运行时 | 按 Agent、Skill 和策略组装实际工具集合 | 本地工具与已连接外部工具 |
 | 权限网关 | 统一实施策略、审批、授权、状态和审计 | Chat、后台任务、MCP Server、管理端测试 |
@@ -100,7 +100,7 @@ ZenVis 同时具备：
 建议：
 
 - 查询、列表、详情和统计类工具评估后使用 `ALLOW`；
-- 写入、删除、执行、发布和任务触发类工具保持 `ASK`；
+- 写入、改名、删除、执行、发布和任务触发类工具保持 `ASK`；
 - 未识别、已下线或不应提供的工具使用 `DENY`；
 - 调试完成后恢复临时策略，不要把高风险工具长期设为 `ALLOW`。
 
@@ -148,7 +148,7 @@ Run 请求 ASK 工具
 ```
 
 - Run 中的只读工具在未被全局 `DENY` 时自动执行，不弹出审批。
-- 外部写入、发布、删除等工具仍按有效策略决定是否询问。
+- 外部写入、改名、删除、发布等工具仍按有效策略决定是否询问。
 - Agent Run 的审批等待默认为 24 小时，不占 worker，也不计入 Run 有效执行时间；超时后 Run 进入 `PAUSED`。
 - `approved_run` 只允许当前 Run 内同一精确 `tool_key` 复用授权，不跨 Run、不跨会话，也不能覆盖 `DENY`。
 - 审批决定必须幂等。重复提交同一决定不能产生第二次执行；终态请求不能重新获得执行权。
@@ -205,13 +205,15 @@ ZenVis 自带六个固定 MCP Server：
 | --- | ---: | --- |
 | `retrieval` | 22 | `/mcp/retrieval/sse`、`/mcp/retrieval/message` |
 | `entity` | 5 | `/mcp/entity/sse`、`/mcp/entity/message` |
-| `config` | 7 | `/mcp/config/sse`、`/mcp/config/message` |
+| `config` | 9 | `/mcp/config/sse`、`/mcp/config/message` |
 | `push-task` | 6 | `/mcp/push-task/sse`、`/mcp/push-task/message` |
 | `visualization` | 21 | `/mcp/visualization/sse`、`/mcp/visualization/message` |
 | `analysis-task` | 16 | `/mcp/analysis-task/sse`、`/mcp/analysis-task/message` |
 
 服务端点和分组随代码固定发布；`app.ai.mcp.builtin-server.*` 只配置版本、请求超时和
 SSE 保活间隔。六组端点共享 `app.security.mcp.bearer-token`，旧聚合端点不再提供。
+
+`config` 服务中的 `config_rename` 和 `config_delete` 默认 `ASK/HIGH`，并只授予元数据配置智能体。重命名只允许同一父目录且禁止覆盖；非空目录删除必须显式携带 `recursive=true`。Meta 操作完成后会严格重载并刷新 Schema，文件系统已变更但重载失败时必须保留现场并报告 `changed=true/applied=false`，不得宣称成功。
 
 本地 Server、外部 Client、Chat、后台任务和管理端测试调用共享工具策略与审计包装。
 内置策略键仍为 `local::<toolName>`；审计额外记录工具所属内置服务 code。外部客户端不能自行构造“已经审批”的状态绕过策略。

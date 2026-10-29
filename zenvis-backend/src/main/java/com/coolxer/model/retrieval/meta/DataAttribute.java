@@ -88,6 +88,11 @@ public class DataAttribute {
     private List<String> operators;
 
     /**
+     * 字段候选值，用于前端下拉筛选和展示。
+     */
+    private List<String> enums;
+
+    /**
      * 标识该属性是否必须用数据字典的备选值
      */
     private boolean mustCandidate;

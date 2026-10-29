@@ -42,7 +42,7 @@ class McpToolApprovalAnnotationTest {
                 .filter(method -> method.isAnnotationPresent(Tool.class))
                 .toList();
 
-        assertThat(methods).hasSize(71);
+        assertThat(methods).hasSize(73);
         assertThat(methods).allSatisfy(method -> {
             McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
             assertThat(approval)
@@ -73,7 +73,9 @@ class McpToolApprovalAnnotationTest {
                 "config_validate",
                 "config_ensure_root",
                 "config_add",
-                "config_apply"
+                "config_apply",
+                "config_rename",
+                "config_delete"
         ));
         assertThat(tools).allSatisfy((name, approval) -> {
             if (Set.of("config_tree", "config_schema", "config_read", "config_validate").contains(name)) {

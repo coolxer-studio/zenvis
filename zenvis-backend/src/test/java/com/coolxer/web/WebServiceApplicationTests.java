@@ -68,7 +68,7 @@ class WebServiceApplicationTests {
 		);
 
 		assertThat(prepared).isNotNull();
-		assertThat(metadataTools.toolCallbackProvider().getToolCallbacks()).hasSize(4);
+		assertThat(metadataTools.toolCallbackProvider().getToolCallbacks()).hasSize(8);
 
 		List<String> pushSkillIds = List.of("data-push-service-agent");
 		McpToolContext pushTools =

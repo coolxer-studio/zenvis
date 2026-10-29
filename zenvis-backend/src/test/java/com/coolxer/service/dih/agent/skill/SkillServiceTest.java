@@ -652,6 +652,8 @@ class SkillServiceTest {
                 .contains("config_tree")
                 .contains("config_add")
                 .contains("config_apply")
+                .contains("config_rename")
+                .contains("config_delete")
                 .contains("config_read")
                 .contains("zenvis:meta-config-record")
                 .doesNotContain(
@@ -666,9 +668,13 @@ class SkillServiceTest {
         assertThat(runtime.getPromptMode()).isNull();
         assertThat(runtime.getTools().getLocal().get("config")).containsExactly(
                 "config_tree",
+                "config_schema",
                 "config_read",
                 "config_add",
-                "config_apply"
+                "config_apply",
+                "config_validate",
+                "config_rename",
+                "config_delete"
         );
         assertThat(runtime.getTools().getLocal()).doesNotContainKey("push-task");
         assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(32);

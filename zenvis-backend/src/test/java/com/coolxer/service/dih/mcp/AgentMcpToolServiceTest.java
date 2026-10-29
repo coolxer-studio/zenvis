@@ -450,7 +450,9 @@ class AgentMcpToolServiceTest {
                 "config_tree",
                 "config_read",
                 "config_add",
-                "config_apply"
+                "config_apply",
+                "config_rename",
+                "config_delete"
         );
         SkillService skillService = mock(SkillService.class);
         SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
@@ -468,6 +470,8 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("config_read", "读取配置"),
                         new FakeToolCallback("config_add", "新增配置"),
                         new FakeToolCallback("config_apply", "应用配置"),
+                        new FakeToolCallback("config_rename", "重命名配置"),
+                        new FakeToolCallback("config_delete", "删除配置"),
                         new FakeToolCallback("push_task_detect_format", "检测格式"),
                         new FakeToolCallback("push_task_list_by_source_mark", "查询推送任务"),
                         new FakeToolCallback("push_task_create_and_start", "创建并启动推送任务"),

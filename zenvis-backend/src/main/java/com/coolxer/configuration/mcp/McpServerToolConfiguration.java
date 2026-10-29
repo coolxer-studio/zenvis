@@ -112,7 +112,8 @@ public class McpServerToolConfiguration {
                     null,
                     tool.description(),
                     defaultPolicy == McpApprovalPolicy.ALLOW,
-                    name.contains("delete") || name.contains("apply") || name.contains("run"),
+                    name.contains("delete") || name.contains("rename")
+                            || name.contains("apply") || name.contains("run"),
                     approval == null ? com.coolxer.commons.enums.McpToolRiskLevel.UNKNOWN : approval.risk(),
                     defaultPolicy
             ));

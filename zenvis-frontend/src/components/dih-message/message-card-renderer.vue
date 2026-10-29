@@ -13,6 +13,7 @@
           :current-tool="agentRunToolFromPart(part)"
           :activity-events="agentRunEventsFromPart(part)"
           @resume="emit('resumeAgentRun', $event)"
+          @reply="emit('replyAgentRun', $event)"
         />
         <TextMessagePart
           v-else-if="isTextPart(part)"
@@ -160,11 +161,12 @@ const emit = defineEmits<{
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
   (e: 'resumeAgentRun', runId: string): void;
+  (e: 'replyAgentRun', payload: { runId: string; message: string }): void;
   (
     e: 'chooseMetadataConfigDecision',
     payload: {
       part: ChatMessagePart;
-      decision: 'apply_config' | 'abandon' | 'revise' | 'retry';
+      decision: 'apply_config' | 'abandon' | 'revise' | 'retry' | 'force_approve';
       detail?: string;
     },
   ): void;

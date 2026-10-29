@@ -188,6 +188,8 @@ Run 默认最多 30 个决策步、30 分钟有效执行和 80 次工具调用�
 ```text
 METADATA_INPUT_COLLECTION
   → config_tree
+  → config_schema
+  → config_validate（最多 3 轮）
   → Meta 候选确认
   → 写前重查
   → 可选覆盖确认
@@ -196,7 +198,9 @@ METADATA_INPUT_COLLECTION
   → 成功记录或阻塞
 ```
 
-工具白名单仅包含 `config_tree`、`config_read`、`config_add`、`config_apply`。候选文件、内容摘要和计划 ID 在确认后由服务端锁定；覆盖必须单独确认，读回与候选语义一致前不能记录成功。
+目录或文件操作使用 `META_OPERATION_DISCOVERY → META_OPERATION_CONFIRMATION → META_OPERATION_APPLY` 独立分支。服务端重新读取配置树后锁定源路径、目标路径和 `operationDigest`，批准后只使用锁定参数执行 `config_rename` 或 `config_delete`。
+
+工具白名单仅包含 `config_tree`、`config_schema`、`config_read`、`config_add`、`config_apply`、`config_validate`、`config_rename`、`config_delete`。候选文件、内容摘要和计划 ID 在确认后由服务端锁定；覆盖必须单独确认，读回与候选语义一致前不能记录成功。重命名仅允许同一父目录且禁止覆盖，删除非空目录必须显式递归授权；Meta 路径操作完成后必须严格重载并刷新 Schema，失败时保留现场并返回 `changed=true/applied=false`。
 
 ## 数据推送服务 Agent
 

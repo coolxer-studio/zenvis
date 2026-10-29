@@ -33,7 +33,8 @@ import java.util.Set;
 public class WorkflowActionService {
 
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(
-            "submit", "approve", "reject", "revise", "retry", "add_to_library");
+            "submit", "approve", "force_approve", "reject", "revise", "retry",
+            "add_to_library");
 
     private static final Set<String> SAFE_CHART_TOOLS = Set.of(
             "entity_overview",
@@ -557,6 +558,7 @@ public class WorkflowActionService {
         return switch (action) {
             case "submit" -> "submitted";
             case "approve" -> "approved";
+            case "force_approve" -> "force_approved";
             case "reject" -> "rejected";
             case "revise" -> "revise";
             case "retry" -> "pending";
@@ -617,6 +619,11 @@ public class WorkflowActionService {
         if ("reject".equals(action)) {
             metadata.put("validationStatus", "cancelled");
             metadata.put("allowedActions", List.of());
+        } else if ("force_approve".equals(action)) {
+            metadata.put("validationStatus", "forced");
+            metadata.put("forced", true);
+            metadata.put("allowedActions",
+                    definition.allowedActions(state.getStep(), metadata));
         } else {
             boolean retryPendingArtifact = retryIntoDataQuery
                     && !retryApprovedQuery

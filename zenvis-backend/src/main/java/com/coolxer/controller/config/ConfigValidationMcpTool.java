@@ -2,10 +2,12 @@ package com.coolxer.controller.config;
 
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.config.MetaConfigValidationService;
 import com.coolxer.service.dih.mcp.McpToolApproval;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.xml.sax.InputSource;
@@ -34,6 +36,9 @@ public class ConfigValidationMcpTool {
 
     private final ConfigService configService;
 
+    @Autowired(required = false)
+    private MetaConfigValidationService metaConfigValidationService;
+
     public ConfigValidationMcpTool(ConfigService configService) {
         this.configService = configService;
     }
@@ -51,12 +56,31 @@ public class ConfigValidationMcpTool {
 
         if (!StringUtils.hasText(text)) {
             errors.add("配置文本不能为空。");
-            return result(false, false, normalizedType, fileName, format, errors, warnings);
+            return result(false, false, normalizedType, fileName, format, text, errors, warnings);
         }
         if (!SUPPORTED_FORMATS.contains(format)) {
             errors.add("当前通用校验器不支持 " + displayFormat(format) + " 格式。");
             warnings.add("请连接能够验证该配置格式及运行效果的专项 MCP 服务。");
-            return result(false, true, normalizedType, fileName, format, errors, warnings);
+            return result(false, true, normalizedType, fileName, format, text, errors, warnings);
+        }
+
+        if ("meta".equals(normalizedType) && "json".equals(format)
+                && metaConfigValidationService != null) {
+            MetaConfigValidationService.ValidationResult validation =
+                    metaConfigValidationService.validate(fileName, text);
+            return new ConfigValidationResult(
+                    validation.passed(),
+                    false,
+                    normalizedType,
+                    fileName,
+                    format,
+                    validation.errors(),
+                    validation.warnings(),
+                    validation.normalizedText(),
+                    validation.candidateDigest(),
+                    validation.repairs(),
+                    validation.diagnostics()
+            );
         }
 
         switch (format) {
@@ -68,7 +92,8 @@ public class ConfigValidationMcpTool {
             default -> throw new IllegalStateException("未处理的配置格式: " + format);
         }
 
-        return result(errors.isEmpty(), false, normalizedType, fileName, format, errors, warnings);
+        return result(errors.isEmpty(), false, normalizedType, fileName, format,
+                text, errors, warnings);
     }
 
     private void validateJson(String type,
@@ -262,6 +287,7 @@ public class ConfigValidationMcpTool {
                                           String type,
                                           String fileName,
                                           String format,
+                                          String text,
                                           List<String> errors,
                                           List<String> warnings) {
         return new ConfigValidationResult(
@@ -271,7 +297,11 @@ public class ConfigValidationMcpTool {
                 fileName,
                 format,
                 List.copyOf(errors),
-                List.copyOf(warnings)
+                List.copyOf(warnings),
+                text,
+                MetaConfigValidationService.digest(text),
+                List.of(),
+                List.of()
         );
     }
 
@@ -282,7 +312,11 @@ public class ConfigValidationMcpTool {
             String fileName,
             String format,
             List<String> errors,
-            List<String> warnings
+            List<String> warnings,
+            String normalizedText,
+            String candidateDigest,
+            List<MetaConfigValidationService.Repair> repairs,
+            List<MetaConfigValidationService.Diagnostic> diagnostics
     ) {
     }
 }

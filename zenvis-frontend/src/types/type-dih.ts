@@ -402,7 +402,7 @@ export type DataAnalysisExtraData = {
 };
 
 export type ConfigChangeMode = 'add' | 'modify';
-export type ConfigValidationStatus = 'unverified' | 'success' | 'failed' | 'blocked';
+export type ConfigValidationStatus = 'unverified' | 'success' | 'failed' | 'blocked' | 'forced';
 export type ConfigEffectiveStatus = 'yes' | 'no';
 
 export type ConfigRecord = {
@@ -522,6 +522,7 @@ export type ChatActionDecisionParams = {
 export type WorkflowActionName =
   | 'submit'
   | 'approve'
+  | 'force_approve'
   | 'reject'
   | 'revise'
   | 'retry'

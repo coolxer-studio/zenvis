@@ -5,7 +5,7 @@
       <el-table-column label="名称" show-overflow-tooltip>
         <template #default="scope">
           <el-button
-            v-if="scope.row.fileName"
+            v-if="scope.row.fileName && canOpenRecord(scope.row)"
             class="record-link"
             text
             type="primary"
@@ -19,6 +19,11 @@
       <el-table-column prop="fileName" label="文件" show-overflow-tooltip />
       <el-table-column prop="tableName" label="目标表" show-overflow-tooltip />
       <el-table-column prop="fieldCount" label="字段" width="72" />
+      <el-table-column label="变更" width="150" show-overflow-tooltip>
+        <template #default="scope">
+          <span>{{ changeLabel(scope.row) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="92">
         <template #default="scope">
           <el-tag :type="statusTagType(scope.row.status)" effect="plain">
@@ -47,6 +52,12 @@ type MetadataConfigRecord = Record<string, unknown> & {
   fileName?: string;
   tableName?: string;
   fieldCount?: number;
+  operation?: string;
+  previousFileName?: string;
+  affectedFiles?: unknown[];
+  recursive?: boolean;
+  changed?: boolean;
+  applied?: boolean;
 };
 
 const records = ref<MetadataConfigRecord[]>([]);
@@ -58,21 +69,46 @@ const asRecordList = (value: unknown): MetadataConfigRecord[] => Array.isArray(v
 
 const statusLabel = (status?: string) => {
   const labels: Record<string, string> = {
+    created: '创建文件',
     confirmed: '已确认',
     applied: '已应用',
+    written: '已写入',
+    renamed: '已重命名',
+    deleted: '已删除',
+    failed: '应用失败',
+    blocked: '已阻断',
     error: '异常',
   };
   return status ? labels[status] || status : '未记录';
 };
 
 const statusTagType = (status?: string) => {
-  if (status === 'applied' || status === 'confirmed') return 'success';
-  if (status === 'error') return 'danger';
+  if (status === 'applied' || status === 'confirmed' || status === 'renamed') return 'success';
+  if (status === 'failed' || status === 'error') return 'danger';
+  if (status === 'written' || status === 'created') return 'warning';
+  if (status === 'blocked' || status === 'deleted') return 'info';
   return 'info';
 };
 
+const canOpenRecord = (record: MetadataConfigRecord) => {
+  if (!record.fileName) return false;
+  if (record.status === 'deleted') return false;
+  return !(record.operation === 'delete' && record.applied === false);
+};
+
+const changeLabel = (record: MetadataConfigRecord) => {
+  if (record.operation === 'rename' && record.previousFileName) {
+    return `原名：${record.previousFileName}`;
+  }
+  if (record.operation === 'delete') {
+    const count = Array.isArray(record.affectedFiles) ? record.affectedFiles.length : 0;
+    return record.recursive ? `递归删除 · ${count} 项` : '删除';
+  }
+  return '-';
+};
+
 const openMetaConfig = (record: MetadataConfigRecord) => {
-  if (!record.fileName) return;
+  if (!canOpenRecord(record)) return;
   const route = router.resolve({
     name: 'policy-config',
     params: { menuParams: 'meta' },

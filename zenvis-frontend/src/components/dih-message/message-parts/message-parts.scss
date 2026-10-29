@@ -665,6 +665,98 @@
     line-height: 1.5;
   }
 
+  .metadata-validation-panel {
+    margin-top: 10px;
+    padding: 10px 12px;
+    color: var(--el-text-color-primary);
+    background: var(--el-color-danger-light-9);
+    border: 1px solid var(--el-color-danger-light-7);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .metadata-validation-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--el-color-danger);
+    font-weight: 600;
+  }
+
+  .metadata-validation-list {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    overflow-wrap: anywhere;
+  }
+
+  .metadata-validation-hint {
+    margin-top: 8px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .metadata-operation-panel {
+    margin-top: 10px;
+    padding: 10px 12px;
+    color: var(--el-text-color-primary);
+    background: var(--el-color-warning-light-9);
+    border: 1px solid var(--el-color-warning-light-7);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .metadata-operation-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--el-color-warning-dark-2);
+    font-weight: 600;
+  }
+
+  .metadata-operation-path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+  }
+
+  .metadata-operation-label {
+    color: var(--el-text-color-secondary);
+  }
+
+  .metadata-operation-arrow {
+    color: var(--el-color-primary);
+    font-weight: 600;
+  }
+
+  .metadata-operation-hint {
+    margin-top: 6px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .metadata-operation-danger {
+    margin-top: 8px;
+    padding: 6px 8px;
+    color: var(--el-color-danger);
+    background: var(--el-color-danger-light-9);
+    border-radius: 4px;
+  }
+
+  .metadata-operation-files {
+    margin-top: 8px;
+  }
+
+  .metadata-operation-files ul {
+    max-height: 180px;
+    margin: 6px 0 0;
+    padding-left: 18px;
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
+
   .visualization-chart-preview-canvas {
     width: 100%;
     height: 320px;

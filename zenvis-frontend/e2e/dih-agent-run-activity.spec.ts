@@ -503,7 +503,7 @@ test('无活动时显示空状态，任务中心保留折叠的原始事件', as
   await expect(detail.locator('.event-list')).toContainText('暂无事件')
 })
 
-test('等待补充信息时通过主输入框提交，任务继续执行', async ({ page }) => {
+test('等待补充信息时自动弹出输入框，提交后任务继续执行', async ({ page }) => {
   const question = [
     '要完成“按环境变量执行配置写入”，需要你补充两类信息：',
     '1）推送任务配置中的 Source、Topic、消费组和 DLQ Topic 实际值；',
@@ -518,20 +518,23 @@ test('等待补充信息时通过主输入框提交，任务继续执行', async
   })
   await openRunWorkspace(page)
 
-  await expect(page.locator('.agent-run-user-input-dialog')).toHaveCount(0)
   const card = page.locator('.agent-run-card').first()
   await expect(card).toContainText('需要补充信息')
   await expect(card).toContainText(question)
-  await expect(card).toContainText('请在页面底部输入框补充信息后发送')
+  const dialog = page.locator('.agent-run-user-input-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('任务需要补充信息')
+  await expect(dialog).toContainText(question)
 
-  await page.locator('.input-container textarea').fill(
+  await dialog.getByPlaceholder('请输入需要补充的信息').fill(
     'Source=lab-access；Topic=lab-access-topic；DLQ=lab-dlq',
   )
-  await page.locator('.send-btn').click()
+  await dialog.getByRole('button', { name: '提交并继续' }).click()
 
   await expect.poll(() => mocks.steerPayloads.length).toBe(1)
   expect(mocks.steerPayloads[0]).toMatchObject({
     message: 'Source=lab-access；Topic=lab-access-topic；DLQ=lab-dlq',
   })
+  await expect(dialog).not.toBeVisible()
   await expect(page.locator('.agent-run-card').first()).toContainText('排队中')
 })

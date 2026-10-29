@@ -414,7 +414,10 @@ export const useChatStream = ({
     }
     if (event.type === 'artifact.updated'
       || event.type === 'run.waiting_user'
-      || event.type === 'run.succeeded') {
+      || event.type === 'run.succeeded'
+      || event.type === 'tool.approval_executed'
+      || event.type === 'approval.required'
+      || event.type === 'tool.approval_required') {
       await refreshChatSessionExtraData();
     }
     await nextTick();
@@ -591,6 +594,26 @@ export const useChatStream = ({
     return updated;
   };
 
+  const replyToWaitingAgentRun = async (runId: string, rawMessage: string) => {
+    const message = rawMessage.trim();
+    if (!runId || !message) return null;
+    const steered = await agentRun.steer(runId, {
+      message,
+      clientMessageId: generateUUID(),
+    });
+    messages.value.push({
+      sender: 'user',
+      content: message,
+      time: getCurrentFormattedDate(),
+    });
+    ensureAgentRunMessage(steered, agentRun.currentTool.value, agentRun.activityEvents.value);
+    await agentRun.attach(steered, { after: agentRun.lastSequence.value });
+    await nextTick();
+    void scrollToBottom();
+    ElMessage.success('补充信息已提交，任务将继续执行');
+    return steered;
+  };
+
   const sendMessage = async (options: SendMessageOptions = {}) => {
     if (!options.content && hasUnreadyAttachments.value) {
       ElMessage.warning('附件尚未解析完成或解析失败，请等待完成或移除后再发送');
@@ -661,6 +684,7 @@ export const useChatStream = ({
     sendMessage,
     stopCurrentChat,
     resumeAgentRun,
+    replyToWaitingAgentRun,
     restoreActiveAgentRun,
   };
 };

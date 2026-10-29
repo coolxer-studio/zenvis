@@ -301,6 +301,10 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
 - 导出服务根据当前文档生成目标格式。
 - 报表工具范围独立于元数据配置、数据推送服务、临时图表、可视化应用和数据大屏 Agent。
 
+报表图表库不新增持久化表，直接聚合当前用户全部会话 `extraData.visualizationChart.chartLibrary` 中的已入库图表。聚合时排除其他用户、兼容完整 ECharts option 快照，并按图表 ID 或 `artifactId` 去重、保留最新 `addedAt`。报表前端只读取该用户级图表库，不再构造附件、消息、分析任务和图表混合的素材列表。
+
+图表以静态快照进入报表正文：前端将 option 离屏渲染为 960×540、2 倍像素白底图片，优先 PNG，超过约 800k 字符时降级 JPEG；超限或渲染失败时不修改正文。插入后自动合并紧凑图表引用并触发保存，`source_refs` 不保存完整 ECharts option。图片是快照，图表库后续刷新或删除不会改写正文；新增图表来源必须属于当前用户图表库，历史非图表来源仍按原值兼容保存。
+
 启用 Agent Run 时，报表 Agent 先创建草稿，再通过受控工具逐章节写入，最后由 `report_finalize` 生成正式修订。单章目标约 1,200 字、硬上限 2,400 字符；已写入章节独立保存，当前章节失败不会删除其他成果。Run 只有在存在已 finalize 草稿时才可成功结束。
 
 未启用 Run 或旧客户端仍可能使用完整的 `zenvis:report-document-config` 围栏。该路径受模型输出 Token 上限约束，检测到 `finish_reason=length` 或围栏未闭合时会丢弃不完整报表，避免半份内容覆盖正式文档。长报表应优先使用持久化 Run 的章节化写入。
@@ -310,9 +314,10 @@ ZenVis 也可以作为 MCP Client 连接外部 Server：
 - `ReportDocument.content` 是当前可编辑正文的权威副本，继续保存在 MySQL，支持并发修订检查和文档工作区读取。
 - 正式修订写入 `zenvis-reports` 的固定对象键 `documents/{documentId}/revisions/{revision}/content.{md|html}`。`ReportRevision` 和 `ReportArtifact` 只保存元信息，新记录正文为 `NULL`；归档产物复用同一修订对象，不复制第二份正文。
 - 保存修订时先写对象再提交数据库。写入前记录对象是否已存在，事务回滚时只删除本次新建的对象，避免误删可复用修订。
-- 归档、恢复、素材摘要和工作区读取从 MinIO 读取修订正文。对象缺失时返回明确业务错误，不回退读取 MySQL 正文字段。
+- 归档、恢复和工作区修订读取从 MinIO 读取修订正文。对象缺失时返回明确业务错误，不回退读取 MySQL 正文字段。
 - DOCX/PDF 导出按 `documentId + revision + sourceFormat + title + contentHash + exporterVersion` 计算 `exportHash`，并以目标格式区分对象键 `documents/{documentId}/revisions/{revision}/exports/v1/{format}/{exportHash}.{docx|pdf}`；对象已存在时直接复用。
 - 导出接口保持原 URL 和下载行为，由后端鉴权后返回 MinIO 流式响应；不签发 presigned URL。
+- 报表图表以 data URI 留在正文中。DOCX 导出按 A4 正文宽度和图片原始宽高比缩放，避免固定 `500×300` 拉伸；PDF 导出前将 HTML 转换为合法 XHTML，确保内嵌 data URI 图片可被解析。
 
 本次迁移不回填历史修订。旧修订没有对应对象时不能恢复或导出，应在新的修订流程下重新生成。
 

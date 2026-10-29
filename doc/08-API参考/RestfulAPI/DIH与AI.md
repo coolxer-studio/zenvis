@@ -356,7 +356,7 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 | 方法 | 路径 | 输入 | 返回/用途 |
 | --- | --- | --- | --- |
 | GET | `/api/v1/dih/chat-session/{sessionId}/report` | 会话记录 ID | `ReportWorkspaceVo` |
-| GET | `/api/v1/dih/chat-session/{sessionId}/report/materials` | 会话记录 ID | 可导入报表的会话素材 |
+| GET | `/api/v1/dih/chat-session/{sessionId}/report/materials` | 会话记录 ID | 兼容入口；校验会话归属后返回与用户图表库接口一致的数据 |
 | POST | `/api/v1/dih/chat-session/{sessionId}/report/save` | `ReportDocumentSaveDto` | 保存当前文档 |
 | POST | `/api/v1/dih/chat-session/{sessionId}/report/archive` | `ReportArchiveDto` | 归档当前文档 |
 | POST | `/api/v1/dih/chat-session/{sessionId}/report/artifacts/{artifactId}/restore` | `ReportArchiveDto` | 恢复归档版本 |
@@ -378,6 +378,29 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 }
 ```
 
+图表来源引用只写紧凑元信息，不重复写完整 ECharts 配置。插入图表后，`source_refs` 示例：
+
+```json
+{
+  "type": "chart",
+  "id": "chart-001",
+  "artifactId": "artifact-chart-001",
+  "name": "用户事件趋势",
+  "chartType": "line",
+  "status": "available",
+  "origin": "chart_library",
+  "source": "用户事件临时图表演示",
+  "addedAt": "2026-10-28T12:00:00+08:00",
+  "queriedAt": "2026-10-28T11:58:00+08:00",
+  "sessionRecordId": 1256,
+  "chatSessionId": "chat-demo-001",
+  "sessionTitle": "用户事件临时图表演示",
+  "agentType": "agent_visualization_chart"
+}
+```
+
+服务端对新增来源只接受当前用户图表库中的图表引用，按 `type:id` 合并去重；历史文档中已有的附件、消息、分析任务等非图表来源继续保留并可保存，避免旧文档来源丢失。伪造、越权或已不在图表库中的新增来源会被丢弃。
+
 归档请求包含 `document_id`、`base_revision`、`name`；重命名请求包含 `base_revision`、`name`。所有写操作采用乐观修订控制：`base_revision` 不是最新版本时返回 HTTP 409，`data.current_document` 包含服务端当前文档，客户端必须合并后重试。
 
 `ReportWorkspaceVo` 包含：
@@ -391,11 +414,41 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 
 报表当前可编辑正文仍以 `ReportDocument.content` 为权威副本。保存、归档时正式修订写入 `zenvis-reports` 的 `documents/{documentId}/revisions/{revision}/content.{md|html}`；`ReportRevision` 与 `ReportArtifact` 复用该对象，不保存第二份正文。归档、恢复和工作区读取都从 MinIO 获取修订内容，对象缺失时返回业务错误，不回退 MySQL 正文字段。
 
-导出接口不使用 `ResponseWrap`，继续返回带 `Content-Disposition` 文件名的流式响应；当前支持 `docx` 和 `pdf`。输出对象键为 `documents/{documentId}/revisions/{revision}/exports/v1/{format}/{exportHash}.{docx|pdf}`，其中 `exportHash` 由文档 ID、修订号、源格式、标题、内容哈希和导出器版本计算；相同输入再次请求时复用已存在对象。接口 URL、下载行为和响应头保持兼容，不签发 presigned URL。
+导出接口不使用 `ResponseWrap`，继续返回带 `Content-Disposition` 文件名的流式响应；当前支持 `docx` 和 `pdf`。输出对象键为 `documents/{documentId}/revisions/{revision}/exports/v1/{format}/{exportHash}.{docx|pdf}`，其中 `exportHash` 由文档 ID、修订号、源格式、标题、内容哈希和导出器版本计算；相同输入再次请求时复用已存在对象。接口 URL、下载行为和响应头保持兼容，不签发 presigned URL。图表快照以 data URI 内嵌在正文中；DOCX 按 A4 正文宽度和图片原始宽高比缩放，PDF 导出前将正文转换为合法 XHTML。保存正文长度上限为 2,000,000 字符。
 
 启用 Agent Run 时，报表正文通过 `report_prepare_document`、`report_upsert_section`、`report_replace_section`、`report_reorder_sections` 和 `report_finalize` 写入章节草稿，单章硬上限 2,400 字符。正式修订只在 `report_finalize` 校验通过后生成，`run.succeeded.data.artifact` 携带文档和修订信息。
 
 旧单轮路径仍要求模型在 `zenvis:report-document-config` 围栏内返回正文。若模型以 `finish_reason=length` 结束，或围栏未闭合，服务端会移除不完整报表部件、返回失败 `notice`，并不写入当前文档。客户端不得把截断内容中的半截围栏渲染为可保存报表。
+
+## ReportMaterialsController
+
+基础路径：`/api/v1/dih/report`
+
+| 方法 | 路径 | 输入 | 返回/用途 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/dih/report/chart-library` | 当前登录用户 | 当前用户图表库，`ResponseWrap.data` 为图表数组 |
+| GET | `/api/v1/dih/report/materials` | 当前登录用户 | 兼容别名，返回内容与 `chart-library` 一致 |
+
+图表库接口不接收会话 ID，聚合当前用户全部含 `visualizationChart.chartLibrary` 的会话，并排除其他用户记录。列表按图表 ID 或 `artifactId` 去重，同一图表保留最新 `addedAt`，按 `addedAt` 倒序返回；当前版本不分页。旧会话级接口 `GET /api/v1/dih/chat-session/{sessionId}/report/materials` 仍保留，但校验会话归属后同样返回用户级图表库。
+
+返回项主要字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `type` | 固定为 `chart` |
+| `id` | 图表记录 ID；缺失时依次回退到 `artifactId` 或内容哈希 |
+| `artifactId` | 图表产物 ID，存在时返回 |
+| `name` | 图表名称 |
+| `chartType` | 图表类型，如 `line`、`bar`、`pie` |
+| `description` | 图表说明 |
+| `source` | 图表库记录的来源说明 |
+| `addedAt` | 加入图表库时间 |
+| `queriedAt` | 数据查询时间 |
+| `sessionRecordId` | 来源临时图表会话的数据库记录 ID |
+| `sessionTitle` | 来源会话标题 |
+| `echartsOption` | 完整 ECharts option 对象；缺失或损坏时为空对象 |
+
+接口还会返回 `status`、`origin`、`chatSessionId` 和 `agentType` 等追溯字段。ECharts option 不再截断到 2,000 字符，兼容读取 `echartsOption`、`echarts.option`、`option`，以及图表类型 `config` / `amisConfig` 中的快照。会话 `extraData` 损坏时跳过该会话；单条图表配置无法解析时仍保留图表记录，但 `echartsOption` 返回空对象、前端禁用插入。图表库读取不新增数据库表，也不迁移旧版 `dataVisualization.chartLibrary`。
 
 ## SkillController
 

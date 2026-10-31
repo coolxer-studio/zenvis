@@ -9,7 +9,7 @@ description: Generate, validate, deploy, monitor, and repair Vectum MCP data pus
 
 Use this skill to operate Vectum as an MCP-driven Vector pipeline manager. The expected outcome is a valid Vector config deployed as a Vectum task, running normally or stopped with a clear external blocker.
 
-Default to YAML because Vector recommends YAML and Vectum auto-detects YAML/TOML/JSON from the config string. Do not invent Vector fields; verify unfamiliar components with official Vector docs or `scripts/validate_vector_config.sh`.
+Default to YAML because Vector recommends YAML. Always pass the format explicitly as `yaml`, `toml`, or `json`; Vectum does not infer it for MCP create, update, or validate calls. Do not invent Vector fields; verify unfamiliar components with official Vector docs or `scripts/validate_vector_config.sh`.
 
 ## Workflow
 
@@ -17,11 +17,13 @@ Default to YAML because Vector recommends YAML and Vectum auto-detects YAML/TOML
 2. Build a Vector topology with at least one `source` and one `sink`. Every `inputs` entry must reference an existing upstream source or transform.
 3. Validate locally when possible: save the config to a temp file and run `scripts/validate_vector_config.sh <file>`. If `vector` is unavailable, state that local prevalidation was skipped and rely on Vectum runtime logs.
 4. Deploy through MCP when the Vectum MCP tools are available:
-   - `createTask(name, description, config)`
-   - `toggleTask(id)`
-   - `getTask(id)` or `getTasks()`
-   - `getTaskLog(id, "system")` and `getTaskLog(id, "console")` when status is not cleanly running.
-5. Repair configuration errors from logs and repeat update/start/check. Use at most 5 automatic repair rounds.
+   - `validateConfig(config, format, testsRequired)`
+   - `listTasks(source, mark, nameContains, status, offset, limit)` to find an existing task
+   - `getTask(id)` for the complete config and current `runId`
+   - `createTask(name, description, config, format)` or `updateTask(id, name, description, config, format)`
+   - `startTask(id)` / `stopTask(id)` / `restartTask(id)`
+   - `diagnoseTask(id)` and `getTaskLog(id, logType)` after every start.
+5. Repair configuration errors from diagnostics and repeat validate/update/restart/diagnose. Use at most 5 automatic repair rounds and stop when the same failure fingerprint repeats twice.
 6. Stop automatic repair when the failure is external: missing secrets, DNS/network unreachable, authentication denied, target service unavailable, permission denied, or a path/volume missing in the runtime environment.
 7. Finish with task ID, status, config summary, validation outcome, repair rounds, and any remaining action needed.
 
@@ -36,7 +38,8 @@ Load only the relevant reference:
 ## Vectum-Specific Rules
 
 - Prefer MCP over REST for task operations when MCP tools are available.
-- Pass the complete `name`, `description`, and `config` to `updateTask`; the current Vectum backend can overwrite omitted fields.
+- Pass the complete `name`, `description`, `config`, and explicit `format` to `updateTask`; ownership fields are preserved by the backend.
+- Use task ID for lifecycle and deletion. Do not infer a target from a mark and do not request batch deletion.
 - Treat `console` logs as Vector stdout and `system` logs as Vector stderr.
-- Consider `running` success. Treat `running[error]`, `error`, `stopped` after a start attempt, and failed tool responses as needing investigation.
+- Consider success only when `diagnoseTask` reports `running`, the current `runId` has its startup marker, and that run contains no `ERROR/FATAL/PANIC`.
 - Do not claim end-to-end success from config validation alone; success requires Vectum task status/log checks after startup.

@@ -1,6 +1,7 @@
 package com.coolxer.service;
 
 import com.coolxer.model.LuaFile;
+import com.coolxer.model.RunMetadata;
 
 import java.util.ArrayList;
 
@@ -24,18 +25,20 @@ public interface VectorService {
      * @param path 进程路径
      * @param configContext 配置内容
      * @param luaFiles Lua脚本文件列表
+     * @param format 配置格式
      * @return 错误信息，成功返回null
      */
-    String createProcess(String path, String configContext, ArrayList<LuaFile> luaFiles);
+    String createProcess(String path, String configContext, ArrayList<LuaFile> luaFiles, String format);
 
     /**
      * 更新进程配置
      * @param path 进程路径
      * @param configContext 配置内容
      * @param luaFiles Lua脚本文件列表
+     * @param format 配置格式
      * @return 错误信息，成功返回null
      */
-    String updateProcess(String path, String configContext, ArrayList<LuaFile> luaFiles);
+    String updateProcess(String path, String configContext, ArrayList<LuaFile> luaFiles, String format);
 
     /**
      * 启动进程
@@ -78,4 +81,12 @@ public interface VectorService {
      * @return 日志内容
      */
     String errorLog(String path);
+
+    /**
+     * 获取任务最近一次启动的 runId 和启动时间。
+     *
+     * @param path 进程路径
+     * @return 运行元数据，不存在时返回空对象
+     */
+    RunMetadata runMetadata(String path);
 }

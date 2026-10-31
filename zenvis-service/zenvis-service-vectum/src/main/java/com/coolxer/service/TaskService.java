@@ -2,6 +2,10 @@ package com.coolxer.service;
 
 import com.coolxer.model.Task;
 import com.coolxer.model.dto.TaskDto;
+import com.coolxer.model.dto.TaskQueryDto;
+import com.coolxer.model.diagnostic.RuntimeDiagnostic;
+import com.coolxer.model.vo.TaskOperationVo;
+import com.coolxer.model.vo.TaskPageVo;
 import com.coolxer.model.vo.TaskVo;
 
 import java.util.List;
@@ -18,6 +22,14 @@ public interface TaskService {
      * @return 任务视图对象列表
      */
     List<TaskVo> findAll();
+
+    /**
+     * 按来源、备注、名称和状态分页查询任务。
+     *
+     * @param query 查询条件
+     * @return 分页结果
+     */
+    TaskPageVo query(TaskQueryDto query);
 
     /**
      * 创建推送任务
@@ -61,11 +73,43 @@ public interface TaskService {
     Boolean toggle(Long id);
 
     /**
+     * 启动任务；已运行时保持现状。
+     *
+     * @param id 任务 ID
+     * @return 操作结果
+     */
+    TaskOperationVo start(Long id);
+
+    /**
+     * 停止任务；已停止时保持现状。
+     *
+     * @param id 任务 ID
+     * @return 操作结果
+     */
+    TaskOperationVo stop(Long id);
+
+    /**
+     * 重启任务并生成新的运行轮次。
+     *
+     * @param id 任务 ID
+     * @return 操作结果
+     */
+    TaskOperationVo restart(Long id);
+
+    /**
      * 获取日志
      * @param id 任务id
      * @param logLevel 日志级别（console/system）
      * @return 日志内容
      */
     String log(Long id, String logLevel);
+
+    /**
+     * 获取当前运行轮次的结构化诊断。
+     *
+     * @param id 任务 ID
+     * @return 运行诊断
+     */
+    RuntimeDiagnostic diagnostics(Long id);
 
 }

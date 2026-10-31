@@ -1,8 +1,10 @@
 package com.coolxer.service.impl;
 
 import com.coolxer.model.LuaFile;
+import com.coolxer.model.RunMetadata;
 import com.coolxer.service.MonitorService;
 import com.coolxer.service.VectorService;
+import com.coolxer.utils.ConfigFormatDetector;
 import com.coolxer.utils.FileUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,7 +15,10 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -34,6 +39,7 @@ public class VectorServiceImpl implements VectorService {
     private static final String LUA_PATH_FORMAT = "%s/%s/lua";
     private static final String LOG_INFO_FORMAT = "%s/%s/info.log";
     private static final String LOG_ERROR_FORMAT = "%s/%s/error.log";
+    private static final String RUN_FORMAT = "%s/%s/run.properties";
 
     private final MonitorService monitorService;
     private final String vectorHomePath;
@@ -98,7 +104,8 @@ public class VectorServiceImpl implements VectorService {
      * @return 错误信息，成功返回null
      */
     @Override
-    public String createProcess(String path, String configContext, ArrayList<LuaFile> luaFiles) {
+    public String createProcess(String path, String configContext, ArrayList<LuaFile> luaFiles,
+                                String format) {
         try {
             File taskPath = new File(taskWorkspace + File.separator + path);
             if (!taskPath.exists()) {
@@ -117,7 +124,13 @@ public class VectorServiceImpl implements VectorService {
                 }
             }
             
-            String extension = detectFormat(configContext);
+            String extension;
+            try {
+                extension = ConfigFormatDetector.resolve(format, configContext);
+            } catch (IllegalArgumentException e) {
+                return e.getMessage();
+            }
+            deleteConfigFiles(path);
             Path configFilePath = Path.of(String.format(CONFIG_FORMAT, taskWorkspace, path, extension));
             Files.writeString(configFilePath, configContext, StandardOpenOption.CREATE);
             
@@ -128,90 +141,6 @@ public class VectorServiceImpl implements VectorService {
         return null;
     }
 
-    private String detectFormat(String content) {
-        if (content == null || content.isEmpty()) {
-            return "yaml";
-        }
-
-        String trimmed = content.trim();
-
-        if (trimmed.startsWith("{")) {
-            return "json";
-        }
-
-        if (trimmed.startsWith("---")) {
-            return "yaml";
-        }
-
-        int colonCount = countOccurrences(trimmed, ':');
-        int equalsCount = countOccurrences(trimmed, '=');
-        int bracketCount = countOccurrences(trimmed, '[');
-        int arrayStartCount = countOccurrences(trimmed, '[');
-
-        // 检查 TOML 特征
-        boolean hasTOMLAssignment = false;
-        boolean hasArrayBracket = false;
-
-        String[] lines = trimmed.split("\n");
-        for (String line : lines) {
-            line = line.trim();
-            if (line.isEmpty() || line.startsWith("#")) {
-                continue;
-            }
-
-            // 检查行内是否包含 TOML 赋值（key = "value"）
-            int equalsIndex = line.indexOf('=');
-            if (equalsIndex > 0) {
-                // 检查等号前面是否是有效的键名（没有包含 : 或 { 等符号）
-                String keyPart = line.substring(0, equalsIndex).trim();
-                if (!keyPart.contains(":") && !keyPart.contains("{") && !keyPart.contains("[")) {
-                    hasTOMLAssignment = true;
-                }
-            }
-
-            // 检查数组开始标记
-            if (line.endsWith(" = [") || line.contains(" = [")) {
-                hasArrayBracket = true;
-            }
-        }
-
-        // TOML 特征判断：有赋值语句且包含数组标记
-        if (hasTOMLAssignment && hasArrayBracket) {
-            return "toml";
-        }
-
-        // 检查 TOML section 标记
-        if (trimmed.contains("[") && trimmed.contains("]")) {
-            // 统计独立的 section 标记（不包含在 JSON 字符串中的）
-            int sectionCount = 0;
-            for (String line : lines) {
-                line = line.trim();
-                if (line.matches("^\\[.*\\]$")) {
-                    sectionCount++;
-                }
-            }
-            if (sectionCount > 0 && hasTOMLAssignment) {
-                return "toml";
-            }
-        }
-
-        if (colonCount > equalsCount && colonCount > bracketCount) {
-            return "yaml";
-        }
-
-        return "yaml";
-    }
-    
-    private int countOccurrences(String str, char c) {
-        int count = 0;
-        for (int i = 0; i < str.length(); i++) {
-            if (str.charAt(i) == c) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     /**
      * 更新进程配置
      * @param path 进程路径
@@ -220,10 +149,11 @@ public class VectorServiceImpl implements VectorService {
      * @return 错误信息，成功返回null
      */
     @Override
-    public String updateProcess(String path, String configContext, ArrayList<LuaFile> luaFiles) {
+    public String updateProcess(String path, String configContext, ArrayList<LuaFile> luaFiles,
+                                String format) {
         stopProcess(path);
         deleteProcess(path);
-        return createProcess(path, configContext, luaFiles);
+        return createProcess(path, configContext, luaFiles, format);
     }
 
     /**
@@ -247,7 +177,10 @@ public class VectorServiceImpl implements VectorService {
         ProcessBuilder processBuilder = new ProcessBuilder(cmdPath, "-c", configPath);
         
         try {
-            initLogFiles(path);
+            RunMetadata runMetadata = new RunMetadata(
+                    UUID.randomUUID().toString(), Instant.now().toString());
+            writeRunMetadata(path, runMetadata);
+            initLogFiles(path, runMetadata);
             Process process = processBuilder.start();
             PROCESS_CACHE.put(path, process);
             
@@ -265,22 +198,33 @@ public class VectorServiceImpl implements VectorService {
         return 0;
     }
 
-    private void initLogFiles(String path) throws IOException {
+    private void initLogFiles(String path, RunMetadata runMetadata) throws IOException {
         Path infoLogPath = Path.of(String.format(LOG_INFO_FORMAT, taskWorkspace, path));
         Path errorLogPath = Path.of(String.format(LOG_ERROR_FORMAT, taskWorkspace, path));
         Files.createDirectories(infoLogPath.getParent());
-        createLogFileIfAbsent(infoLogPath);
-        createLogFileIfAbsent(errorLogPath);
+        String marker = String.format(
+                "=== Vectum run %s started %s ===\n",
+                runMetadata.getRunId(), runMetadata.getStartedAt());
+        Files.writeString(infoLogPath, marker, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING);
+        Files.writeString(errorLogPath, marker, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING);
     }
 
-    private void createLogFileIfAbsent(Path logPath) throws IOException {
-        if (!Files.exists(logPath)) {
-            Files.writeString(logPath, "create.......\n", StandardOpenOption.CREATE_NEW);
+    private void writeRunMetadata(String path, RunMetadata runMetadata) throws IOException {
+        Path runPath = Path.of(String.format(RUN_FORMAT, taskWorkspace, path));
+        Files.createDirectories(runPath.getParent());
+        Properties properties = new Properties();
+        properties.setProperty("runId", runMetadata.getRunId());
+        properties.setProperty("startedAt", runMetadata.getStartedAt());
+        try (OutputStream output = Files.newOutputStream(
+                runPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            properties.store(output, "Vectum current run");
         }
     }
     
     private String findConfigFile(String path) {
-        String[] extensions = {"yaml", "json", "toml"};
+        String[] extensions = {"yaml", "yml", "json", "toml"};
         for (String ext : extensions) {
             String configPath = String.format(CONFIG_FORMAT, taskWorkspace, path, ext);
             if (Files.exists(Path.of(configPath))) {
@@ -288,6 +232,13 @@ public class VectorServiceImpl implements VectorService {
             }
         }
         return null;
+    }
+
+    private void deleteConfigFiles(String path) throws IOException {
+        for (String extension : new String[]{"yaml", "yml", "json", "toml"}) {
+            Path configPath = Path.of(String.format(CONFIG_FORMAT, taskWorkspace, path, extension));
+            Files.deleteIfExists(configPath);
+        }
     }
 
     /**
@@ -301,8 +252,8 @@ public class VectorServiceImpl implements VectorService {
         if (process == null) {
             return "stopped";
         } else if (process.isAlive()) {
-            String errorLog = errorLog(path);
-            if (errorLog != null && errorLog.contains(" ERROR ")) {
+            String currentErrorLog = currentRunLog(path, LOG_ERROR_FORMAT);
+            if (currentErrorLog != null && currentErrorLog.contains(" ERROR ")) {
                 return "running[error]";
             }
             return "running";
@@ -379,6 +330,41 @@ public class VectorServiceImpl implements VectorService {
     @Override
     public String errorLog(String path) {
         return readFile(String.format(LOG_ERROR_FORMAT, taskWorkspace, path));
+    }
+
+    /**
+     * 获取任务最近一次启动的运行元数据。
+     *
+     * @param path 进程路径
+     * @return 运行元数据
+     */
+    @Override
+    public RunMetadata runMetadata(String path) {
+        Path runPath = Path.of(String.format(RUN_FORMAT, taskWorkspace, path));
+        if (!Files.exists(runPath)) {
+            return new RunMetadata("", "");
+        }
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(runPath)) {
+            properties.load(input);
+            return new RunMetadata(
+                    properties.getProperty("runId", ""),
+                    properties.getProperty("startedAt", ""));
+        } catch (IOException e) {
+            log.warn("Failed to read run metadata for task {}: {}", path, e.getMessage());
+            return new RunMetadata("", "");
+        }
+    }
+
+    private String currentRunLog(String path, String logFormat) {
+        String content = readFile(String.format(logFormat, taskWorkspace, path));
+        RunMetadata metadata = runMetadata(path);
+        if (metadata.getRunId() == null || metadata.getRunId().isBlank()) {
+            return "";
+        }
+        String marker = "=== Vectum run " + metadata.getRunId();
+        int markerIndex = content == null ? -1 : content.lastIndexOf(marker);
+        return markerIndex >= 0 ? content.substring(markerIndex) : "";
     }
 
     /**

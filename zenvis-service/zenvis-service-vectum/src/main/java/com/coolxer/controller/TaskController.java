@@ -3,9 +3,16 @@ package com.coolxer.controller;
 import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.model.dto.TaskDto;
+import com.coolxer.model.dto.TaskQueryDto;
+import com.coolxer.model.diagnostic.RuntimeDiagnostic;
+import com.coolxer.model.validation.ConfigValidationResult;
+import com.coolxer.model.validation.ValidationRequest;
 import com.coolxer.model.vo.ResponseWrap;
 import com.coolxer.model.vo.TaskVo;
+import com.coolxer.model.vo.TaskOperationVo;
+import com.coolxer.model.vo.TaskPageVo;
 import com.coolxer.service.TaskService;
+import com.coolxer.service.TaskValidationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,9 +40,27 @@ public class TaskController {
 
     private static final String ID_NOT_NULL = "任务ID不能为空";
     private final TaskService taskService;
+    private final TaskValidationService taskValidationService;
 
-    public TaskController(TaskService taskService) {
+    public TaskController(TaskService taskService,
+                          TaskValidationService taskValidationService) {
         this.taskService = taskService;
+        this.taskValidationService = taskValidationService;
+    }
+
+    /**
+     * 使用生产同版本 Vector 隔离校验配置。
+     *
+     * @param request 校验请求
+     * @return 校验结果
+     */
+    @PostMapping("/validate")
+    @Operation(summary = "校验 Vector 配置", description = "在临时目录执行 Vector 原生 validate 和 test")
+    public ResponseWrap<ConfigValidationResult> validate(
+            @Valid @RequestBody ValidationRequest request) {
+        log.info("校验 Vector 配置: format={}, testsRequired={}",
+                request.getFormat(), request.isTestsRequired());
+        return ResponseWrap.success(taskValidationService.validate(request));
     }
 
     /**
@@ -130,6 +155,18 @@ public class TaskController {
     }
 
     /**
+     * 分页查询任务摘要。
+     *
+     * @param query 查询条件
+     * @return 分页结果
+     */
+    @GetMapping("/query")
+    @Operation(summary = "查询任务列表", description = "按来源、备注、名称和状态分页查询任务摘要")
+    public ResponseWrap<TaskPageVo> query(TaskQueryDto query) {
+        return ResponseWrap.success(taskService.query(query));
+    }
+
+    /**
      * 查询任务详情
      * @param id 任务ID
      * @return 任务详情
@@ -163,6 +200,45 @@ public class TaskController {
     }
 
     /**
+     * 启动任务。
+     *
+     * @param id 任务 ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/start")
+    @Operation(summary = "启动任务", description = "启动已停止的任务；已运行时保持现状")
+    public ResponseWrap<TaskOperationVo> start(
+            @NotNull(message = ID_NOT_NULL) @PathVariable("id") Long id) {
+        return ResponseWrap.success(taskService.start(id));
+    }
+
+    /**
+     * 停止任务。
+     *
+     * @param id 任务 ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/stop")
+    @Operation(summary = "停止任务", description = "停止运行中的任务；已停止时保持现状")
+    public ResponseWrap<TaskOperationVo> stop(
+            @NotNull(message = ID_NOT_NULL) @PathVariable("id") Long id) {
+        return ResponseWrap.success(taskService.stop(id));
+    }
+
+    /**
+     * 重启任务。
+     *
+     * @param id 任务 ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/restart")
+    @Operation(summary = "重启任务", description = "重新启动任务并生成新的运行轮次")
+    public ResponseWrap<TaskOperationVo> restart(
+            @NotNull(message = ID_NOT_NULL) @PathVariable("id") Long id) {
+        return ResponseWrap.success(taskService.restart(id));
+    }
+
+    /**
      * 获取任务日志
      * @param id 任务ID
      * @param logType 日志类型
@@ -179,5 +255,19 @@ public class TaskController {
             throw new ApiException(ResultCodeEnum.INNER_ERROR);
         }
         return logContent;
+    }
+
+    /**
+     * 获取任务当前运行轮次诊断。
+     *
+     * @param id 任务 ID
+     * @return 结构化诊断
+     */
+    @GetMapping("/{id}/diagnostics")
+    @Operation(summary = "获取运行诊断", description = "仅分析任务当前 runId 的启动日志")
+    public ResponseWrap<RuntimeDiagnostic> diagnostics(
+            @NotNull(message = ID_NOT_NULL) @PathVariable("id") Long id) {
+        log.debug("获取任务运行诊断: id={}", id);
+        return ResponseWrap.success(taskService.diagnostics(id));
     }
 }

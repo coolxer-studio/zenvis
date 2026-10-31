@@ -52,6 +52,11 @@ public class TaskVo implements Serializable {
     private String config;
 
     /**
+     * 配置格式：yaml、toml 或 json。
+     */
+    private String format;
+
+    /**
      * 任务状态
      */
     private String status;
@@ -70,6 +75,16 @@ public class TaskVo implements Serializable {
      * 更新时间（格式化）
      */
     private String updateTime;
+
+    /**
+     * 当前运行轮次标识。
+     */
+    private String currentRunId;
+
+    /**
+     * 当前运行轮次启动时间。
+     */
+    private String runStartedAt;
 
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
@@ -94,9 +109,12 @@ public class TaskVo implements Serializable {
         this.source = task.getSource().name();
         this.mark = task.getMark();
         this.config = task.getConfig();
+        this.format = task.getFormat();
         this.status = status;
         this.pid = task.getPid();
         this.createTime = formatDate(task.getCreateTime());
         this.updateTime = formatDate(task.getUpdateTime());
+        this.currentRunId = task.getCurrentRunId();
+        this.runStartedAt = task.getRunStartedAt();
     }
 }

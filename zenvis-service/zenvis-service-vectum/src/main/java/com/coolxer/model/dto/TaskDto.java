@@ -38,6 +38,11 @@ public class TaskDto {
     private String config;
 
     /**
+     * 配置格式：yaml、toml 或 json。缺省时仅兼容可可靠识别的历史调用。
+     */
+    private String format;
+
+    /**
      * 来源
      */
     private String source;

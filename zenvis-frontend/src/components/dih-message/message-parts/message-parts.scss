@@ -658,6 +658,17 @@
     line-height: 1.5;
   }
 
+  .visualization-preview-snapshot-message {
+    margin: 8px 0 10px;
+    padding: 8px 10px;
+    color: var(--el-color-info-dark-2);
+    background: var(--el-color-info-light-9);
+    border: 1px solid var(--el-color-info-light-7);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
   .workflow-source-meta {
     margin: 8px 0;
     color: var(--el-text-color-secondary);

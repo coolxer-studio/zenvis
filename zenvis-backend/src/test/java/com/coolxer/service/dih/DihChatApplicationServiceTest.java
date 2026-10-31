@@ -58,6 +58,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1402,6 +1403,186 @@ class DihChatApplicationServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void chartPreviewReusesVerifiedSnapshotWhenOnlyPresentationChanges() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> query = entityDistributionQuery();
+        Instant sourceQueriedAt = Instant.now().minusSeconds(60);
+        ChatSession session = visualizationSession(
+                approvedChartPlan("chart-plan-001", query),
+                verifiedChartSnapshot("source-artifact-001", "chart-plan-001",
+                        query, sourceQueriedAt, pieOption()));
+        ChatMessagePart preview = chartPreview("chart-plan-001", query,
+                lineOptionWithSameData());
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(preview), emptyMcpEvidence());
+
+        assertThat(preview.getStatus()).isEqualTo("temporary");
+        assertThat(preview.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("validated", true)
+                .containsEntry("evidenceMode", "reused_snapshot")
+                .containsEntry("snapshotReused", true)
+                .containsEntry("sourceQueriedAt", sourceQueriedAt.toString())
+                .containsEntry("sourceArtifactId", "source-artifact-001")
+                .containsEntry("sourcePlanId", "chart-plan-001")
+                .doesNotContainKeys("validationCode", "validationMessage", "blockedAction");
+        assertThat(preview.getMetadata().get("queryDataDigest"))
+                .asString().isNotBlank();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void expiredVerifiedSnapshotBlocksChartValidation() throws Exception {
+        DihChatApplicationService service = emptyService();
+        ReflectionTestUtils.setField(service, "visualizationSnapshotTtlSeconds", 60L);
+        Map<String, Object> query = entityDistributionQuery();
+        ChatSession session = visualizationSession(
+                approvedChartPlan("chart-plan-001", query),
+                verifiedChartSnapshot("source-artifact-001", "chart-plan-001",
+                        query, Instant.now().minusSeconds(120), pieOption()));
+        ChatMessagePart preview = chartPreview("chart-plan-001", query,
+                lineOptionWithSameData());
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(preview), emptyMcpEvidence());
+
+        assertThat(preview.getStatus()).isEqualTo("blocked");
+        assertThat(preview.getMetadata())
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("validationCode", "query_snapshot_expired")
+                .containsEntry("validationMessage",
+                        "会话内的已验证查询快照已过期，请重新执行数据查询");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void chartDataDifferentFromVerifiedSnapshotBlocksReuse() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> query = entityDistributionQuery();
+        ChatSession session = visualizationSession(
+                approvedChartPlan("chart-plan-001", query),
+                verifiedChartSnapshot("source-artifact-001", "chart-plan-001",
+                        query, Instant.now().minusSeconds(60), pieOption()));
+        ChatMessagePart preview = chartPreview("chart-plan-001", query, Map.of(
+                "xAxis", Map.of("type", "category",
+                        "data", List.of("jailbreak", "session_suspended")),
+                "series", List.of(Map.of("type", "line", "data", List.of(10, 7)))));
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(preview), emptyMcpEvidence());
+
+        assertThat(preview.getStatus()).isEqualTo("blocked");
+        assertThat(preview.getMetadata())
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("validationCode", "query_data_mismatch")
+                .containsEntry("validationMessage",
+                        "当前图表数据与可复用的已验证查询快照不一致，本次结果未验证");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void chartWithoutApprovedPlanCannotReuseSnapshot() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> query = entityDistributionQuery();
+        ChatSession session = visualizationSession(
+                verifiedChartSnapshot("source-artifact-001", "chart-plan-001",
+                        query, Instant.now().minusSeconds(60), pieOption()));
+        ChatMessagePart preview = chartPreview("chart-plan-001", query,
+                lineOptionWithSameData());
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(preview), emptyMcpEvidence());
+
+        assertThat(preview.getStatus()).isEqualTo("blocked");
+        assertThat(preview.getMetadata())
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("validationCode", "query_plan_not_approved")
+                .containsEntry("validationMessage", "查询方案尚未批准，图表不能验证或入库");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void successfulCurrentQueryTakesPrecedenceOverSessionSnapshot() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> query = entityDistributionQuery();
+        ChatMessagePart snapshot = verifiedChartSnapshot(
+                "source-artifact-001", "chart-plan-001", query,
+                Instant.now().minusSeconds(60), Map.of(
+                        "series", List.of(Map.of("type", "pie", "data", List.of(
+                                Map.of("name", "jailbreak", "value", 99))))));
+        ChatSession session = visualizationSession(
+                approvedChartPlan("chart-plan-001", query), snapshot);
+        ChatMessagePart preview = chartPreview("chart-plan-001", query,
+                lineOptionWithSameData());
+        Map<String, Object> currentOption = Map.of(
+                "xAxis", Map.of("type", "category",
+                        "data", List.of("jailbreak", "session_suspended")),
+                "series", List.of(Map.of("type", "line", "data", List.of(8, 4))));
+        String arguments = JacksonUtil.toJson(Map.of(
+                "request", query.get("request")));
+        String result = JacksonUtil.toJson(Map.of(
+                "meta", Map.of("result_count", 2),
+                "echarts", Map.of("chart_type", "line", "option", currentOption)));
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(preview),
+                chartEvidenceWithSuccessfulQuery(arguments, result));
+
+        assertThat(preview.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("evidenceMode", "fresh_query")
+                .containsEntry("echartsOption", currentOption)
+                .doesNotContainKeys("sourceArtifactId", "snapshotReused");
+        assertThat(preview.getMetadata().get("sourceQueriedAt"))
+                .asString().isNotBlank();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void chartLibraryRecordRetainsValidatedQueryProvenance() {
+        DihChatApplicationService service = emptyService();
+        Map<String, Object> query = entityDistributionQuery();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("id", "chart-artifact-001");
+        metadata.put("planId", "chart-plan-001");
+        metadata.put("query", query);
+        metadata.put("echartsOption", pieOption());
+        metadata.put("amisConfig", Map.of("type", "chart", "config", pieOption()));
+        metadata.put("queriedAt", "2026-10-31T17:31:24+08:00");
+        metadata.put("sourceQueriedAt", "2026-10-31T17:31:24+08:00");
+        metadata.put("validatedAt", "2026-10-31T17:33:23+08:00");
+        metadata.put("validationStatus", "success");
+        metadata.put("evidenceMode", "reused_snapshot");
+        metadata.put("queryFingerprint", "fingerprint-001");
+        metadata.put("queryDataDigest", "digest-001");
+        metadata.put("sourceArtifactId", "source-artifact-001");
+        metadata.put("snapshotReused", true);
+        ChatMessagePart record = ChatMessagePart.builder()
+                .type("visualization-chart-record")
+                .metadata(metadata)
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(record));
+
+        assertThat(patch).isNotNull();
+        Map<String, Object> visualizationChart =
+                (Map<String, Object>) patch.get("visualizationChart");
+        List<Map<String, Object>> chartLibrary =
+                (List<Map<String, Object>>) visualizationChart.get("chartLibrary");
+        assertThat(chartLibrary).singleElement().satisfies(chart -> assertThat(chart)
+                .containsEntry("validationStatus", "success")
+                .containsEntry("evidenceMode", "reused_snapshot")
+                .containsEntry("sourceQueriedAt", "2026-10-31T17:31:24+08:00")
+                .containsEntry("sourceArtifactId", "source-artifact-001")
+                .containsEntry("queryFingerprint", "fingerprint-001")
+                .containsEntry("queryDataDigest", "digest-001")
+                .containsEntry("snapshotReused", true));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void skillChartPreviewUsesSuccessfulCurrentTurnMcpAsItsProvenance() throws Exception {
         DihChatApplicationService service = emptyService();
         Class<?> streamType = java.util.Arrays.stream(
@@ -1523,6 +1704,100 @@ class DihChatApplicationServiceTest {
                 service, "tryBootstrapUnambiguousAttributeMeta",
                 context, "你好", entityRows, null, null, true);
         assertThat(unrelated).isEmpty();
+    }
+
+    @Test
+    void securityDataPromptResolvesSemanticEntityAliasAndSkipsEntitySelection() throws Exception {
+        DihChatApplicationService service = emptyService();
+        ToolCallback attributeTool = mock(ToolCallback.class);
+        ToolDefinition attributeDefinition = mock(ToolDefinition.class);
+        when(attributeDefinition.name()).thenReturn("retrieval_list_display_attribute");
+        when(attributeTool.getToolDefinition()).thenReturn(attributeDefinition);
+        when(attributeTool.call(any(String.class))).thenReturn(
+                "{\"entity\":\"sentinel_security_event\",\"attributeList\":["
+                        + "{\"name\":\"judgment\",\"label\":\"判定类别\",\"type\":\"string\"}]}");
+        ToolCallbackProvider provider = mock(ToolCallbackProvider.class);
+        when(provider.getToolCallbacks()).thenReturn(new ToolCallback[]{attributeTool});
+        McpToolContext context = new McpToolContext(provider, "system-prompt");
+        List<Map<String, Object>> entityRows = List.of(
+                Map.of("name", "sentinel_security_event", "label", "智能体安全事件"),
+                Map.of("name", "sentinel_chat_session_event", "label", "智能体会话事件"));
+
+        String fastPath = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "针对智能体安全数据做个判定类别的统计，看下分布情况",
+                entityRows, null, null, true);
+        assertThat(fastPath)
+                .contains("sentinel_security_event")
+                .contains("智能体安全事件")
+                .contains("judgment")
+                .contains("visualization_chart.confirm_query_plan");
+
+        String ambiguous = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "对比智能体安全事件和智能体会话事件的分布",
+                entityRows, null, null, true);
+        assertThat(ambiguous).isEmpty();
+    }
+
+    @Test
+    void resolvedEntityPersistsAsSelectionAndFallbackDoesNotSynthesizeSelector() throws Exception {
+        DihChatApplicationService service = emptyService();
+        WorkflowStateStore store = new WorkflowStateStore();
+        ReflectionTestUtils.setField(service, "workflowStateStore", store);
+        ToolCallback attributeTool = mock(ToolCallback.class);
+        ToolDefinition attributeDefinition = mock(ToolDefinition.class);
+        when(attributeDefinition.name()).thenReturn("retrieval_list_display_attribute");
+        when(attributeTool.getToolDefinition()).thenReturn(attributeDefinition);
+        when(attributeTool.call(any(String.class))).thenReturn(
+                "{\"entity\":\"sentinel_security_event\",\"attributeList\":["
+                        + "{\"name\":\"judgment\",\"label\":\"判定类别\",\"type\":\"string\"}]}");
+        ToolCallbackProvider provider = mock(ToolCallbackProvider.class);
+        when(provider.getToolCallbacks()).thenReturn(new ToolCallback[]{attributeTool});
+        McpToolContext context = new McpToolContext(provider, "system-prompt");
+        List<Map<String, Object>> entityRows = List.of(
+                Map.of("name", "sentinel_security_event", "label", "智能体安全事件"),
+                Map.of("name", "sentinel_chat_session_event", "label", "智能体会话事件"));
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("wf-sentinel")
+                .setAgentType(VisualizationChartAgent.AGENT_TYPE)
+                .setStep(AgentWorkflowStep.ENTITY_META)
+                .setContext(new LinkedHashMap<>());
+        ChatSession session = new ChatSession();
+        session.setType(VisualizationChartAgent.AGENT_TYPE);
+        session.setMessages(JacksonUtil.toJson(List.of(Map.of(
+                "sender", "user",
+                "content", "针对智能体安全数据做个判定类别的统计，看下分布情况"))));
+        store.upsert(session, workflow);
+
+        String fastPath = ReflectionTestUtils.invokeMethod(
+                service, "tryBootstrapUnambiguousAttributeMeta",
+                context, "针对智能体安全数据做个判定类别的统计，看下分布情况",
+                entityRows, session, workflow, true);
+        assertThat(fastPath).contains("sentinel_security_event");
+        assertThat(workflow.getStep()).isEqualTo(AgentWorkflowStep.ATTRIBUTE_META);
+        assertThat(workflow.getContext())
+                .containsEntry("selectedEntity", "sentinel_security_event");
+
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "retrieval_list_display_entity", "{}",
+                "{\"entityList\":["
+                        + "{\"name\":\"sentinel_security_event\",\"label\":\"智能体安全事件\"},"
+                        + "{\"name\":\"sentinel_chat_session_event\",\"label\":\"智能体会话事件\"}]}");
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(ChatMessagePart.builder()
+                .type("markdown")
+                .content("已完成智能体安全事件的字段查询。")
+                .build(), ChatMessagePart.builder()
+                .type("info-steps")
+                .title("选择分析实体")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_chart.select_entity_from_meta")))
+                .build()));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationEntitySelection",
+                session, parts, evidence);
+        assertThat(parts).hasSize(1);
+        assertThat(parts.get(0).getType()).isEqualTo("markdown");
     }
 
     @Test
@@ -1895,6 +2170,111 @@ class DihChatApplicationServiceTest {
         emit.invoke(evidence,
                 McpToolCallLoggingProvider.McpToolCallLog.succeeded(
                         callId, tool, 1L, result, result));
+    }
+
+    private Object emptyMcpEvidence() throws Exception {
+        Class<?> streamType = java.util.Arrays.stream(
+                        DihChatApplicationService.class.getDeclaredClasses())
+                .filter(type -> "McpToolLogStream".equals(type.getSimpleName()))
+                .findFirst()
+                .orElseThrow();
+        var create = streamType.getDeclaredMethod("create");
+        create.setAccessible(true);
+        return create.invoke(null);
+    }
+
+    private Object chartEvidenceWithSuccessfulQuery(String arguments,
+                                                    String result) throws Exception {
+        Object evidence = emptyMcpEvidence();
+        var emit = evidence.getClass().getDeclaredMethod(
+                "emit", McpToolCallLoggingProvider.McpToolCallLog.class);
+        emit.setAccessible(true);
+        emitSuccessfulCall(emit, evidence, "entity_distribution", arguments, result);
+        return evidence;
+    }
+
+    private ChatSession visualizationSession(ChatMessagePart... parts) {
+        Message message = new Message("ai", "图表消息", MessageType.TEXT);
+        message.setParts(List.of(parts));
+        ChatSession session = new ChatSession();
+        session.setMessages(JacksonUtil.toJson(List.of(message)));
+        return session;
+    }
+
+    private ChatMessagePart approvedChartPlan(String planId,
+                                              Map<String, Object> query) {
+        return ChatMessagePart.builder()
+                .id("plan-" + planId)
+                .type("confirm")
+                .status("approved")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_chart.confirm_query_plan",
+                        "planId", planId,
+                        "query", query)))
+                .build();
+    }
+
+    private ChatMessagePart verifiedChartSnapshot(String artifactId,
+                                                  String planId,
+                                                  Map<String, Object> query,
+                                                  Instant queriedAt,
+                                                  Map<String, Object> option) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("artifactId", artifactId);
+        metadata.put("planId", planId);
+        metadata.put("query", query);
+        metadata.put("queryMeta", Map.of("result_count", 2));
+        metadata.put("echartsOption", option);
+        metadata.put("queriedAt", queriedAt.toString());
+        metadata.put("sourceQueriedAt", queriedAt.toString());
+        metadata.put("validationStatus", "success");
+        metadata.put("validated", true);
+        return ChatMessagePart.builder()
+                .id(artifactId)
+                .type("visualization-chart-preview")
+                .status("temporary")
+                .metadata(metadata)
+                .build();
+    }
+
+    private ChatMessagePart chartPreview(String planId,
+                                         Map<String, Object> query,
+                                         Map<String, Object> option) {
+        return ChatMessagePart.builder()
+                .id("preview-" + planId)
+                .type("visualization-chart-preview")
+                .status("temporary")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_chart.add_chart_library",
+                        "planId", planId,
+                        "query", query,
+                        "echartsOption", option)))
+                .build();
+    }
+
+    private Map<String, Object> entityDistributionQuery() {
+        return Map.of(
+                "tool", "entity_distribution",
+                "request", Map.of(
+                        "entity", "traffic",
+                        "time_field", "zenvis_insert_time",
+                        "dimension", "fact_type",
+                        "limit", 20));
+    }
+
+    private Map<String, Object> pieOption() {
+        return Map.of("series", List.of(Map.of(
+                "type", "pie",
+                "data", List.of(
+                        Map.of("name", "jailbreak", "value", 10),
+                        Map.of("name", "session_suspended", "value", 6)))));
+    }
+
+    private Map<String, Object> lineOptionWithSameData() {
+        return Map.of(
+                "xAxis", Map.of("type", "category",
+                        "data", List.of("jailbreak", "session_suspended")),
+                "series", List.of(Map.of("type", "line", "data", List.of(10, 6))));
     }
 
     private DihChatApplicationService streamingService() {

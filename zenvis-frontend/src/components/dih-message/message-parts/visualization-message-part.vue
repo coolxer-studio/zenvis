@@ -9,11 +9,7 @@
         }}</el-tag>
       </div>
       <div class="visualization-chart-preview-tools">
-        <el-tooltip
-          v-if="interactive"
-          :content="chartLibraryHint"
-          placement="top"
-        >
+        <el-tooltip v-if="interactive" :content="chartLibraryHint" placement="top">
           <el-button
             class="config-copy-btn"
             size="small"
@@ -36,6 +32,9 @@
     </div>
     <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
     <div v-if="part.content" class="visualization-chart-preview-desc">{{ part.content }}</div>
+    <div v-if="chartSnapshotNotice" class="visualization-preview-snapshot-message" role="status">
+      {{ chartSnapshotNotice }}
+    </div>
     <div v-if="chartPreviewNotice" class="visualization-preview-validation-message" role="alert">
       {{ chartPreviewNotice }}
     </div>
@@ -107,6 +106,7 @@ import {
   canAddVisualizationChartToLibrary,
   isVisualizationChartAdded,
   visualizationChartOption,
+  visualizationPreviewSnapshotNotice,
   visualizationPreviewValidationNotice,
 } from './visualization-preview-state';
 import { workflowRevision } from '../workflow-card-state';
@@ -185,10 +185,9 @@ const isChartLibraryAdded = computed(() => isVisualizationChartAdded(props.part)
 
 const chartPreviewOption = computed(() => visualizationChartOption(props.part));
 
-const canAddToChartLibrary = computed(() => canAddVisualizationChartToLibrary(
-  props.part,
-  chartRenderFailed.value,
-));
+const canAddToChartLibrary = computed(() =>
+  canAddVisualizationChartToLibrary(props.part, chartRenderFailed.value),
+);
 
 const chartLibraryHint = computed(() => {
   if (isChartLibraryAdded.value) return '已加入图表库';
@@ -206,6 +205,7 @@ const requestAddChartLibrary = () => {
 };
 
 const chartPreviewNotice = computed(() => visualizationPreviewValidationNotice(props.part));
+const chartSnapshotNotice = computed(() => visualizationPreviewSnapshotNotice(props.part));
 const chartPreviewError = computed(() => '');
 
 const handleChartRenderFailed = (error: string) => {
@@ -227,8 +227,7 @@ const isVisualizationRecord = computed(() => {
 
 const visualizationRecordTitle = computed(() => {
   if (props.part.type === 'visualization-chart-record') return props.part.title || '图表库记录';
-  if (props.part.type === 'visualization-app-record')
-    return props.part.title || '可视化应用记录';
+  if (props.part.type === 'visualization-app-record') return props.part.title || '可视化应用记录';
   if (props.part.type === 'visualization-dashboard-record')
     return props.part.title || '数据大屏记录';
   return props.part.title || '可视化记录';

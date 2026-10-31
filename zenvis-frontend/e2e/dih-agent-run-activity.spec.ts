@@ -553,8 +553,12 @@ test('等待补充信息时在运行卡内联提交，不新增用户气泡', as
   await openRunWorkspace(page)
 
   const card = page.locator('.agent-run-card').first()
+  const prompt = card.getByTestId('agent-run-user-input-prompt')
   await expect(card).toContainText('需要补充信息')
-  await expect(card).toContainText(question)
+  await expect(prompt).toContainText('要完成“按环境变量执行配置写入”，需要你补充两类信息：')
+  await expect(prompt).toContainText('1）推送任务配置中的 Source、Topic、消费组和 DLQ Topic 实际值；')
+  await expect(prompt).toContainText('2）KAFKA_BOOTSTRAP_SERVERS、LAB_ACCESS_TOPIC、LAB_RISK_TOPIC 的实际值。')
+  await expect(prompt).toContainText('请勿提供任何密码、Token 或 Cookie。')
   await expect(page.locator('.agent-run-user-input-dialog')).toHaveCount(0)
 
   await card.getByPlaceholder('请输入需要补充的信息').fill(
@@ -568,6 +572,94 @@ test('等待补充信息时在运行卡内联提交，不新增用户气泡', as
   })
   await expect(page.locator('.agent-run-card').first()).toContainText('排队中')
   await expect(page.locator('.user-message')).toHaveCount(0)
+})
+
+test('等待补充信息时完整展示 Markdown 提示且不静默截断', async ({ page }) => {
+  const question = [
+    '为了生成 Kafka → ClickHouse 的数据推送配置，请提供以下信息：',
+    '1. **Kafka Broker 地址**（如 `192.168.1.100:9092`，多个用逗号分隔）',
+    '2. **Topic 名称**（消费哪个 topic）',
+    '3. **Consumer Group ID**（消费组，如 `zenvis-btw-controlled-event`）',
+    '4. **认证方式**（无认证 / SASL_PLAINTEXT / SASL_SSL 等；如有认证请提供环境变量名，不要明文密码）',
+    '5. **Kafka 消息格式**（JSON 字段样例或消息 Schema）',
+  ].join('\n')
+  await installMocks(page, {
+    lastEventSequence: 4,
+    streamEvents: [],
+    historyEvents: [],
+    initialRun: waitingUserRun(question),
+  })
+  await openRunWorkspace(page)
+
+  const card = page.locator('.agent-run-card').first()
+  const prompt = card.getByTestId('agent-run-user-input-prompt')
+  await expect(prompt).toBeVisible()
+  await expect(prompt).toContainText('Kafka Broker 地址')
+  await expect(prompt).toContainText('Kafka 消息格式')
+  await expect(prompt.locator('strong').filter({ hasText: 'Consumer Group ID' })).toHaveCount(1)
+  await expect(prompt.locator('code').filter({ hasText: '192.168.1.100:9092' })).toHaveCount(1)
+
+  const overflow = await prompt.evaluate(element => element.scrollHeight - element.clientHeight)
+  expect(overflow).toBeLessThanOrEqual(1)
+  const lineClamp = await prompt.evaluate(element =>
+    getComputedStyle(element).getPropertyValue('-webkit-line-clamp').trim(),
+  )
+  expect(['', 'none']).toContain(lineClamp)
+
+  await card.getByRole('button', { name: '收起提示' }).click()
+  await expect(card.getByRole('button', { name: '展开完整提示' })).toBeVisible()
+  await card.getByRole('button', { name: '展开完整提示' }).click()
+  await expect(prompt).toContainText('Kafka 消息格式')
+})
+
+test('等待补充信息时把字面量换行符显示为真实换行', async ({ page }) => {
+  const question = [
+    '已锁定目标 Meta，需要补充以下参数：',
+    '\\n1）Kafka broker 地址（例如 kafka-service:9092）',
+    '\\n2）Topic 名称',
+    '\\n3）消费组 group_id',
+    '\\n\\n另外说明：不要提供明文密码。',
+  ].join('')
+  await installMocks(page, {
+    lastEventSequence: 4,
+    streamEvents: [],
+    historyEvents: [],
+    initialRun: waitingUserRun(question),
+  })
+  await openRunWorkspace(page)
+
+  const prompt = page.locator('.agent-run-card').first().getByTestId('agent-run-user-input-prompt')
+  await expect(prompt).toBeVisible()
+  const renderedText = await prompt.innerText()
+  expect(renderedText).not.toContain('\\n')
+  expect(renderedText).toContain('需要补充以下参数：\n1）Kafka broker 地址')
+  expect(renderedText).toContain('\n2）Topic 名称')
+  expect(renderedText).toContain('\n3）消费组 group_id')
+  expect(renderedText).toContain('另外说明：不要提供明文密码。')
+})
+
+test('旧任务只有暂停原因时明确提示信息可能不完整', async ({ page }) => {
+  await installMocks(page, {
+    lastEventSequence: 4,
+    streamEvents: [],
+    historyEvents: [],
+    initialRun: {
+      ...baseRun(4, 'WAITING_USER'),
+      paused_reason: '旧任务只保留了截断的暂停原因…',
+      pending_action: null,
+      pending_interaction: null,
+    },
+  })
+  await openRunWorkspace(page)
+
+  const card = page.locator('.agent-run-card').first()
+  await expect(card.getByTestId('agent-run-user-input-prompt')).toContainText(
+    '旧任务只保留了截断的暂停原因…',
+  )
+  await expect(card.getByTestId('agent-run-user-input-legacy-note')).toContainText(
+    '提示可能不完整',
+  )
+  await expect(card).toContainText('当前任务缺少可提交的交互记录，请刷新会话后重试。')
 })
 
 test('数据推送阻断卡展示逐项门禁原因并通过统一交互重新校验', async ({ page }) => {

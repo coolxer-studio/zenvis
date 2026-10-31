@@ -40,22 +40,58 @@ export const resolveAgentRunStepStatus = (runStatus: string | undefined, stepSta
   return normalizedStep;
 };
 
-export const resolveAgentRunWaitingQuestion = (run?: AgentRun | null): string => {
-  if (!run || run.status !== 'WAITING_USER') return '';
-  const prompt = String(run.pendingInteraction?.prompt || '').trim();
-  if (prompt) return prompt;
+export type AgentRunWaitingQuestionSource =
+  | 'none'
+  | 'interaction'
+  | 'pending_action'
+  | 'paused_reason';
+
+export type AgentRunWaitingQuestion = {
+  text: string;
+  source: AgentRunWaitingQuestionSource;
+  mayBeIncomplete: boolean;
+};
+
+export const normalizeAgentRunPromptText = (value?: string | null): string =>
+  String(value || '')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+export const resolveAgentRunWaitingQuestionDetail = (
+  run?: AgentRun | null,
+): AgentRunWaitingQuestion => {
+  if (!run || run.status !== 'WAITING_USER') {
+    return { text: '', source: 'none', mayBeIncomplete: false };
+  }
+  const prompt = normalizeAgentRunPromptText(run.pendingInteraction?.prompt);
+  if (prompt) {
+    return { text: prompt, source: 'interaction', mayBeIncomplete: false };
+  }
   const pendingAction = String(run.pendingAction || '');
   if (pendingAction) {
     try {
       const action = JSON.parse(pendingAction) as Record<string, unknown>;
-      const question = String(action.question || '').trim();
-      if (question) return question;
+      const question = normalizeAgentRunPromptText(String(action.question || ''));
+      if (question) {
+        return { text: question, source: 'pending_action', mayBeIncomplete: false };
+      }
     } catch {
       // Fall back to the persisted reason for malformed or legacy pending actions.
     }
   }
-  return String(run.pausedReason || '').trim();
+  const pausedReason = normalizeAgentRunPromptText(run.pausedReason);
+  return {
+    text: pausedReason,
+    source: pausedReason ? 'paused_reason' : 'none',
+    mayBeIncomplete: Boolean(pausedReason),
+  };
 };
+
+export const resolveAgentRunWaitingQuestion = (run?: AgentRun | null): string =>
+  resolveAgentRunWaitingQuestionDetail(run).text;
 
 /**
  * Restore the pending MCP approval card from the run snapshot even when the

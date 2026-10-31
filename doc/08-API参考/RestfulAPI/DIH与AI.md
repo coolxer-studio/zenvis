@@ -164,6 +164,8 @@
 
 附件只读工具对所有会话开放，但只能访问当前用户、当前会话或当前 Run 允许的附件：`attachment_list`、`attachment_outline`、`attachment_search`、`attachment_read`、`attachment_table_query`。`ask` 仍不加载业务 MCP/Skill 工具，仅在存在附件时加载附件工具。工具调用沿用 `tool_call` 事件和审计，默认每轮 6 次、单次结果 8,000 字符、累计 24,000 字符。
 
+注入模型的附件上下文同时包含 `fileName` 和 `fileId`，工具调用必须原样使用 `fileId`，不能使用文件名。兼容旧 Run 或压缩后的上下文时，工具只会在当前用户、当前会话或当前 Run 的白名单内接受唯一文件名；同名文件会返回候选 `fileId` 并要求改用 ID，未命中时会提示先调用 `attachment_list`。不会因为文件名兼容而扩大附件访问范围。
+
 大文件上下文由结构化目录、统计、首段和 Top 8 混合检索片段组成，总附件上下文不超过 24,000 字符。关键词检索始终启用，向量检索依赖 `app.ai.embedding.enabled=true` 和 Redis；不可用时自动降级。附件正文按不可信资料处理，引用必须包含文件名与 page/sheet/slide/lines locator。
 
 ## AgentRunController

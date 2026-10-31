@@ -5,9 +5,11 @@ import {
   isAgentRunLive,
   isAgentRunRestorable,
   isAgentRunSubscribable,
+  normalizeAgentRunPromptText,
   resolveAgentRunPendingApprovalRequestId,
   resolveAgentRunStepStatus,
   resolveAgentRunWaitingQuestion,
+  resolveAgentRunWaitingQuestionDetail,
   upsertAgentRunMessage,
 } from './agent-run-message.ts';
 
@@ -342,6 +344,60 @@ test('等待用户时以 pendingInteraction 作为唯一交互提示来源', () 
   });
 
   assert.equal(resolveAgentRunWaitingQuestion(waitingRun as any), '请补充新的 Topic 与消费组');
+  assert.deepEqual(resolveAgentRunWaitingQuestionDetail(waitingRun as any), {
+    text: '请补充新的 Topic 与消费组',
+    source: 'interaction',
+    mayBeIncomplete: false,
+  });
+});
+
+test('等待用户时标记 pausedReason 回退提示可能不完整', () => {
+  const waitingRun = run({
+    status: 'WAITING_USER',
+    pausedReason: '旧任务只保留了截断的暂停原因…',
+    pendingAction: 'not-json',
+  });
+
+  assert.deepEqual(resolveAgentRunWaitingQuestionDetail(waitingRun as any), {
+    text: '旧任务只保留了截断的暂停原因…',
+    source: 'paused_reason',
+    mayBeIncomplete: true,
+  });
+  assert.deepEqual(resolveAgentRunWaitingQuestionDetail(run({
+    status: 'WAITING_USER',
+    pendingAction: JSON.stringify({ type: 'user', question: '从旧 pendingAction 恢复的完整问题' }),
+  }) as any), {
+    text: '从旧 pendingAction 恢复的完整问题',
+    source: 'pending_action',
+    mayBeIncomplete: false,
+  });
+});
+
+test('等待用户时将字面量换行转义还原为真实换行', () => {
+  assert.equal(
+    normalizeAgentRunPromptText('需要补充：\\n1）Kafka 地址\\r\\n2）Topic 名称\\r3）消费组'),
+    '需要补充：\n1）Kafka 地址\n2）Topic 名称\n3）消费组',
+  );
+  assert.equal(
+    normalizeAgentRunPromptText('第一行\r\n第二行\r第三行\n第四行'),
+    '第一行\n第二行\n第三行\n第四行',
+  );
+  const waitingRun = run({
+    status: 'WAITING_USER',
+    pendingInteraction: {
+      interactionId: 'interaction-1',
+      kind: 'user_input',
+      title: '需要补充信息',
+      prompt: '需要补充：\\n1）Kafka 地址\\n2）Topic 名称',
+      allowedActions: [],
+    },
+  });
+
+  assert.deepEqual(resolveAgentRunWaitingQuestionDetail(waitingRun as any), {
+    text: '需要补充：\n1）Kafka 地址\n2）Topic 名称',
+    source: 'interaction',
+    mayBeIncomplete: false,
+  });
 });
 
 test('等待审批时从 pendingAction 恢复审批请求以便重连后展示审批卡', () => {

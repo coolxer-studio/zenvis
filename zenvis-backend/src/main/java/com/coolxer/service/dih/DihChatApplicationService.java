@@ -70,6 +70,7 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -96,7 +97,12 @@ import java.util.regex.Pattern;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 /**
  * DIH 聊天应用编排服务。
@@ -190,6 +196,9 @@ public class DihChatApplicationService {
 
     @Autowired(required = false)
     private AgentRunService agentRunService;
+
+    @Value("${app.ai.dih.visualization.snapshot-ttl-seconds:1800}")
+    private long visualizationSnapshotTtlSeconds = 1800;
 
     public DihChatApplicationService(AIChatService chatService,
                                      AIBaseService baseService,
@@ -3344,6 +3353,14 @@ public class DihChatApplicationService {
             AgentWorkflowState workflow,
             String prompt,
             List<Map<String, Object>> entityRows) {
+        return resolveAttributeMetaEntity(workflow, prompt, entityRows, true);
+    }
+
+    private String resolveAttributeMetaEntity(
+            AgentWorkflowState workflow,
+            String prompt,
+            List<Map<String, Object>> entityRows,
+            boolean allowSingleEntity) {
         Map<String, Object> context = workflow == null || workflow.getContext() == null
                 ? Map.of() : workflow.getContext();
         String selected = stringValue(context, "selectedEntity", "");
@@ -3366,7 +3383,7 @@ public class DihChatApplicationService {
         if (matched.size() == 1) {
             return matched.iterator().next();
         }
-        if (entityRows.size() == 1) {
+        if (allowSingleEntity && entityRows.size() == 1) {
             String only = stringValue(entityRows.get(0), "name", "");
             return StringUtils.hasText(only) ? only : "";
         }
@@ -3384,24 +3401,40 @@ public class DihChatApplicationService {
         if (!StringUtils.hasText(prompt) || !StringUtils.hasText(name)) {
             return false;
         }
-        String lowerPrompt = prompt.toLowerCase(Locale.ROOT);
-        if (name.length() >= 2
-                && lowerPrompt.contains(name.toLowerCase(Locale.ROOT))) {
+        String normalizedPrompt = normalizeEntityMatchText(prompt);
+        if (containsEntityAlias(normalizedPrompt, normalizeEntityMatchText(name), 2)) {
             return true;
         }
         String compactName = name.replaceAll("[_\\-\\s]", "");
-        if (compactName.length() >= 2
-                && lowerPrompt.contains(compactName.toLowerCase(Locale.ROOT))) {
+        if (containsEntityAlias(normalizedPrompt, normalizeEntityMatchText(compactName), 2)) {
             return true;
         }
         if (!StringUtils.hasText(label)) {
             return false;
         }
-        if (label.length() >= 2 && prompt.contains(label)) {
+        String normalizedLabel = normalizeEntityMatchText(label);
+        if (containsEntityAlias(normalizedPrompt, normalizedLabel, 2)) {
             return true;
         }
-        String trimmedLabel = label.replaceAll("(数据|表|信息|记录|日志|详情|列表)$", "");
-        return trimmedLabel.length() >= 2 && prompt.contains(trimmedLabel);
+        String coreLabel = normalizedLabel.replaceAll(
+                "(数据|表|信息|记录|日志|详情|列表|相关|的)+$", "");
+        if (containsEntityAlias(normalizedPrompt, coreLabel, 3)) {
+            return true;
+        }
+        String conceptLabel = coreLabel.replaceAll("(事件|消息)$", "");
+        return containsEntityAlias(normalizedPrompt, conceptLabel, 3);
+    }
+
+    private String normalizeEntityMatchText(String value) {
+        return Objects.toString(value, "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[_\\-\\s]+", "");
+    }
+
+    private boolean containsEntityAlias(String prompt, String alias, int minimumLength) {
+        return alias != null
+                && alias.length() >= minimumLength
+                && prompt.contains(alias);
     }
 
     private List<Map<String, Object>> controlledAttributeRows(String result) {
@@ -3442,7 +3475,32 @@ public class DihChatApplicationService {
             return;
         }
         workflow.getContext().putAll(values);
+        String resolvedEntity = stringValue(values, "verifiedMetaAttributeEntity", "");
+        if (StringUtils.hasText(resolvedEntity)) {
+            workflow.getContext().put("selectedEntity", resolvedEntity);
+            advanceResolvedEntityStep(workflow);
+        }
         workflowStateStore.upsert(chatSession, workflow);
+    }
+
+    /**
+     * A deterministic entity match is equivalent to the user's ENTITY_SELECTION
+     * submission. Persist that decision so a retry cannot fall back to the selection
+     * card merely because the model did not emit one this turn.
+     */
+    private void advanceResolvedEntityStep(AgentWorkflowState workflow) {
+        AgentWorkflowStep step = workflow.getStep();
+        if (step != null && !Set.of(
+                AgentWorkflowStep.INTENT_CONFIRMATION,
+                AgentWorkflowStep.ENTITY_META,
+                AgentWorkflowStep.ENTITY_SELECTION,
+                AgentWorkflowStep.BLOCKED).contains(step)) {
+            return;
+        }
+        workflow.setStep(AgentWorkflowStep.ATTRIBUTE_META);
+        workflow.setStatus("active");
+        workflow.setStateRevision(workflow.getStateRevision() + 1);
+        workflow.setUpdatedAt(Instant.now().toString());
     }
 
     private Map<String, Object> verifiedMetaSnapshot(ChatSession chatSession) {
@@ -5174,26 +5232,43 @@ public class DihChatApplicationService {
         if (!visualizationSession) {
             return;
         }
-        if (parts.stream().anyMatch(part -> Set.of(
-                "info-steps", "confirm", "config",
-                "visualization-chart-preview", "visualization-chart-record",
-                "visualization-app-record", "visualization-dashboard-record")
-                .contains(part.getType()))) {
-            return;
-        }
         AgentWorkflowState workflow = workflowStateStore == null
                 ? null
                 : workflowStateStore.loadActive(
                         chatSession, chatSession.getType()).orElse(null);
+        McpToolLogStream.SuccessfulToolCall entityCall =
+                latestSuccessfulCall(evidence, VISUALIZATION_META_ENTITY_TOOLS);
+        if (entityCall == null) {
+            return;
+        }
+        Map<String, Object> entityPayload = metaToolPayload(entityCall.result());
+        List<Map<String, Object>> entityRows = firstNonEmptyListOfMaps(
+                entityPayload.get("entityList"),
+                entityPayload.get("entity_list"),
+                entityPayload.get("entities"),
+                entityPayload.get("datalist"),
+                mapValue(entityPayload.get("result")).get("rows"));
+        String resolvedEntity = resolveAttributeMetaEntity(
+                workflow, latestUserPrompt(chatSession), entityRows, false);
+        if (StringUtils.hasText(resolvedEntity)) {
+            if (removePendingEntitySelectionParts(
+                    parts, visualizationAgentType(chatSession))) {
+                log.debug("可视化实体已明确，移除模型生成的实体选择卡: entity={}",
+                        resolvedEntity);
+            }
+            return;
+        }
         if (workflow != null && !Set.of(
                 AgentWorkflowStep.INTENT_CONFIRMATION,
                 AgentWorkflowStep.ENTITY_META,
                 AgentWorkflowStep.ENTITY_SELECTION).contains(workflow.getStep())) {
             return;
         }
-        McpToolLogStream.SuccessfulToolCall entityCall =
-                latestSuccessfulCall(evidence, VISUALIZATION_META_ENTITY_TOOLS);
-        if (entityCall == null) {
+        if (parts.stream().anyMatch(part -> Set.of(
+                "info-steps", "confirm", "config",
+                "visualization-chart-preview", "visualization-chart-record",
+                "visualization-app-record", "visualization-dashboard-record")
+                .contains(part.getType()))) {
             return;
         }
         boolean repaired = stripMalformedInfoStepsFences(parts);
@@ -5214,6 +5289,45 @@ public class DihChatApplicationService {
                 .status("pending")
                 .metadata(metadata)
                 .build());
+    }
+
+    private boolean removePendingEntitySelectionParts(
+            List<ChatMessagePart> parts,
+            String agentType) {
+        return parts.removeIf(part -> {
+            if (!"info-steps".equals(part.getType())) {
+                return false;
+            }
+            String status = part.getStatus() == null
+                    ? "pending" : part.getStatus().toLowerCase(Locale.ROOT);
+            if (!"pending".equals(status)) {
+                return false;
+            }
+            return VisualizationAgentTypes.selectEntityAction(agentType).equals(
+                    stringValue(part.getMetadata(), "action", ""));
+        });
+    }
+
+    private String latestUserPrompt(ChatSession chatSession) {
+        if (chatSession == null || !StringUtils.hasText(chatSession.getMessages())) {
+            return "";
+        }
+        try {
+            List<Message> messages = JacksonUtil.toList(
+                    chatSession.getMessages(), new TypeReference<List<Message>>() {
+                    });
+            for (int index = messages.size() - 1; index >= 0; index--) {
+                Message message = messages.get(index);
+                if (message != null
+                        && "user".equals(message.getSender())
+                        && StringUtils.hasText(message.getContent())) {
+                    return message.getContent();
+                }
+            }
+        } catch (RuntimeException e) {
+            log.debug("读取可视化会话最新用户提示失败: {}", e.getMessage());
+        }
+        return "";
     }
 
     private boolean stripMalformedInfoStepsFences(List<ChatMessagePart> parts) {
@@ -6292,21 +6406,52 @@ public class DihChatApplicationService {
         String planId = stringValue(raw, "planId", "");
         Map<String, Object> query = mapValue(raw.get("query"));
         String tool = stringValue(query, "tool", "");
+        if (!StringUtils.hasText(planId)) {
+            blockVisualizationPart(part, raw, "query_plan_missing",
+                    "图表缺少查询方案标识，不能验证或入库");
+            return;
+        }
         Map<String, Object> approvedPlan = approvedVisualizationPlan(chatSession, planId);
+        if (approvedPlan.isEmpty()) {
+            blockVisualizationPart(part, raw, "query_plan_not_approved",
+                    "查询方案尚未批准，图表不能验证或入库");
+            return;
+        }
         Map<String, Object> approvedQuery = mapValue(approvedPlan.get("query"));
         String approvedTool = stringValue(approvedQuery, "tool", "");
         Map<String, Object> approvedRequest = VisualizationQueryNormalizer.normalizeRequest(
                 mapValue(approvedQuery.get("request")));
+        if (!tool.equals(approvedTool)) {
+            blockVisualizationPart(part, raw, "query_tool_mismatch",
+                    "图表查询工具与已批准方案不一致，本次结果未验证");
+            return;
+        }
+        if (!VISUALIZATION_DATA_TOOLS.contains(approvedTool)) {
+            blockVisualizationPart(part, raw, "query_tool_unsupported",
+                    "已批准方案使用的查询工具不在允许的数据查询范围内");
+            return;
+        }
+        if (approvedRequest.isEmpty()) {
+            blockVisualizationPart(part, raw, "query_plan_invalid",
+                    "已批准方案缺少可执行的查询参数，图表不能验证或入库");
+            return;
+        }
         McpToolLogStream.SuccessfulToolCall call = evidence.successfulCall(approvedTool);
-        if (!StringUtils.hasText(planId)
-                || approvedPlan.isEmpty()
-                || !tool.equals(approvedTool)
-                || !VISUALIZATION_DATA_TOOLS.contains(approvedTool)
-                || approvedRequest.isEmpty()
-                || call == null
-                || !hasApprovedVisualizationPlan(chatSession, planId)) {
-            blockVisualizationPart(part, raw, "query_plan_unverified",
-                    "查询方案未批准或本轮数据 MCP 未成功，图表不能验证或入库");
+        Map<String, Object> currentOption = visualizationChartOptionFromMetadata(raw);
+        if (call == null) {
+            if (currentOption.isEmpty()) {
+                blockVisualizationPart(part, raw, "missing_echarts_option",
+                        "图表缺少可渲染的 echarts.option");
+                return;
+            }
+            VisualizationSnapshotReuse reuse = reusableVisualizationSnapshot(
+                    chatSession, part, planId, approvedTool, approvedRequest, currentOption);
+            if (reuse.success()) {
+                applyReusedVisualizationSnapshot(raw, planId, approvedTool,
+                        approvedRequest, currentOption, reuse);
+            } else {
+                blockVisualizationPart(part, raw, reuse.code(), reuse.message());
+            }
             return;
         }
 
@@ -6353,13 +6498,337 @@ public class DihChatApplicationService {
         raw.put("queryMeta", mapValue(toolResult.get("meta")));
         raw.put("echartsOption", option);
         raw.put("amisConfig", Map.of("type", "chart", "config", option));
-        raw.put("queriedAt", call.time().toString());
+        String queriedAt = call.time() == null ? "" : call.time().toString();
+        raw.put("queriedAt", queriedAt);
+        raw.put("sourceQueriedAt", queriedAt);
         raw.put("validationStatus", "success");
         raw.put("validated", true);
+        raw.put("validatedAt", Instant.now().toString());
+        raw.put("evidenceMode", "fresh_query");
+        raw.put("queryFingerprint", visualizationQueryFingerprint(approvedTool, approvedRequest));
+        raw.put("queryDataDigest", visualizationDataDigest(option));
         raw.remove("api");
         raw.remove("url");
         raw.remove("echarts");
         raw.remove("option");
+        raw.remove("validationCode");
+        raw.remove("validationMessage");
+        raw.remove("blockedAction");
+    }
+
+    private VisualizationSnapshotReuse reusableVisualizationSnapshot(
+            ChatSession chatSession,
+            ChatMessagePart currentPart,
+            String planId,
+            String tool,
+            Map<String, Object> approvedRequest,
+            Map<String, Object> currentOption) {
+        if (chatSession == null || !StringUtils.hasText(chatSession.getMessages())) {
+            return VisualizationSnapshotReuse.failure("query_evidence_missing",
+                    "本轮没有成功执行数据查询，且会话内没有可复用的已验证查询快照");
+        }
+        String currentDigest = visualizationDataDigest(currentOption);
+        boolean expired = false;
+        boolean dataMismatch = false;
+        boolean unverifiable = false;
+        try {
+            List<Message> messages = JacksonUtil.toList(
+                    chatSession.getMessages(), new TypeReference<List<Message>>() {
+                    });
+            if (messages == null) {
+                messages = List.of();
+            }
+            Instant now = Instant.now();
+            for (int messageIndex = messages.size() - 1; messageIndex >= 0; messageIndex--) {
+                Message message = messages.get(messageIndex);
+                if (message == null || message.getParts() == null) {
+                    continue;
+                }
+                for (int partIndex = message.getParts().size() - 1; partIndex >= 0; partIndex--) {
+                    ChatMessagePart candidate = message.getParts().get(partIndex);
+                    if (candidate == null
+                            || candidate == currentPart
+                            || !"visualization-chart-preview".equals(candidate.getType())
+                            || candidate.getMetadata() == null) {
+                        continue;
+                    }
+                    Map<String, Object> snapshot = candidate.getMetadata();
+                    if (!"success".equals(stringValue(
+                            snapshot, "validationStatus", ""))) {
+                        continue;
+                    }
+                    if (!planId.equals(stringValue(snapshot, "planId", ""))) {
+                        continue;
+                    }
+                    Map<String, Object> snapshotQuery = VisualizationQueryNormalizer.normalizeQuery(
+                            snapshot.get("query"));
+                    if (!tool.equals(stringValue(snapshotQuery, "tool", ""))
+                            || !approvedRequest.equals(VisualizationQueryNormalizer.normalizeRequest(
+                            mapValue(snapshotQuery.get("request"))))) {
+                        continue;
+                    }
+                    Map<String, Object> snapshotOption =
+                            visualizationChartOptionFromMetadata(snapshot);
+                    if (snapshotOption.isEmpty()) {
+                        continue;
+                    }
+                    String queriedAt = visualizationSnapshotTime(snapshot);
+                    Instant sourceQueriedAt = parseVisualizationInstant(queriedAt);
+                    if (sourceQueriedAt == null
+                            || Duration.between(sourceQueriedAt, now)
+                            .compareTo(Duration.ofSeconds(
+                                    Math.max(1L, visualizationSnapshotTtlSeconds))) > 0) {
+                        expired = true;
+                        continue;
+                    }
+                    String snapshotDigest = stringValue(snapshot, "queryDataDigest", "");
+                    if (!StringUtils.hasText(snapshotDigest)) {
+                        snapshotDigest = visualizationDataDigest(snapshotOption);
+                    }
+                    if (!StringUtils.hasText(currentDigest)
+                            || !StringUtils.hasText(snapshotDigest)) {
+                        unverifiable = true;
+                        continue;
+                    }
+                    if (!currentDigest.equals(snapshotDigest)) {
+                        dataMismatch = true;
+                        continue;
+                    }
+                    String artifactId = firstNonBlank(
+                            stringValue(snapshot, "artifactId", ""),
+                            stringValue(snapshot, "id", ""),
+                            candidate.getId());
+                    return VisualizationSnapshotReuse.success(
+                            artifactId,
+                            queriedAt,
+                            mapValue(snapshot.get("queryMeta")),
+                            currentDigest);
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("读取可复用可视化查询快照失败: {}", e.getMessage());
+        }
+        if (expired) {
+            return VisualizationSnapshotReuse.failure("query_snapshot_expired",
+                    "会话内的已验证查询快照已过期，请重新执行数据查询");
+        }
+        if (dataMismatch) {
+            return VisualizationSnapshotReuse.failure("query_data_mismatch",
+                    "当前图表数据与可复用的已验证查询快照不一致，本次结果未验证");
+        }
+        if (unverifiable) {
+            return VisualizationSnapshotReuse.failure("query_data_unverifiable",
+                    "无法从图表配置中提取可核验的数据，本次结果未验证");
+        }
+        return VisualizationSnapshotReuse.failure("query_evidence_missing",
+                "本轮没有成功执行数据查询，且会话内没有可复用的已验证查询快照");
+    }
+
+    private void applyReusedVisualizationSnapshot(
+            Map<String, Object> raw,
+            String planId,
+            String tool,
+            Map<String, Object> request,
+            Map<String, Object> option,
+            VisualizationSnapshotReuse reuse) {
+        Map<String, Object> verifiedQuery = new LinkedHashMap<>();
+        verifiedQuery.put("tool", tool);
+        verifiedQuery.put("request", request);
+        raw.put("query", verifiedQuery);
+        raw.put("queryMeta", reuse.queryMeta());
+        raw.put("echartsOption", option);
+        raw.put("amisConfig", Map.of("type", "chart", "config", option));
+        raw.put("queriedAt", reuse.queriedAt());
+        raw.put("sourceQueriedAt", reuse.queriedAt());
+        raw.put("sourceArtifactId", reuse.artifactId());
+        raw.put("sourcePlanId", planId);
+        raw.put("validationStatus", "success");
+        raw.put("validated", true);
+        raw.put("validatedAt", Instant.now().toString());
+        raw.put("evidenceMode", "reused_snapshot");
+        raw.put("snapshotReused", true);
+        raw.put("snapshotTtlSeconds", visualizationSnapshotTtlSeconds);
+        raw.put("queryFingerprint", visualizationQueryFingerprint(tool, request));
+        raw.put("queryDataDigest", reuse.dataDigest());
+        raw.remove("api");
+        raw.remove("url");
+        raw.remove("echarts");
+        raw.remove("option");
+        raw.remove("validationCode");
+        raw.remove("validationMessage");
+        raw.remove("blockedAction");
+    }
+
+    private Map<String, Object> visualizationChartOptionFromMetadata(Map<String, Object> raw) {
+        Object value = firstNonNull(
+                raw.get("echartsOption"),
+                mapValue(raw.get("echarts")).get("option"),
+                mapValue(raw.get("amisConfig")).get("config"),
+                mapValue(raw.get("config")).get("config"),
+                raw.get("option"));
+        if (value instanceof String text) {
+            return parseJsonObject(text);
+        }
+        return mapValue(value);
+    }
+
+    private String visualizationSnapshotTime(Map<String, Object> metadata) {
+        return firstNonBlank(
+                stringValue(metadata, "sourceQueriedAt", ""),
+                stringValue(metadata, "queriedAt", ""));
+    }
+
+    private Instant parseVisualizationInstant(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value).toInstant();
+        } catch (RuntimeException ignored) {
+            // 兼容历史数据中不带时区的本地时间。
+        }
+        try {
+            return LocalDateTime.parse(value).atZone(ZoneId.of("Asia/Shanghai")).toInstant();
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private String visualizationQueryFingerprint(String tool, Map<String, Object> request) {
+        Map<String, Object> query = new LinkedHashMap<>();
+        query.put("tool", tool);
+        query.put("request", request);
+        return sha256(JacksonUtil.toJson(query));
+    }
+
+    private String visualizationDataDigest(Object option) {
+        String signature = visualizationDataSignature(option);
+        return StringUtils.hasText(signature) ? sha256(signature) : "";
+    }
+
+    private String visualizationDataSignature(Object optionValue) {
+        Map<String, Object> option = optionValue instanceof Map<?, ?>
+                ? mapValue(optionValue)
+                : visualizationChartOptionFromMetadata(Map.of("option", optionValue));
+        if (option.isEmpty()) {
+            return "";
+        }
+        List<String> pairs = new ArrayList<>();
+        Map<String, Object> dataset = mapValue(option.get("dataset"));
+        collectVisualizationDataPairs(dataset.get("source"), List.of(), pairs);
+        List<String> axisLabels = visualizationAxisLabels(option.get("xAxis"));
+        for (Object seriesValue : listValue(option.get("series"))) {
+            Map<String, Object> series = mapValue(seriesValue);
+            collectVisualizationDataPairs(series.get("data"), axisLabels, pairs);
+        }
+        if (pairs.isEmpty()) {
+            return "";
+        }
+        return pairs.stream().distinct().sorted().collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    private void collectVisualizationDataPairs(Object data,
+                                               List<String> axisLabels,
+                                               List<String> pairs) {
+        if (!(data instanceof List<?> values)) {
+            return;
+        }
+        int index = 0;
+        for (Object item : values) {
+            String fallbackLabel = index < axisLabels.size() ? axisLabels.get(index) : "";
+            if (item instanceof Map<?, ?>) {
+                Map<String, Object> row = mapValue(item);
+                String label = firstNonBlank(
+                        stringValue(row, "bucket", ""),
+                        stringValue(row, "name", ""),
+                        stringValue(row, "category", ""),
+                        stringValue(row, "x", ""),
+                        stringValue(row, "label", ""),
+                        fallbackLabel);
+                addVisualizationDataPair(pairs, label, firstNonNull(
+                        row.get("value"),
+                        row.get("count"),
+                        row.get("total"),
+                        row.get("y")));
+            } else if (item instanceof List<?> row) {
+                if (row.size() >= 2) {
+                    addVisualizationDataPair(pairs, Objects.toString(row.get(0), ""), row.get(1));
+                } else if (row.size() == 1) {
+                    addVisualizationDataPair(pairs, fallbackLabel, row.get(0));
+                }
+            } else {
+                addVisualizationDataPair(pairs, fallbackLabel, item);
+            }
+            index++;
+        }
+    }
+
+    private List<String> visualizationAxisLabels(Object axisValue) {
+        List<String> labels = new ArrayList<>();
+        Map<String, Object> axis = mapValue(axisValue);
+        if (axis.isEmpty() && axisValue instanceof List<?> axes) {
+            for (Object candidate : axes) {
+                Map<String, Object> item = mapValue(candidate);
+                if (!item.isEmpty()) {
+                    axis = item;
+                    break;
+                }
+            }
+        }
+        for (Object label : listValue(axis.get("data"))) {
+            labels.add(Objects.toString(label, ""));
+        }
+        return labels;
+    }
+
+    private void addVisualizationDataPair(List<String> pairs, String label, Object value) {
+        String normalizedValue = visualizationNumericValue(value);
+        if (!StringUtils.hasText(label) || !StringUtils.hasText(normalizedValue)) {
+            return;
+        }
+        pairs.add(label.trim() + "=" + normalizedValue);
+    }
+
+    private String visualizationNumericValue(Object value) {
+        if (value instanceof Number number) {
+            try {
+                return BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros().toPlainString();
+            } catch (NumberFormatException ignored) {
+                return "";
+            }
+        }
+        if (value instanceof String text && StringUtils.hasText(text)) {
+            try {
+                return new BigDecimal(text.trim()).stripTrailingZeros().toPlainString();
+            } catch (NumberFormatException ignored) {
+                return "";
+            }
+        }
+        return "";
+    }
+
+    private record VisualizationSnapshotReuse(
+            String code,
+            String message,
+            String artifactId,
+            String queriedAt,
+            Map<String, Object> queryMeta,
+            String dataDigest) {
+        private boolean success() {
+            return !StringUtils.hasText(code);
+        }
+
+        private static VisualizationSnapshotReuse success(String artifactId,
+                                                          String queriedAt,
+                                                          Map<String, Object> queryMeta,
+                                                          String dataDigest) {
+            return new VisualizationSnapshotReuse("", "", artifactId, queriedAt,
+                    queryMeta == null ? Map.of() : new LinkedHashMap<>(queryMeta), dataDigest);
+        }
+
+        private static VisualizationSnapshotReuse failure(String code, String message) {
+            return new VisualizationSnapshotReuse(code, message, "", "", Map.of(), "");
+        }
     }
 
     private boolean hasSafeVisualizationQuery(Map<String, Object> raw) {
@@ -6369,10 +6838,6 @@ public class DihChatApplicationService {
         return VISUALIZATION_DATA_TOOLS.contains(tool)
                 && !request.isEmpty()
                 && !StringUtils.hasText(VisualizationQueryValidator.validate(tool, request));
-    }
-
-    private boolean hasApprovedVisualizationPlan(ChatSession chatSession, String planId) {
-        return !approvedVisualizationPlan(chatSession, planId).isEmpty();
     }
 
     private Map<String, Object> approvedVisualizationPlan(ChatSession chatSession,
@@ -7059,7 +7524,13 @@ public class DihChatApplicationService {
         record.put("amisConfig", amisConfig);
         record.put("api", visualizationRestPath(stringValue(query, "tool", "")));
         record.put("queriedAt", stringValue(raw, "queriedAt", null));
+        record.put("sourceQueriedAt", stringValue(raw, "sourceQueriedAt", null));
         record.put("validationStatus", stringValue(raw, "validationStatus", "unverified"));
+        record.put("evidenceMode", stringValue(raw, "evidenceMode", null));
+        record.put("queryFingerprint", stringValue(raw, "queryFingerprint", null));
+        record.put("queryDataDigest", stringValue(raw, "queryDataDigest", null));
+        record.put("sourceArtifactId", stringValue(raw, "sourceArtifactId", null));
+        record.put("snapshotReused", Boolean.TRUE.equals(raw.get("snapshotReused")));
         record.put("status", stringValue(raw, "status", "temporary"));
         record.put("source", stringValue(raw, "source", "session"));
         record.put("recordKind", "chart");

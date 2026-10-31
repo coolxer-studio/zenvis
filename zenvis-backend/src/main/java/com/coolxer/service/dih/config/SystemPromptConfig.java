@@ -106,7 +106,8 @@ public class SystemPromptConfig {
                 """
                         你是 ZenVis 临时图表智能体，只负责基于已发布 Meta 查询真实数据并生成临时图表。
                         先调用实体列表 MCP，再调用字段列表 MCP；实体和字段只能使用真实返回值，确认卡必须展示 label 与 name。
-                        实体不唯一时输出 action=visualization_chart.select_entity_from_meta 的 zenvis:visualization-chart-decision 选择卡并停止。
+                        用户提示词或工作流上下文已明确唯一目标实体时，直接使用该实体查询字段 Meta 并生成查询方案，不得输出实体选择卡。
+                        只有存在多个同样合理的候选且无法唯一确定实体时，才输出 action=visualization_chart.select_entity_from_meta 的 zenvis:visualization-chart-decision 选择卡并停止。
                         Meta 完成后必须输出 action=visualization_chart.confirm_query_plan 的查询方案卡并停止；用户确认后才能执行白名单数据工具。
                         time_range.preset 只能使用 TODAY、YESTERDAY、LAST_24_HOURS、LAST_7_DAYS、LAST_30_DAYS、THIS_MONTH、CUSTOM 或 ALL_TIME；
                         不限时间必须写 ALL_TIME，禁止写 ALL；CUSTOM 必须同时提供 start_time、end_time，且跨度不超过 3 年。

@@ -15,6 +15,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -42,6 +43,87 @@ class AttachmentToolProviderFactoryTest {
                 list.call("{}"), new TypeReference<Map<String, Object>>() { });
         assertThat(response).containsEntry("status", "ok");
         assertThat(JacksonUtil.toJson(response)).contains("sales.csv", "ready");
+        assertThat(bundle.systemPrompt())
+                .contains("attachment_list", "原样使用清单中的 fileId", "不得使用文件名");
+    }
+
+    @Test
+    void resolvesUniqueFileNameToAllowedFileIdForLegacyModelCalls() {
+        ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        AttachmentContentService contentService = mock(AttachmentContentService.class);
+        ChatAttachmentRecord record = record(1);
+        when(attachmentService.accessibleRecords(eq(user(1)), eq("chat-1"), any()))
+                .thenReturn(List.of(record));
+        when(contentService.read(eq(record), eq("lines:1-2"), anyInt()))
+                .thenReturn(new AttachmentContentService.ReadResult(
+                        "file-1", "sales.csv", "lines:1-2", null, List.of(), false, null));
+        AttachmentToolProviderFactory factory = new AttachmentToolProviderFactory(
+                attachmentService, contentService, new AttachmentProperties());
+
+        ToolCallback read = callback(factory.create(user(1), "chat-1", null, List.of()),
+                "attachment_read");
+        Map<String, Object> response = JacksonUtil.toMap(
+                read.call("{\"fileId\":\"sales.csv\",\"locator\":\"lines:1-2\"}"),
+                new TypeReference<Map<String, Object>>() { });
+
+        assertThat(response).containsEntry("status", "ok");
+        assertThat(JacksonUtil.toJson(response)).contains("file-1", "sales.csv", "lines:1-2");
+    }
+
+    @Test
+    void rejectsAmbiguousFileNameAndListsCandidateFileIds() {
+        ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        ChatAttachmentRecord first = record(1).setFileId("file-1");
+        ChatAttachmentRecord second = record(1).setFileId("file-2");
+        when(attachmentService.accessibleRecords(eq(user(1)), eq("chat-1"), any()))
+                .thenReturn(List.of(first, second));
+        AttachmentToolProviderFactory factory = new AttachmentToolProviderFactory(
+                attachmentService, mock(AttachmentContentService.class), new AttachmentProperties());
+        ToolCallback outline = callback(factory.create(user(1), "chat-1", null, List.of()),
+                "attachment_outline");
+
+        assertThatThrownBy(() -> outline.call("{\"fileId\":\"sales.csv\"}"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("匹配到多个附件")
+                .hasMessageContaining("file-1", "file-2", "sales.csv");
+    }
+
+    @Test
+    void missingFileIdExplainsHowToRecoverWithoutLeakingOtherAttachments() {
+        ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        ChatAttachmentRecord allowed = record(1);
+        ChatAttachmentRecord otherUser = record(2).setFileId("file-2").setFileName("private.csv");
+        when(attachmentService.accessibleRecords(eq(user(1)), eq("chat-1"), any()))
+                .thenReturn(List.of(allowed, otherUser));
+        AttachmentToolProviderFactory factory = new AttachmentToolProviderFactory(
+                attachmentService, mock(AttachmentContentService.class), new AttachmentProperties());
+        ToolCallback read = callback(factory.create(user(1), "chat-1", null, List.of()),
+                "attachment_read");
+
+        assertThatThrownBy(() -> read.call(
+                "{\"fileId\":\"missing.md\",\"locator\":\"lines:1-2\"}"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("attachment_list")
+                .hasMessageContaining("不要使用文件名")
+                .hasMessageContaining("sales.csv", "file-1")
+                .hasMessageNotContaining("private.csv")
+                .hasMessageNotContaining("file-2");
+    }
+
+    @Test
+    void toolSchemaRequiresUuidRatherThanFileName() {
+        ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        when(attachmentService.accessibleRecords(eq(user(1)), eq("chat-1"), any()))
+                .thenReturn(List.of(record(1)));
+        AttachmentToolProviderFactory factory = new AttachmentToolProviderFactory(
+                attachmentService, mock(AttachmentContentService.class), new AttachmentProperties());
+        AttachmentToolProviderFactory.AttachmentToolBundle bundle =
+                factory.create(user(1), "chat-1", null, List.of());
+
+        assertThat(callback(bundle, "attachment_read").getToolDefinition().inputSchema())
+                .contains("UUID fileId", "不能使用文件名");
+        assertThat(callback(bundle, "attachment_table_query").getToolDefinition().inputSchema())
+                .contains("UUID fileId", "不能使用文件名");
     }
 
     @Test

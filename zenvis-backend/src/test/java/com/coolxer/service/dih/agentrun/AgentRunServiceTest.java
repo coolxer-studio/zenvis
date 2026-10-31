@@ -12,6 +12,7 @@ import com.coolxer.dao.mysql.repository.AgentRunInputRepository;
 import com.coolxer.dao.mysql.repository.AgentRunRepository;
 import com.coolxer.dao.mysql.repository.ChatSessionRepository;
 import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
+import com.coolxer.model.dih.agentrun.AgentRunInteraction;
 import com.coolxer.model.dih.dto.AgentRunSteerDto;
 import com.coolxer.model.dih.dto.AgentRunRequestDto;
 import com.coolxer.model.dih.vo.AgentRunVo;
@@ -172,6 +173,22 @@ class AgentRunServiceTest {
         service.markApprovalUpdated("run-1", "approval-1", "APPROVED", "1");
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.QUEUED);
         assertThat(run.getPendingAction()).isNull();
+    }
+
+    @Test
+    void markWaitingUserPersistsEscapedLineBreaksAsRealLineBreaks() {
+        AgentRun run = run("run-1", AgentRunStatus.RUNNING);
+        when(runRepository.findByRunIdForUpdate("run-1")).thenReturn(Optional.of(run));
+
+        AgentRun waiting = service.markWaitingUser(
+                "run-1", "需要补充：\\n1）Kafka 地址\\r\\n2）Topic 名称", "1");
+        AgentRunInteraction interaction = AgentRunInteraction.fromRun(waiting);
+
+        assertThat(interaction).isNotNull();
+        assertThat(interaction.getPrompt())
+                .isEqualTo("需要补充：\n1）Kafka 地址\n2）Topic 名称");
+        assertThat(waiting.getPausedReason()).contains("\n1）Kafka 地址\n2）Topic 名称");
+        assertThat(waiting.getPendingAction()).doesNotContain("\\\\n");
     }
 
     @Test

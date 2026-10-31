@@ -64,3 +64,26 @@ export const isSupersededVisualizationPlanCard = (
   const own = workflowRevision(part);
   return current !== undefined && own !== undefined && own < current;
 };
+
+/**
+ * Once the workflow has advanced past entity selection, an old pending selector
+ * is dead UI. It still reports "历史卡片", but leaving it visible makes a resolved
+ * request look like it is asking the user to choose the entity again.
+ */
+export const isSupersededVisualizationEntitySelectionCard = (
+  part: ChatMessagePart,
+  revisions: WorkflowRevisionMap,
+): boolean => {
+  if (part.type !== 'info-steps') return false;
+  const action = part.metadata?.action;
+  if (typeof action !== 'string' || !action.endsWith('.select_entity_from_meta')) {
+    return false;
+  }
+  const status = typeof part.status === 'string' ? part.status.toLowerCase() : '';
+  if (status !== 'pending') return false;
+
+  const id = workflowId(part);
+  const current = id ? revisions[id] : undefined;
+  const own = workflowRevision(part);
+  return current !== undefined && own !== undefined && own < current;
+};

@@ -12,6 +12,7 @@
           :run="agentRunFromPart(part)"
           :current-tool="agentRunToolFromPart(part)"
           :activity-events="agentRunEventsFromPart(part)"
+          :chart-needs-verification="runHasUnverifiedChart"
           @resume="emit('resumeAgentRun', $event)"
           @reply="emit('replyAgentRun', $event)"
         />
@@ -80,7 +81,9 @@
           v-else-if="part.type === 'visualization-dashboard-decision'"
           :part="part"
           :interactive="interactive"
-          @choose-visualization-dashboard-decision="emit('chooseVisualizationDashboardDecision', $event)"
+          @choose-visualization-dashboard-decision="
+            emit('chooseVisualizationDashboardDecision', $event)
+          "
         />
         <ConfigRecordMessagePart v-else-if="part.type === 'config-record'" :part="part" />
         <DataPushServiceRecordMessagePart
@@ -122,7 +125,11 @@ import VisualizationMessagePart from './message-parts/visualization-message-part
 import { createMarkdownRenderer, markdownRendererKey } from './message-parts/message-part-context';
 import { collapseLegacyToolCallParts, isToolCallPart } from './tool-call-parts';
 import { isRagSearchPart } from './rag-search-parts';
-import { isSupersededVisualizationPlanCard } from './workflow-card-state';
+import {
+  isSupersededVisualizationEntitySelectionCard,
+  isSupersededVisualizationPlanCard,
+} from './workflow-card-state';
+import { hasBlockedVisualizationChart } from './message-parts/visualization-preview-state';
 import type { AgentRun } from '@/types/type-dih';
 import type { AgentRunEvent } from '@/types/type-dih';
 
@@ -167,11 +174,14 @@ const emit = defineEmits<{
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
   (e: 'resumeAgentRun', runId: string): void;
-  (e: 'replyAgentRun', payload: {
-    runId: string;
-    interactionId: string;
-    message: string;
-  }): void;
+  (
+    e: 'replyAgentRun',
+    payload: {
+      runId: string;
+      interactionId: string;
+      message: string;
+    },
+  ): void;
   (
     e: 'chooseMetadataConfigDecision',
     payload: {
@@ -300,7 +310,9 @@ const renderParts = computed<ChatMessagePart[]>(() => {
       : parseFallbackThinkingParts(props.message.content);
   const rendered = collapseLegacyToolCallParts(parts, props.message.id || 'message');
   const visible = rendered.filter(
-    part => !isSupersededVisualizationPlanCard(part, props.workflowRevisions),
+    part =>
+      !isSupersededVisualizationPlanCard(part, props.workflowRevisions) &&
+      !isSupersededVisualizationEntitySelectionCard(part, props.workflowRevisions),
   );
   const errorContent = props.message.isError ? (props.message.content || '').trim() : '';
   if (
@@ -318,6 +330,8 @@ const renderParts = computed<ChatMessagePart[]>(() => {
     },
   ];
 });
+
+const runHasUnverifiedChart = computed(() => hasBlockedVisualizationChart(renderParts.value));
 
 const toolGroupAt = (index: number): ChatMessagePart[] => {
   const parts: ChatMessagePart[] = [];
@@ -355,7 +369,7 @@ const agentRunToolFromPart = (part: ChatMessagePart): Record<string, unknown> | 
 
 const agentRunEventsFromPart = (part: ChatMessagePart): AgentRunEvent[] => {
   const events = part.metadata?.activityEvents;
-  return Array.isArray(events) ? events as AgentRunEvent[] : [];
+  return Array.isArray(events) ? (events as AgentRunEvent[]) : [];
 };
 
 onBeforeUnmount(() => {

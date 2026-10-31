@@ -148,8 +148,7 @@
         >
           <h3>{{ detail.pendingInteraction.title || '需要处理任务交互' }}</h3>
           <p>
-            {{ detail.pendingInteraction.prompt
-              || resolveAgentRunWaitingQuestion(detail)
+            {{ resolveAgentRunWaitingQuestion(detail)
               || '任务正在等待你补充继续执行所需的信息。' }}
           </p>
           <template v-if="detail.pendingInteraction.kind === 'user_input'">

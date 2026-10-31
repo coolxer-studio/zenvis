@@ -103,6 +103,21 @@ public class AgentRunInteraction {
         return "legacy-" + UUID.nameUUIDFromBytes(raw.getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * Model-generated prompts sometimes contain literal line-break escape sequences.
+     * Persist them as real line breaks so every client renders the same content.
+     */
+    public static String normalizePromptText(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\r", "\n")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
+    }
+
     private static String text(Object value) {
         return value == null ? "" : value.toString().trim();
     }

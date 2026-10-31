@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   currentWorkflowRevisions,
   isCurrentWorkflowPart,
+  isSupersededVisualizationEntitySelectionCard,
   isSupersededVisualizationPlanCard,
 } from './workflow-card-state.ts';
 import {
@@ -72,12 +73,36 @@ test('旧 revision 的待确认查询方案卡被更高 revision 取代', () => 
     },
   };
 
-  const revisions = currentWorkflowRevisions([
-    { parts: [oldPlan, currentPlan] },
-  ]);
+  const revisions = currentWorkflowRevisions([{ parts: [oldPlan, currentPlan] }]);
 
   assert.equal(isSupersededVisualizationPlanCard(oldPlan, revisions), true);
   assert.equal(isSupersededVisualizationPlanCard(currentPlan, revisions), false);
+});
+
+test('旧 revision 的实体选择卡被更高 revision 取代', () => {
+  const oldSelection = {
+    type: 'info-steps',
+    status: 'pending',
+    metadata: {
+      workflowId: 'workflow-1',
+      stateRevision: 6,
+      action: 'visualization_chart.select_entity_from_meta',
+    },
+  };
+  const currentSelection = {
+    type: 'info-steps',
+    status: 'pending',
+    metadata: {
+      workflowId: 'workflow-1',
+      stateRevision: 8,
+      action: 'visualization_chart.select_entity_from_meta',
+    },
+  };
+
+  const revisions = currentWorkflowRevisions([{ parts: [oldSelection, currentSelection] }]);
+
+  assert.equal(isSupersededVisualizationEntitySelectionCard(oldSelection, revisions), true);
+  assert.equal(isSupersededVisualizationEntitySelectionCard(currentSelection, revisions), false);
 });
 
 test('元数据失败候选映射强制动作且正常候选不暴露强制入口', () => {
@@ -111,16 +136,22 @@ test('元数据失败候选映射强制动作且正常候选不暴露强制入�
 });
 
 test('摘要缺失或动作列表未授权时不显示强制写入', () => {
-  assert.equal(metadataForceApproveAllowed({
-    validationStatus: 'failed',
-    forceAllowed: true,
-    allowedActions: ['reject', 'revise'],
-  }), false);
-  assert.equal(metadataForceApproveAllowed({
-    validationStatus: 'success',
-    forceAllowed: true,
-    allowedActions: ['force_approve'],
-  }), false);
+  assert.equal(
+    metadataForceApproveAllowed({
+      validationStatus: 'failed',
+      forceAllowed: true,
+      allowedActions: ['reject', 'revise'],
+    }),
+    false,
+  );
+  assert.equal(
+    metadataForceApproveAllowed({
+      validationStatus: 'success',
+      forceAllowed: true,
+      allowedActions: ['force_approve'],
+    }),
+    false,
+  );
 });
 
 test('元数据目录操作生成重命名与删除确认文案且不暴露强制入口', () => {

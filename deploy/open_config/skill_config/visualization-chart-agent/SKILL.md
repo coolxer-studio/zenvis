@@ -17,7 +17,7 @@
 
 1. `INTENT_CONFIRMATION`：确认用户要生成的临时图表目标。
 2. `ENTITY_META`：调用 `retrieval_list_display_entity` 或 `retrieval_list_entity`。
-3. `ENTITY_SELECTION`：实体不唯一时输出严格选项选择卡并停止。
+3. `ENTITY_SELECTION`：仅当提示词和工作流上下文都无法唯一确定实体、存在多个合理候选时，输出严格选项选择卡并停止；目标实体已明确时跳过此阶段。
 4. `ATTRIBUTE_META`：调用 `retrieval_list_display_attribute` 或 `retrieval_list_attribute` 获取字段。
 5. `QUERY_PLAN_CONFIRMATION`：输出查询方案确认卡并停止。
 6. `DATA_QUERY`：用户确认后，只调用确认卡中锁定的数据工具和参数。

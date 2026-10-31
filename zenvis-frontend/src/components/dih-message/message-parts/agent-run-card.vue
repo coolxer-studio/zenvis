@@ -1,10 +1,14 @@
 <template>
-  <section class="agent-run-card" :class="`is-${statusTone}`">
+  <section
+    class="agent-run-card"
+    :class="[`is-${statusTone}`, { 'needs-verification': chartNeedsVerification }]"
+  >
     <header class="agent-run-header" @click="expanded = !expanded">
       <span class="run-mark" aria-hidden="true">
         <el-icon :class="{ spinning: isActive }">
           <Loading v-if="isActive" />
           <Clock v-else-if="isWaiting" />
+          <WarningFilled v-else-if="chartNeedsVerification" />
           <CircleCheck v-else />
         </el-icon>
       </span>
@@ -61,7 +65,8 @@
             <strong>执行过程</strong>
           </span>
           <span class="run-activity-summary">
-            检索 {{ activitySummary.ragCount }} · 工具 {{ activitySummary.toolCount }} · 压缩 {{ activitySummary.compactionCount }}
+            检索 {{ activitySummary.ragCount }} · 工具 {{ activitySummary.toolCount }} · 压缩
+            {{ activitySummary.compactionCount }}
           </span>
           <el-icon class="run-activity-chevron">
             <ArrowUp v-if="activityExpanded" />
@@ -75,7 +80,9 @@
             type="button"
             class="run-activity-state is-error"
             @click.stop="loadActivityEvents"
-          >{{ activityError }}，点击重试</button>
+          >
+            {{ activityError }}，点击重试
+          </button>
           <AgentRunActivity v-else :activities="activities" />
         </div>
       </div>
@@ -85,12 +92,42 @@
         <span>{{ currentToolText }}</span>
       </div>
 
-      <div v-if="pendingInteraction" class="run-user-input-callout">
-        <span class="run-user-input-copy">
-          <strong>{{ pendingInteraction.title || '需要处理当前任务交互' }}</strong>
-          <small>{{ pendingInteraction.prompt || waitingQuestion }}</small>
-        </span>
-        <div v-if="pendingInteraction.kind === 'user_input'" class="run-user-input-inline">
+      <div v-if="pendingInteraction || waitingPrompt" class="run-user-input-callout">
+        <div class="run-user-input-copy">
+          <strong>{{ pendingInteraction?.title || '需要补充信息' }}</strong>
+          <div
+            v-if="waitingPrompt"
+            class="run-user-input-prompt-wrap"
+            :class="{ 'is-collapsed': !waitingPromptExpanded }"
+            data-testid="agent-run-user-input-prompt"
+          >
+            <MarkdownContent
+              class="message-content markdown-body run-user-input-prompt"
+              :content="waitingPrompt"
+              :render-markdown="parseMarkdown"
+            />
+          </div>
+          <div
+            v-if="waitingPromptMayBeIncomplete"
+            class="run-user-input-legacy-note"
+            data-testid="agent-run-user-input-legacy-note"
+          >
+            <el-icon><Warning /></el-icon>
+            <span
+              >该任务来自旧数据，只保留了任务暂停原因，提示可能不完整。补充前请刷新会话，或说明完整需求。</span
+            >
+          </div>
+          <button
+            v-if="waitingPromptCanToggle"
+            type="button"
+            class="run-user-input-prompt-toggle"
+            :aria-expanded="waitingPromptExpanded"
+            @click.stop="waitingPromptExpanded = !waitingPromptExpanded"
+          >
+            {{ waitingPromptExpanded ? '收起提示' : '展开完整提示' }}
+          </button>
+        </div>
+        <div v-if="pendingInteraction?.kind === 'user_input'" class="run-user-input-inline">
           <el-input
             v-model="userInputAnswer"
             type="textarea"
@@ -107,12 +144,18 @@
             :loading="userInputSubmitting"
             :disabled="!userInputAnswer.trim()"
             @click.stop="submitUserInput"
-          >提交并继续</el-button>
+            >提交并继续</el-button
+          >
         </div>
+        <small v-else-if="pendingInteraction" class="run-interaction-hint">
+          {{
+            pendingInteraction.kind === 'mcp_approval'
+              ? '请在下方 MCP 审批卡中处理。'
+              : '请在对应业务卡片中完成操作。'
+          }}
+        </small>
         <small v-else class="run-interaction-hint">
-          {{ pendingInteraction.kind === 'mcp_approval'
-            ? '请在下方 MCP 审批卡中处理。'
-            : '请在对应业务卡片中完成操作。' }}
+          当前任务缺少可提交的交互记录，请刷新会话后重试。
         </small>
       </div>
 
@@ -153,32 +196,35 @@ import {
   WarningFilled,
 } from '@element-plus/icons-vue';
 import { DihService } from '@/service/api';
-import type {
-  AgentRun,
-  AgentRunEvent,
-  AgentRunPlanStep,
-} from '@/types/type-dih';
+import type { AgentRun, AgentRunEvent, AgentRunPlanStep } from '@/types/type-dih';
 import {
   isAgentRunLive,
   resolveAgentRunStepStatus,
-  resolveAgentRunWaitingQuestion,
+  resolveAgentRunWaitingQuestionDetail,
 } from '@/views/dih/composables/agent-run-message';
 import {
   AGENT_RUN_ACTIVITY_EVENT_TYPES,
   buildAgentRunActivities,
   summarizeAgentRunActivities,
 } from '@/views/dih/composables/agent-run-activity';
+import MarkdownContent from '@/components/markdown/markdown-content.vue';
 import AgentRunActivity from './agent-run-activity.vue';
+import { useMarkdownRenderer } from './message-part-context';
 
-const props = withDefaults(defineProps<{
-  run?: AgentRun | null;
-  currentTool?: Record<string, unknown> | null;
-  activityEvents?: AgentRunEvent[];
-}>(), {
-  run: null,
-  currentTool: null,
-  activityEvents: () => [],
-});
+const props = withDefaults(
+  defineProps<{
+    run?: AgentRun | null;
+    currentTool?: Record<string, unknown> | null;
+    activityEvents?: AgentRunEvent[];
+    chartNeedsVerification?: boolean;
+  }>(),
+  {
+    run: null,
+    currentTool: null,
+    activityEvents: () => [],
+    chartNeedsVerification: false,
+  },
+);
 
 const emit = defineEmits<{
   (e: 'resume', runId: string): void;
@@ -193,12 +239,15 @@ const loadedRunId = ref('');
 const fetchedActivityEvents = ref<AgentRunEvent[]>([]);
 const steps = computed<AgentRunPlanStep[]>(() => props.run?.plan?.steps || []);
 const isActive = computed(() => isAgentRunLive(props.run?.status));
-const isWaiting = computed(() => props.run?.status === 'WAITING_APPROVAL'
-  || props.run?.status === 'WAITING_USER'
-  || props.run?.status === 'PAUSED');
-const completedSteps = computed(() => steps.value.filter(step =>
-  step.status === 'DONE' || step.status === 'SKIPPED',
-).length);
+const isWaiting = computed(
+  () =>
+    props.run?.status === 'WAITING_APPROVAL' ||
+    props.run?.status === 'WAITING_USER' ||
+    props.run?.status === 'PAUSED',
+);
+const completedSteps = computed(
+  () => steps.value.filter(step => step.status === 'DONE' || step.status === 'SKIPPED').length,
+);
 const stepProgressText = computed(() => {
   if (!steps.value.length) return props.run?.statusLabel || '准备执行';
   return `${completedSteps.value}/${steps.value.length} 个步骤完成`;
@@ -206,12 +255,21 @@ const stepProgressText = computed(() => {
 const activityDetailsId = computed(() => `agent-run-activity-${props.run?.runId || 'unknown'}`);
 const allActivityEvents = computed(() => {
   const runId = props.run?.runId || '';
-  return [...fetchedActivityEvents.value, ...props.activityEvents]
-    .filter(event => !runId || !event.run_id || event.run_id === runId);
+  return [...fetchedActivityEvents.value, ...props.activityEvents].filter(
+    event => !runId || !event.run_id || event.run_id === runId,
+  );
 });
 const activities = computed(() => buildAgentRunActivities(allActivityEvents.value));
 const activitySummary = computed(() => summarizeAgentRunActivities(activities.value));
-const waitingQuestion = computed(() => resolveAgentRunWaitingQuestion(props.run));
+const { parseMarkdown } = useMarkdownRenderer();
+const waitingPromptDetail = computed(() => resolveAgentRunWaitingQuestionDetail(props.run));
+const waitingPrompt = computed(() => waitingPromptDetail.value.text);
+const waitingPromptMayBeIncomplete = computed(() => waitingPromptDetail.value.mayBeIncomplete);
+const waitingPromptCanToggle = computed(() => {
+  const prompt = waitingPrompt.value;
+  return prompt.length > 260 || prompt.split(/\r?\n/).filter(Boolean).length > 5;
+});
+const waitingPromptExpanded = ref(true);
 const pendingInteraction = computed(() => props.run?.pendingInteraction || null);
 const interactionKey = computed(() => pendingInteraction.value?.interactionId || '');
 const userInputAnswer = ref('');
@@ -232,9 +290,10 @@ const submitUserInput = () => {
   }, 10_000);
 };
 
-watch(interactionKey, () => {
+watch([interactionKey, waitingPrompt], () => {
   userInputAnswer.value = '';
   userInputSubmitting.value = false;
+  waitingPromptExpanded.value = true;
   if (submitResetTimer !== null) {
     window.clearTimeout(submitResetTimer);
     submitResetTimer = null;
@@ -280,13 +339,16 @@ const toggleActivity = async () => {
   }
 };
 
-watch(() => props.run?.runId, () => {
-  activityExpanded.value = false;
-  activityLoading.value = false;
-  activityError.value = '';
-  loadedRunId.value = '';
-  fetchedActivityEvents.value = [];
-});
+watch(
+  () => props.run?.runId,
+  () => {
+    activityExpanded.value = false;
+    activityLoading.value = false;
+    activityError.value = '';
+    loadedRunId.value = '';
+    fetchedActivityEvents.value = [];
+  },
+);
 
 const statusText = computed(() => {
   const labels: Record<string, string> = {
@@ -300,15 +362,22 @@ const statusText = computed(() => {
     CANCELING: '取消中',
     CANCELLED: '已取消',
   };
-  return props.run?.status ? (labels[props.run.status] || props.run.statusLabel || props.run.status) : '准备中';
+  if (props.run?.status === 'SUCCEEDED' && props.chartNeedsVerification) {
+    return '已完成 · 图表待验证';
+  }
+  return props.run?.status
+    ? labels[props.run.status] || props.run.statusLabel || props.run.status
+    : '准备中';
 });
 
 const statusTone = computed(() => (props.run?.status || 'QUEUED').toLowerCase());
 const statusTagType = computed<'success' | 'warning' | 'info' | 'danger' | 'primary'>(() => {
   const status = props.run?.status;
+  if (status === 'SUCCEEDED' && props.chartNeedsVerification) return 'warning';
   if (status === 'SUCCEEDED') return 'success';
   if (status === 'FAILED') return 'danger';
-  if (status === 'WAITING_APPROVAL' || status === 'WAITING_USER' || status === 'PAUSED') return 'warning';
+  if (status === 'WAITING_APPROVAL' || status === 'WAITING_USER' || status === 'PAUSED')
+    return 'warning';
   if (status === 'RUNNING' || status === 'QUEUED') return 'primary';
   return 'info';
 });
@@ -340,8 +409,7 @@ const stepStatusText = (status?: string) => {
   return labels[String(status || 'PENDING').toUpperCase()] || String(status || '待执行');
 };
 
-const displayStepStatus = (status?: string) =>
-  resolveAgentRunStepStatus(props.run?.status, status);
+const displayStepStatus = (status?: string) => resolveAgentRunStepStatus(props.run?.status, status);
 </script>
 
 <style lang="scss" scoped>
@@ -362,6 +430,10 @@ const displayStepStatus = (status?: string) =>
 
 .agent-run-card.is-failed {
   border-color: color-mix(in srgb, var(--el-color-danger) 45%, var(--zv-border));
+}
+
+.agent-run-card.needs-verification {
+  border-color: color-mix(in srgb, var(--el-color-warning) 45%, var(--zv-border));
 }
 
 .agent-run-header {
@@ -389,7 +461,9 @@ const displayStepStatus = (status?: string) =>
 }
 
 @keyframes run-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .run-title {
@@ -629,14 +703,108 @@ button.run-activity-state {
   font-size: var(--zv-font-size-xs);
 }
 
-.run-user-input-copy small {
-  display: -webkit-box;
+.run-user-input-prompt-wrap {
+  min-width: 0;
+  color: var(--zv-text-secondary);
+}
+
+.run-user-input-prompt-wrap.is-collapsed {
+  position: relative;
+  max-height: 6.2em;
   overflow: hidden;
+}
+
+.run-user-input-prompt-wrap.is-collapsed::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2em;
+  background: linear-gradient(
+    transparent,
+    color-mix(in srgb, var(--el-color-warning) 10%, var(--zv-bg-card))
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.run-user-input-copy .run-user-input-prompt {
   color: var(--zv-text-secondary);
   font-size: var(--zv-font-size-xs);
   line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(p) {
+  margin: 0 0 0.45em;
+  white-space: normal;
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(ol),
+.run-user-input-copy .run-user-input-prompt :deep(ul) {
+  margin: 0.35em 0 0.55em;
+  padding-left: 1.55em;
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(li) {
+  margin: 0.15em 0;
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(li > p) {
+  margin-bottom: 0.2em;
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(strong) {
+  color: var(--zv-text-primary);
+  font-weight: var(--zv-font-weight-semibold);
+}
+
+.run-user-input-copy .run-user-input-prompt :deep(code) {
+  padding: 1px 4px;
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-size: 0.92em;
+  background: var(--zv-bg-subtle);
+  border: 1px solid var(--zv-divider);
+  border-radius: var(--zv-radius-xs);
+}
+
+.run-user-input-prompt-toggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  color: var(--zv-primary);
+  font: inherit;
+  font-size: var(--zv-font-size-xs);
+  line-height: 1.5;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.run-user-input-prompt-toggle:hover {
+  text-decoration: underline;
+}
+
+.run-user-input-legacy-note {
+  display: flex;
+  margin-top: 4px;
+  padding: 7px 9px;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--el-color-warning-dark-2);
+  font-size: var(--zv-font-size-xs);
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--el-color-warning) 13%, var(--zv-bg-card));
+  border: 1px solid color-mix(in srgb, var(--el-color-warning) 34%, var(--zv-border));
+  border-radius: var(--zv-radius-sm);
+}
+
+.run-user-input-legacy-note .el-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .run-user-input-inline {

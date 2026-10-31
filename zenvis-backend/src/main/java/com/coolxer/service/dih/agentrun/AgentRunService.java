@@ -620,6 +620,7 @@ public class AgentRunService {
         if (run.getStatus().isTerminal()) {
             return run;
         }
+        String normalizedQuestion = AgentRunInteraction.normalizePromptText(question);
         AgentRunInteraction existing = AgentRunInteraction.fromRun(run);
         String interactionId = existing != null
                 && AgentRunInteraction.KIND_USER_INPUT.equals(existing.getKind())
@@ -629,20 +630,21 @@ public class AgentRunService {
                 .interactionId(interactionId)
                 .kind(AgentRunInteraction.KIND_USER_INPUT)
                 .title("需要补充信息")
-                .prompt(StringUtils.defaultIfBlank(question, "请补充必要信息后继续"))
+                .prompt(StringUtils.defaultIfBlank(normalizedQuestion, "请补充必要信息后继续"))
                 .createdAt(new Date())
                 .build();
         run.setStatus(AgentRunStatus.WAITING_USER)
                 .setInteractionJson(JacksonUtil.toJson(interaction))
                 .setPendingAction(JacksonUtil.toJson(Map.of(
                         "type", "user",
-                        "question", StringUtils.defaultString(question),
+                        "question", StringUtils.defaultString(normalizedQuestion),
                         "interactionId", interactionId)))
-                .setPausedReason(StringUtils.left(StringUtils.defaultIfBlank(question, "等待用户输入"), 255))
+                .setPausedReason(StringUtils.left(
+                        StringUtils.defaultIfBlank(normalizedQuestion, "等待用户输入"), 255))
                 .setLeaseId(null)
                 .setLeaseUntil(null);
         appendEvent(run, "run.waiting_user", stepId, Map.of(
-                "question", StringUtils.defaultString(question),
+                "question", StringUtils.defaultString(normalizedQuestion),
                 "interactionId", interactionId));
         return runRepository.save(run);
     }

@@ -1,13 +1,17 @@
 package com.coolxer.service.dih;
 
 import com.coolxer.configuration.minio.MinioProperties;
+import com.coolxer.dao.mysql.entity.ChatAttachmentRecord;
 import com.coolxer.dao.mysql.entity.User;
+import com.coolxer.dao.mysql.repository.ChatAttachmentRecordRepository;
 import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.service.core.MinioService;
+import com.coolxer.service.dih.attachment.AttachmentContentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -15,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -188,6 +193,46 @@ class ChatAttachmentServiceTest {
         assertThat(compact)
                 .contains("请分析日志", "evidence.log", attachment.getFileId())
                 .doesNotContain("SECRET_RAW_ATTACHMENT_BODY");
+    }
+
+    @Test
+    void attachmentContextExposesFileIdAndToolMappingRule() {
+        User user = newUser();
+        String fileId = "3ab0c6d7-2907-45a3-bd8f-8f9754b386dd";
+        ChatAttachmentRecord record = new ChatAttachmentRecord()
+                .setFileId(fileId)
+                .setUserId(user.getId())
+                .setChatId("chat-1")
+                .setFileName("数据字典-僵木螨_v3.0.1.md")
+                .setFileSize(140 * 1024L)
+                .setContentType("text/markdown")
+                .setKind("text")
+                .setFormat("md")
+                .setObjectKey("chat/123/" + fileId + "/data.md")
+                .setParseStatus("ready")
+                .setParseProgress(100)
+                .setTruncated(false);
+        ChatAttachmentRecordRepository repository = mock(ChatAttachmentRecordRepository.class);
+        AttachmentContentService contentService = mock(AttachmentContentService.class);
+        when(repository.findByFileIdAndUserId(fileId, user.getId()))
+                .thenReturn(Optional.of(record));
+        ReflectionTestUtils.setField(service, "attachmentRecordRepository", repository);
+        ReflectionTestUtils.setField(service, "attachmentContentService", contentService);
+        ChatAttachment attachment = ChatAttachment.builder()
+                .fileId(fileId)
+                .fileName(record.getFileName())
+                .fileSize(record.getFileSize())
+                .contentType(record.getContentType())
+                .kind(record.getKind())
+                .parseStatus(record.getParseStatus())
+                .build();
+
+        String context = service.appendAttachmentContext(
+                "生成元数据配置", List.of(attachment), user, "chat-1");
+
+        assertThat(context)
+                .contains("fileId=" + fileId, record.getFileName())
+                .contains("调用附件工具时必须原样使用", "不得使用文件名", "attachment_list");
     }
 
     private User newUser() {

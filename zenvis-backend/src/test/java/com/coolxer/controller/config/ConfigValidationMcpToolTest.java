@@ -93,6 +93,9 @@ class ConfigValidationMcpToolTest {
 
         assertThat(result.passed()).isTrue();
         assertThat(result.candidateDigest()).hasSize(64);
+        assertThat(result.validationId()).startsWith("meta-validation-");
+        assertThat(result.schemaVersion()).startsWith("meta-schema@");
+        assertThat(result.schemaHash()).hasSize(64);
         assertThat(result.normalizedText()).contains("\"name\" : \"probe_event\"");
         assertThat(Files.list(configRoot.resolve("meta_config")).toList()).isEmpty();
     }

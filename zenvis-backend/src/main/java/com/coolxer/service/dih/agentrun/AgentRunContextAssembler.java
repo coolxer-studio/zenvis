@@ -16,6 +16,7 @@ import com.coolxer.model.dih.agentrun.AgentRunPlanStep;
 import com.coolxer.service.dih.ContextCompactionObserver;
 import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.DihTokenEstimator;
+import com.coolxer.service.dih.mcp.McpToolDescriptor;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -282,6 +283,16 @@ public class AgentRunContextAssembler {
             return;
         }
         McpToolInvocation latest = invocations.get(0);
+        if (latest.getStatus() == com.coolxer.commons.enums.McpInvocationStatus.UNKNOWN
+                && McpToolDescriptor.localKey("push_task_create_and_start")
+                .equals(latest.getToolKey())) {
+            prompt.append("\n【最近工具审批/执行结果】\n工具 ")
+                    .append(latest.getToolName()).append(" 状态为 UNKNOWN。")
+                    .append("平台已按 sourceMark 为该工具启用幂等恢复：先读回任务，")
+                    .append("再由平台重新发起 MCP 审批；不要调用 run_request_user 询问用户，")
+                    .append("也不要让用户手工输入“继续”或审批意见。\n");
+            return;
+        }
         if (latest.getStatus() == com.coolxer.commons.enums.McpInvocationStatus.REJECTED
                 || latest.getStatus() == com.coolxer.commons.enums.McpInvocationStatus.EXPIRED
                 || latest.getStatus() == com.coolxer.commons.enums.McpInvocationStatus.UNKNOWN

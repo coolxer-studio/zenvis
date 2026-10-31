@@ -2,7 +2,15 @@ package com.coolxer.controller.system;
 
 import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.model.system.dto.PushTaskDto;
+import com.coolxer.model.system.dto.PushTaskQueryDto;
+import com.coolxer.model.system.dto.PushTaskValidationRequest;
+import com.coolxer.model.system.validation.PushTaskDiagnosticResultVo;
+import com.coolxer.model.system.validation.PushTaskValidationVo;
+import com.coolxer.model.system.vo.PushTaskOperationVo;
+import com.coolxer.model.system.vo.PushTaskPageVo;
+import com.coolxer.model.system.vo.PushTaskSummaryVo;
 import com.coolxer.model.system.vo.PushTaskVo;
+import com.coolxer.service.dih.mcp.McpPreExecutionException;
 import com.coolxer.service.system.PushTaskService;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,161 +18,20 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PushTaskMcpToolTest {
 
-    private final FakePushTaskService pushTaskService = new FakePushTaskService();
-    private final PushTaskMcpTool tool = new PushTaskMcpTool(pushTaskService);
+    private final FakePushTaskService service = new FakePushTaskService();
+    private final PushTaskMcpTool tool = new PushTaskMcpTool(service);
 
     @Test
-    void createAndStartDelegatesToService() {
-        PushTaskDto request = new PushTaskDto();
-        request.setName("持续分析数据匹配");
-        request.setSource("SYSTEM");
-        request.setMark("source-mark");
-        request.setConfig("sources: {}");
-        pushTaskService.createAndStartResult = true;
-
-        assertThat(tool.createAndStart(request)).isTrue();
-
-        assertThat(pushTaskService.createAndStartRequest).isSameAs(request);
-    }
-
-    @Test
-    void listBySourceMarkDelegatesToService() {
-        PushTaskVo task = new PushTaskVo();
-        task.setName("持续分析数据匹配");
-        pushTaskService.findBySourceMarkResult = List.of(task);
-
-        assertThat(tool.listBySourceMark("analysis-risk")).containsExactly(task);
-
-        assertThat(pushTaskService.findBySourceMarkValue).isEqualTo("analysis-risk");
-    }
-
-    @Test
-    void deleteBySourceMarkDelegatesToService() {
-        pushTaskService.deleteBySourceMarkResult = true;
-
-        assertThat(tool.deleteBySourceMark("analysis-risk")).isTrue();
-
-        assertThat(pushTaskService.deleteBySourceMarkValue).isEqualTo("analysis-risk");
-    }
-
-    @Test
-    void detectFormatDelegatesToService() {
-        pushTaskService.detectFormatResult = "yaml";
-
-        assertThat(tool.detectFormat("sources: {}")).isEqualTo("yaml");
-
-        assertThat(pushTaskService.detectFormatContent).isEqualTo("sources: {}");
-    }
-
-    @Test
-    void getLogReturnsLatestSanitizedBoundedLogForOwnedTask() {
-        PushTaskVo task = managedTask(12, "data-push:chat:service-log");
-        task.setStatus("running[error]");
-        pushTaskService.findByIdResult = task;
-        pushTaskService.getLogResult = IntStream.rangeClosed(1, 120)
-                .mapToObj(index -> "line-" + index)
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("")
-                + "\npassword=\"top-secret\" Authorization: Bearer secret-token";
-
-        Map<String, Object> result = tool.getLog(
-                12,
-                "data-push:chat:service-log",
-                "system"
-        );
-
-        assertThat(result)
-                .containsEntry("taskId", 12)
-                .containsEntry("sourceMark", "data-push:chat:service-log")
-                .containsEntry("logType", "system")
-                .containsEntry("taskStatus", "running[error]")
-                .containsEntry("truncated", true);
-        assertThat(result.get("content").toString())
-                .doesNotContain("line-1\n", "top-secret", "secret-token", "Bearer")
-                .contains("line-22", "line-120", "password=\"***", "Authorization: ***");
-        assertThat(pushTaskService.getLogTaskId).isEqualTo(12);
-        assertThat(pushTaskService.getLogType).isEqualTo("system");
-        assertThat(pushTaskService.findByIdValue).isEqualTo(12);
-        assertThat(pushTaskService.findBySourceMarkValue).isNull();
-    }
-
-    @Test
-    void getLogCapsLongContentFromTheTail() {
-        PushTaskVo task = managedTask(12, "data-push:chat:service-log");
-        pushTaskService.findByIdResult = task;
-        pushTaskService.getLogResult = IntStream.rangeClosed(1, 100)
-                .mapToObj(index -> index + "-" + "x".repeat(100))
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("");
-
-        Map<String, Object> result = tool.getLog(
-                12,
-                "data-push:chat:service-log",
-                "console"
-        );
-
-        assertThat(result.get("content").toString()).hasSize(6_000).endsWith("x".repeat(100));
-        assertThat(result).containsEntry("truncated", true);
-    }
-
-    @Test
-    void getLogRejectsMismatchedTaskOwnership() {
-        pushTaskService.findByIdResult = managedTask(12, "data-push:chat:other");
-
-        assertThatThrownBy(() -> tool.getLog(
-                12,
-                "data-push:chat:service-log",
-                "system"
-        )).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("不匹配");
-    }
-
-    @Test
-    void repairAndRestartDelegatesCompleteManagedTask() {
-        String sourceMark = "data-push:chat:service-log";
-        pushTaskService.findByIdResult = managedTask(12, sourceMark);
-        pushTaskService.updateAndStartResult = true;
-        PushTaskDto request = new PushTaskDto();
-        request.setName("service-log");
-        request.setConfig("sources: {}");
-        request.setSource("SYSTEM");
-        request.setMark(sourceMark);
-
-        assertThat(tool.repairAndRestart(12, sourceMark, request)).isTrue();
-
-        assertThat(pushTaskService.updateAndStartTaskId).isEqualTo(12);
-        assertThat(pushTaskService.updateAndStartRequest).isSameAs(request);
-        assertThat(pushTaskService.findBySourceMarkValue).isNull();
-    }
-
-    @Test
-    void repairAndRestartRejectsMismatchedHistoricalTaskId() {
-        String sourceMark = "data-push:chat:service-log";
-        pushTaskService.findByIdResult = managedTask(
-                13, "data-push:chat:other");
-        PushTaskDto request = new PushTaskDto();
-        request.setName("service-log");
-        request.setConfig("sources: {}");
-        request.setSource("SYSTEM");
-        request.setMark(sourceMark);
-
-        assertThatThrownBy(() -> tool.repairAndRestart(12, sourceMark, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("不匹配");
-        assertThat(pushTaskService.updateAndStartRequest).isNull();
-    }
-
-    @Test
-    void exposesOnlyLogDrivenPushTaskToolsWithoutValidationId() throws Exception {
+    void exposesExactlyElevenLifecycleToolsAndRemovesLegacyTools() {
         List<ToolCallback> callbacks = List.of(MethodToolCallbackProvider.builder()
                 .toolObjects(tool)
                 .build()
@@ -173,58 +40,276 @@ class PushTaskMcpToolTest {
         assertThat(callbacks)
                 .extracting(callback -> callback.getToolDefinition().name())
                 .containsExactlyInAnyOrder(
+                        "push_task_list",
+                        "push_task_get",
+                        "push_task_get_log",
+                        "push_task_diagnose",
+                        "push_task_validate_config",
                         "push_task_create_and_start",
+                        "push_task_update_and_restart",
+                        "push_task_start",
+                        "push_task_stop",
+                        "push_task_restart",
+                        "push_task_delete")
+                .doesNotContain(
+                        "push_task_detect_format",
                         "push_task_list_by_source_mark",
                         "push_task_delete_by_source_mark",
-                        "push_task_get_log",
-                        "push_task_repair_and_restart",
-                        "push_task_detect_format")
-                .doesNotContain(
-                        "push_task_vector_capabilities",
-                        "push_task_vector_component_schema",
-                        "push_task_generate_config",
-                        "push_task_validate_config");
-
-        for (String toolName : List.of(
-                "push_task_create_and_start",
-                "push_task_repair_and_restart")) {
-            String schemaText = callbacks.stream()
-                    .filter(callback -> toolName.equals(
-                            callback.getToolDefinition().name()))
-                    .findFirst()
-                    .orElseThrow()
-                    .getToolDefinition()
-                    .inputSchema();
-            JsonNode schema = JacksonConfig.OBJECT_MAPPER.readTree(schemaText);
-            assertThat(schema.path("properties").has("validationId")).isFalse();
-        }
+                        "push_task_repair_and_restart");
     }
 
-    private PushTaskVo managedTask(int id, String sourceMark) {
+    @Test
+    void createNormalizesExplicitYmlFormatAndReturnsStructuredOperation() {
+        PushTaskDto request = request("sources: {}", "yml");
+        service.createOperation = operation("create_and_start", 12, "running");
+
+        PushTaskOperationVo result = tool.createAndStart(request);
+
+        assertThat(result.getTaskId()).isEqualTo(12);
+        assertThat(service.createRequest).isSameAs(request);
+        assertThat(request.getFormat()).isEqualTo("yaml");
+    }
+
+    @Test
+    void createRequiresSourceSystemMarkAndExplicitFormat() {
+        PushTaskDto missingFormat = request("sources: {}", null);
+        assertThatThrownBy(() -> tool.createAndStart(missingFormat))
+                .isInstanceOf(McpPreExecutionException.class)
+                .hasMessageContaining("format");
+
+        PushTaskDto wrongSource = request("sources: {}", "yaml");
+        wrongSource.setSource("WEB");
+        assertThatThrownBy(() -> tool.createAndStart(wrongSource))
+                .isInstanceOf(McpPreExecutionException.class)
+                .hasMessageContaining("SYSTEM");
+    }
+
+    @Test
+    void createReusesSameSystemMarkWithoutCallingCreateAgain() {
+        PushTaskDto request = request("sources: {}", "yaml");
+        PushTaskSummaryVo summary = new PushTaskSummaryVo();
+        summary.setId(12);
+        service.queryPage = PushTaskPageVo.builder()
+                .items(List.of(summary))
+                .total(1)
+                .offset(0)
+                .limit(100)
+                .hasMore(false)
+                .build();
+        PushTaskVo existing = task(12, "SYSTEM", "source-mark", "sources: {}");
+        existing.setStatus("running");
+        service.findByIdResult = existing;
+
+        PushTaskOperationVo result = tool.createAndStart(request);
+
+        assertThat(service.createRequest).isNull();
+        assertThat(result.getTaskId()).isEqualTo(12);
+        assertThat(result.isChanged()).isFalse();
+    }
+
+    @Test
+    void createRejectsExistingMarkWithDifferentConfig() {
+        PushTaskDto request = request("sources: {new: true}", "yaml");
+        PushTaskSummaryVo summary = new PushTaskSummaryVo();
+        summary.setId(12);
+        service.queryPage = PushTaskPageVo.builder()
+                .items(List.of(summary))
+                .total(1)
+                .offset(0)
+                .limit(100)
+                .hasMore(false)
+                .build();
+        service.findByIdResult = task(12, "SYSTEM", "source-mark", "sources: {old: true}");
+
+        assertThatThrownBy(() -> tool.createAndStart(request))
+                .isInstanceOf(McpPreExecutionException.class)
+                .hasMessageContaining("更新流程");
+        assertThat(service.createRequest).isNull();
+    }
+
+    @Test
+    void createRejectsExistingMarkWithDifferentExplicitFormat() {
+        PushTaskDto request = request("sources: {}", "toml");
+        PushTaskSummaryVo summary = new PushTaskSummaryVo();
+        summary.setId(12);
+        service.queryPage = PushTaskPageVo.builder()
+                .items(List.of(summary))
+                .total(1)
+                .offset(0)
+                .limit(100)
+                .hasMore(false)
+                .build();
+        service.findByIdResult = task(12, "SYSTEM", "source-mark", "sources: {}");
+
+        assertThatThrownBy(() -> tool.createAndStart(request))
+                .isInstanceOf(McpPreExecutionException.class)
+                .hasMessageContaining("格式");
+        assertThat(service.createRequest).isNull();
+    }
+
+    @Test
+    void listMapsAllFiltersAndCapsPageSize() {
+        service.queryPage = PushTaskPageVo.builder().items(List.of()).build();
+
+        tool.list("mark-1", "事件", "MCP", "running", -5, 500);
+
+        assertThat(service.query.getSourceMark()).isEqualTo("mark-1");
+        assertThat(service.query.getNameContains()).isEqualTo("事件");
+        assertThat(service.query.getSource()).isEqualTo("MCP");
+        assertThat(service.query.getStatus()).isEqualTo("running");
+        assertThat(service.query.getOffset()).isZero();
+        assertThat(service.query.getLimit()).isEqualTo(100);
+    }
+
+    @Test
+    void getReturnsCompleteConfigurationFromDetailEndpoint() {
+        service.findByIdResult = task(12, "WEB", "web-mark", "sources: {}");
+
+        PushTaskVo result = tool.get(12);
+
+        assertThat(result.getConfig()).isEqualTo("sources: {}");
+        assertThat(result.getSource()).isEqualTo("WEB");
+    }
+
+    @Test
+    void updatePreservesSourceAndMarkAndReturnsRestartRunMetadata() {
+        service.findByIdResult = task(12, "API", "api-mark", "sources: {}");
+        service.updateOperation = operation("update_and_restart", 12, "running");
+        PushTaskDto request = request("sinks: {}", "yaml");
+        request.setSource("API");
+        request.setMark("api-mark");
+
+        PushTaskOperationVo result = tool.updateAndRestart(12, request);
+
+        assertThat(result.getAction()).isEqualTo("update_and_restart");
+        assertThat(service.updateTaskId).isEqualTo(12);
+        assertThat(service.updateRequest.getSource()).isNull();
+        assertThat(service.updateRequest.getMark()).isNull();
+    }
+
+    @Test
+    void updateRejectsOwnershipChanges() {
+        service.findByIdResult = task(12, "API", "api-mark", "sources: {}");
+        PushTaskDto request = request("sinks: {}", "yaml");
+        request.setSource("API");
+        request.setMark("other-mark");
+
+        assertThatThrownBy(() -> tool.updateAndRestart(12, request))
+                .isInstanceOf(McpPreExecutionException.class)
+                .hasMessageContaining("mark");
+    }
+
+    @Test
+    void lifecycleToolsDelegateByIdAndReturnOperation() {
+        service.findByIdResult = task(12, "SYSTEM", "mark", "sources: {}");
+        service.startOperation = operation("start", 12, "running");
+        service.stopOperation = operation("stop", 12, "stopped");
+        service.restartOperation = operation("restart", 12, "running");
+        service.deleteOperation = operation("delete", 12, "deleted");
+
+        assertThat(tool.start(12).getAction()).isEqualTo("start");
+        assertThat(tool.stop(12).getAction()).isEqualTo("stop");
+        assertThat(tool.restart(12).getAction()).isEqualTo("restart");
+        assertThat(tool.delete(12).getAction()).isEqualTo("delete");
+        assertThat(service.startTaskId).isEqualTo(12);
+        assertThat(service.stopTaskId).isEqualTo(12);
+        assertThat(service.restartTaskId).isEqualTo(12);
+        assertThat(service.deleteTaskId).isEqualTo(12);
+    }
+
+    @Test
+    void validateConfigPassesExplicitFormatAndMeta() {
+        service.validationResult = PushTaskValidationVo.builder()
+                .passed(true)
+                .format("toml")
+                .candidateDigest("candidate")
+                .build();
+
+        PushTaskValidationVo result = tool.validateConfig(
+                "[sources.demo]\ntype = \"demo_logs\"",
+                "toml", "user_event.json", "{}");
+
+        assertThat(result.isPassed()).isTrue();
+        assertThat(service.validationRequest.getFormat()).isEqualTo("toml");
+        assertThat(service.validationRequest.getMetaFileName()).isEqualTo("user_event.json");
+    }
+
+    @Test
+    void diagnoseUsesOnlyTaskIdAndLogIsBoundedAndRedacted() {
+        service.findByIdResult = task(12, "MCP", "mark", "sources: {}");
+        service.diagnosticResult = PushTaskDiagnosticResultVo.builder()
+                .verdict("RUNNING")
+                .runId("run-1")
+                .build();
+        service.log = "first\npassword=secret\nhttps://user:pass@example.test\nlast";
+
+        assertThat(tool.diagnose(12).getRunId()).isEqualTo("run-1");
+        Map<String, Object> result = tool.getLog(12, "system", 3);
+
+        assertThat(service.diagnoseTaskId).isEqualTo(12);
+        assertThat(result).containsEntry("logType", "system");
+        assertThat(result.get("content").toString())
+                .contains("password=***", "https://***@example.test", "last")
+                .doesNotContain("secret", "user:pass", "first");
+    }
+
+    private PushTaskDto request(String config, String format) {
+        PushTaskDto request = new PushTaskDto();
+        request.setName("推送任务");
+        request.setDescription("description");
+        request.setSource("SYSTEM");
+        request.setMark("source-mark");
+        request.setConfig(config);
+        request.setFormat(format);
+        return request;
+    }
+
+    private PushTaskVo task(int id, String source, String mark, String config) {
         PushTaskVo task = new PushTaskVo();
         task.setId(id);
-        task.setSource("SYSTEM");
-        task.setMark(sourceMark);
+        task.setName("推送任务");
+        task.setSource(source);
+        task.setMark(mark);
+        task.setConfig(config);
+        task.setFormat("yaml");
+        task.setStatus("running");
+        task.setCurrentRunId("run-1");
         return task;
     }
 
+    private PushTaskOperationVo operation(String action, int taskId, String status) {
+        return PushTaskOperationVo.builder()
+                .action(action)
+                .taskId(taskId)
+                .previousStatus("stopped")
+                .status(status)
+                .changed(true)
+                .currentRunId("run-1")
+                .build();
+    }
+
     private static class FakePushTaskService implements PushTaskService {
-        private boolean createAndStartResult;
-        private PushTaskDto createAndStartRequest;
-        private boolean updateAndStartResult;
-        private Integer updateAndStartTaskId;
-        private PushTaskDto updateAndStartRequest;
+        private PushTaskQueryDto query;
+        private PushTaskPageVo queryPage = PushTaskPageVo.builder().items(List.of()).build();
+        private PushTaskDto createRequest;
+        private PushTaskOperationVo createOperation;
         private PushTaskVo findByIdResult;
-        private Integer findByIdValue;
-        private List<PushTaskVo> findBySourceMarkResult = List.of();
-        private String findBySourceMarkValue;
-        private boolean deleteBySourceMarkResult;
-        private String deleteBySourceMarkValue;
-        private Integer getLogTaskId;
-        private String getLogType;
-        private String getLogResult;
-        private String detectFormatResult;
-        private String detectFormatContent;
+        private Integer updateTaskId;
+        private PushTaskDto updateRequest;
+        private PushTaskOperationVo updateOperation;
+        private Integer startTaskId;
+        private Integer stopTaskId;
+        private Integer restartTaskId;
+        private Integer deleteTaskId;
+        private PushTaskOperationVo startOperation;
+        private PushTaskOperationVo stopOperation;
+        private PushTaskOperationVo restartOperation;
+        private PushTaskOperationVo deleteOperation;
+        private PushTaskValidationRequest validationRequest;
+        private PushTaskValidationVo validationResult;
+        private Integer diagnoseTaskId;
+        private PushTaskDiagnosticResultVo diagnosticResult;
+        private String log;
 
         @Override
         public Object proxy(HttpServletRequest request) {
@@ -233,15 +318,33 @@ class PushTaskMcpToolTest {
 
         @Override
         public boolean createAndStart(PushTaskDto pushTaskDto) {
-            createAndStartRequest = pushTaskDto;
-            return createAndStartResult;
+            return createAndStartTask(pushTaskDto) != null;
+        }
+
+        @Override
+        public PushTaskOperationVo createAndStartTask(PushTaskDto pushTaskDto) {
+            createRequest = pushTaskDto;
+            return createOperation;
         }
 
         @Override
         public boolean updateAndStart(Integer id, PushTaskDto pushTaskDto) {
-            updateAndStartTaskId = id;
-            updateAndStartRequest = pushTaskDto;
-            return updateAndStartResult;
+            updateTaskId = id;
+            updateRequest = pushTaskDto;
+            return updateOperation != null;
+        }
+
+        @Override
+        public PushTaskOperationVo updateAndRestartTask(Integer id, PushTaskDto pushTaskDto) {
+            updateTaskId = id;
+            updateRequest = pushTaskDto;
+            return updateOperation;
+        }
+
+        @Override
+        public PushTaskOperationVo deleteTask(Integer id) {
+            deleteTaskId = id;
+            return deleteOperation;
         }
 
         @Override
@@ -250,35 +353,59 @@ class PushTaskMcpToolTest {
         }
 
         @Override
+        public PushTaskPageVo query(PushTaskQueryDto query) {
+            this.query = query;
+            return queryPage;
+        }
+
+        @Override
         public PushTaskVo findById(Integer id) {
-            findByIdValue = id;
             return findByIdResult;
         }
 
         @Override
         public List<PushTaskVo> findBySourceMark(String sourceMark) {
-            findBySourceMarkValue = sourceMark;
-            return findBySourceMarkResult;
+            return List.of();
         }
 
         @Override
         public boolean deleteBySourceMark(String sourceMark) {
-            deleteBySourceMarkValue = sourceMark;
-            return deleteBySourceMarkResult;
+            return false;
         }
 
         @Override
         public String getLog(Integer id, String logType) {
-            getLogTaskId = id;
-            getLogType = logType;
-            return getLogResult;
+            return log;
         }
 
         @Override
-        public String detectFormat(String content) {
-            detectFormatContent = content;
-            return detectFormatResult;
+        public PushTaskOperationVo startTask(Integer id) {
+            startTaskId = id;
+            return startOperation;
         }
 
+        @Override
+        public PushTaskOperationVo stopTask(Integer id) {
+            stopTaskId = id;
+            return stopOperation;
+        }
+
+        @Override
+        public PushTaskOperationVo restartTask(Integer id) {
+            restartTaskId = id;
+            return restartOperation;
+        }
+
+        @Override
+        public PushTaskValidationVo validateConfig(PushTaskValidationRequest request) {
+            validationRequest = request;
+            return validationResult;
+        }
+
+        @Override
+        public PushTaskDiagnosticResultVo diagnose(Integer id) {
+            diagnoseTaskId = id;
+            return diagnosticResult;
+        }
     }
 }

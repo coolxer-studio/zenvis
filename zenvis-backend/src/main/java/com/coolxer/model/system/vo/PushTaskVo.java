@@ -46,6 +46,11 @@ public class PushTaskVo implements Serializable {
     private String config;
 
     /**
+     * 配置格式：yaml、toml 或 json。
+     */
+    private String format;
+
+    /**
      * 任务状态
      */
     private String status;
@@ -59,5 +64,20 @@ public class PushTaskVo implements Serializable {
      * 更新时间
      */
     private Date updateTime;
+
+    /**
+     * 最近一次启动轮次。
+     */
+    private String currentRunId;
+
+    /**
+     * 最近一次启动时间。
+     */
+    private String runStartedAt;
+
+    /**
+     * 平台校验状态。
+     */
+    private String validationStatus;
 
 }

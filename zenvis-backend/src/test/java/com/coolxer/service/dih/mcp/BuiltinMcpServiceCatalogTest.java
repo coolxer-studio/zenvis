@@ -75,9 +75,8 @@ class BuiltinMcpServiceCatalogTest {
                 .extracting("code", "toolCount")
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("retrieval", 22),
-                        org.assertj.core.groups.Tuple.tuple("entity", 5),
-                        org.assertj.core.groups.Tuple.tuple("config", 9),
-                        org.assertj.core.groups.Tuple.tuple("push-task", 6),
+                        org.assertj.core.groups.Tuple.tuple("config", 10),
+                        org.assertj.core.groups.Tuple.tuple("push-task", 11),
                         org.assertj.core.groups.Tuple.tuple("visualization", 21),
                         org.assertj.core.groups.Tuple.tuple("analysis-task", 16));
         assertThat(catalog.listTools("retrieval"))

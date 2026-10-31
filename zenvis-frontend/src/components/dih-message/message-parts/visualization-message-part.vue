@@ -11,7 +11,7 @@
       <div class="visualization-chart-preview-tools">
         <el-tooltip
           v-if="interactive"
-          :content="isChartLibraryAdded ? '已加入图表库' : '加入图表库'"
+          :content="chartLibraryHint"
           placement="top"
         >
           <el-button
@@ -19,7 +19,7 @@
             size="small"
             :icon="isChartLibraryAdded ? CircleCheckFilled : Plus"
             circle
-            :disabled="isChartLibraryAdded || !chartLibraryAction"
+            :disabled="!canAddToChartLibrary"
             @click="requestAddChartLibrary"
           />
         </el-tooltip>
@@ -36,6 +36,9 @@
     </div>
     <div v-if="workflowSummary" class="workflow-source-meta">{{ workflowSummary }}</div>
     <div v-if="part.content" class="visualization-chart-preview-desc">{{ part.content }}</div>
+    <div v-if="chartPreviewNotice" class="visualization-preview-validation-message" role="alert">
+      {{ chartPreviewNotice }}
+    </div>
     <div v-if="interactive && isWorkflowRetryable" class="confirm-actions">
       <el-button
         size="small"
@@ -52,7 +55,7 @@
       :loading="part.status === 'loading'"
       :error="chartPreviewError"
       min-height="320px"
-      @render-failed="emit('chartRenderFailed', { part, error: $event })"
+      @render-failed="handleChartRenderFailed"
     />
   </div>
 
@@ -88,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRef } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import {
   CaretBottom,
   CaretTop,
@@ -100,6 +103,12 @@ import {
 import SafeEcharts from '@/components/visualization/safe-echarts.vue';
 import type { ChatMessagePart } from '@/types/type-dih';
 import { metadataJsonText, metadataText, useDefaultExpanded } from './message-part-context';
+import {
+  canAddVisualizationChartToLibrary,
+  isVisualizationChartAdded,
+  visualizationChartOption,
+  visualizationPreviewValidationNotice,
+} from './visualization-preview-state';
 import { workflowRevision } from '../workflow-card-state';
 
 const props = defineProps<{
@@ -126,21 +135,6 @@ const { isExpanded, toggleExpanded } = useDefaultExpanded(toRef(props, 'part'));
 
 const chartPreviewConfigText = computed(() => {
   return metadataJsonText(props.part, 'amisConfig') || props.part.content || '';
-});
-
-const chartLibraryAction = computed(() => {
-  const action = metadataText(props.part, 'action');
-  if (action !== 'visualization_chart.add_chart_library') {
-    return '';
-  }
-  const source = metadataText(props.part, 'source');
-  const demo = metadataText(props.part, 'demoId');
-  if (source === 'demo' && demo) {
-    return action;
-  }
-  const workflow = metadataText(props.part, 'workflowId');
-  const validationStatus = metadataText(props.part, 'validationStatus');
-  return workflow && validationStatus === 'success' ? action : '';
 });
 
 const workflowSummary = computed(() => {
@@ -185,45 +179,42 @@ const requestWorkflowRetry = () => {
   });
 };
 
-const isChartLibraryAdded = computed(() => {
-  return props.part.status === 'submitted' || props.part.status === 'added';
+const chartRenderFailed = ref(false);
+
+const isChartLibraryAdded = computed(() => isVisualizationChartAdded(props.part));
+
+const chartPreviewOption = computed(() => visualizationChartOption(props.part));
+
+const canAddToChartLibrary = computed(() => canAddVisualizationChartToLibrary(
+  props.part,
+  chartRenderFailed.value,
+));
+
+const chartLibraryHint = computed(() => {
+  if (isChartLibraryAdded.value) return '已加入图表库';
+  if (chartRenderFailed.value) return '图表渲染失败，暂不能加入图表库';
+  if (!chartPreviewOption.value) return '图表缺少可渲染配置，暂不能加入图表库';
+  if (!canAddToChartLibrary.value) return '缺少图表入库标识，暂不能加入图表库';
+  return '加入图表库';
 });
 
 const requestAddChartLibrary = () => {
-  if (!props.interactive || !chartLibraryAction.value || isChartLibraryAdded.value) {
+  if (!props.interactive || !canAddToChartLibrary.value) {
     return;
   }
   emit('addChartLibrary', props.part);
 };
 
-const chartPreviewOption = computed(() => {
-  const metadata = props.part.metadata as Record<string, any> | undefined;
-  const value =
-    metadata?.echartsOption ||
-    metadata?.echarts?.option ||
-    metadata?.data?.echarts?.option ||
-    metadata?.option ||
-    metadata?.amisConfig?.config ||
-    metadata?.config?.config;
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  if (value && typeof value === 'object') {
-    return value;
-  }
-  return null;
-});
+const chartPreviewNotice = computed(() => visualizationPreviewValidationNotice(props.part));
+const chartPreviewError = computed(() => '');
 
-const chartPreviewError = computed(() => {
-  const validationStatus = metadataText(props.part, 'validationStatus');
-  if (validationStatus === 'blocked' || validationStatus === 'failed') {
-    return metadataText(props.part, 'validationMessage') || '真实数据查询未完成';
-  }
-  return '';
+const handleChartRenderFailed = (error: string) => {
+  chartRenderFailed.value = true;
+  emit('chartRenderFailed', { part: props.part, error });
+};
+
+watch(chartPreviewOption, () => {
+  chartRenderFailed.value = false;
 });
 
 const isVisualizationRecord = computed(() => {

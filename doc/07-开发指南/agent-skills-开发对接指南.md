@@ -121,7 +121,7 @@ interface:
 
 ### Meta 与数据推送契约
 
-- 运行时元数据配置智能体只允许 `config_tree/config_schema/config_read/config_add/config_apply/config_validate/config_rename/config_delete`，不得调用 `push_task_*`。
+- 运行时元数据配置智能体只允许 `config_tree/config_schema/config_read/config_meta_draft/config_add/config_apply/config_validate/config_rename/config_delete`，不得调用 `push_task_*`。`config_meta_draft` 只读展开精简 Meta 草稿；校验结果中的 `validationId` 必须与确认卡锁定回执一致。
 - 运行时数据推送服务智能体只允许 `config_tree/config_read/push_task_*`，不得调用 `config_add/config_apply`；Meta 始终只读。
 - 临时图表智能体只允许 retrieval 元数据与实体查询工具，不得调用 `config_*`、`dashboard_*`、`menu_*` 或 `push_task_*`。
 - 可视化应用智能体允许 retrieval、配置写工具和 `menu_*`，不得调用 `dashboard_*`、`push_task_*` 或 Meta 写工具。

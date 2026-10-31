@@ -10,7 +10,7 @@
 
 | 方法 | 路径 | 返回/用途 |
 | --- | --- | --- |
-| GET | `/api/v1/dih/mcp/local-services` | 六个固定服务的 code、名称、说明、SSE/Message 端点和工具数 |
+| GET | `/api/v1/dih/mcp/local-services` | 五个固定服务的 code、名称、说明、SSE/Message 端点和工具数 |
 | GET | `/api/v1/dih/mcp/local-services/{code}/tools` | 指定服务的工具名、说明、Schema、风险等级和有效审批策略 |
 
 这两个接口只读。内置分组不能在管理端修改；工具策略仍通过统一策略接口配置，稳定键保持

@@ -15,6 +15,9 @@ public interface AgentRunInputRepository extends BaseRepository<AgentRunInput, I
 
     Optional<AgentRunInput> findByRunIdAndClientMessageId(String runId, String clientMessageId);
 
+    Optional<AgentRunInput> findFirstByRunIdAndInteractionIdOrderByCreateTimeAsc(
+            String runId, String interactionId);
+
     List<AgentRunInput> findByRunIdAndStatusOrderByCreateTimeAsc(
             String runId, AgentRunInputStatus status);
 

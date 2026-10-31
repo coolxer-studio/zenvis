@@ -18,6 +18,80 @@ import static org.mockito.Mockito.when;
 class MetadataConfigWorkflowDefinitionTest {
 
     @Test
+    void cardShapedConfigCannotOverwriteLockedCandidate() {
+        MetadataConfigWorkflowDefinition definition = new MetadataConfigWorkflowDefinition();
+        AgentWorkflowState state = state(AgentWorkflowStep.META_DISCOVERY,
+                Map.of("candidate", Map.of(
+                        "content", "{\"entity\":[],\"attribute\":[],\"operator\":[]}",
+                        "digest", "locked-digest")));
+        ChatMessagePart cardPart = ChatMessagePart.builder()
+                .type("config")
+                .status("completed")
+                .content("""
+                        {"fileName":"probe_event.json","configKind":"meta",
+                         "validationStatus":"success","config":{"entity":[],
+                         "attribute":[],"operator":[]}}
+                        """)
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "configKind", "meta-config",
+                        "__metaCandidateOrdinal", 1)))
+                .build();
+        Map<String, Object> metadata = cardPart.getMetadata();
+
+        definition.updateContext(state, cardPart, metadata);
+
+        assertThat(cardPart.getStatus()).isEqualTo("blocked");
+        assertThat(metadata)
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("candidateRejected", true);
+        assertThat(map(state.getContext().get("candidate")))
+                .containsEntry("digest", "locked-digest");
+    }
+
+    @Test
+    void secondCandidateInSameTurnIsRejectedWithoutReplacingFirst() {
+        MetadataConfigWorkflowDefinition definition = new MetadataConfigWorkflowDefinition();
+        AgentWorkflowState state = state(AgentWorkflowStep.META_DISCOVERY, Map.of());
+        ChatMessagePart first = configPart("""
+                {"entity":[{"name":"first"}],"attribute":[],"operator":[]}
+                """, 1);
+        ChatMessagePart second = configPart("""
+                {"entity":[{"name":"second"}],"attribute":[],"operator":[]}
+                """, 2);
+
+        definition.updateContext(state, first, first.getMetadata());
+        String firstDigest = map(state.getContext().get("candidate")).get("digest").toString();
+        definition.updateContext(state, second, second.getMetadata());
+
+        assertThat(second.getStatus()).isEqualTo("blocked");
+        assertThat(map(state.getContext().get("candidate")))
+                .containsEntry("digest", firstDigest);
+        assertThat((List<Map<String, Object>>) state.getContext().get("validationErrors"))
+                .singleElement()
+                .satisfies(item -> assertThat(item).containsEntry(
+                        "code", "META_MULTIPLE_CANDIDATES"));
+    }
+
+    @Test
+    void approvalRequiresCurrentServerValidationReceipt() {
+        MetadataConfigWorkflowDefinition definition = new MetadataConfigWorkflowDefinition();
+        AgentWorkflowState state = state(AgentWorkflowStep.META_PLAN_CONFIRMATION,
+                Map.of(
+                        "fileName", "probe_event.json",
+                        "validationStatus", "success",
+                        "validationId", "meta-validation-current",
+                        "candidate", Map.of("content", "{}", "digest", "digest-1")));
+        ChatMessagePart part = decisionPart(Map.of(
+                "configKind", "meta",
+                "fileName", "probe_event.json",
+                "candidateDigest", "digest-1",
+                "validationId", "meta-validation-stale"));
+
+        assertThat(definition.validateAction(state, part, part.getMetadata(), "approve"))
+                .contains("回执已失效");
+    }
+
+    @Test
     void failedCandidateOnlyAllowsForceRejectReviseAndRejectsApprove() {
         MetadataConfigWorkflowDefinition definition = new MetadataConfigWorkflowDefinition();
         AgentWorkflowState state = state(AgentWorkflowStep.META_PLAN_CONFIRMATION,
@@ -463,6 +537,18 @@ class MetadataConfigWorkflowDefinitionTest {
                 .type("metadata-config-decision")
                 .status("pending")
                 .metadata(new LinkedHashMap<>(metadata))
+                .build();
+    }
+
+    private ChatMessagePart configPart(String content, int ordinal) {
+        return ChatMessagePart.builder()
+                .id("config-" + ordinal)
+                .type("config")
+                .status("completed")
+                .content(content)
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "configKind", "meta-config",
+                        "__metaCandidateOrdinal", ordinal)))
                 .build();
     }
 

@@ -8,7 +8,7 @@ ZenVis 同时具备：
 
 | 角色 | 用途 | 当前端点或来源 |
 | --- | --- | --- |
-| MCP Server | 按业务域向外部客户端暴露 79 个 ZenVis 本地工具 | 六组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
+| MCP Server | 按业务域向外部客户端暴露 80 个 ZenVis 本地工具 | 五组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
 | MCP Client | 连接数据库中配置的外部 MCP Server | 当前使用 SSE Client |
 | 工具运行时 | 按 Agent、Skill 和策略组装实际工具集合 | 本地工具与已连接外部工具 |
 | 权限网关 | 统一实施策略、审批、授权、状态和审计 | Chat、后台任务、MCP Server、管理端测试 |
@@ -142,6 +142,7 @@ Agent 请求工具
 Run 请求 ASK 工具
   → 创建 PENDING 调用并写入 agent_run_id
   → Run 进入 WAITING_APPROVAL，释放 worker 租约
+  → 审批事件写入 Run 证据，最终消息保存 mcp-approval 部件
   → 用户从运行卡或任务中心提交决定
   → approval.updated / tool.approval_updated
   → Run 重新入队并执行已批准调用
@@ -152,7 +153,8 @@ Run 请求 ASK 工具
 - Agent Run 的审批等待默认为 24 小时，不占 worker，也不计入 Run 有效执行时间；超时后 Run 进入 `PAUSED`。
 - `approved_run` 只允许当前 Run 内同一精确 `tool_key` 复用授权，不跨 Run、不跨会话，也不能覆盖 `DENY`。
 - 审批决定必须幂等。重复提交同一决定不能产生第二次执行；终态请求不能重新获得执行权。
-- 关闭页面不会取消等待或运行中的任务。重新打开会话会恢复 Run 快照、待审批动作和事件游标。
+- 审批卡属于对应 AI 消息的 `mcp-approval` 结构化部件，不是只在实时流中存在、关闭页面就消失的临时 UI。卡片展示 `requestId`、工具名、说明、风险级别、授权范围、当前状态和决定按钮。
+- 关闭页面不会取消等待或运行中的任务。重新打开会话时，优先使用 Run 快照的 `pendingInteraction.requestId` 查询审批并恢复卡片；只有旧快照没有该字段时才兼容 `pendingAction.requestId`。`tool.approval_required` 可能已经早于事件游标，不能作为唯一恢复来源。
 - 服务重启时，Run 的 `PENDING`/`APPROVED` 审批继续保留；已经进入 `RUNNING` 但结果未落库的工具调用标记为 `UNKNOWN`，Run 暂停，禁止盲目重放可能已生效的写操作。
 
 ## 6. 后台任务审批
@@ -199,19 +201,18 @@ PENDING
 
 ## 8. MCP Server 运维
 
-ZenVis 自带六个固定 MCP Server：
+ZenVis 自带五个固定 MCP Server：
 
 | code | 工具数 | SSE / Message |
 | --- | ---: | --- |
 | `retrieval` | 22 | `/mcp/retrieval/sse`、`/mcp/retrieval/message` |
-| `entity` | 5 | `/mcp/entity/sse`、`/mcp/entity/message` |
-| `config` | 9 | `/mcp/config/sse`、`/mcp/config/message` |
-| `push-task` | 6 | `/mcp/push-task/sse`、`/mcp/push-task/message` |
+| `config` | 10 | `/mcp/config/sse`、`/mcp/config/message` |
+| `push-task` | 11 | `/mcp/push-task/sse`、`/mcp/push-task/message` |
 | `visualization` | 21 | `/mcp/visualization/sse`、`/mcp/visualization/message` |
 | `analysis-task` | 16 | `/mcp/analysis-task/sse`、`/mcp/analysis-task/message` |
 
 服务端点和分组随代码固定发布；`app.ai.mcp.builtin-server.*` 只配置版本、请求超时和
-SSE 保活间隔。六组端点共享 `app.security.mcp.bearer-token`，旧聚合端点不再提供。
+SSE 保活间隔。五组端点共享 `app.security.mcp.bearer-token`，旧聚合端点不再提供。
 
 `config` 服务中的 `config_rename` 和 `config_delete` 默认 `ASK/HIGH`，并只授予元数据配置智能体。重命名只允许同一父目录且禁止覆盖；非空目录删除必须显式携带 `recursive=true`。Meta 操作完成后会严格重载并刷新 Schema，文件系统已变更但重载失败时必须保留现场并报告 `changed=true/applied=false`，不得宣称成功。
 
@@ -241,9 +242,16 @@ SSE 保活间隔。六组端点共享 `app.security.mcp.bearer-token`，旧聚�
 
 可以通过 `/api/v1/dih/mcp/agent/prompt` 查看目标 Agent 当前实际工具提示词。
 
-### Chat 没有出现审批卡
+### Chat 或 Agent Run 没有出现审批卡
 
-确认请求使用 `response_format=events`、有效策略确为 `ASK`、工具没有会话授权，以及前端能处理 `approval_required`。
+普通 Chat 先确认请求使用 `response_format=events`、有效策略确为 `ASK`、工具没有会话授权，以及前端能处理 `approval_required`。
+
+持久化 Agent Run 还要检查：
+
+1. Run 状态为 `WAITING_APPROVAL`，`pendingInteraction.kind=mcp_approval` 且 `requestId` 非空；旧快照才检查 `pendingAction` 的 `type=approval` 和 `requestId`；
+2. 审批记录仍为 `PENDING`，没有被超时、拒绝或取消；
+3. 会话消息含对应的 `mcp-approval` 部件，或重连逻辑能按 `requestId` 回填该部件；
+4. 刷新或重新打开会话后审批卡仍存在。若只在实时流中出现、刷新后消失，说明审批部件未持久化或快照恢复未执行。
 
 ### 审批后工具重复执行
 
@@ -258,6 +266,8 @@ app.ai.mcp.approval.timeout-seconds=300
 ```
 
 后台 `MANUAL` 任务可以持续等待，直到任务被决定或取消。
+
+持久化 Agent Run 的审批默认等待 24 小时。若任务中心显示等待但聊天区没有审批卡，按“Chat 或 Agent Run 没有出现审批卡”的 Run 检查项确认快照、审批状态和 `mcp-approval` 部件。
 
 ### 连接错误影响后端启动
 

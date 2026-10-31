@@ -756,6 +756,128 @@ class McpApprovalServiceTest {
     }
 
     @Test
+    void resumedApprovedInvocationEmitsRunningAndSucceededTerminalStatus() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        when(repository.findFirstByAgentRunIdAndTurnIdAndToolKeyAndArgumentsDigestOrderByCreateTimeDesc(
+                anyString(), anyString(), anyString(), anyString()))
+                .thenAnswer(call -> invocations.values().stream()
+                        .filter(item -> call.getArgument(0).equals(item.getAgentRunId()))
+                        .filter(item -> call.getArgument(1).equals(item.getTurnId()))
+                        .filter(item -> call.getArgument(2).equals(item.getToolKey()))
+                        .filter(item -> call.getArgument(3).equals(item.getArgumentsDigest()))
+                        .findFirst());
+        List<McpApprovalEvent> events = new CopyOnWriteArrayList<>();
+        User requester = user(42, false);
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor(), "{\"id\":1}", runContext(events), () -> "first"))
+                .isInstanceOf(McpApprovalPendingException.class);
+        McpToolInvocation pending = invocations.values().stream()
+                .filter(item -> item.getStatus() == McpInvocationStatus.PENDING)
+                .findFirst().orElseThrow();
+        service.decide(pending.getRequestId(), "approved", null, requester);
+        events.clear();
+
+        String result = service.execute(
+                descriptor(), "{\"id\":1}", runContext(events), () -> "created");
+
+        assertThat(result).isEqualTo("created");
+        assertThat(invocations.values()).singleElement()
+                .extracting(McpToolInvocation::getStatus)
+                .isEqualTo(McpInvocationStatus.SUCCEEDED);
+        assertThat(events)
+                .extracting(event -> event.data().getStatus())
+                .containsExactly(McpInvocationStatus.RUNNING,
+                        McpInvocationStatus.SUCCEEDED);
+    }
+
+    @Test
+    void unknownPushCreateStartsFreshApprovalInsteadOfAskingUserForInput() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        McpToolInvocation previous = new McpToolInvocation()
+                .setRequestId("unknown-create")
+                .setAgentRunId("run-1")
+                .setTurnId("run:run-1:1")
+                .setToolKey(McpToolDescriptor.localKey("push_task_create_and_start"))
+                .setToolName("push_task_create_and_start")
+                .setStatus(McpInvocationStatus.UNKNOWN);
+        when(repository.findFirstByAgentRunIdAndTurnIdAndToolKeyAndArgumentsDigestOrderByCreateTimeDesc(
+                anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(Optional.of(previous));
+        McpToolDescriptor descriptor = new McpToolDescriptor(
+                McpToolDescriptor.localKey("push_task_create_and_start"),
+                McpToolSourceType.LOCAL, null, "push-task", "ZenVis",
+                "push_task_create_and_start", "push_task_create_and_start",
+                "创建推送任务", "creates push task", false, true,
+                com.coolxer.commons.enums.McpToolRiskLevel.HIGH,
+                McpApprovalPolicy.ASK);
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor, "{\"request\":{\"mark\":\"data-push:chat:demo\"}}",
+                runContext(null), () -> "should-not-run"))
+                .isInstanceOf(McpApprovalPendingException.class);
+
+        assertThat(invocations.values())
+                .filteredOn(item -> item.getStatus() == McpInvocationStatus.PENDING)
+                .singleElement()
+                .satisfies(item -> assertThat(item.getArgumentsDigest())
+                        .isNotBlank());
+    }
+
+    @Test
+    void unknownNonIdempotentToolStillBlocksReplay() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
+        McpToolInvocation previous = new McpToolInvocation()
+                .setRequestId("unknown-write")
+                .setAgentRunId("run-1")
+                .setTurnId("run:run-1:1")
+                .setToolKey(descriptor().toolKey())
+                .setStatus(McpInvocationStatus.UNKNOWN);
+        when(repository.findFirstByAgentRunIdAndTurnIdAndToolKeyAndArgumentsDigestOrderByCreateTimeDesc(
+                anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(Optional.of(previous));
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor(), "{\"id\":1}", runContext(null), () -> "should-not-run"))
+                .isInstanceOf(McpToolResultUnknownException.class);
+        assertThat(invocations.values()).isEmpty();
+    }
+
+    @Test
+    void preExecutionFailureIsFailedInsteadOfUnknown() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ALLOW);
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor(), "{\"id\":1}", runContext(null),
+                () -> {
+                    throw new McpPreExecutionException("配置校验失败");
+                }))
+                .isInstanceOf(McpPreExecutionException.class);
+
+        assertThat(invocations.values()).singleElement()
+                .satisfies(invocation -> {
+                    assertThat(invocation.getStatus()).isEqualTo(McpInvocationStatus.FAILED);
+                    assertThat(invocation.getErrorSummary()).contains("配置校验失败");
+                });
+    }
+
+    @Test
+    void ordinaryAgentRunWriteFailureRemainsUnknown() {
+        when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ALLOW);
+
+        assertThatThrownBy(() -> service.execute(
+                descriptor(), "{\"id\":1}", runContext(null),
+                () -> {
+                    throw new IllegalStateException("connection reset after write");
+                }))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(invocations.values()).singleElement()
+                .extracting(McpToolInvocation::getStatus)
+                .isEqualTo(McpInvocationStatus.UNKNOWN);
+    }
+
+    @Test
     void existingRunScopeGrantExecutesAnotherCallOfSameToolWithoutApproval() {
         when(policyService.effectivePolicy(anyString(), any())).thenReturn(McpApprovalPolicy.ASK);
         when(repository.existsByAgentRunIdAndToolKeyAndApprovalScopeAndStatusIn(

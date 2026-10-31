@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { currentWorkflowRevisions, isCurrentWorkflowPart } from './workflow-card-state.ts';
+import {
+  currentWorkflowRevisions,
+  isCurrentWorkflowPart,
+  isSupersededVisualizationPlanCard,
+} from './workflow-card-state.ts';
 import {
   metadataPathOperation,
   metadataPathOperationAffectedFiles,
@@ -46,6 +50,34 @@ test('不同工作流分别维护当前检查点，历史缺失版本的卡片�
   assert.equal(isCurrentWorkflowPart(legacy, revisions), true);
   assert.equal(isCurrentWorkflowPart(first, revisions), true);
   assert.equal(isCurrentWorkflowPart(second, revisions), true);
+});
+
+test('旧 revision 的待确认查询方案卡被更高 revision 取代', () => {
+  const oldPlan = {
+    type: 'visualization-chart-decision',
+    status: 'pending',
+    metadata: {
+      workflowId: 'workflow-1',
+      stateRevision: 6,
+      action: 'visualization_chart.confirm_query_plan',
+    },
+  };
+  const currentPlan = {
+    type: 'visualization-chart-decision',
+    status: 'pending',
+    metadata: {
+      workflowId: 'workflow-1',
+      stateRevision: 8,
+      action: 'visualization_chart.confirm_query_plan',
+    },
+  };
+
+  const revisions = currentWorkflowRevisions([
+    { parts: [oldPlan, currentPlan] },
+  ]);
+
+  assert.equal(isSupersededVisualizationPlanCard(oldPlan, revisions), true);
+  assert.equal(isSupersededVisualizationPlanCard(currentPlan, revisions), false);
 });
 
 test('元数据失败候选映射强制动作且正常候选不暴露强制入口', () => {

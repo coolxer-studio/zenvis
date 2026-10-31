@@ -20,6 +20,7 @@ import com.coolxer.model.retrieval.meta.DataAttribute;
 import com.coolxer.model.retrieval.meta.DataEntity;
 import com.coolxer.model.retrieval.meta.MetaDataConstants;
 import com.coolxer.service.retrieval.AnalyticsQueryEngine;
+import com.coolxer.service.retrieval.AnalyticsTimeRangeRules;
 import com.coolxer.service.retrieval.EntityAnalyticsService;
 import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.retrieval.RetrievalAccessPolicy;
@@ -33,10 +34,8 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -71,11 +70,8 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
     private static final int DEFAULT_TOP_LIMIT = 10;
     private static final int MAX_TOP_LIMIT = 100;
     private static final int DEFAULT_CATEGORY_LIMIT = 10;
-    private static final Duration MAX_CUSTOM_RANGE = Duration.ofDays(366L * 3);
     private static final DateTimeFormatter BOUNDARY_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-    private static final DateTimeFormatter SECOND_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Set<String> OPERATIONS =
             Set.of("COUNT", "DISTINCT_COUNT", "SUM", "AVG", "MIN", "MAX", "PERCENTILE");
     private static final Set<String> COMPARISONS =
@@ -1234,61 +1230,27 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
 
     private TimeContext resolveTime(AnalyticsTimeRange input, String defaultPreset,
                                     boolean allowAllTime) {
-        String preset = StringUtils.upperCase(input == null
-                ? defaultPreset : StringUtils.defaultIfBlank(input.preset(), defaultPreset));
         ZoneId zone = ZoneId.of(retrievalTimeZone);
-        LocalDateTime now = LocalDateTime.now(zone);
-        if ("ALL_TIME".equals(preset)) {
-            if (!allowAllTime) {
-                throw unsupported("当前接口不支持ALL_TIME");
-            }
-            return new TimeContext(preset, null, null, zone.getId());
+        try {
+            AnalyticsTimeRangeRules.Resolved resolved = AnalyticsTimeRangeRules.resolve(
+                    input == null ? null : input.preset(),
+                    input == null ? null : input.startTime(),
+                    input == null ? null : input.endTime(),
+                    defaultPreset,
+                    allowAllTime,
+                    zone,
+                    LocalDateTime.now(zone));
+            LocalDateTime start = resolved.start();
+            LocalDateTime end = resolved.end();
+            return new TimeContext(resolved.preset(),
+                    start == null ? null : new AnalyticsQueryEngine.TimeWindow(format(start), format(end)),
+                    start == null ? null : new LocalWindow(start, end),
+                    resolved.zoneId());
+        } catch (AnalyticsTimeRangeRules.Violation violation) {
+            throw violation.invalidTime()
+                    ? invalidTime(violation.getMessage())
+                    : unsupported(violation.getMessage());
         }
-        LocalDateTime start;
-        LocalDateTime end;
-        switch (preset) {
-            case "TODAY" -> {
-                start = LocalDate.now(zone).atStartOfDay();
-                end = start.plusDays(1);
-            }
-            case "YESTERDAY" -> {
-                end = LocalDate.now(zone).atStartOfDay();
-                start = end.minusDays(1);
-            }
-            case "LAST_24_HOURS" -> {
-                end = now;
-                start = now.minusHours(24);
-            }
-            case "LAST_7_DAYS" -> {
-                end = now;
-                start = now.minusDays(7);
-            }
-            case "LAST_30_DAYS" -> {
-                end = now;
-                start = now.minusDays(30);
-            }
-            case "THIS_MONTH" -> {
-                start = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay();
-                end = start.plusMonths(1);
-            }
-            case "CUSTOM" -> {
-                if (input == null) {
-                    throw invalidTime("CUSTOM必须提供start_time和end_time");
-                }
-                start = parseTime(input.startTime(), "start_time");
-                end = parseTime(input.endTime(), "end_time");
-            }
-            default -> throw unsupported("不支持的时间范围: " + preset);
-        }
-        if (!start.isBefore(end)) {
-            throw invalidTime("开始时间必须早于结束时间");
-        }
-        if (Duration.between(start, end).compareTo(MAX_CUSTOM_RANGE) > 0) {
-            throw invalidTime("时间跨度不能超过3年");
-        }
-        return new TimeContext(preset,
-                new AnalyticsQueryEngine.TimeWindow(format(start), format(end)),
-                new LocalWindow(start, end), zone.getId());
     }
 
     private AnalyticsQueryEngine.TimeWindow comparisonWindow(TimeContext time, String comparison) {
@@ -1757,19 +1719,6 @@ public class EntityAnalyticsServiceImpl implements EntityAnalyticsService {
             }
         }
         return current;
-    }
-
-    private LocalDateTime parseTime(String value, String label) {
-        String normalized = requireNonBlank(value, label + "不能为空");
-        for (DateTimeFormatter formatter : List.of(
-                DateTimeFormatter.ISO_LOCAL_DATE_TIME, SECOND_FORMAT, BOUNDARY_FORMAT)) {
-            try {
-                return LocalDateTime.parse(normalized, formatter);
-            } catch (DateTimeParseException ignored) {
-                // Try the next accepted representation.
-            }
-        }
-        throw invalidTime(label + "格式必须为ISO本地时间或yyyy-MM-dd HH:mm:ss[.SSS]");
     }
 
     private LocalDateTime parseBoundary(String value) {

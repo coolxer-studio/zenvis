@@ -36,6 +36,10 @@
       <div class="mcp-approval-content">
         {{ part.content || '该工具需要你的明确许可后才能执行。' }}
       </div>
+      <div v-if="mcpApprovalState.hasError" class="mcp-approval-error">
+        <strong>{{ mcpApprovalState.errorTitle }}</strong>
+        <span>{{ mcpApprovalState.errorSummary || '工具执行失败，未返回错误详情。' }}</span>
+      </div>
       <div v-if="mcpApprovalExpiryText" class="mcp-approval-expiry">
         {{ mcpApprovalExpiryText }}
       </div>
@@ -261,6 +265,7 @@ import { useSecondClock } from '@/composables/use-second-clock';
 import type { ChatMessagePart, McpApprovalDecision } from '@/types/type-dih';
 import { metadataText, useDefaultExpanded } from './message-part-context';
 import { workflowRevision } from '../workflow-card-state';
+import { resolveMcpApprovalState } from './mcp-approval-state';
 
 type InfoStepSuggestion = {
   label: string;
@@ -318,13 +323,6 @@ const emit = defineEmits<{
 
 const approvalNow = useSecondClock();
 const { isExpanded, toggleExpanded, setExpanded } = useDefaultExpanded(toRef(props, 'part'));
-watch(
-  () => [props.part.type, props.part.status] as const,
-  ([type, status]) => {
-    if (type === 'mcp-approval') setExpanded(status === 'pending');
-  },
-  { immediate: true },
-);
 const confirmReviseInputVisible = ref(false);
 const confirmDecisionInput = ref('');
 const infoStepSelectedValues = reactive<Record<string, string>>({});
@@ -355,39 +353,17 @@ const mcpApprovalRunAllowed = computed(
     props.part.metadata?.run_approval_allowed === true,
 );
 
-const mcpApprovalStatusText = computed(() => {
-  if (mcpApprovalScope.value === 'session') {
-    if (props.part.status === 'approved') return '本会话已允许，等待执行';
-    if (props.part.status === 'running') return '本会话已允许，执行中';
-  }
-  if (mcpApprovalScope.value === 'run') {
-    if (props.part.status === 'approved') return '本任务已允许同类工具，等待执行';
-    if (props.part.status === 'running') return '本任务已允许同类工具，执行中';
-  }
-  return (
-    {
-      pending: '等待审批',
-      approved: '已允许，等待执行',
-      running: '已允许，执行中',
-      succeeded: '执行成功',
-      failed: '执行失败',
-      rejected: '已拒绝',
-      denied: '审批规则拒绝',
-      expired: '已超时',
-      cancelled: '已取消',
-    }[props.part.status || 'pending'] ||
-    props.part.status ||
-    '等待审批'
-  );
-});
+const mcpApprovalState = computed(() => resolveMcpApprovalState(props.part));
+const mcpApprovalStatusText = computed(() => mcpApprovalState.value.statusText);
+const mcpApprovalTagType = computed(() => mcpApprovalState.value.tagType);
 
-const mcpApprovalTagType = computed<'success' | 'warning' | 'info' | 'danger'>(() => {
-  const status = props.part.status;
-  if (status === 'succeeded') return 'success';
-  if (status === 'failed' || status === 'rejected' || status === 'denied') return 'danger';
-  if (status === 'pending' || status === 'approved' || status === 'running') return 'warning';
-  return 'info';
-});
+watch(
+  () => [props.part.type, props.part.status] as const,
+  ([type]) => {
+    if (type === 'mcp-approval') setExpanded(mcpApprovalState.value.expandedByDefault);
+  },
+  { immediate: true },
+);
 
 const mcpApprovalSourceText = computed(() => {
   const serverName = metadataText(props.part, 'serverName');
@@ -430,7 +406,7 @@ const mcpApprovalExpiryText = computed(() => {
   return `剩余审批时间：${minutes}:${String(rest).padStart(2, '0')}`;
 });
 
-const mcpApprovalCanDecide = computed(() => props.part.status === 'pending');
+const mcpApprovalCanDecide = computed(() => mcpApprovalState.value.canDecide);
 const mcpApprovalIsDeciding = computed(() => props.part.metadata?.deciding === true);
 const mcpApprovalDecisionLoading = (decision: McpApprovalDecision) =>
   mcpApprovalIsDeciding.value && props.part.metadata?.decisionInFlight === decision;

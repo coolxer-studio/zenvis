@@ -16,7 +16,7 @@ import lombok.experimental.Accessors;
 import java.util.Date;
 
 /**
- * Run 运行期间由用户追加的 steer 输入。
+ * Run 运行期间的主动消息、统一交互响应和附件。
  */
 @Data
 @Entity
@@ -42,11 +42,32 @@ public class AgentRunInput extends BaseEntity {
     @Column(name = "message_id", length = 64)
     private String messageId;
 
+    @Column(name = "part_id", length = 64)
+    private String partId;
+
+    @Column(name = "workflow_id", length = 64)
+    private String workflowId;
+
+    @Column(name = "request_id", length = 64)
+    private String requestId;
+
+    @Column(name = "interaction_id", length = 64)
+    private String interactionId;
+
+    @Column(name = "interaction_kind", length = 32)
+    private String interactionKind;
+
     @Column(columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "attachments_json", columnDefinition = "LONGTEXT")
     private String attachments;
+
+    /**
+     * 结构化交互响应，用于幂等比较和审计；普通聊天输入可为空。
+     */
+    @Column(name = "response_json", columnDefinition = "LONGTEXT")
+    private String responseJson;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

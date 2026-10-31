@@ -42,6 +42,8 @@ export const resolveAgentRunStepStatus = (runStatus: string | undefined, stepSta
 
 export const resolveAgentRunWaitingQuestion = (run?: AgentRun | null): string => {
   if (!run || run.status !== 'WAITING_USER') return '';
+  const prompt = String(run.pendingInteraction?.prompt || '').trim();
+  if (prompt) return prompt;
   const pendingAction = String(run.pendingAction || '');
   if (pendingAction) {
     try {
@@ -53,6 +55,26 @@ export const resolveAgentRunWaitingQuestion = (run?: AgentRun | null): string =>
     }
   }
   return String(run.pausedReason || '').trim();
+};
+
+/**
+ * Restore the pending MCP approval card from the run snapshot even when the
+ * approval event has already fallen behind the replay cursor.
+ */
+export const resolveAgentRunPendingApprovalRequestId = (run?: AgentRun | null): string => {
+  if (!run || run.status !== 'WAITING_APPROVAL') return '';
+  if (run.pendingInteraction?.kind === 'mcp_approval') {
+    return String(run.pendingInteraction.requestId || '').trim();
+  }
+  const pendingAction = String(run.pendingAction || '');
+  if (!pendingAction) return '';
+  try {
+    const action = JSON.parse(pendingAction) as Record<string, unknown>;
+    if (String(action.type || '') !== 'approval') return '';
+    return String(action.requestId || '').trim();
+  } catch {
+    return '';
+  }
 };
 
 type AgentRunMessageOptions = {

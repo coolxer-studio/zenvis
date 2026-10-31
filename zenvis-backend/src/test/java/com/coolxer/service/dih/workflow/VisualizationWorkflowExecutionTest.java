@@ -80,6 +80,26 @@ class VisualizationWorkflowExecutionTest {
     }
 
     @Test
+    void entityInTitleDoesNotOverrideTheQueryPlanConfirmationAction() {
+        AgentWorkflowState state = state(
+                VisualizationAgentTypes.CHART, AgentWorkflowStep.ATTRIBUTE_META);
+        ChatMessagePart confirmPlan = decision(
+                VisualizationAgentTypes.CHART,
+                "confirm_query_plan",
+                Map.of(
+                        "title", "确认实体与字段查询方案",
+                        "planId", "plan-entity-title",
+                        "query", Map.of(
+                                "tool", "entity_distribution",
+                                "request", Map.of(
+                                        "entity", "user_event",
+                                        "dimension", "event_type"))));
+
+        assertThat(chart.resolveStep(state, confirmPlan, confirmPlan.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.QUERY_PLAN_CONFIRMATION);
+    }
+
+    @Test
     void appMenuConfirmationRequiresAReadBackVerifiedConfigRecord() {
         AgentWorkflowState state = state(
                 VisualizationAgentTypes.APP, AgentWorkflowStep.ARTIFACT_READY);

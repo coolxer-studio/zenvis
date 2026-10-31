@@ -2,7 +2,7 @@
   "id": "metadata-config-agent",
   "name": "元数据配置",
   "description": "系统内置元数据配置智能体 Skill，负责 Meta 配置生成、确认、写入、读回校验、目录或文件重命名与删除。",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_metadata_config"
@@ -26,6 +26,7 @@
           "config_tree",
           "config_schema",
           "config_read",
+          "config_meta_draft",
           "config_add",
           "config_apply",
           "config_validate",
@@ -37,7 +38,7 @@
     "limits": {
       "maxToolCalls": 32,
       "maxRepeatedFailures": 2,
-      "maxToolResultChars": 8000,
+      "maxToolResultChars": 32000,
       "maxAccumulatedToolResultChars": 64000,
       "maxAccumulatedToolResultTokens": 48000
     }

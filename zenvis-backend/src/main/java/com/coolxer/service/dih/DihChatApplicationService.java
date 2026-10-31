@@ -33,6 +33,7 @@ import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.dih.mcp.McpApprovalEvent;
 import com.coolxer.service.dih.mcp.McpApprovalService;
 import com.coolxer.service.dih.mcp.McpApprovalPendingException;
+import com.coolxer.service.dih.mcp.McpToolResultUnknownException;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.workflow.AgentWorkflowState;
@@ -42,17 +43,25 @@ import com.coolxer.service.dih.workflow.WorkflowOrchestrator;
 import com.coolxer.service.dih.workflow.WorkflowStateStore;
 import com.coolxer.service.dih.workflow.WorkflowMetrics;
 import com.coolxer.service.dih.workflow.VisualizationQueryNormalizer;
+import com.coolxer.service.dih.workflow.VisualizationQueryValidator;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.commons.enums.McpInvocationChannel;
 import com.coolxer.model.config.dto.ConfigDto;
 import com.coolxer.model.config.vo.ConfigPathOperationResult;
 import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.config.MetaConfigContractService;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.model.system.vo.DashboardVo;
 import com.coolxer.model.system.vo.MenuVo;
+import com.coolxer.model.system.vo.PushTaskOperationVo;
+import com.coolxer.model.system.vo.PushTaskPageVo;
 import com.coolxer.model.system.vo.PushTaskVo;
+import com.coolxer.model.system.validation.PushTaskDiagnosticResultVo;
+import com.coolxer.model.system.validation.PushTaskDiagnosticVo;
+import com.coolxer.model.system.validation.PushTaskTestSummaryVo;
+import com.coolxer.model.system.validation.PushTaskValidationVo;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -105,19 +114,6 @@ public class DihChatApplicationService {
             "模型服务无法加载当前智能体的工具定义，请联系管理员检查工具参数后重试。";
     private static final String REPORT_DOCUMENT_FENCE_INFO = "```zenvis:report-document-config";
     private static final String INCOMPLETE_REPORT_FALLBACK = "报表生成未完成，请重试。";
-    private static final String META_CONFIG_CONTRACT = """
-            【Meta 精简契约】
-            1. 顶层只允许 entity、attribute、operator 三个对象数组，字段名使用 snake_case。
-            2. entity 必填 name、label、description、table_name、data_source；
-               data_source 固定 clickhouse，table_name 固定 zenvis.<table_name>；
-               auto_create.engine 固定 MergeTree，order_by 至少一项，禁止 zenvis_id。
-            3. attribute 必填 entity、name、label、description、column_name、column_type、operators；
-               operators 引用顶层已定义的 operator.name；display_selected 可省略，平台补 true。
-            4. operator 使用 name + label，不使用 description；id 可省略。
-            5. 禁止生成或重复 zenvis_id、zenvis_insert_time，平台会自动注入。
-            6. 生成候选后必须调用 config_validate(type="meta", fileName, text)；
-               有错误时按 diagnostics[].path/repairHint 修订并复验，最多 3 轮。
-            """;
     private static final Set<String> VISUALIZATION_META_ENTITY_TOOLS = Set.of(
             "retrieval_list_display_entity", "retrieval_list_entity");
     private static final Set<String> VISUALIZATION_META_ATTRIBUTE_TOOLS = Set.of(
@@ -162,6 +158,9 @@ public class DihChatApplicationService {
     private final PushTaskService pushTaskService;
     private final DashboardService dashboardService;
     private final MenuService menuService;
+
+    @Autowired(required = false)
+    private MetaConfigContractService metaConfigContractService;
 
     @Autowired(required = false)
     private AttachmentToolProviderFactory attachmentToolProviderFactory;
@@ -1174,7 +1173,8 @@ public class DihChatApplicationService {
         return switch (workflow.getStep()) {
             case PUSH_INPUT_COLLECTION -> bootstrapDataPushMetaDiscovery(
                     mcpToolContext, prompt, metaRef);
-            case PUSH_FORMAT_CHECK, PUSH_EXECUTING -> executeApprovedPushTask(
+            case PUSH_CONFIG_VALIDATION, PUSH_FORMAT_CHECK, PUSH_EXECUTING ->
+                    executeApprovedPushTask(
                     mcpToolContext, prompt, chatSession, workflow);
             default -> prompt + "\n\n【平台工作流状态】\n当前阶段："
                     + workflow.getStep().name()
@@ -1238,10 +1238,19 @@ public class DihChatApplicationService {
                 + "\n当前 Meta 文件列表：" + (fileNames.isEmpty()
                 ? "（无）" : String.join(", ", fileNames))
                 + schemaSection
-                + "\n\n" + META_CONFIG_CONTRACT
+                + "\n\n" + metaConfigContract()
                 + "\n请只基于真实文件列表和 Schema 生成完整候选配置与确认卡；"
-                + "生成后先调用 config_validate(type=\"meta\")，通过后再输出确认卡；"
+                + "先把精简实体/字段草稿交给 config_meta_draft 展开，再调用 config_validate(type=\"meta\")，"
+                + "通过后再输出确认卡；"
                 + "确认前不得调用 config_add 或 config_apply。";
+    }
+
+    private String metaConfigContract() {
+        MetaConfigContractService service = metaConfigContractService;
+        if (service == null) {
+            service = new MetaConfigContractService(configService);
+        }
+        return service.snapshot().promptContract();
     }
 
     private String bootstrapMetadataOperationDiscovery(
@@ -1319,8 +1328,12 @@ public class DihChatApplicationService {
                     + "metaRef：" + JacksonUtil.toJson(validation.metaRef())
                     + "\nMeta 内容摘要：" + validation.resultSummary()
                     + "\n请只基于该已发布 Meta 生成完整推送配置；不得调用 "
-                    + "config_add/config_apply。确认卡必须包含上述 metaRef、稳定 sourceMark、"
-                    + "完整 request，并使用 action=data_push.confirm_plan。";
+                    + "config_add/config_apply。生成后必须先调用 push_task_validate_config，"
+                    + "传入完整 config、metaFileName、config_read 原文和 format；"
+                    + "只有 passed=true 且 blocked=false 才可输出确认卡。"
+                    + "确认卡必须包含上述 metaRef、稳定 sourceMark、完整 request、"
+                    + "真实验证结果 validation、validationStatus=passed 和 validationDigest；"
+                    + "校验失败时按 diagnostics[].path/repairHint 修订完整候选后复验。";
         } catch (RuntimeException e) {
             return prompt + "\n\n【平台 Meta 只读检查失败】\n真实错误："
                     + safeWorkflowError(e)
@@ -1947,7 +1960,7 @@ public class DihChatApplicationService {
             metaRef.put("fileName", fileName);
             metaRef.put("contentDigest", sha256(content));
             return new PushMetaValidation(true, fileName, metaRef,
-                    abbreviateWorkflowValue(content, 500));
+                    abbreviateWorkflowValue(content, 500), content);
         } catch (RuntimeException e) {
             return PushMetaValidation.missing(fileName);
         }
@@ -1957,10 +1970,11 @@ public class DihChatApplicationService {
             boolean present,
             String fileName,
             Map<String, Object> metaRef,
-            String resultSummary) {
+            String resultSummary,
+            String content) {
         private static PushMetaValidation missing(String fileName) {
             return new PushMetaValidation(false, fileName,
-                    new LinkedHashMap<>(), "");
+                    new LinkedHashMap<>(), "", "");
         }
 
         private String contentDigest() {
@@ -2357,48 +2371,56 @@ public class DihChatApplicationService {
             ChatSession chatSession,
             AgentWorkflowState workflow) {
         Map<String, Object> context = workflow.getContext() == null
-                ? new LinkedHashMap<>() : workflow.getContext();
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(workflow.getContext());
+        boolean revalidateOnly = Boolean.TRUE.equals(context.get("revalidateOnly"));
         Map<String, Object> candidate = mapValue(context.get("candidate"));
         String config = stringValue(candidate, "content", "");
+        String candidateFormat = stringValue(candidate, "format", "");
         String sourceMark = stringValue(context, "sourceMark", "");
         Map<String, Object> lockedRequest =
                 new LinkedHashMap<>(mapValue(context.get("request")));
         Map<String, Object> lockedMetaRef = mapValue(context.get("metaRef"));
-        AgentWorkflowStep retryStep = workflow.getStep();
+        int repairRound = integerValue(context.get("repairRound"), 0);
         if (!StringUtils.hasText(config)
+                || !StringUtils.hasText(candidateFormat)
                 || !StringUtils.hasText(sourceMark)
                 || lockedRequest.isEmpty()
                 || !StringUtils.hasText(stringValue(lockedRequest, "name", ""))
                 || !StringUtils.hasText(stringValue(lockedMetaRef, "fileName", ""))
                 || !StringUtils.hasText(stringValue(lockedMetaRef, "contentDigest", ""))) {
             markWorkflowBlocked(
-                    chatSession,
-                    workflow,
-                    retryStep,
-                    "",
+                    chatSession, workflow, workflow.getStep(), "",
                     "已批准 PushTask 方案缺少锁定配置、sourceMark、Meta 引用或任务名称");
-            return prompt + """
-
-                    【平台 PushTask 执行阻断】
-                    已批准方案缺少锁定配置、sourceMark、Meta 引用或任务名称。
-                    不得自行编造任务参数或创建任务。
-                    """;
+            return prompt + "\n\n【平台 PushTask 执行阻断】\n"
+                    + "已批准方案缺少锁定配置、format、sourceMark、Meta 引用或任务名称。"
+                    + "平台未调用任何写工具；不得自行编造任务参数或创建任务。";
         }
+        String candidateDigest = sha256(config);
+        String lockedCandidateDigest = stringValue(candidate, "digest", "");
+        if (StringUtils.hasText(lockedCandidateDigest)
+                && !Objects.equals(lockedCandidateDigest, candidateDigest)) {
+            markWorkflowBlocked(
+                    chatSession, workflow,
+                    AgentWorkflowStep.PUSH_CONFIG_VALIDATION,
+                    "push_task_validate_config",
+                    "锁定候选摘要与完整配置不一致");
+            return prompt + "\n\n【平台 PushTask 执行阻断】\n"
+                    + "候选配置摘要与正文不一致，平台未调用任何写工具。"
+                    + "请重新生成完整配置并重新确认。";
+        }
+
         PushMetaValidation metaValidation = validatePushMeta(
-                mcpToolContext,
-                stringValue(lockedMetaRef, "fileName", ""));
+                mcpToolContext, stringValue(lockedMetaRef, "fileName", ""));
         if (!metaValidation.present()) {
             markWorkflowBlocked(
-                    chatSession,
-                    workflow,
+                    chatSession, workflow,
                     AgentWorkflowStep.PUSH_INPUT_COLLECTION,
                     "config_read",
                     "已批准推送方案依赖的 Meta 不存在或无法读取");
             return prompt + missingPushMetaInstruction(
                     stringValue(lockedMetaRef, "fileName", ""));
         }
-        if (!Objects.equals(
-                stringValue(lockedMetaRef, "contentDigest", ""),
+        if (!Objects.equals(stringValue(lockedMetaRef, "contentDigest", ""),
                 metaValidation.contentDigest())) {
             workflow.setStep(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
             workflow.setStatus("active");
@@ -2409,121 +2431,481 @@ public class DihChatApplicationService {
                     + "请基于最新 Meta 重新生成完整推送配置并重新确认。"
                     + "\n最新 metaRef：" + JacksonUtil.toJson(metaValidation.metaRef());
         }
+
         lockedRequest.put("config", config);
         lockedRequest.put("source", "SYSTEM");
         lockedRequest.put("mark", sourceMark);
+        lockedRequest.put("metaFileName", stringValue(lockedMetaRef, "fileName", ""));
+        lockedRequest.put("metaContent", metaValidation.content());
+        lockedRequest.put("candidateDigest", candidateDigest);
+        lockedRequest.put("metaDigest", metaValidation.contentDigest());
+        lockedRequest.put("repairRound", repairRound);
 
-        List<String> requiredTools = List.of(
-                "push_task_detect_format",
-                "push_task_list_by_source_mark",
+        List<String> requiredTools = revalidateOnly
+                ? List.of("push_task_validate_config")
+                : List.of(
+                "push_task_validate_config",
+                "push_task_list",
+                "push_task_get",
                 "push_task_create_and_start",
-                "push_task_get_log");
+                "push_task_diagnose");
         if (requiredTools.stream().anyMatch(
                 name -> findToolCallback(mcpToolContext, name) == null)) {
             markWorkflowBlocked(
-                    chatSession,
-                    workflow,
-                    retryStep,
-                    "",
-                    "PushTask 格式检测、冲突检查、创建或日志 MCP 工具未完整暴露");
+                    chatSession, workflow, workflow.getStep(), "",
+                    "PushTask 校验、冲突检查、创建或运行诊断 MCP 工具未完整暴露");
             return prompt + "\n\n【平台 PushTask 执行阻断】\n"
                     + "所需 MCP 工具未完整暴露，不得创建任务或生成成功记录。";
         }
 
         try {
-            String formatResult = callNamedTool(
-                    mcpToolContext,
-                    "push_task_detect_format",
-                    Map.of("content", config));
-            String format = decodeToolString(formatResult);
-            if (!Set.of("yaml", "toml", "json").contains(
-                    format.trim().toLowerCase(Locale.ROOT))) {
-                throw new IllegalStateException("push_task_detect_format 返回不支持的格式：" + format);
+            PushTaskValidationVo validation = validatePushCandidate(
+                    mcpToolContext, config,
+                    stringValue(lockedMetaRef, "fileName", ""),
+                    metaValidation.content(),
+                    candidateFormat);
+            String validationFailure = pushValidationFailure(validation);
+            if (StringUtils.hasText(validationFailure)) {
+                markWorkflowBlocked(
+                        chatSession, workflow,
+                        AgentWorkflowStep.PUSH_CONFIG_VALIDATION,
+                        "push_task_validate_config",
+                        validationFailure);
+                return prompt + "\n\n【平台 PushTask 配置门禁未通过】\n"
+                        + validationFailure
+                        + "\n平台未调用创建或更新工具。请按 diagnostics[].path/repairHint "
+                        + "修订完整配置，重新执行 push_task_validate_config 并重新确认。";
+            }
+            if (!Objects.equals(candidateDigest, validation.getCandidateDigest())
+                    || !Objects.equals(metaValidation.contentDigest(),
+                    validation.getMetaDigest())) {
+                throw new IllegalStateException(
+                        "校验结果摘要与锁定候选或 Meta 摘要不一致（candidate="
+                                + candidateDigest + "/" + validation.getCandidateDigest()
+                                + "，meta=" + metaValidation.contentDigest()
+                                + "/" + validation.getMetaDigest() + "）");
+            }
+            lockedRequest.put("format", validation.getFormat());
+            lockedRequest.put("validationDigest", validation.getValidationDigest());
+
+            if (revalidateOnly) {
+                Map<String, Object> validationMetadata = pushValidationMetadata(
+                        validation, repairRound);
+                context.put("validation", validationMetadata);
+                context.put("validationStatus", "success");
+                context.put("validationDigest", validation.getValidationDigest());
+                context.remove("revalidateOnly");
+                workflow.setContext(context);
+                workflow.setStep(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+                workflow.setStatus("active");
+                workflow.setStateRevision(workflow.getStateRevision() + 1);
+                workflowStateStore.upsert(chatSession, workflow);
+                return prompt + "\n\n【平台已重新校验锁定 PushTask 候选】\n"
+                        + "平台未创建、更新或启动任何任务。\n"
+                        + "sourceMark：" + sourceMark + "\n"
+                        + "metaRef：" + JacksonUtil.toJson(lockedMetaRef) + "\n"
+                        + "request：" + JacksonUtil.toJson(context.get("request")) + "\n"
+                        + "完整配置：\n" + config + "\n"
+                        + "校验结果：" + JacksonUtil.toJson(validationMetadata) + "\n"
+                        + "请严格使用上述锁定值输出唯一的 action=data_push.confirm_plan "
+                        + "zenvis:data-push-service-decision，完整展示配置和真实诊断；"
+                        + "不得修改候选、复用旧摘要或调用 push_task_create_and_start。";
             }
 
-            List<PushTaskVo> tasks = readPushTaskList(callNamedTool(
-                    mcpToolContext,
-                    "push_task_list_by_source_mark",
-                    Map.of("sourceMark", sourceMark)));
-            if (tasks.size() > 1) {
+            PushTaskPageVo page = readPushTaskPage(callNamedTool(
+                    mcpToolContext, "push_task_list",
+                    Map.of(
+                            "sourceMark", sourceMark,
+                            "source", "SYSTEM",
+                            "offset", 0,
+                            "limit", 100)));
+            List<com.coolxer.model.system.vo.PushTaskSummaryVo> summaries = page == null
+                    || page.getItems() == null ? List.of() : page.getItems();
+            if (summaries.size() > 1 || page != null && page.isHasMore()) {
                 throw new IllegalStateException(
                         "sourceMark=" + sourceMark + " 存在多个任务，平台拒绝自动选择或删除");
             }
-            boolean created = tasks.isEmpty();
-            if (tasks.isEmpty()) {
-                String createResult = callNamedTool(
-                        mcpToolContext,
-                        "push_task_create_and_start",
-                        Map.of("request", lockedRequest));
-                requireSuccessfulBoolean("push_task_create_and_start", createResult);
+            boolean created = false;
+            boolean repaired = false;
+            Integer taskId;
+            if (summaries.isEmpty()) {
+                PushTaskOperationVo createdOperation = readPushTaskOperation(callNamedTool(
+                        mcpToolContext, "push_task_create_and_start",
+                        Map.of("request", lockedRequest)));
+                if (createdOperation.getTaskId() == null) {
+                    throw new IllegalStateException("push_task_create_and_start 未返回真实 taskId");
+                }
+                taskId = createdOperation.getTaskId();
+                created = true;
+            } else {
+                taskId = summaries.get(0).getId();
+                PushTaskVo existing = readPushTaskGet(callNamedTool(
+                        mcpToolContext, "push_task_get", Map.of("taskId", taskId)));
+                boolean configChanged = StringUtils.hasText(existing.getConfig())
+                        && !Objects.equals(existing.getConfig().trim(), config.trim());
+                if (repairRound > 0 || configChanged) {
+                    if (findToolCallback(mcpToolContext,
+                            "push_task_update_and_restart") == null) {
+                        throw new IllegalStateException(
+                                "修复或更新任务所需的 push_task_update_and_restart 未暴露");
+                    }
+                    PushTaskOperationVo repairedOperation = readPushTaskOperation(callNamedTool(
+                            mcpToolContext, "push_task_update_and_restart",
+                            Map.of(
+                                    "taskId", taskId,
+                                    "request", lockedRequest)));
+                    if (repairedOperation.getTaskId() == null) {
+                        throw new IllegalStateException(
+                                "push_task_update_and_restart 未返回真实 taskId");
+                    }
+                    repaired = true;
+                }
             }
-            tasks = readPushTaskList(callNamedTool(
-                    mcpToolContext,
-                    "push_task_list_by_source_mark",
-                    Map.of("sourceMark", sourceMark)));
-            if (tasks.size() != 1) {
-                throw new IllegalStateException("创建或复用后未读回唯一 PushTask");
-            }
-            PushTaskVo task = tasks.get(0);
+
+            PushTaskVo task = readPushTaskGet(callNamedTool(
+                    mcpToolContext, "push_task_get", Map.of("taskId", taskId)));
             if (task.getId() == null
                     || !"SYSTEM".equals(task.getSource())
                     || !sourceMark.equals(task.getMark())) {
                 throw new IllegalStateException("读回任务不属于锁定 sourceMark 或 SYSTEM 来源");
             }
-            Map<String, Object> logResult = parseJsonObject(callNamedTool(
-                    mcpToolContext,
-                    "push_task_get_log",
-                    Map.of(
-                            "taskId", task.getId(),
-                            "sourceMark", sourceMark,
-                            "logType", "system")));
-            String status = firstNonBlank(
-                    stringValue(logResult, "taskStatus", ""),
-                    task.getStatus(),
-                    "unknown");
-            String systemLog = stringValue(logResult, "content", "");
-            if (!"running".equalsIgnoreCase(status)
-                    || workflowLogContainsCurrentError(systemLog)) {
-                throw new IllegalStateException(
-                        "任务读回状态为 " + status + "，或最新 system 日志包含错误");
-            }
             if (StringUtils.hasText(task.getConfig())
                     && !Objects.equals(task.getConfig().trim(), config.trim())) {
-                throw new IllegalStateException("任务读回配置与已批准候选不一致");
+                return handlePushRuntimeFailure(
+                        prompt, chatSession, workflow, context, task, sourceMark,
+                        config, repairRound,
+                        PushTaskDiagnosticResultVo.builder()
+                                .verdict("FAILED")
+                                .runId(task.getCurrentRunId())
+                                .taskStatus(task.getStatus())
+                                .failureStage("CONFIG_MISMATCH")
+                                .repairable(true)
+                                .diagnostics(List.of(pushDiagnostic(
+                                        "PUSH_READBACK_CONFIG_MISMATCH", "ERROR",
+                                        "VECTUM", "$",
+                                        "任务读回配置与已批准候选不一致。",
+                                        "以当前持久化配置为基线重新生成完整候选并修复。")))
+                                .build());
             }
+            PushTaskDiagnosticResultVo diagnosis = diagnosePushTask(
+                    mcpToolContext, task.getId());
+            if (!pushDiagnosisSuccessful(diagnosis)) {
+                return handlePushRuntimeFailure(
+                        prompt, chatSession, workflow, context, task, sourceMark,
+                        config, repairRound, diagnosis);
+            }
+
             context.put("taskId", task.getId());
+            context.put("runId", diagnosis.getRunId());
             context.put("taskStatus", "running");
+            context.put("validation", pushValidationMetadata(validation, repairRound));
+            context.put("validationDigest", validation.getValidationDigest());
+            context.put("repairRound", repairRound);
+            context.remove("lastDiagnosis");
             workflow.setContext(context);
+            workflow.setStep(AgentWorkflowStep.PUSH_VERIFIED);
+            workflow.setStatus("active");
+            workflow.setStateRevision(workflow.getStateRevision() + 1);
             workflowStateStore.upsert(chatSession, workflow);
+
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("taskId", task.getId());
+            result.put("runId", diagnosis.getRunId());
             result.put("sourceMark", sourceMark);
             result.put("name", task.getName());
             result.put("description", task.getDescription());
             result.put("status", "running");
-            result.put("format", format);
+            result.put("format", validation.getFormat());
+            result.put("validationStatus", "passed");
+            result.put("candidateDigest", validation.getCandidateDigest());
+            result.put("metaDigest", validation.getMetaDigest());
+            result.put("validationDigest", validation.getValidationDigest());
+            result.put("vectorVersion", validation.getVectorVersion());
+            result.put("tests", validation.getTests());
+            result.put("repairRound", repairRound);
+            result.put("verdict", diagnosis.getVerdict());
+            result.put("logExcerpt", diagnosis.getLogExcerpt());
             result.put("config", config);
-            return prompt + "\n\n【平台已完成锁定 PushTask 执行与读回】\n"
-                    + "工具顺序：push_task_detect_format → "
-                    + "push_task_list_by_source_mark"
-                    + (created ? " → push_task_create_and_start" : "")
-                    + " → push_task_list_by_source_mark → push_task_get_log\n"
+            return prompt + "\n\n【平台已完成锁定 PushTask 校验、执行与诊断】\n"
+                    + "工具顺序：push_task_validate_config → "
+                    + "push_task_list → push_task_get"
+                    + (created ? " → push_task_create_and_start"
+                    : repaired ? " → push_task_update_and_restart" : "")
+                    + " → push_task_get → push_task_diagnose\n"
                     + "验证结果：" + JacksonUtil.toJson(result)
                     + "\n请输出 source=workflow、status=running 的"
-                    + " zenvis:vectum-task-record；taskId、sourceMark 和 config"
-                    + "必须严格使用上述读回值。";
+                    + " zenvis:vectum-task-record；taskId、runId、sourceMark、config、"
+                    + "validationDigest、tests 和 repairRound 必须严格使用上述读回值。";
+        } catch (McpApprovalPendingException pending) {
+            // 审批等待不是工作流失败。保留当前校验/执行阶段，审批通过后
+            // resumeApprovedTools 复跑已批准调用，平台再从这里继续读回与诊断。
+            workflow.setContext(context);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            throw pending;
+        } catch (McpToolResultUnknownException unknown) {
+            // 工具结果未知也不是配置失败。保留阶段，避免模型误判为 BLOCKED 后
+            // 用 run_request_user 向用户索取“重新授权”之类的补充信息。
+            workflow.setContext(context);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            throw unknown;
         } catch (RuntimeException e) {
             markWorkflowBlocked(
-                    chatSession,
-                    workflow,
-                    retryStep,
-                    "push_task",
-                    safeWorkflowError(e));
-            return prompt + "\n\n【平台 PushTask 执行或读回失败】\nsourceMark："
+                    chatSession, workflow, workflow.getStep(),
+                    "push_task", safeWorkflowError(e));
+            return prompt + "\n\n【平台 PushTask 执行或诊断失败】\nsourceMark："
                     + sourceMark + "\n真实错误：" + safeWorkflowError(e)
-                    + "\n不得生成成功记录；写操作不盲目重试，"
-                    + "重试时先按 sourceMark 读回现状。";
+                    + "\n不得生成成功记录；先调用 push_task_diagnose 获取当前 runId 证据，"
+                    + "再决定修订配置或报告外部阻塞。";
         }
+    }
+
+    private PushTaskValidationVo validatePushCandidate(
+            McpToolContext mcpToolContext,
+            String config,
+            String metaFileName,
+            String metaContent,
+            String format) {
+        String result = callNamedTool(
+                mcpToolContext, "push_task_validate_config",
+                Map.of(
+                        "config", config,
+                        "metaFileName", Objects.toString(metaFileName, ""),
+                        "metaContent", Objects.toString(metaContent, ""),
+                        "format", Objects.toString(format, "")));
+        try {
+            return JacksonConfig.OBJECT_MAPPER.readValue(
+                    result, PushTaskValidationVo.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("push_task_validate_config 返回无法解析", e);
+        }
+    }
+
+    private PushTaskDiagnosticResultVo diagnosePushTask(
+            McpToolContext mcpToolContext,
+            Integer taskId) {
+        String result = callNamedTool(
+                mcpToolContext, "push_task_diagnose",
+                Map.of("taskId", taskId));
+        try {
+            return JacksonConfig.OBJECT_MAPPER.readValue(
+                    result, PushTaskDiagnosticResultVo.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("push_task_diagnose 返回无法解析", e);
+        }
+    }
+
+    private String pushValidationFailure(PushTaskValidationVo validation) {
+        if (validation == null || validation.isBlocked()) {
+            return "Vector 配置校验服务不可用；门禁按 fail-closed 处理。";
+        }
+        if (validation.isPassed()) {
+            return "";
+        }
+        List<PushTaskDiagnosticVo> diagnostics = validation.getDiagnostics();
+        if (diagnostics == null || diagnostics.isEmpty()) {
+            return "配置未通过 Vector 原生校验，但未返回诊断详情。";
+        }
+        return diagnostics.stream()
+                .filter(item -> "ERROR".equalsIgnoreCase(item.getSeverity()))
+                .limit(8)
+                .map(item -> "- " + item.getCode() + " " + item.getPath()
+                        + "：" + item.getMessage()
+                        + "（修复建议：" + item.getRepairHint() + "）")
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("配置未通过平台门禁。");
+    }
+
+    private boolean pushDiagnosisSuccessful(PushTaskDiagnosticResultVo diagnosis) {
+        if (diagnosis == null || "UNAVAILABLE".equalsIgnoreCase(diagnosis.getVerdict())) {
+            return false;
+        }
+        String status = Objects.toString(diagnosis.getTaskStatus(), "").toLowerCase(Locale.ROOT);
+        if (!"running".equals(status)) {
+            return false;
+        }
+        List<PushTaskDiagnosticVo> diagnostics = diagnosis.getDiagnostics();
+        return diagnostics == null || diagnostics.stream().noneMatch(
+                item -> "ERROR".equalsIgnoreCase(item.getSeverity())
+                        || "FATAL".equalsIgnoreCase(item.getSeverity()));
+    }
+
+    private String handlePushRuntimeFailure(
+            String prompt,
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            Map<String, Object> context,
+            PushTaskVo task,
+            String sourceMark,
+            String config,
+            int repairRound,
+            PushTaskDiagnosticResultVo diagnosis) {
+        PushTaskDiagnosticResultVo safeDiagnosis = diagnosis == null
+                ? PushTaskDiagnosticResultVo.builder()
+                .verdict("UNAVAILABLE")
+                .taskStatus("unknown")
+                .failureStage("DIAGNOSTICS_UNAVAILABLE")
+                .repairable(false)
+                .diagnostics(List.of(pushDiagnostic(
+                        "PUSH_DIAGNOSTICS_UNAVAILABLE", "ERROR", "VECTUM", "$",
+                        "当前轮次诊断不可用。",
+                        "恢复 Vectum 后重新诊断；不得继续改配置。")))
+                .build() : diagnosis;
+        String fingerprint = pushFailureFingerprint(safeDiagnosis);
+        List<String> fingerprints = stringListValue(context.get("failureFingerprints"));
+        long repeated = fingerprints.stream().filter(fingerprint::equals).count();
+        if (repeated == 0) {
+            fingerprints.add(fingerprint);
+        }
+        boolean external = !safeDiagnosis.isRepairable()
+                && ("EXTERNAL_DEPENDENCY".equalsIgnoreCase(safeDiagnosis.getFailureStage())
+                || safeDiagnosis.getDiagnostics() != null
+                && safeDiagnosis.getDiagnostics().stream().anyMatch(
+                item -> item.getCode() != null
+                        && item.getCode().startsWith("EXTERNAL_")));
+        boolean unavailable = "UNAVAILABLE".equalsIgnoreCase(safeDiagnosis.getVerdict())
+                || "DIAGNOSTICS_UNAVAILABLE".equalsIgnoreCase(
+                safeDiagnosis.getFailureStage());
+        int nextRound = repairRound + 1;
+        String base = pushDiagnosisSummary(safeDiagnosis);
+        if (external || unavailable || !safeDiagnosis.isRepairable()) {
+            markWorkflowBlocked(
+                    chatSession, workflow,
+                    AgentWorkflowStep.PUSH_RUNTIME_DIAGNOSIS,
+                    "push_task_diagnose",
+                    "运行失败不可通过改配置修复：" + base);
+            return prompt + "\n\n【平台 PushTask 运行阻断：需外部处理】\n"
+                    + "taskId=" + task.getId() + "，sourceMark=" + sourceMark
+                    + "\n当前 runId=" + Objects.toString(safeDiagnosis.getRunId(), "")
+                    + "\n" + base
+                    + "\n平台不会继续修改配置。请补齐所需网络、凭据、文件权限或基础设施后重试。";
+        }
+        if (repeated >= 1) {
+            markWorkflowBlocked(
+                    chatSession, workflow,
+                    AgentWorkflowStep.PUSH_RUNTIME_DIAGNOSIS,
+                    "push_task_diagnose",
+                    "相同失败指纹已重复出现：" + fingerprint);
+            return prompt + "\n\n【平台 PushTask 修复已停止】\n"
+                    + "本轮失败与上一轮指纹相同，平台禁止继续盲目修改配置。"
+                    + "\n" + base;
+        }
+        if (nextRound > 5) {
+            markWorkflowBlocked(
+                    chatSession, workflow,
+                    AgentWorkflowStep.PUSH_RUNTIME_DIAGNOSIS,
+                    "push_task_diagnose",
+                    "自动修复已达到 5 轮上限");
+            return prompt + "\n\n【平台 PushTask 修复达到上限】\n" + base;
+        }
+
+        context.put("repairRound", nextRound);
+        context.put("failureFingerprints", fingerprints);
+        context.put("lastDiagnosis", JacksonConfig.OBJECT_MAPPER.convertValue(
+                safeDiagnosis, new TypeReference<Map<String, Object>>() {
+                }));
+        context.put("baseConfig", config);
+        context.put("taskId", task.getId());
+        workflow.setContext(context);
+        workflow.setStep(AgentWorkflowStep.PUSH_REPAIR);
+        workflow.setStatus("active");
+        workflow.setStateRevision(workflow.getStateRevision() + 1);
+        workflowStateStore.upsert(chatSession, workflow);
+        return prompt + "\n\n【平台 PushTask 当前轮次诊断】\n"
+                + "taskId=" + task.getId() + "，sourceMark=" + sourceMark
+                + "，runId=" + Objects.toString(safeDiagnosis.getRunId(), "")
+                + "\n" + base
+                + "\n\n请以当前持久化配置为基线，依据上述证据生成完整修复候选；"
+                + "先调用 push_task_validate_config，通过后展示逐项修改清单和新确认卡。"
+                + "用户再次确认后才可调用 push_task_update_and_restart，"
+                + "并继续接受平台 MCP 审批。当前为第 " + nextRound + "/5 轮。";
+    }
+
+    private String pushFailureFingerprint(PushTaskDiagnosticResultVo diagnosis) {
+        if (diagnosis == null) {
+            return "unknown";
+        }
+        String codes = diagnosis.getDiagnostics() == null ? "" :
+                diagnosis.getDiagnostics().stream()
+                        .map(PushTaskDiagnosticVo::getCode)
+                        .filter(Objects::nonNull)
+                        .sorted()
+                        .reduce((left, right) -> left + "," + right)
+                        .orElse("");
+        return Objects.toString(diagnosis.getFailureStage(), "") + "|" + codes;
+    }
+
+    private String pushDiagnosisSummary(PushTaskDiagnosticResultVo diagnosis) {
+        if (diagnosis == null) {
+            return "诊断不可用";
+        }
+        StringBuilder result = new StringBuilder();
+        result.append("verdict=").append(Objects.toString(diagnosis.getVerdict(), ""))
+                .append("，taskStatus=").append(Objects.toString(diagnosis.getTaskStatus(), ""))
+                .append("，failureStage=").append(Objects.toString(diagnosis.getFailureStage(), ""))
+                .append("，repairable=").append(diagnosis.isRepairable());
+        if (diagnosis.getDiagnostics() != null) {
+            for (PushTaskDiagnosticVo item : diagnosis.getDiagnostics()) {
+                result.append("\n- ").append(item.getCode()).append(" ")
+                        .append(item.getPath()).append("：").append(item.getMessage())
+                        .append("（修复建议：").append(item.getRepairHint()).append("）");
+            }
+        }
+        if (StringUtils.hasText(diagnosis.getLogExcerpt())) {
+            result.append("\n本轮日志摘要：\n")
+                    .append(abbreviateWorkflowValue(diagnosis.getLogExcerpt(), 4_000));
+        }
+        return result.toString();
+    }
+
+    private Map<String, Object> pushValidationMetadata(
+            PushTaskValidationVo validation,
+            int repairRound) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("passed", validation.isPassed());
+        result.put("blocked", validation.isBlocked());
+        result.put("format", validation.getFormat());
+        result.put("candidateDigest", validation.getCandidateDigest());
+        result.put("metaDigest", validation.getMetaDigest());
+        result.put("validationDigest", validation.getValidationDigest());
+        result.put("vectorVersion", validation.getVectorVersion());
+        result.put("tests", validation.getTests());
+        result.put("diagnostics", validation.getDiagnostics());
+        result.put("repairRound", repairRound);
+        return result;
+    }
+
+    private PushTaskDiagnosticVo pushDiagnostic(String code,
+                                                String severity,
+                                                String source,
+                                                String path,
+                                                String message,
+                                                String repairHint) {
+        return PushTaskDiagnosticVo.builder()
+                .code(code)
+                .severity(severity)
+                .source(source)
+                .path(path)
+                .message(message)
+                .repairHint(repairHint)
+                .build();
+    }
+
+    private int integerValue(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? fallback : Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return new ArrayList<>();
+        }
+        return list.stream().map(String::valueOf).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
     }
 
     private String callNamedTool(
@@ -2610,17 +2992,27 @@ public class DihChatApplicationService {
         return false;
     }
 
-    private List<PushTaskVo> readPushTaskList(String result) {
+    private PushTaskPageVo readPushTaskPage(String result) {
         try {
-            Object value = JacksonConfig.OBJECT_MAPPER.readValue(result, Object.class);
-            if (value instanceof Map<?, ?> map && map.get("data") != null) {
-                value = map.get("data");
-            }
-            return JacksonConfig.OBJECT_MAPPER.convertValue(
-                    value, new TypeReference<List<PushTaskVo>>() {
-                    });
+            return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskPageVo.class);
         } catch (Exception e) {
-            throw new IllegalStateException("PushTask 列表返回无法解析", e);
+            throw new IllegalStateException("PushTask 分页结果无法解析", e);
+        }
+    }
+
+    private PushTaskVo readPushTaskGet(String result) {
+        try {
+            return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskVo.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("PushTask 详情无法解析", e);
+        }
+    }
+
+    private PushTaskOperationVo readPushTaskOperation(String result) {
+        try {
+            return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskOperationVo.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("PushTask 操作结果无法解析", e);
         }
     }
 
@@ -3902,6 +4294,8 @@ public class DihChatApplicationService {
                                         ReportActionDto reportAction,
                                         String runId,
                                         McpToolLogStream toolEvidence) {
+        List<ChatMessagePart> approvalParts = toolEvidence == null
+                ? List.of() : toolEvidence.approvalParts();
         return saveAiResponse(
                 chatSession,
                 currentUser,
@@ -3909,7 +4303,7 @@ public class DihChatApplicationService {
                 type,
                 true,
                 false,
-                List.of(),
+                approvalParts,
                 toolEvidence,
                 null,
                 reportAction,
@@ -3927,6 +4321,16 @@ public class DihChatApplicationService {
         }
         return chatMessagePartParser.parse(content, MessageType.TEXT).stream()
                 .anyMatch(this::isInteractiveDecisionPart);
+    }
+
+    /**
+     * 将待处理卡片转换为补充信息弹窗中的具体问题，避免只展示通用占位说明。
+     *
+     * @param content 模型返回内容
+     * @return 卡片中的标题、说明和结构化补充要求
+     */
+    public String resolveUserDecisionQuestion(String content) {
+        return chatMessagePartParser.resolveUserDecisionQuestion(content);
     }
 
     private boolean isInteractiveDecisionPart(ChatMessagePart part) {
@@ -5571,6 +5975,12 @@ public class DihChatApplicationService {
         }
 
         String entityLabel = stringValue(entityMeta, "label", entityName);
+        request = VisualizationQueryNormalizer.normalizeRequest(request);
+        String queryValidationError = VisualizationQueryValidator.validate(
+                stringValue(query, "tool", ""), request);
+        if (StringUtils.hasText(queryValidationError)) {
+            return queryValidationError;
+        }
         raw.put("entity", entityName);
         raw.put("entities", requestedEntities);
         raw.put("entityLabel", entityLabel);
@@ -5580,7 +5990,6 @@ public class DihChatApplicationService {
                 "fields", verifiedFields,
                 "entityTool", entityCall.toolName(),
                 "attributeTool", attributeCall.toolName()));
-        request = VisualizationQueryNormalizer.normalizeRequest(request);
         query = new LinkedHashMap<>(query);
         query.put("request", request);
         raw.put("query", query);
@@ -5797,7 +6206,7 @@ public class DihChatApplicationService {
                 || approvedRequest.isEmpty()
                 || call == null
                 || !hasApprovedVisualizationPlan(chatSession, planId)) {
-            blockVisualizationPart(part, raw,
+            blockVisualizationPart(part, raw, "query_plan_unverified",
                     "查询方案未批准或本轮数据 MCP 未成功，图表不能验证或入库");
             return;
         }
@@ -5806,15 +6215,22 @@ public class DihChatApplicationService {
         Object request = arguments.containsKey("request")
                 ? arguments.get("request") : arguments;
         if (!(request instanceof Map<?, ?>)) {
-            blockVisualizationPart(part, raw,
-                    "实际数据 MCP 查询参数与已批准方案不一致，图表不能验证或入库");
+            blockVisualizationPart(part, raw, "query_parameter_mismatch",
+                    "数据查询参数与已确认方案不一致，本次结果未验证；请重新确认查询方案后重试");
             return;
         }
         Map<String, Object> executedRequest = VisualizationQueryNormalizer.normalizeRequest(
                 mapValue(request));
         if (!approvedRequest.equals(executedRequest)) {
-            blockVisualizationPart(part, raw,
-                    "实际数据 MCP 查询参数与已批准方案不一致，图表不能验证或入库");
+            blockVisualizationPart(part, raw, "query_parameter_mismatch",
+                    "数据查询参数与已确认方案不一致，本次结果未验证；请重新确认查询方案后重试");
+            return;
+        }
+        String queryValidationError = VisualizationQueryValidator.validate(
+                approvedTool, executedRequest);
+        if (StringUtils.hasText(queryValidationError)) {
+            blockVisualizationPart(part, raw, "invalid_query_parameters",
+                    "查询方案参数不合法：" + queryValidationError);
             return;
         }
 
@@ -5826,7 +6242,7 @@ public class DihChatApplicationService {
         Map<String, Object> echarts = mapValue(toolResult.get("echarts"));
         Object option = echarts.get("option");
         if (!(option instanceof Map<?, ?>)) {
-            blockVisualizationPart(part, raw,
+            blockVisualizationPart(part, raw, "missing_echarts_option",
                     "数据 MCP 未返回可渲染的 echarts.option");
             return;
         }
@@ -5852,7 +6268,8 @@ public class DihChatApplicationService {
         String tool = stringValue(query, "tool", "");
         Map<String, Object> request = mapValue(query.get("request"));
         return VISUALIZATION_DATA_TOOLS.contains(tool)
-                && !request.isEmpty();
+                && !request.isEmpty()
+                && !StringUtils.hasText(VisualizationQueryValidator.validate(tool, request));
     }
 
     private boolean hasApprovedVisualizationPlan(ChatSession chatSession, String planId) {
@@ -5984,6 +6401,14 @@ public class DihChatApplicationService {
     private void blockVisualizationPart(ChatMessagePart part,
                                         Map<String, Object> raw,
                                         String message) {
+        blockVisualizationPart(part, raw, "validation_failed", message);
+    }
+
+    private void blockVisualizationPart(ChatMessagePart part,
+                                        Map<String, Object> raw,
+                                        String validationCode,
+                                        String message) {
+        raw.put("validationCode", validationCode);
         raw.put("validationStatus", "blocked");
         raw.put("validationMessage", message);
         String action = stringValue(raw, "action", "");
@@ -7543,8 +7968,17 @@ public class DihChatApplicationService {
             if (!enabled() || approvalEvent == null || approvalEvent.data() == null) {
                 return;
             }
-            approvalStates.put(approvalEvent.data().getRequestId(), approvalEvent.data());
+            recordApproval(approvalEvent);
             sink.tryEmitNext(APPROVAL_EVENT_PREFIX + JacksonUtil.toJson(approvalEvent));
+        }
+
+        public void recordApproval(McpApprovalEvent approvalEvent) {
+            if (approvalEvent == null
+                    || approvalEvent.data() == null
+                    || !StringUtils.hasText(approvalEvent.data().getRequestId())) {
+                return;
+            }
+            approvalStates.put(approvalEvent.data().getRequestId(), approvalEvent.data());
         }
 
         private static McpApprovalEvent parseApprovalEvent(String value) {

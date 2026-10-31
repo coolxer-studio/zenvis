@@ -39,6 +39,8 @@
 - 实体选择卡动作使用 `visualization_chart.select_entity_from_meta`。
 - 查询方案确认动作使用 `visualization_chart.confirm_query_plan`。
 - 确认卡必须携带 `planId`、真实实体、字段角色和完整 `query.tool` / `query.request`。
+- `time_range.preset` 只能使用 `TODAY`、`YESTERDAY`、`LAST_24_HOURS`、`LAST_7_DAYS`、`LAST_30_DAYS`、`THIS_MONTH`、`CUSTOM` 或 `ALL_TIME`；不限时间必须写 `ALL_TIME`，禁止写 `ALL`。
+- `CUSTOM` 必须同时提供 `start_time`、`end_time` 且跨度不超过 3 年；只能在工具真实支持时使用 `ALL_TIME`。
 - 输出确认卡后立即结束当前轮次，不得同时调用数据工具。
 
 ## 缺少 Meta、实体或字段

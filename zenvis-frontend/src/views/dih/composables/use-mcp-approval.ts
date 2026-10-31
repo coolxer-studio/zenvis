@@ -7,6 +7,10 @@ import type {
   McpApprovalData,
   McpApprovalDecision,
 } from '@/types/type-dih';
+import {
+  executePersistedApprovalResponse,
+  isPersistedRunMessage,
+} from './agent-run-interaction';
 
 export type McpApprovalDecisionPayload = {
   part: ChatMessagePart;
@@ -76,6 +80,28 @@ export const useMcpApproval = ({
       decisionInFlight: payload.decision,
     };
     try {
+      if (isPersistedRunMessage(message)) {
+        const run = await DihService.getAgentRun(String(message.runId));
+        const { response } = await executePersistedApprovalResponse({
+          run,
+          message,
+          part: payload.part,
+          params: {
+            decision: payload.decision,
+          },
+          respond: DihService.respondAgentRunInteraction,
+        });
+        const status = response.partStatus
+          || (payload.decision === 'rejected' ? 'rejected' : 'approved');
+        payload.part.status = status;
+        payload.part.metadata = {
+          ...payload.part.metadata,
+          status,
+          deciding: false,
+          decisionInFlight: '',
+        };
+        return;
+      }
       const approval = await DihService.decideMcpApproval(requestId, { decision: payload.decision });
       upsertMcpApprovalPart(message, approval, message.content || '');
     } catch (error) {

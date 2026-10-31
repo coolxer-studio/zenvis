@@ -145,6 +145,22 @@ export type AgentRunPlan = {
   steps: AgentRunPlanStep[];
 };
 
+export type AgentRunInteractionKind = 'user_input' | 'card_decision' | 'mcp_approval';
+
+export type AgentRunInteraction = {
+  interactionId: string;
+  kind: AgentRunInteractionKind;
+  messageId?: string;
+  partId?: string;
+  workflowId?: string;
+  stateRevision?: number;
+  requestId?: string;
+  title: string;
+  prompt: string;
+  allowedActions: string[];
+  createdAt?: string;
+};
+
 export type AgentRun = {
   runId: string;
   chatId: string;
@@ -168,6 +184,7 @@ export type AgentRun = {
   finalAnswer?: string;
   pausedReason?: string;
   pendingAction?: string;
+  pendingInteraction?: AgentRunInteraction | null;
   attemptCount: number;
   recoveryCount: number;
   truncationCount: number;
@@ -242,6 +259,26 @@ export type AgentRunSteerParams = {
   message: string;
   attachments?: ChatAttachment[];
   clientMessageId?: string;
+};
+
+export type AgentRunInteractionResponseParams = {
+  message?: string;
+  attachments?: ChatAttachment[];
+  action?: string;
+  answers?: Array<Record<string, unknown>>;
+  stateRevision?: number;
+  revision?: string;
+  decision?: string;
+  comment?: string;
+};
+
+export type AgentRunInteractionResponse = {
+  accepted: boolean;
+  duplicate: boolean;
+  interactionId: string;
+  partStatus: string;
+  summary: string;
+  run: AgentRun;
 };
 
 export type AgentRunListParams = {

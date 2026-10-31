@@ -144,7 +144,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("entity_histogram", "直方图"),
                         new FakeToolCallback("entity_scatter", "散点图"),
                         new FakeToolCallback("retrieval_create_rule", "创建一个新的检索规则"),
-                        new FakeToolCallback("entity_update", "更新指定实体的记录"),
+                        new FakeToolCallback("analysis_task_delete", "删除分析任务"),
                         new FakeToolCallback("config_apply", "应用配置"),
                         new FakeToolCallback("config_delete", "删除配置"),
                         new FakeToolCallback("dashboard_create", "创建看板"),
@@ -169,7 +169,7 @@ class AgentMcpToolServiceTest {
                         "menu_create",
                         "push_task_create_and_start",
                         "retrieval_create_rule",
-                        "entity_update",
+                        "analysis_task_delete",
                         "config_delete",
                         "dashboard_delete",
                         "menu_update",
@@ -213,7 +213,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("dashboard_create", "创建看板"),
                         new FakeToolCallback("dashboard_view", "查看看板"),
                         new FakeToolCallback("push_task_create_and_start", "创建推送任务"),
-                        new FakeToolCallback("entity_update", "更新实体")
+                        new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
                 skillService
@@ -231,7 +231,7 @@ class AgentMcpToolServiceTest {
                         "dashboard_create",
                         "dashboard_view",
                         "push_task_create_and_start",
-                        "entity_update",
+                        "analysis_task_delete",
                         "external_write");
     }
 
@@ -266,7 +266,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("menu_list", "查询菜单"),
                         new FakeToolCallback("menu_view", "查看菜单"),
                         new FakeToolCallback("push_task_create_and_start", "创建推送任务"),
-                        new FakeToolCallback("entity_update", "更新实体")
+                        new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
                 skillService
@@ -280,7 +280,7 @@ class AgentMcpToolServiceTest {
                 .containsExactlyElementsOf(allowedTools);
         assertThat(context.systemPrompt())
                 .contains(allowedTools.toArray(String[]::new))
-                .doesNotContain("push_task_create_and_start", "entity_update", "external_write");
+                .doesNotContain("push_task_create_and_start", "analysis_task_delete", "external_write");
     }
 
     @Test
@@ -412,7 +412,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("retrieval_search", "根据条件检索数据"),
                         new FakeToolCallback("retrieval_list_attribute", "获取字段"),
                         new FakeToolCallback("retrieval_list_candidate", "数字字段候选"),
-                        new FakeToolCallback("entity_update", "更新实体")
+                        new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
                 skillService
@@ -431,7 +431,7 @@ class AgentMcpToolServiceTest {
                 .contains("jmr_dictionary_lookup", "jmr_payload_decode_base64", "jmr_ioc_lookup")
                 .doesNotContain(
                         "retrieval_list_candidate",
-                        "entity_update",
+                        "analysis_task_delete",
                         "zenvis_retrieval_search",
                         "external_write");
         assertThat(context.toolCallbackProvider().getToolCallbacks())
@@ -472,11 +472,11 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("config_apply", "应用配置"),
                         new FakeToolCallback("config_rename", "重命名配置"),
                         new FakeToolCallback("config_delete", "删除配置"),
-                        new FakeToolCallback("push_task_detect_format", "检测格式"),
-                        new FakeToolCallback("push_task_list_by_source_mark", "查询推送任务"),
+                        new FakeToolCallback("push_task_list", "查询推送任务"),
+                        new FakeToolCallback("push_task_get", "获取推送任务详情"),
                         new FakeToolCallback("push_task_create_and_start", "创建并启动推送任务"),
                         new FakeToolCallback("push_task_get_log", "读取推送任务日志"),
-                        new FakeToolCallback("entity_update", "更新实体")
+                        new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
                 skillService
@@ -493,11 +493,11 @@ class AgentMcpToolServiceTest {
         assertThat(context.systemPrompt())
                 .contains(allowedTools.toArray(String[]::new))
                 .doesNotContain(
-                        "push_task_detect_format",
-                        "push_task_list_by_source_mark",
+                        "push_task_list",
+                        "push_task_get",
                         "push_task_create_and_start",
                         "push_task_get_log",
-                        "entity_update",
+                        "analysis_task_delete",
                         "external_write");
         assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(32);
         assertThat(context.toolRuntimeContext().maxAccumulatedToolResultChars()).isEqualTo(64_000);
@@ -509,12 +509,17 @@ class AgentMcpToolServiceTest {
         List<String> allowedTools = List.of(
                 "config_tree",
                 "config_read",
-                "push_task_detect_format",
-                "push_task_list_by_source_mark",
+                "push_task_validate_config",
+                "push_task_list",
+                "push_task_get",
                 "push_task_create_and_start",
+                "push_task_update_and_restart",
                 "push_task_get_log",
-                "push_task_repair_and_restart",
-                "push_task_delete_by_source_mark"
+                "push_task_diagnose",
+                "push_task_start",
+                "push_task_stop",
+                "push_task_restart",
+                "push_task_delete"
         );
         SkillService skillService = mock(SkillService.class);
         SkillRuntimeConfigVo runtime = new SkillRuntimeConfigVo(
@@ -532,13 +537,18 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("config_add", "新增配置"),
                         new FakeToolCallback("config_apply", "应用配置"),
                         new FakeToolCallback("config_read", "读取配置"),
-                        new FakeToolCallback("push_task_detect_format", "检测格式"),
-                        new FakeToolCallback("push_task_list_by_source_mark", "查询推送任务"),
+                        new FakeToolCallback("push_task_validate_config", "校验推送配置"),
+                        new FakeToolCallback("push_task_list", "查询推送任务"),
+                        new FakeToolCallback("push_task_get", "获取推送任务详情"),
                         new FakeToolCallback("push_task_create_and_start", "创建并启动推送任务"),
+                        new FakeToolCallback("push_task_update_and_restart", "更新并重启推送任务"),
                         new FakeToolCallback("push_task_get_log", "读取推送任务日志"),
-                        new FakeToolCallback("push_task_repair_and_restart", "修复并重启推送任务"),
-                        new FakeToolCallback("push_task_delete_by_source_mark", "删除推送任务"),
-                        new FakeToolCallback("entity_update", "更新实体"),
+                        new FakeToolCallback("push_task_diagnose", "诊断推送任务"),
+                        new FakeToolCallback("push_task_start", "启动推送任务"),
+                        new FakeToolCallback("push_task_stop", "停止推送任务"),
+                        new FakeToolCallback("push_task_restart", "重启推送任务"),
+                        new FakeToolCallback("push_task_delete", "删除推送任务"),
+                        new FakeToolCallback("analysis_task_delete", "删除任务"),
                         new FakeToolCallback("menu_create", "创建菜单")
                 ),
                 null,
@@ -558,11 +568,14 @@ class AgentMcpToolServiceTest {
                 .doesNotContain(
                         "config_add",
                         "config_apply",
+                        "push_task_detect_format",
+                        "push_task_list_by_source_mark",
+                        "push_task_delete_by_source_mark",
+                        "push_task_repair_and_restart",
                         "push_task_vector_capabilities",
                         "push_task_vector_component_schema",
                         "push_task_generate_config",
-                        "push_task_validate_config",
-                        "entity_update",
+                        "analysis_task_delete",
                         "menu_create",
                         "external_write");
         assertThat(context.toolRuntimeContext().maxToolCalls()).isEqualTo(32);
@@ -585,7 +598,6 @@ class AgentMcpToolServiceTest {
                 ToolCallbackProvider.from(
                         new FakeToolCallback("retrieval_search", "查询"),
                         new FakeToolCallback("config_apply", "应用配置"),
-                        new FakeToolCallback("entity_delete", "删除实体"),
                         new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
@@ -623,7 +635,7 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("analysis_task_list", "任务列表"),
                         new FakeToolCallback("analysis_task_view", "任务详情"),
                         new FakeToolCallback("config_apply", "应用配置"),
-                        new FakeToolCallback("entity_delete", "删除实体"),
+                        new FakeToolCallback("push_task_delete", "删除推送任务"),
                         new FakeToolCallback("analysis_task_delete", "删除任务")
                 ),
                 null,
@@ -640,7 +652,7 @@ class AgentMcpToolServiceTest {
         assertThat(context.systemPrompt())
                 .doesNotContain(
                         "config_apply",
-                        "entity_delete",
+                        "push_task_delete",
                         "analysis_task_delete",
                         "external_write");
     }

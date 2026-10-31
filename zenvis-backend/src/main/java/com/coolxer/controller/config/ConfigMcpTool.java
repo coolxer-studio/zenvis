@@ -6,6 +6,7 @@ import com.coolxer.model.config.dto.ConfigDto;
 import com.coolxer.model.config.vo.ConfigPathOperationResult;
 import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.service.config.ConfigService;
+import com.coolxer.service.config.MetaConfigDraftService;
 import com.coolxer.service.config.MetaConfigValidationService;
 import com.coolxer.service.dih.mcp.McpToolApproval;
 import com.coolxer.utils.JacksonUtil;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.coolxer.commons.enums.McpApprovalPolicy.ALLOW;
 import static com.coolxer.commons.enums.McpApprovalPolicy.ASK;
@@ -32,6 +34,9 @@ public class ConfigMcpTool {
 
     @Autowired(required = false)
     private MetaConfigValidationService metaConfigValidationService;
+
+    @Autowired(required = false)
+    private MetaConfigDraftService metaConfigDraftService;
 
     public ConfigMcpTool(ConfigService configService) {
         this.configService = configService;
@@ -55,6 +60,20 @@ public class ConfigMcpTool {
                          @ToolParam(description = "文件全名，带路径或文件名，例如 system_info.json") String fileName) {
         String schema = configService.readFileSchema(type, fileName);
         return JacksonUtil.toObject(schema, Object.class);
+    }
+
+    /**
+     * 将精简实体/字段草稿展开为完整 Meta 配置。
+     */
+    @McpToolApproval(value = ALLOW, risk = LOW)
+    @Tool(name = "config_meta_draft", description = "将精简实体与字段草稿确定性展开为完整 Meta JSON；只读且不写文件，生成后仍需 config_validate")
+    public MetaConfigDraftService.DraftResult draftMetaConfig(
+            @ToolParam(description = "目标文件名，例如 user_event.json；留空时按实体名生成") String fileName,
+            @ToolParam(description = "精简草稿 JSON：{entityName,entityLabel,description,tableName,fields:[{name,label,description,type,sample,operators}]}") String draft) {
+        if (metaConfigDraftService == null) {
+            throw new IllegalStateException("Meta 草稿展开服务不可用");
+        }
+        return metaConfigDraftService.draft(fileName, draft);
     }
 
     /**
@@ -155,6 +174,16 @@ public class ConfigMcpTool {
         MetaConfigValidationService.ValidationResult validation =
                 metaConfigValidationService.validate(
                         configDto.getFileName(), configDto.getText());
+        boolean wrongObject = validation.diagnostics().stream()
+                .map(MetaConfigValidationService.Diagnostic::code)
+                .anyMatch(Set.of(
+                        "META_EMPTY", "META_JSON_SYNTAX", "META_OBJECT_REQUIRED",
+                        "META_WRONG_OBJECT")::contains);
+        if (wrongObject) {
+            throw new IllegalArgumentException(
+                    "Meta 写入对象不是有效 Meta，不能强制写入："
+                            + String.join("；", validation.errors()));
+        }
         if (!validation.passed() && !forced) {
             throw new IllegalArgumentException(
                     "Meta 校验未通过，拒绝写入：" + String.join("；", validation.errors()));

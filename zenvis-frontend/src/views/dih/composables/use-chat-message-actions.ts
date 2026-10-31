@@ -2,13 +2,25 @@ import { nextTick } from 'vue';
 import type { Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { DihService } from '@/service/api';
-import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
 import type {
+  AgentRun,
+  AgentRunInteractionResponseParams,
+  ChatMessage,
+  ChatMessagePart,
   WorkflowActionName,
   WorkflowActionResult,
 } from '@/types/type-dih';
 import { workflowActionForConfigDecision } from '@/components/dih-message/config-decision-actions';
+import {
+  canAddVisualizationChartToLibrary,
+  isVisualizationChartAdded,
+} from '@/components/dih-message/message-parts/visualization-preview-state';
 import type { SendMessageOptions } from './use-chat-stream';
+import {
+  executePersistedCardResponse,
+  isPersistedRunMessage,
+  type PersistedInteractionResponder,
+} from './agent-run-interaction';
 
 export type InfoStepAnswer = {
   id: string;
@@ -21,6 +33,8 @@ type UseChatMessageActionsOptions = {
   chatSessionId: Ref<string>;
   chatSessionExtraData: Ref<string>;
   sendMessage: (options?: SendMessageOptions) => Promise<void>;
+  respondAgentRunInteraction: PersistedInteractionResponder;
+  getAgentRunSnapshot: () => AgentRun | null;
 };
 
 const AUTO_CONFIRM_ACTIONS = new Set([
@@ -257,7 +271,7 @@ const dataPushDecisionMessage = (
   detail?: string,
 ) => {
   if (decision === 'apply_config') {
-    return '我已确认创建并启动上一轮展示的数据推送服务配置。当前只允许读取已发布 Meta，不得调用 config_add、config_apply 或任何修改 Meta 的工具。请调用 push_task_detect_format，按锁定 sourceMark 检查冲突，再调用 push_task_create_and_start 并接受平台 MCP 审批；审批通过后必须查询任务状态和 system 日志，仅在任务真实运行成功后输出 zenvis:vectum-task-record。';
+    return '我已确认创建并启动上一轮展示的数据推送服务配置。当前只允许读取已发布 Meta，不得调用 config_add、config_apply 或任何修改 Meta 的工具。请严格使用锁定候选和显式 format，先调用 push_task_validate_config 复核，再按锁定 sourceMark 调用 push_task_list 检查冲突；不存在时创建，存在且配置不同时更新并重启，所有写操作接受平台 MCP 审批；随后调用 push_task_get 和 push_task_diagnose 检查当前 runId，仅在本轮日志无 ERROR/FATAL/PANIC 且任务仍存活时输出 zenvis:vectum-task-record。';
   }
   if (decision === 'abandon') {
     return '我已取消创建本次数据推送服务。不要创建或启动 PushTask，也不要调用任何写工具。';
@@ -357,7 +371,46 @@ export const useChatMessageActions = ({
   chatSessionId,
   chatSessionExtraData,
   sendMessage,
+  respondAgentRunInteraction,
+  getAgentRunSnapshot,
 }: UseChatMessageActionsOptions) => {
+  const respondPersistedCard = async (
+    message: ChatMessage,
+    part: ChatMessagePart,
+    params: AgentRunInteractionResponseParams,
+  ) => {
+    const runId = String(message.runId || '').trim();
+    let run = getAgentRunSnapshot();
+    if (!run || run.runId !== runId) {
+      run = await DihService.getAgentRun(runId);
+    }
+    if (part.metadata?.deciding === true) {
+      throw new Error('卡片动作正在处理中，请稍候');
+    }
+    part.metadata = {
+      ...(part.metadata || {}),
+      deciding: true,
+      decisionInFlight: params.action || params.decision || '',
+    };
+    try {
+      const { response } = await executePersistedCardResponse({
+        run,
+        message,
+        part,
+        params,
+        respond: respondAgentRunInteraction,
+      });
+      if (response.partStatus) part.status = response.partStatus;
+      return response;
+    } finally {
+      part.metadata = {
+        ...(part.metadata || {}),
+        deciding: false,
+        decisionInFlight: '',
+      };
+    }
+  };
+
   const continueWorkflow = async (result: WorkflowActionResult) => {
     if (result.extraData) {
       chatSessionExtraData.value = result.extraData;
@@ -441,6 +494,25 @@ export const useChatMessageActions = ({
       return;
     }
 
+    if (isPersistedRunMessage(message)) {
+      try {
+        await respondPersistedCard(message, payload.part, {
+          action: 'submit',
+          answers: payload.answers.map(answer => ({
+            id: answer.id,
+            title: answer.title,
+            value: answer.value,
+            source: answer.source,
+          })),
+        });
+        ElMessage.success('已提交补充信息');
+      } catch (error) {
+        console.error('提交智能体卡片补充信息失败:', error);
+        ElMessage.error(errorMessage(error, '提交补充信息失败'));
+      }
+      return;
+    }
+
     if (workflowId(payload.part)) {
       try {
         await performWorkflowAction(message, payload.part, 'submit', {
@@ -491,6 +563,34 @@ export const useChatMessageActions = ({
   ) => {
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning('缺少确认记录标识，无法记录操作结果');
+      return;
+    }
+
+    if (isPersistedRunMessage(message)) {
+      const actionMap: Record<typeof payload.decision, WorkflowActionName> = {
+        approved: 'approve',
+        rejected: 'reject',
+        revise: 'revise',
+        retry: 'retry',
+      };
+      try {
+        await respondPersistedCard(message, payload.part, {
+          action: actionMap[payload.decision],
+          revision: payload.detail,
+        });
+        ElMessage.success(
+          payload.decision === 'approved'
+            ? '已确认执行'
+            : payload.decision === 'rejected'
+              ? '已取消操作'
+              : payload.decision === 'retry'
+                ? '已开始重试'
+                : '已提交调整要求',
+        );
+      } catch (error) {
+        console.error('执行智能体确认动作失败:', error);
+        ElMessage.error(errorMessage(error, '执行工作流动作失败'));
+      }
       return;
     }
 
@@ -610,12 +710,11 @@ export const useChatMessageActions = ({
   };
 
   const handleAddChartLibrary = async (message: ChatMessage, part: ChatMessagePart) => {
-    const action = confirmAction(part);
-    if (action !== 'visualization_chart.add_chart_library') {
+    if (part.type !== 'visualization-chart-preview') {
       ElMessage.warning('当前图表不支持加入图表库');
       return;
     }
-    if (part.status === 'submitted' || part.status === 'added') {
+    if (isVisualizationChartAdded(part)) {
       ElMessage.info('该图表已加入图表库');
       return;
     }
@@ -634,15 +733,8 @@ export const useChatMessageActions = ({
       }
       return;
     }
-    const metadata = asObject(part.metadata);
-    const query = asObject(metadata.query);
-    const echartsOption = asObject(metadata.echartsOption);
-    if (textValue(metadata.validationStatus) !== 'success'
-      || !textValue(metadata.planId)
-      || !textValue(query.tool)
-      || Object.keys(asObject(query.request)).length === 0
-      || Object.keys(echartsOption).length === 0) {
-      ElMessage.warning('当前预览尚未通过真实查询验证，不能加入图表库');
+    if (!canAddVisualizationChartToLibrary(part)) {
+      ElMessage.warning('图表缺少可渲染配置或入库标识，暂不能加入图表库');
       return;
     }
     if (workflowId(part)) {
@@ -681,6 +773,44 @@ export const useChatMessageActions = ({
       return;
     }
 
+    if (isPersistedRunMessage(message)) {
+      if (domain !== 'metadata' && decision === 'force_approve') {
+        ElMessage.error('只有元数据配置候选支持强制写入');
+        return;
+      }
+      try {
+        await respondPersistedCard(message, payload.part, {
+          action: workflowActionForConfigDecision(decision),
+          revision: payload.detail,
+        });
+        const operation = domain === 'metadata'
+          ? metadataPathOperation(payload.part) : '';
+        ElMessage.success(
+          decision === 'apply_config'
+            ? domain === 'push'
+              ? '已确认创建数据推送服务'
+              : operation === 'rename'
+                ? '已确认重命名，正在执行路径核验与 Meta 重载'
+                : operation === 'delete'
+                  ? '已确认删除，正在执行路径核验与 Meta 重载'
+                  : '已确认应用元数据配置'
+            : decision === 'force_approve'
+              ? '已强制确认写入，正在执行真实加载与读回'
+              : decision === 'abandon'
+                ? `已取消当前${domainLabel}流程`
+                : decision === 'retry'
+                  ? domain === 'push'
+                    ? '已开始重新校验锁定候选'
+                    : '已开始重试当前阶段'
+                  : '已提交配置调整要求',
+        );
+      } catch (error) {
+        console.error(`执行${domainLabel}智能体卡片动作失败:`, error);
+        ElMessage.error(errorMessage(error, `执行${domainLabel}工作流失败`));
+      }
+      return;
+    }
+
     if (workflowId(payload.part)) {
       if (domain !== 'metadata' && decision === 'force_approve') {
         ElMessage.error('只有元数据配置候选支持强制写入');
@@ -709,7 +839,9 @@ export const useChatMessageActions = ({
             : decision === 'abandon'
               ? `已取消当前${domainLabel}流程`
               : decision === 'retry'
-                ? '已开始重试当前阶段'
+                ? domain === 'push'
+                  ? '已开始重新校验锁定候选'
+                  : '已开始重试当前阶段'
                 : '已提交配置调整要求',
         );
       } catch (error) {
@@ -777,6 +909,34 @@ export const useChatMessageActions = ({
     const label = visualizationDomainLabel(domain);
     if (!chatSessionId.value || !message.id || !payload.part.id) {
       ElMessage.warning(`缺少${label}选择记录标识，无法记录操作结果`);
+      return;
+    }
+
+    if (isPersistedRunMessage(message)) {
+      const actionMap: Record<typeof payload.decision, WorkflowActionName> = {
+        apply_config: 'approve',
+        abandon: 'reject',
+        revise: 'revise',
+        retry: 'retry',
+      };
+      try {
+        await respondPersistedCard(message, payload.part, {
+          action: actionMap[payload.decision],
+          revision: payload.detail,
+        });
+        ElMessage.success(
+          payload.decision === 'apply_config'
+            ? `已确认${label}当前步骤`
+            : payload.decision === 'abandon'
+              ? `已取消${label}当前步骤`
+              : payload.decision === 'retry'
+                ? '已开始重试当前阶段'
+                : '已提交调整要求',
+        );
+      } catch (error) {
+        console.error(`执行${label}智能体卡片动作失败:`, error);
+        ElMessage.error(errorMessage(error, `执行${label}工作流失败`));
+      }
       return;
     }
 

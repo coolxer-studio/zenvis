@@ -159,39 +159,39 @@
   "operator": [
     {
       "name": "equal",
-      "description": "等于"
+      "label": "等于"
     },
     {
       "name": "notequal",
-      "description": "不等于"
+      "label": "不等于"
     },
     {
       "name": "match",
-      "description": "模糊匹配"
+      "label": "模糊匹配"
     },
     {
       "name": "greatthan",
-      "description": "大于"
+      "label": "大于"
     },
     {
       "name": "greatequalthan",
-      "description": "大于等于"
+      "label": "大于等于"
     },
     {
       "name": "lessthan",
-      "description": "小于"
+      "label": "小于"
     },
     {
       "name": "lessequalthan",
-      "description": "小于等于"
+      "label": "小于等于"
     },
     {
       "name": "between",
-      "description": "介于"
+      "label": "介于"
     },
     {
       "name": "in",
-      "description": "包含"
+      "label": "包含"
     }
   ]
 }

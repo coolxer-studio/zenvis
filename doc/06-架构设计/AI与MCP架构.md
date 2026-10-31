@@ -59,7 +59,9 @@ DIH 是应用编排层，不是单一模型代理。它先确定会话分支，�
 
 Run 消息保存 `runId`，前端据此把每轮任务卡挂回对应 AI 消息。会话重载时不能只恢复当前活动 Run，而要先读取消息引用的全部 Run，再为活动 Run 建立实时订阅；否则历史轮次会在 `run.succeeded` 触发重载后消失。
 
-确认、审批和执行结果必须写回消息状态，刷新页面后不能重新出现已完成动作。
+确认、审批和执行结果必须写回消息状态，刷新页面后不能重新出现已完成动作。持久化 Run 的 `pendingInteraction` 是唯一待处理交互入口：`kind=card_decision` 指向业务卡，`kind=user_input` 提供内联补充输入，`kind=mcp_approval` 指向已持久化的 `mcp-approval` 部件。`WAITING_USER` 和 `WAITING_APPROVAL` 只表示执行状态，不能用于推断 UI 类型。
+
+所有交互响应走同一 Run 交互接口。服务端从已保存交互推导消息、部件、工作流和审批请求，统一加锁、校验归属、状态、版本和幂等；业务卡仍执行原有工作流校验，MCP 审批仍执行原有安全策略。响应只记录 `AgentRunInput`、`interaction.responded` 事件和卡片 `interactionResponse` 元数据，不向 `ChatSession` 追加用户消息。只有用户主动消息接口会追加用户气泡。
 
 ## 普通问答与 RAG
 
@@ -106,10 +108,10 @@ RAG 原文和插件数据集以 `zenvis-rag` 为权威存储。Redis 只保存�
 
 ## 持久化 Agent Run
 
-Agent Run 把一个业务目标从 HTTP 请求生命周期中拆出来，保存为可恢复的执行实体。除普通问答外，所有业务 Agent 类型默认统一使用该执行模型；`enabled-types=*`，并可通过显式白名单或 `disabled-types` 做灰度与应急回滚。业务工作流卡片需要用户操作时，Run 保存结构化消息并进入 `WAITING_USER`，用户动作通过 steer 恢复同一任务。
+Agent Run 把一个业务目标从 HTTP 请求生命周期中拆出来，保存为可恢复的执行实体。除普通问答外，所有业务 Agent 类型默认统一使用该执行模型；`enabled-types=*`，并可通过显式白名单或 `disabled-types` 做灰度与应急回滚。业务工作流卡片需要用户操作时，Run 保存结构化消息和 `pendingInteraction` 并进入 `WAITING_USER`，用户动作通过统一交互接口恢复同一任务。
 
 ```text
-创建或 steer
+创建或主动发消息
   → AgentRunService 锁定会话并保存 Run / Input
   → AgentRunScheduler CAS 认领并获取租约
   → AgentRunExecutor 执行一次模型决策
@@ -121,10 +123,11 @@ Agent Run 把一个业务目标从 HTTP 请求生命周期中拆出来，保存�
 
 | 组件 | 职责 |
 | --- | --- |
-| `AgentRunService` | 创建、steer、暂停、继续、取消、状态迁移、事件追加和快照查询 |
+| `AgentRunService` | 创建、主动消息、暂停、继续、取消、状态迁移、事件追加和快照查询 |
 | `AgentRunScheduler` | 数据库 CAS 认领、并发槽、租约、心跳和启动恢复 |
-| `AgentRunExecutor` | 单次模型决策、工具执行、审批恢复、结构化卡片等待、截断重试和完成判定 |
-| `AgentRunContextAssembler` | 组装目标、计划、摘要、近期对话、steer、证据和附件，并在真实裁剪时产生 `context.compacted` 诊断 |
+| `AgentRunExecutor` | 单次模型决策、工具执行、审批恢复、从持久化消息选择当前唯一交互卡、截断重试和完成判定 |
+| `AgentRunInteractionService` | 统一交互响应的事务锁、归属/状态/版本/幂等校验，以及自由文本、工作流卡和 MCP 审批分派 |
+| `AgentRunContextAssembler` | 组装目标、计划、摘要、近期对话、未应用输入、证据和附件，并在真实裁剪时产生 `context.compacted` 诊断 |
 | `AgentRunInternalToolProvider` | 提供计划、步骤、用户提问和报表草稿控制工具 |
 | `ReportDraftService` | 保存章节草稿，校验后生成不可变报表修订 |
 | `AgentRunMetrics` | 记录队列、步骤、审批、恢复、截断、终态和失败指标 |
@@ -133,13 +136,13 @@ Agent Run 把一个业务目标从 HTTP 请求生命周期中拆出来，保存�
 
 | 数据 | 用途 |
 | --- | --- |
-| `t_ai_agent_run` | 目标、计划、状态、预算计数、检查点、租约和最终答复 |
+| `t_ai_agent_run` | 目标、计划、状态、`pendingInteraction`、预算计数、检查点、租约和最终答复 |
 | `t_ai_agent_run_event` | 按 `(run_id, sequence)` 唯一的只追加事件日志 |
-| `t_ai_agent_run_input` | steer 和附件，按 `(run_id, client_message_id)` 幂等 |
+| `t_ai_agent_run_input` | 主动消息、交互响应和附件；`interaction_id` 用于响应幂等，`message_id`、`part_id`、`workflow_id`、`request_id` 记录来源，`response_json` 保存结构化审计 |
 | `t_ai_report_draft` | 报表章节、顺序、来源引用、哈希和完成状态 |
 | `t_ai_mcp_invocation.agent_run_id` | 把工具审批与审计绑定到具体 Run |
 
-Run 的创建在会话行锁和 MySQL 命名锁内完成，确保同一用户、同一会话不会并发创建两个活动 Run。`ChatSession` 和报表草稿使用乐观锁版本，消息追加在事务内完成，避免后台执行、steer 和多端恢复互相覆盖。
+Run 的创建在会话行锁和 MySQL 命名锁内完成，确保同一用户、同一会话不会并发创建两个活动 Run。`ChatSession` 和报表草稿使用乐观锁版本，消息追加在事务内完成，避免后台执行、主动消息、交互响应和多端恢复互相覆盖。
 
 ### 执行可观测性
 
@@ -159,6 +162,8 @@ Run 的创建在会话行锁和 MySQL 命名锁内完成，确保同一用户、
 ### 状态与恢复
 
 活动状态为 `QUEUED`、`RUNNING`、`WAITING_APPROVAL`、`WAITING_USER`、`PAUSED` 和 `CANCELING`；终态为 `SUCCEEDED`、`FAILED` 和 `CANCELLED`。等待状态释放租约和并发槽，终态不会阻止会话创建下一个 Run。
+
+恢复 `WAITING_APPROVAL` 时，事件重放与快照恢复需要同时执行：Run 快照确定当前待处理的 `requestId` 和动作，事件流补齐审批状态变化，消息中的 `mcp-approval` 部件负责历史展示。任何一方都不能单独作为待审批动作的唯一事实来源。
 
 调度器默认 1 秒扫描一次、单实例并发 4、租约 60 秒。worker 定期续租；租约过期后其他实例可重新认领，连续恢复 3 次仍无法稳定执行时标记失败。服务启动会把心跳超时的中断 Run 重新入队，同时保留等待中的 Run 审批，服务重启前已发出但未记录结果的工具调用则标记为 `UNKNOWN` 并暂停 Run。
 
@@ -189,6 +194,7 @@ Run 默认最多 30 个决策步、30 分钟有效执行和 80 次工具调用�
 METADATA_INPUT_COLLECTION
   → config_tree
   → config_schema
+  → config_meta_draft（精简草稿展开为完整 Meta）
   → config_validate（最多 3 轮）
   → Meta 候选确认
   → 写前重查
@@ -200,7 +206,7 @@ METADATA_INPUT_COLLECTION
 
 目录或文件操作使用 `META_OPERATION_DISCOVERY → META_OPERATION_CONFIRMATION → META_OPERATION_APPLY` 独立分支。服务端重新读取配置树后锁定源路径、目标路径和 `operationDigest`，批准后只使用锁定参数执行 `config_rename` 或 `config_delete`。
 
-工具白名单仅包含 `config_tree`、`config_schema`、`config_read`、`config_add`、`config_apply`、`config_validate`、`config_rename`、`config_delete`。候选文件、内容摘要和计划 ID 在确认后由服务端锁定；覆盖必须单独确认，读回与候选语义一致前不能记录成功。重命名仅允许同一父目录且禁止覆盖，删除非空目录必须显式递归授权；Meta 路径操作完成后必须严格重载并刷新 Schema，失败时保留现场并返回 `changed=true/applied=false`。
+工具白名单仅包含 `config_tree`、`config_schema`、`config_read`、`config_meta_draft`、`config_add`、`config_apply`、`config_validate`、`config_rename`、`config_delete`。Meta Schema 是字段白名单的单一事实来源，校验结果携带 `validationId`、`schemaVersion`、`schemaHash`。候选文件、内容摘要、服务端校验回执和计划 ID 在确认后由服务端锁定；同一轮只接受一个 `zenvis:meta-config`，确认卡/记录卡对象不得混入候选。覆盖必须单独确认，读回与候选语义一致前不能记录成功。重命名仅允许同一父目录且禁止覆盖，删除非空目录必须显式递归授权；Meta 路径操作完成后必须严格重载并刷新 Schema，失败时保留现场并返回 `changed=true/applied=false`。
 
 ## 数据推送服务 Agent
 
@@ -208,19 +214,27 @@ METADATA_INPUT_COLLECTION
 PUSH_INPUT_COLLECTION
   → config_tree(type="meta") + config_read（只读）
   → PushTask 候选确认
-  → push_task_detect_format
-  → sourceMark 冲突检查
-  → 创建或复用
-  → 状态读回
-  → system 日志验证
+  → PUSH_CONFIG_VALIDATION
+  → push_task_validate_config（静态 + Vector 原生 validate/test）
+  → push_task_list + push_task_get 冲突检查
+  → push_task_create_and_start 或 push_task_update_and_restart
+  → 配置与任务身份读回
+  → PUSH_RUNTIME_DIAGNOSIS
+  → push_task_diagnose（仅当前 runId 与本轮日志）
   → 成功记录或阻塞
 ```
 
 - 工具白名单包含 `config_tree`、`config_read` 和 `push_task_*`，不包含 `config_add/config_apply`。
+- 配置格式从生成、校验、创建、更新到 Vectum 落盘全程显式传递，不经过格式检测工具。
+- MCP 查询和生命周期操作覆盖全部任务来源；智能体新建任务固定 `source=SYSTEM`。
 - 唯一业务输入依赖是已发布 Meta 的只读契约；不存在 Agent 间自动调用。
 - 缺失 Meta 时停止写入并返回 `missing_meta` 深链，不创建任务。
 - Meta 内容摘要变化后必须重新确认推送配置，不能静默沿用旧方案。
-- 修复最多 5 轮，每轮必须引用本轮 system 日志证据。
+- 用户批准后，平台仍以锁定配置正文重新执行静态规则、Vector 原生 `validate/test`，并比对 `candidateDigest`、`metaDigest` 和 `validationDigest`；任一缺失或不一致即 fail-closed。
+- 含 Transform 或 ClickHouse 写入时，必须有合法样例和异常/死信测试；纯原始转发豁免测试但仍需原生校验。
+- Vectum 每次启动写入唯一 `runId`、运行元数据和日志启动标记。诊断只分析该标记之后的内容，成功需进程存活且本轮日志无 `ERROR/FATAL/PANIC`。
+- 修复以当前持久化配置为基线，最多 5 轮；相同失败指纹再次出现即停止。
+- 外部依赖阻塞（连接、认证、DNS、TLS、权限、目录）不进入配置修复，直接报告所需基础设施或凭据。
 
 ## 可视化智能体
 

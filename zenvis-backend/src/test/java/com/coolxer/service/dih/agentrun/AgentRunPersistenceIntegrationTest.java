@@ -9,9 +9,13 @@ import com.coolxer.dao.mysql.repository.AgentRunEventRepository;
 import com.coolxer.dao.mysql.repository.AgentRunInputRepository;
 import com.coolxer.dao.mysql.repository.AgentRunRepository;
 import com.coolxer.dao.mysql.repository.ChatSessionRepository;
+import com.coolxer.model.dih.ChatMessagePart;
 import com.coolxer.model.dih.Message;
+import com.coolxer.model.dih.agentrun.AgentRunInteraction;
 import com.coolxer.model.dih.dto.AgentRunRequestDto;
+import com.coolxer.model.dih.dto.AgentRunInteractionResponseDto;
 import com.coolxer.model.dih.dto.AgentRunSteerDto;
+import com.coolxer.model.dih.vo.AgentRunInteractionResponseVo;
 import com.coolxer.model.dih.vo.AgentRunVo;
 import com.coolxer.service.dih.ChatSessionService;
 import com.coolxer.utils.JacksonUtil;
@@ -27,6 +31,7 @@ import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -61,19 +66,166 @@ class AgentRunPersistenceIntegrationTest {
     private ChatSessionService chatSessionService;
 
     @Autowired
+    private AgentRunInteractionService interactionService;
+
+    @Autowired
     @Qualifier("mysqlDataSource")
     private DataSource mysqlDataSource;
 
     @BeforeEach
     void removeStaleTestRuns() {
         JdbcTemplate jdbc = new JdbcTemplate(mysqlDataSource);
-        for (String prefix : List.of("agent-run-create-%", "agent-run-lease-%", "agent-run-session-%")) {
+        for (String prefix : List.of("agent-run-create-%", "agent-run-lease-%",
+                "agent-run-session-%", "agent-run-interaction-%")) {
             jdbc.update("DELETE e FROM t_ai_agent_run_event e JOIN t_ai_agent_run r " +
                     "ON e.run_id = r.run_id WHERE r.chat_id LIKE ?", prefix);
             jdbc.update("DELETE i FROM t_ai_agent_run_input i JOIN t_ai_agent_run r " +
                     "ON i.run_id = r.run_id WHERE r.chat_id LIKE ?", prefix);
             jdbc.update("DELETE FROM t_ai_agent_run WHERE chat_id LIKE ?", prefix);
             jdbc.update("DELETE FROM t_ai_chat_session WHERE session_id LIKE ?", prefix);
+        }
+    }
+
+    @Test
+    void userInputInteractionIsAuditedWithoutAppendingChatMessage() {
+        String chatId = "agent-run-interaction-" + UUID.randomUUID();
+        User user = testUser();
+        String runId = null;
+        try {
+            AgentRunVo created = asUser(user, () -> runService.create(request(chatId), user));
+            runId = created.getRunId();
+            String activeRunId = runId;
+            String stepId = created.getCurrentStepId();
+            AgentRun waiting = asUser(user, () -> runService.markWaitingUser(
+                    activeRunId, "请补充执行参数", stepId));
+            AgentRunInteraction interaction = AgentRunInteraction.fromRun(waiting);
+            assertThat(interaction).isNotNull();
+
+            ChatSession beforeSession = chatSessionRepository
+                    .findBySessionIdAndCreateBy(chatId, user.getId()).orElseThrow();
+            List<Message> beforeMessages = messages(beforeSession);
+            long beforeUserMessages = beforeMessages.stream()
+                    .filter(message -> "user".equals(message.getSender())).count();
+
+            AgentRunInteractionResponseDto request = new AgentRunInteractionResponseDto();
+            request.setMessage("参数 A=1，参数 B=2");
+            AgentRunInteractionResponseVo response = asUser(user, () ->
+                    interactionService.respond(activeRunId, interaction.getInteractionId(), request, user));
+
+            assertThat(response.isAccepted()).isTrue();
+            assertThat(response.getRun().getStatus()).isEqualTo(AgentRunStatus.QUEUED);
+            assertThat(response.getRun().getPendingInteraction()).isNull();
+            ChatSession afterSession = chatSessionRepository
+                    .findBySessionIdAndCreateBy(chatId, user.getId()).orElseThrow();
+            List<Message> afterMessages = messages(afterSession);
+            assertThat(afterMessages).extracting(Message::getId)
+                    .containsExactlyElementsOf(beforeMessages.stream().map(Message::getId).toList());
+            assertThat(afterMessages.stream().filter(message -> "user".equals(message.getSender())).count())
+                    .isEqualTo(beforeUserMessages);
+
+            List<com.coolxer.dao.mysql.entity.AgentRunInput> audits =
+                    inputRepository.findByRunIdOrderByCreateTimeAsc(runId).stream()
+                            .filter(input -> interaction.getInteractionId().equals(input.getInteractionId()))
+                            .toList();
+            assertThat(audits).hasSize(1);
+            assertThat(audits.get(0).getInteractionKind())
+                    .isEqualTo(AgentRunInteraction.KIND_USER_INPUT);
+            assertThat(audits.get(0).getResponseJson()).isNotBlank();
+
+            AgentRunInteractionResponseVo duplicate = asUser(user, () ->
+                    interactionService.respond(activeRunId, interaction.getInteractionId(), request, user));
+            assertThat(duplicate.isDuplicate()).isTrue();
+            assertThat(inputRepository.findByRunIdOrderByCreateTimeAsc(runId).stream()
+                    .filter(input -> interaction.getInteractionId().equals(input.getInteractionId()))
+                    .count()).isEqualTo(1);
+        } finally {
+            if (runId != null) {
+                cleanup(chatId, user.getId(), List.of(runId));
+            }
+        }
+    }
+
+    @Test
+    void genericCardDecisionUpdatesCardWithoutAppendingUserMessage() {
+        String chatId = "agent-run-interaction-" + UUID.randomUUID();
+        User user = testUser();
+        String runId = null;
+        try {
+            AgentRunVo created = asUser(user, () -> runService.create(request(chatId), user));
+            runId = created.getRunId();
+            String activeRunId = runId;
+            String stepId = created.getCurrentStepId();
+            Message cardMessage = new Message("ai", "请补充 Topic");
+            cardMessage.setRunId(activeRunId);
+            ChatMessagePart card = ChatMessagePart.builder()
+                    .id("card-" + UUID.randomUUID())
+                    .type("info-steps")
+                    .title("补充 Topic")
+                    .status("pending")
+                    .metadata(Map.of(
+                            "allowedActions", List.of("submit"),
+                            "steps", List.of(Map.of(
+                                    "id", "topic",
+                                    "title", "Topic",
+                                    "required", true,
+                                    "strictOptions", true,
+                                    "suggestions", List.of(Map.of("value", "lab-topic"))))))
+                    .build();
+            cardMessage.setParts(List.of(card));
+            asUser(user, () -> chatSessionService.appendMessage(chatId,
+                    new com.coolxer.model.dih.dto.ChatSessionDto(), cardMessage, user));
+
+            AgentRunInteraction interaction = AgentRunInteraction.builder()
+                    .interactionId(UUID.randomUUID().toString())
+                    .kind(AgentRunInteraction.KIND_CARD_DECISION)
+                    .messageId(cardMessage.getId())
+                    .partId(card.getId())
+                    .stateRevision(0)
+                    .title(card.getTitle())
+                    .prompt("请补充 Topic")
+                    .allowedActions(List.of("submit"))
+                    .createdAt(new Date())
+                    .build();
+            asUser(user, () -> runService.markWaitingForCard(
+                    activeRunId, interaction, stepId));
+
+            ChatSession beforeSession = chatSessionRepository
+                    .findBySessionIdAndCreateBy(chatId, user.getId()).orElseThrow();
+            long beforeUserMessages = messages(beforeSession).stream()
+                    .filter(message -> "user".equals(message.getSender())).count();
+            AgentRunInteractionResponseDto request = new AgentRunInteractionResponseDto();
+            request.setAction("submit");
+            request.setStateRevision(0);
+            request.setAnswers(List.of(Map.of("id", "topic", "value", "lab-topic")));
+
+            AgentRunInteractionResponseVo response = asUser(user, () ->
+                    interactionService.respond(activeRunId, interaction.getInteractionId(), request, user));
+
+            assertThat(response.getPartStatus()).isEqualTo("submitted");
+            assertThat(response.getRun().getStatus()).isEqualTo(AgentRunStatus.QUEUED);
+            ChatSession afterSession = chatSessionRepository
+                    .findBySessionIdAndCreateBy(chatId, user.getId()).orElseThrow();
+            List<Message> afterMessages = messages(afterSession);
+            assertThat(afterMessages.stream().filter(message -> "user".equals(message.getSender())).count())
+                    .isEqualTo(beforeUserMessages);
+            ChatMessagePart persistedCard = afterMessages.stream()
+                    .filter(message -> cardMessage.getId().equals(message.getId()))
+                    .flatMap(message -> message.getParts().stream())
+                    .filter(part -> card.getId().equals(part.getId()))
+                    .findFirst().orElseThrow();
+            assertThat(persistedCard.getStatus()).isEqualTo("submitted");
+            assertThat(persistedCard.getMetadata()).containsKey("interactionResponse");
+            List<com.coolxer.dao.mysql.entity.AgentRunInput> interactionInputs =
+                    inputRepository.findByRunIdOrderByCreateTimeAsc(runId).stream()
+                            .filter(input -> interaction.getInteractionId().equals(input.getInteractionId()))
+                            .toList();
+            assertThat(interactionInputs).hasSize(1);
+            assertThat(interactionInputs.get(0).getMessageId()).isEqualTo(cardMessage.getId());
+            assertThat(interactionInputs.get(0).getPartId()).isEqualTo(card.getId());
+        } finally {
+            if (runId != null) {
+                cleanup(chatId, user.getId(), List.of(runId));
+            }
         }
     }
 
@@ -259,6 +411,11 @@ class AgentRunPersistenceIntegrationTest {
 
     private <T> T asUser(User user, java.util.function.Supplier<T> action) {
         return JpaAuditorContext.callWith(user.getId(), action);
+    }
+
+    private List<Message> messages(ChatSession session) {
+        return JacksonUtil.toList(session.getMessages(),
+                new TypeReference<List<Message>>() {});
     }
 
     private void cleanup(String chatId, Integer userId, List<String> runIds) {

@@ -4,6 +4,7 @@ import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.dao.mysql.entity.User;
 import com.coolxer.model.config.vo.ConfigVo;
+import com.coolxer.model.system.vo.PushTaskSummaryVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.utils.JacksonUtil;
@@ -15,6 +16,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -31,6 +33,7 @@ public class DataPushDemoResponseService {
     private static final String DEMO_ENTITY_NAME = "user_event";
     private static final String DEMO_TABLE_NAME = "zenvis.msg_user_event";
     private static final String DEMO_PUSH_MARK_PREFIX = "data-push-demo:user-event:";
+    private static final String DEMO_PUSH_FORMAT = "toml";
     private static final String DEMO_PUSH_NAME = "用户事件数据推送服务";
     private static final String DEMO_PUSH_DESCRIPTION =
             "定时生成用户事件 JSON demo 日志并写入 ZenVis ClickHouse msg_user_event 表";
@@ -170,13 +173,20 @@ public class DataPushDemoResponseService {
         if (!validation.present()) {
             return missingMetaResponse();
         }
+        Map<String, Object> configValidation = validateDemoConfig(
+                mcpToolContext, validation);
+        if (!Boolean.TRUE.equals(configValidation.get("passed"))
+                || Boolean.TRUE.equals(configValidation.get("blocked"))) {
+            return configValidationFailureResponse(configValidation);
+        }
         String sourceMark = DEMO_PUSH_MARK_PREFIX
                 + (StringUtils.hasText(chatId) ? chatId : "default");
         String requestJson = JacksonUtil.toJson(Map.of(
                 "name", DEMO_PUSH_NAME,
                 "description", DEMO_PUSH_DESCRIPTION,
                 "source", "SYSTEM",
-                "mark", sourceMark));
+                "mark", sourceMark,
+                "format", DEMO_PUSH_FORMAT));
         return """
                 已通过只读工具校验已发布 Meta，并生成数据推送服务配置，请确认后再创建。
 
@@ -196,7 +206,7 @@ public class DataPushDemoResponseService {
                 ```
 
                 ```zenvis:data-push-service-decision
-                {"title":"数据推送配置已生成，请确认创建","content":"确认后将调用 push_task_create_and_start，并由平台弹出 MCP 审批；批准后才会创建并启动用户事件数据推送服务。Meta 全程只读。","action":"data_push.confirm_plan","configKind":"push_task","sourceMark":"%s","request":%s,"metaRef":{"fileName":"%s","contentDigest":"%s"},"actions":["apply_config","abandon","revise"]}
+                {"title":"数据推送配置已生成，请确认创建","content":"确认后将调用 push_task_create_and_start，并由平台弹出 MCP 审批；批准后才会创建并启动用户事件数据推送服务。Meta 全程只读。","action":"data_push.confirm_plan","configKind":"push_task","sourceMark":"%s","request":%s,"metaRef":{"fileName":"%s","contentDigest":"%s"},"validation":%s,"validationStatus":"passed","validationDigest":"%s","actions":["apply_config","abandon","revise"]}
                 ```
                 """.formatted(
                 DEMO_META_FILE,
@@ -205,7 +215,10 @@ public class DataPushDemoResponseService {
                 DemoResponseSupport.escapeJson(sourceMark),
                 requestJson,
                 DEMO_META_FILE,
-                validation.contentDigest());
+                validation.contentDigest(),
+                JacksonUtil.toJson(configValidation),
+                DemoResponseSupport.escapeJson(
+                        String.valueOf(configValidation.getOrDefault("validationDigest", ""))));
     }
 
     private String createPushTaskResponse(String chatId, McpToolContext mcpToolContext) {
@@ -217,12 +230,21 @@ public class DataPushDemoResponseService {
             return missingMetaResponse();
         }
         try {
-            DemoResponseSupport.callTool(
-                    mcpToolContext,
-                    "push_task_detect_format",
-                    Map.of("content", DEMO_PUSH_CONFIG));
+            Map<String, Object> configValidation = validateDemoConfig(
+                    mcpToolContext, validation);
+            if (!Boolean.TRUE.equals(configValidation.get("passed"))
+                    || Boolean.TRUE.equals(configValidation.get("blocked"))) {
+                return runtimeFailureResponse(
+                        "未取得",
+                        sourceMark,
+                        "blocked",
+                        "配置校验",
+                        null,
+                        false,
+                        validationFailureSummary(configValidation));
+            }
 
-            List<PushTaskVo> tasks = DemoResponseSupport.listPushTasks(
+            List<PushTaskSummaryVo> tasks = DemoResponseSupport.listPushTasks(
                     mcpToolContext, sourceMark);
             if (tasks.size() > 1) {
                 return runtimeFailureResponse(
@@ -238,12 +260,21 @@ public class DataPushDemoResponseService {
                 createResult = DemoResponseSupport.callTool(
                         mcpToolContext,
                         "push_task_create_and_start",
-                        Map.of("request", Map.of(
-                                "name", DEMO_PUSH_NAME,
-                                "description", DEMO_PUSH_DESCRIPTION,
-                                "config", DEMO_PUSH_CONFIG,
-                                "source", "SYSTEM",
-                                "mark", sourceMark)));
+                        Map.of("request", Map.ofEntries(
+                                Map.entry("name", DEMO_PUSH_NAME),
+                                Map.entry("description", DEMO_PUSH_DESCRIPTION),
+                                Map.entry("config", DEMO_PUSH_CONFIG),
+                                Map.entry("format", DEMO_PUSH_FORMAT),
+                                Map.entry("source", "SYSTEM"),
+                                Map.entry("mark", sourceMark),
+                                Map.entry("metaFileName", DEMO_META_FILE),
+                                Map.entry("metaContent", validation.content()),
+                                Map.entry("candidateDigest", String.valueOf(
+                                        configValidation.getOrDefault("candidateDigest", ""))),
+                                Map.entry("metaDigest", String.valueOf(
+                                        configValidation.getOrDefault("metaDigest", ""))),
+                                Map.entry("validationDigest", String.valueOf(
+                                        configValidation.getOrDefault("validationDigest", ""))))));
             }
             tasks = DemoResponseSupport.listPushTasks(mcpToolContext, sourceMark);
             if (tasks.size() != 1) {
@@ -259,11 +290,12 @@ public class DataPushDemoResponseService {
                                 : "创建工具结果：" + DemoResponseSupport.describeToolResult(createResult)
                                 + "；创建后未查询到唯一任务。");
             }
-            PushTaskVo task = tasks.get(0);
+            PushTaskVo task = DemoResponseSupport.getPushTask(
+                    mcpToolContext, tasks.get(0).getId());
             String taskId = task.getId() == null ? "" : String.valueOf(task.getId());
             String config = StringUtils.hasText(task.getConfig()) ? task.getConfig() : DEMO_PUSH_CONFIG;
             Map<String, Object> logResult = DemoResponseSupport.readSystemLog(
-                    mcpToolContext, task, sourceMark);
+                    mcpToolContext, task);
             String status = String.valueOf(logResult.getOrDefault(
                     "taskStatus",
                     StringUtils.hasText(task.getStatus()) ? task.getStatus() : "unknown"));
@@ -292,6 +324,9 @@ public class DataPushDemoResponseService {
                       "name": "%s",
                       "description": "%s",
                       "status": "running",
+                      "format": "%s",
+                      "runId": "%s",
+                      "validationDigest": "%s",
                       "config": %s
                     }
                     ```
@@ -302,6 +337,11 @@ public class DataPushDemoResponseService {
                             ? task.getName() : DEMO_PUSH_NAME),
                     DemoResponseSupport.escapeJson(StringUtils.hasText(task.getDescription())
                             ? task.getDescription() : DEMO_PUSH_DESCRIPTION),
+                    DEMO_PUSH_FORMAT,
+                    DemoResponseSupport.escapeJson(String.valueOf(
+                            task.getCurrentRunId() == null ? "" : task.getCurrentRunId())),
+                    DemoResponseSupport.escapeJson(String.valueOf(
+                            configValidation.getOrDefault("validationDigest", ""))),
                     JacksonUtil.toJson(config));
         } catch (Exception e) {
             log.error("执行数据推送演示 MCP 流程失败: {}", e.getMessage(), e);
@@ -333,7 +373,7 @@ public class DataPushDemoResponseService {
             if (!hasExpectedEntityAndAttributes(content)) {
                 return MetaValidation.missing();
             }
-            return new MetaValidation(true, DemoResponseSupport.digest(content));
+            return new MetaValidation(true, content, DemoResponseSupport.digest(content));
         } catch (Exception e) {
             log.warn("校验数据推送演示 Meta 失败: {}", e.getMessage());
             return MetaValidation.missing();
@@ -437,9 +477,40 @@ public class DataPushDemoResponseService {
                 DemoResponseSupport.escapeJson(reason));
     }
 
-    private record MetaValidation(boolean present, String contentDigest) {
+    private Map<String, Object> validateDemoConfig(McpToolContext mcpToolContext,
+                                                   MetaValidation validation) {
+        try {
+            return DemoResponseSupport.validatePushConfig(
+                    mcpToolContext,
+                    DEMO_PUSH_CONFIG,
+                    DEMO_PUSH_FORMAT,
+                    DEMO_META_FILE,
+                    validation.content());
+        } catch (Exception e) {
+            throw new IllegalStateException("执行数据推送配置校验失败", e);
+        }
+    }
+
+    private String configValidationFailureResponse(Map<String, Object> validation) {
+        return """
+                数据推送配置未通过平台校验，尚未创建或启动任务。
+
+                ```zenvis:notice
+                {"title":"数据推送配置校验未通过","content":"%s","level":"error"}
+                ```
+                """.formatted(DemoResponseSupport.escapeJson(
+                validationFailureSummary(validation)));
+    }
+
+    private String validationFailureSummary(Map<String, Object> validation) {
+        Object diagnostics = validation == null ? null : validation.get("diagnostics");
+        return "blocked=" + (validation == null ? "true" : validation.get("blocked"))
+                + "；diagnostics=" + Objects.toString(diagnostics, "[]");
+    }
+
+    private record MetaValidation(boolean present, String content, String contentDigest) {
         private static MetaValidation missing() {
-            return new MetaValidation(false, "");
+            return new MetaValidation(false, "", "");
         }
     }
 }

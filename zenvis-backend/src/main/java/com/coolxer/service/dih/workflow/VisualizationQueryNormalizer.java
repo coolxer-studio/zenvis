@@ -1,5 +1,7 @@
 package com.coolxer.service.dih.workflow;
 
+import com.coolxer.service.retrieval.AnalyticsTimeRangeRules;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,8 +43,21 @@ public final class VisualizationQueryNormalizer {
             }
             String name = key.toString();
             normalized.put(name, "dimensions".equals(name) && value instanceof List<?> dimensions
-                    ? dimensions(dimensions) : nested(value));
+                    ? dimensions(dimensions)
+                    : "time_range".equals(name) ? timeRange(value) : nested(value));
         });
+        return normalized;
+    }
+
+    private static Object timeRange(Object value) {
+        if (!(value instanceof Map<?, ?> range)) {
+            return nested(value);
+        }
+        Map<String, Object> normalized = map(range);
+        if (normalized.containsKey("preset")) {
+            normalized.put("preset", AnalyticsTimeRangeRules.normalizePreset(
+                    text(normalized.get("preset"))));
+        }
         return normalized;
     }
 

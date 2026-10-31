@@ -86,6 +86,22 @@ class ConfigMcpToolTest {
     }
 
     @Test
+    void forceCannotWriteConfirmationCardAsMeta() {
+        ConfigDto configDto = configDto("""
+                {"fileName":"probe_event.json","configKind":"meta",
+                 "validationStatus":"success","config":{"entity":[],
+                 "attribute":[],"operator":[]}}
+                """);
+
+        assertThatThrownBy(() -> tool.apply("meta", configDto, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("不是有效 Meta");
+
+        verify(configService, never()).modifyConfig(any(), any());
+        verify(configService, never()).applyConfig(any(), any());
+    }
+
+    @Test
     void addMetaCreatesEmptyFileWithoutApplyingCandidate() {
         when(configService.fileExistsInConfigPath("meta", "probe_event.json"))
                 .thenReturn(false);

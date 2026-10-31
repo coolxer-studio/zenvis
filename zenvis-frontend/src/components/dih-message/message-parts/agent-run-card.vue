@@ -85,14 +85,35 @@
         <span>{{ currentToolText }}</span>
       </div>
 
-      <div v-if="run?.status === 'WAITING_USER'" class="run-user-input-callout">
+      <div v-if="pendingInteraction" class="run-user-input-callout">
         <span class="run-user-input-copy">
-          <strong>需要补充信息</strong>
-          <small>{{ waitingQuestion || '当前任务正在等待你补充继续执行所需的信息。' }}</small>
+          <strong>{{ pendingInteraction.title || '需要处理当前任务交互' }}</strong>
+          <small>{{ pendingInteraction.prompt || waitingQuestion }}</small>
         </span>
-        <el-button size="small" type="primary" plain @click.stop="openUserInput">
-          补充信息
-        </el-button>
+        <div v-if="pendingInteraction.kind === 'user_input'" class="run-user-input-inline">
+          <el-input
+            v-model="userInputAnswer"
+            type="textarea"
+            :rows="3"
+            :maxlength="8000"
+            resize="vertical"
+            placeholder="请输入需要补充的信息"
+            @keydown.meta.enter.prevent="submitUserInput"
+            @keydown.ctrl.enter.prevent="submitUserInput"
+          />
+          <el-button
+            size="small"
+            type="primary"
+            :loading="userInputSubmitting"
+            :disabled="!userInputAnswer.trim()"
+            @click.stop="submitUserInput"
+          >提交并继续</el-button>
+        </div>
+        <small v-else class="run-interaction-hint">
+          {{ pendingInteraction.kind === 'mcp_approval'
+            ? '请在下方 MCP 审批卡中处理。'
+            : '请在对应业务卡片中完成操作。' }}
+        </small>
       </div>
 
       <div v-else-if="run?.pausedReason" class="run-paused-reason">
@@ -114,14 +135,6 @@
         <span v-if="run?.recoveryCount">恢复 {{ run.recoveryCount }} 次</span>
       </div>
     </template>
-
-    <AgentRunUserInputDialog
-      v-model="userInputVisible"
-      :question="waitingQuestion"
-      :submitting="userInputSubmitting"
-      @submit="submitUserInput"
-      @closed="handleUserInputClosed"
-    />
   </section>
 </template>
 
@@ -156,7 +169,6 @@ import {
   summarizeAgentRunActivities,
 } from '@/views/dih/composables/agent-run-activity';
 import AgentRunActivity from './agent-run-activity.vue';
-import AgentRunUserInputDialog from './agent-run-user-input-dialog.vue';
 
 const props = withDefaults(defineProps<{
   run?: AgentRun | null;
@@ -170,7 +182,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'resume', runId: string): void;
-  (e: 'reply', payload: { runId: string; message: string }): void;
+  (e: 'reply', payload: { runId: string; interactionId: string; message: string }): void;
 }>();
 
 const expanded = ref(true);
@@ -200,52 +212,34 @@ const allActivityEvents = computed(() => {
 const activities = computed(() => buildAgentRunActivities(allActivityEvents.value));
 const activitySummary = computed(() => summarizeAgentRunActivities(activities.value));
 const waitingQuestion = computed(() => resolveAgentRunWaitingQuestion(props.run));
-const waitingPromptKey = computed(() => {
-  if (props.run?.status !== 'WAITING_USER') return '';
-  return `${props.run.runId}:${waitingQuestion.value}`;
-});
-const userInputVisible = ref(false);
+const pendingInteraction = computed(() => props.run?.pendingInteraction || null);
+const interactionKey = computed(() => pendingInteraction.value?.interactionId || '');
+const userInputAnswer = ref('');
 const userInputSubmitting = ref(false);
-let dismissedPromptKey = '';
-let promptedKey = '';
 let submitResetTimer: number | null = null;
 
-const openUserInput = () => {
-  userInputVisible.value = true;
-};
-
-const submitUserInput = (message: string) => {
+const submitUserInput = () => {
   const runId = props.run?.runId || '';
-  const answer = message.trim();
-  if (!runId || !answer) return;
+  const interactionId = pendingInteraction.value?.interactionId || '';
+  const answer = userInputAnswer.value.trim();
+  if (!runId || !interactionId || !answer || userInputSubmitting.value) return;
   userInputSubmitting.value = true;
-  emit('reply', { runId, message: answer });
+  emit('reply', { runId, interactionId, message: answer });
   if (submitResetTimer !== null) window.clearTimeout(submitResetTimer);
   submitResetTimer = window.setTimeout(() => {
     userInputSubmitting.value = false;
     submitResetTimer = null;
-  }, 5_000);
+  }, 10_000);
 };
 
-const handleUserInputClosed = () => {
-  if (props.run?.status === 'WAITING_USER') {
-    dismissedPromptKey = waitingPromptKey.value;
+watch(interactionKey, () => {
+  userInputAnswer.value = '';
+  userInputSubmitting.value = false;
+  if (submitResetTimer !== null) {
+    window.clearTimeout(submitResetTimer);
+    submitResetTimer = null;
   }
-};
-
-watch(waitingPromptKey, key => {
-  if (!key) {
-    userInputVisible.value = false;
-    userInputSubmitting.value = false;
-    dismissedPromptKey = '';
-    promptedKey = '';
-    return;
-  }
-  if (key !== dismissedPromptKey && key !== promptedKey) {
-    promptedKey = key;
-    userInputVisible.value = true;
-  }
-}, { immediate: true });
+});
 
 onBeforeUnmount(() => {
   if (submitResetTimer !== null) window.clearTimeout(submitResetTimer);
@@ -614,7 +608,8 @@ button.run-activity-state {
   display: flex;
   margin: 8px 14px 0;
   padding: 10px 12px;
-  align-items: center;
+  align-items: stretch;
+  flex-direction: column;
   gap: 12px;
   background: color-mix(in srgb, var(--el-color-warning) 10%, var(--zv-bg-card));
   border: 1px solid color-mix(in srgb, var(--el-color-warning) 28%, var(--zv-border));
@@ -642,6 +637,21 @@ button.run-activity-state {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+.run-user-input-inline {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.run-user-input-inline :deep(.el-textarea) {
+  flex: 1;
+}
+
+.run-interaction-hint {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-font-size-xs);
 }
 
 .run-metrics {

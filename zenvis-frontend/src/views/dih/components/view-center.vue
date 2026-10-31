@@ -884,7 +884,9 @@ const {
   sendMessage,
   stopCurrentChat,
   resumeAgentRun,
-  replyToWaitingAgentRun,
+  respondToWaitingAgentRun,
+  respondAgentRunInteraction,
+  getAgentRunSnapshot,
   restoreActiveAgentRun,
 } = useChatStream({
   router,
@@ -951,6 +953,8 @@ const {
   chatSessionId,
   chatSessionExtraData,
   sendMessage,
+  respondAgentRunInteraction,
+  getAgentRunSnapshot,
 });
 
 const handleResumeAgentRun = async (runId: string) => {
@@ -962,9 +966,13 @@ const handleResumeAgentRun = async (runId: string) => {
   }
 };
 
-const handleReplyAgentRun = async (payload: { runId: string; message: string }) => {
+const handleReplyAgentRun = async (payload: {
+  runId: string;
+  interactionId: string;
+  message: string;
+}) => {
   try {
-    await replyToWaitingAgentRun(payload.runId, payload.message);
+    await respondToWaitingAgentRun(payload.runId, payload.interactionId, payload.message);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
   }

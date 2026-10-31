@@ -42,7 +42,7 @@ class McpToolApprovalAnnotationTest {
                 .filter(method -> method.isAnnotationPresent(Tool.class))
                 .toList();
 
-        assertThat(methods).hasSize(73);
+        assertThat(methods).hasSize(74);
         assertThat(methods).allSatisfy(method -> {
             McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
             assertThat(approval)
@@ -70,6 +70,7 @@ class McpToolApprovalAnnotationTest {
                 "config_tree",
                 "config_schema",
                 "config_read",
+                "config_meta_draft",
                 "config_validate",
                 "config_ensure_root",
                 "config_add",
@@ -78,7 +79,8 @@ class McpToolApprovalAnnotationTest {
                 "config_delete"
         ));
         assertThat(tools).allSatisfy((name, approval) -> {
-            if (Set.of("config_tree", "config_schema", "config_read", "config_validate").contains(name)) {
+            if (Set.of("config_tree", "config_schema", "config_read",
+                    "config_meta_draft", "config_validate").contains(name)) {
                 assertThat(approval.value()).isEqualTo(ALLOW);
                 assertThat(approval.risk()).isEqualTo(LOW);
             } else {
@@ -102,16 +104,23 @@ class McpToolApprovalAnnotationTest {
             assertThat(approval.risk()).isEqualTo(LOW);
         });
         assertThat(tools).containsOnlyKeys(
+                "push_task_list",
+                "push_task_get",
                 "push_task_create_and_start",
-                "push_task_list_by_source_mark",
-                "push_task_delete_by_source_mark",
+                "push_task_update_and_restart",
+                "push_task_start",
+                "push_task_stop",
+                "push_task_restart",
+                "push_task_delete",
                 "push_task_get_log",
-                "push_task_repair_and_restart",
-                "push_task_detect_format");
+                "push_task_validate_config",
+                "push_task_diagnose");
         for (String toolName : List.of(
-                "push_task_list_by_source_mark",
+                "push_task_list",
+                "push_task_get",
                 "push_task_get_log",
-                "push_task_detect_format")) {
+                "push_task_validate_config",
+                "push_task_diagnose")) {
             assertThat(tools.get(toolName).getAnnotation(McpToolApproval.class))
                     .satisfies(approval -> {
                         assertThat(approval.value()).isEqualTo(ALLOW);
@@ -120,16 +129,19 @@ class McpToolApprovalAnnotationTest {
         }
         for (String toolName : List.of(
                 "push_task_create_and_start",
-                "push_task_delete_by_source_mark",
-                "push_task_repair_and_restart")) {
+                "push_task_update_and_restart",
+                "push_task_start",
+                "push_task_stop",
+                "push_task_restart",
+                "push_task_delete")) {
             assertThat(tools.get(toolName).getAnnotation(McpToolApproval.class))
                     .satisfies(approval -> {
                         assertThat(approval.value()).isEqualTo(ASK);
                         assertThat(approval.risk()).isEqualTo(HIGH);
                     });
         }
-        Method repairTool = tools.get("push_task_repair_and_restart");
+        Method repairTool = tools.get("push_task_update_and_restart");
         assertThat(repairTool.getAnnotation(Tool.class).description())
-                .contains("真实日志证据", "具体失败原因", "逐项配置旧值/新值");
+                .contains("完整配置", "格式", "source", "mark", "保持不变");
     }
 }

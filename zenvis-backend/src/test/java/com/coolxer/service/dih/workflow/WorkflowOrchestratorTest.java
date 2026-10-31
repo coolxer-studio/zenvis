@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -199,6 +202,7 @@ class WorkflowOrchestratorTest {
 
     @Test
     void dataPushPlanRequiresMetaReferenceAndReadEvidence() {
+        String content = "[sources.demo]\ntype = \"demo_logs\"";
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
@@ -207,7 +211,7 @@ class WorkflowOrchestratorTest {
                 .id("code-1")
                 .type("code")
                 .language("toml")
-                .content("[sources.demo]\ntype = \"demo_logs\"")
+                .content(content)
                 .build();
         ChatMessagePart decision = ChatMessagePart.builder()
                 .id("decision-1")
@@ -220,6 +224,12 @@ class WorkflowOrchestratorTest {
                         "metaRef", Map.of(
                                 "fileName", "user_event.json",
                                 "contentDigest", "digest-meta"),
+                        "validation", Map.of(
+                                "passed", true,
+                                "blocked", false,
+                                "candidateDigest", digest(content),
+                                "metaDigest", "digest-meta",
+                                "validationDigest", "validation-1"),
                         "request", Map.of("name", "探针推送"))))
                 .build();
 
@@ -234,7 +244,15 @@ class WorkflowOrchestratorTest {
                         Map.of(
                                 "evidenceId", "config-read-1",
                                 "tool", "config_read",
-                                "status", "succeeded")),
+                                "status", "succeeded"),
+                        Map.of(
+                                "evidenceId", "validation-1",
+                                "tool", "push_task_validate_config",
+                                "status", "succeeded",
+                                "resultSummary", "{\"candidate_digest\":\""
+                                        + digest(content) + "\","
+                                        + "\"meta_digest\":\"digest-meta\","
+                                        + "\"validation_digest\":\"validation-1\"}")),
                 "message-1");
 
         assertThat(decision.getMetadata())
@@ -251,6 +269,96 @@ class WorkflowOrchestratorTest {
                             .containsKey("metaRef")
                             .containsKey("candidate");
                 });
+    }
+
+    @Test
+    void dataPushBlockedPlanPersistsItemizedReasonsInFailureLedger() {
+        String content = "[sources.demo]\ntype = \"demo_logs\"";
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession session = new ChatSession()
+                .setType("agent_data_push_service");
+        ChatMessagePart candidate = ChatMessagePart.builder()
+                .id("code-blocked")
+                .type("code")
+                .language("toml")
+                .content(content)
+                .build();
+        ChatMessagePart decision = ChatMessagePart.builder()
+                .id("decision-blocked")
+                .type("data-push-service-decision")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "data_push.confirm_plan",
+                        "configKind", "push_task",
+                        "sourceMark", "data-push:chat-1:probe",
+                        "metaRef", Map.of(
+                                "fileName", "user_event.json",
+                                "contentDigest", "digest-meta"),
+                        "validation", Map.of(
+                                "passed", true,
+                                "blocked", false,
+                                "candidateDigest", "stale-candidate",
+                                "metaDigest", "digest-meta",
+                                "validationDigest", "validation-1"),
+                        "request", Map.of("name", "探针推送"))))
+                .build();
+
+        orchestrator.prepareParts(
+                session,
+                List.of(candidate, decision),
+                List.of(
+                        Map.of(
+                                "evidenceId", "config-tree-1",
+                                "tool", "config_tree",
+                                "status", "succeeded"),
+                        Map.of(
+                                "evidenceId", "config-read-1",
+                                "tool", "config_read",
+                                "status", "succeeded"),
+                        Map.of(
+                                "evidenceId", "validation-1",
+                                "tool", "push_task_validate_config",
+                                "status", "succeeded")),
+                "message-1");
+
+        assertThat(decision.getStatus()).isEqualTo("blocked");
+        assertThat(decision.getMetadata())
+                .containsEntry("step", "BLOCKED")
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("allowedActions", List.of("retry", "revise"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> reasons =
+                (List<Map<String, Object>>) decision.getMetadata().get("blockingReasons");
+        assertThat(reasons).extracting(reason -> reason.get("code"))
+                .contains("PUSH_CANDIDATE_DIGEST_MISMATCH",
+                        "PUSH_VALIDATION_EVIDENCE_DIGEST_MISSING");
+        assertThat(store.loadActive(session, "agent_data_push_service"))
+                .get()
+                .satisfies(state -> {
+                    assertThat(state.getStep()).isEqualTo(AgentWorkflowStep.BLOCKED);
+                    assertThat(state.getContext())
+                            .containsEntry("sourceMark", "data-push:chat-1:probe")
+                            .containsEntry("metaRef", Map.of(
+                                    "fileName", "user_event.json",
+                                    "contentDigest", "digest-meta"));
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> lockedCandidate =
+                            (Map<String, Object>) state.getContext().get("candidate");
+                    assertThat(lockedCandidate).containsEntry("digest", digest(content));
+                    assertThat(state.getFailures()).isNotEmpty();
+                    assertThat(state.getFailures().get(state.getFailures().size() - 1))
+                            .containsKey("blockingReasons");
+                });
+    }
+
+    private String digest(String content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(content.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test

@@ -44,7 +44,64 @@ class MetaConfigValidationServiceTest {
         assertThat(result.passed()).isTrue();
         assertThat(result.errors()).isEmpty();
         assertThat(result.candidateDigest()).hasSize(64);
+        assertThat(result.validationId()).startsWith("meta-validation-");
+        assertThat(result.schemaVersion()).startsWith("meta-schema@");
+        assertThat(result.schemaHash()).hasSize(64);
         assertThat(result.normalizedText()).contains("\"column_name\" : \"event_id\"");
+    }
+
+    @Test
+    void confirmationCardFieldsAreRejectedAsWrongObject() {
+        String card = """
+                {
+                  "fileName": "probe_event.json",
+                  "configKind": "meta",
+                  "overwrite": false,
+                  "candidateDigest": "abc",
+                  "validationStatus": "success",
+                  "config": {"entity": [], "attribute": [], "operator": []}
+                }
+                """;
+
+        MetaConfigValidationService.ValidationResult result =
+                service.validate("probe_event.json", card);
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.diagnostics())
+                .extracting(MetaConfigValidationService.Diagnostic::code)
+                .containsExactly("META_WRONG_OBJECT");
+        assertThat(result.diagnostics().get(0).message())
+                .contains("configKind", "candidateDigest", "validationStatus", "config");
+    }
+
+    @Test
+    void brokenWorkspaceFileDoesNotFailValidCandidate() throws Exception {
+        Files.writeString(metaDir.resolve("broken_existing.json"), "{not-json");
+
+        MetaConfigValidationService.ValidationResult result =
+                service.validate("probe_event.json", json(validRoot("probe_event")));
+
+        assertThat(result.passed()).isTrue();
+        assertThat(result.diagnostics())
+                .filteredOn(item -> "META_WORKSPACE_INVALID".equals(item.code()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.severity()).isEqualTo("WARNING");
+                    assertThat(item.scope()).isEqualTo("workspace");
+                });
+    }
+
+    @Test
+    void diagnosticsPrecedeNormalizedTextInToolPayload() {
+        ObjectNode root = validRoot("probe_event");
+        root.put("unexpected", true);
+
+        MetaConfigValidationService.ValidationResult result =
+                service.validate("probe_event.json", json(root));
+        java.util.List<String> keys = java.util.List.copyOf(result.toMap().keySet());
+
+        assertThat(keys).containsSubsequence("diagnostics", "repairs", "normalizedText");
+        assertThat(keys.get(keys.size() - 1)).isEqualTo("normalizedText");
     }
 
     @Test

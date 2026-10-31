@@ -15,19 +15,19 @@ class BuiltinMcpServiceDefinitionTest {
         assertThat(BuiltinMcpServiceDefinition.orderedValues())
                 .extracting(BuiltinMcpServiceDefinition::code)
                 .containsExactly(
-                        "retrieval", "entity", "config", "push-task",
+                        "retrieval", "config", "push-task",
                         "visualization", "analysis-task");
         assertThat(BuiltinMcpServiceDefinition.orderedValues())
                 .extracting(service -> service.toolNames().size())
-                .containsExactly(22, 5, 9, 6, 21, 16);
+                .containsExactly(22, 10, 11, 21, 16);
 
         List<String> tools = BuiltinMcpServiceDefinition.orderedValues().stream()
                 .flatMap(service -> service.toolNames().stream())
                 .toList();
         Set<String> unique = new LinkedHashSet<>(tools);
 
-        assertThat(tools).hasSize(79);
-        assertThat(unique).hasSize(79);
+        assertThat(tools).hasSize(80);
+        assertThat(unique).hasSize(80);
         assertThat(BuiltinMcpServiceDefinition.allToolNames()).containsExactlyInAnyOrderElementsOf(unique);
     }
 
@@ -41,7 +41,7 @@ class BuiltinMcpServiceDefinitionTest {
         assertThat(retrieval.serverName()).isEqualTo("zenvis-retrieval-mcp");
         assertThat(retrieval.containsTool("entity_view")).isTrue();
         assertThat(retrieval.containsTool("entity_update")).isFalse();
-        assertThat(BuiltinMcpServiceDefinition.findByTool("entity_update"))
-                .contains(BuiltinMcpServiceDefinition.ENTITY);
+        assertThat(BuiltinMcpServiceDefinition.findByCode("entity")).isEmpty();
+        assertThat(BuiltinMcpServiceDefinition.findByTool("entity_update")).isEmpty();
     }
 }

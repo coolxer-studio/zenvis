@@ -49,11 +49,11 @@
 | `done` | 本轮完成，包含最终 `message` |
 | `error` | 本轮失败 |
 
-客户端必须逐行解析，未知事件应忽略而不是终止整个流。同一轮可能产生多个审批请求，应按 `request_id` 分别维护。MCP 审批提交到 [MCP 服务管理接口](/08-API参考/RestfulAPI/MCP服务管理.md#审批与调用审计)，不能提交到 `action-decision`。
+客户端必须逐行解析，未知事件应忽略而不是终止整个流。同一轮可能产生多个审批请求，应按 `request_id` 分别维护。普通 DIH 聊天的 MCP 审批提交到 [MCP 服务管理接口](/08-API参考/RestfulAPI/MCP服务管理.md#审批与调用审计)；持久化 Agent Run 的审批使用 Run 统一交互接口，不能提交到 `action-decision`。
 
 ### 工作流动作
 
-业务确认卡通过 `POST /api/v1/dih/chat/workflow/action` 提交，`WorkflowActionDto` 使用以下字段：
+未创建持久化 Run 的普通 DIH 工作流卡通过 `POST /api/v1/dih/chat/workflow/action` 提交；属于持久化 Run 的卡片会被该接口拒绝并返回 `409`，必须使用 Run 统一交互接口。`WorkflowActionDto` 使用以下字段：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -69,7 +69,7 @@
 
 元数据重命名或删除使用同一卡片类型，`operation` 为 `rename` 或 `delete`，并携带 `sourcePath`、`targetPath`、`recursive`、`affectedPaths` 和 `operationDigest`。批准后前端必须使用服务端锁定的路径参数，不能重新解释文件路径；源文件、目录成员、目标占用或配置树证据变化后卡片失效。删除非空目录需要显式递归确认，操作成功后才由服务端写入右侧的 `renamed`/`deleted` 记录。
 
-当 `type` 属于 `app.ai.agent-run.enabled-types` 时，`POST /api/v1/dih/chat` 兼容适配器会创建 Agent Run，并把 Run 事件映射为 `delta`、`tool_call`、`approval_required`、`approval_updated`、`rag_search`、`done` 和 `error`。非事件流请求只返回“任务已创建”和 `runId`，不会等待任务完成。持久化运行、steer 和断线恢复应优先使用下节的 Run API。
+当 `type` 属于 `app.ai.agent-run.enabled-types` 时，`POST /api/v1/dih/chat` 兼容适配器会创建 Agent Run，并把 Run 事件映射为 `delta`、`tool_call`、`approval_required`、`approval_updated`、`rag_search`、`done` 和 `error`。非事件流请求只返回“任务已创建”和 `runId`，不会等待任务完成。持久化运行、主动消息、统一交互和断线恢复应优先使用下节的 Run API。
 
 内置示例提示词优先走确定性示例流，不创建 Run；直接向 Run API 提交示例时返回业务码 `503`，客户端应回退到 `POST /api/v1/dih/chat`。
 
@@ -174,17 +174,18 @@ Agent Run 用于所有真实业务 Agent 任务，普通问答 `ask` 和内置�
 
 | 方法 | 路径 | 输入 | 返回/用途 |
 | --- | --- | --- | --- |
-| POST | `/api/v1/dih/chat/runs` | `AgentRunRequestDto` | 创建 Run；会话已有活动 Run 时转为 steer |
+| POST | `/api/v1/dih/chat/runs` | `AgentRunRequestDto` | 创建 Run；会话已有活动 Run 时转为主消息入口 |
 | GET | `/api/v1/dih/chat/runs/{runId}` | Run ID | `AgentRunVo` 快照 |
 | GET | `/api/v1/dih/chat/runs` | `chatId?`、`status?`、`page=1`、`perPage=20` | `PageRowsVo<AgentRunVo>` |
 | GET | `/api/v1/dih/chat/runs/{runId}/events` | query `after=0`、`types?` | `application/x-ndjson` 事件流 |
 | GET | `/api/v1/dih/chat/runs/{runId}/events/list` | query `after=0`、`types?` | 最多 500 条历史事件数组 |
-| POST | `/api/v1/dih/chat/runs/{runId}/steer` | `AgentRunSteerDto` | 追加当前 Run 指令；任务可能重新入队 |
+| POST | `/api/v1/dih/chat/runs/{runId}/messages` | `AgentRunSteerDto` | 用户主动发送新指令；只有该入口创建用户气泡 |
+| POST | `/api/v1/dih/chat/runs/{runId}/interactions/{interactionId}/respond` | `AgentRunInteractionResponseDto` | 响应自由文本补充、卡片决策或 MCP 审批；不创建用户气泡 |
 | POST | `/api/v1/dih/chat/runs/{runId}/pause` | query `reason?` | 暂停任务 |
 | POST | `/api/v1/dih/chat/runs/{runId}/resume` | 无 | 继续 `PAUSED` 或 `WAITING_USER` 任务 |
 | POST | `/api/v1/dih/chat/runs/{runId}/cancel` | 无 | 取消任务或进入 `CANCELING` |
 
-### 创建与 steer
+### 创建与主动消息
 
 ```json
 {
@@ -203,15 +204,15 @@ Agent Run 用于所有真实业务 Agent 任务，普通问答 `ask` 和内置�
 }
 ```
 
-`chat_id` 必填；`message` 与 `attachments` 至少一个非空。`type` 必须是已启用 Run 的业务 Agent 类型，否则返回 `400`；类型未启用 Run 时返回 `503`。`client_message_id` 在 Run 内用于 steer 幂等。
+`chat_id` 必填；`message` 与 `attachments` 至少一个非空。`type` 必须是已启用 Run 的业务 Agent 类型，否则返回 `400`；类型未启用 Run 时返回 `503`。`client_message_id` 在 Run 内用于主动消息幂等。
 
 平台在会话锁内检查活动 Run：
 
 - 没有活动 Run：创建新 Run，返回 `steered=false`。
-- 已有活动 Run：同一请求转为 steer，返回该 Run，且 `steered=true`。
+- 已有活动 Run：同一请求转为主动消息，返回该 Run，且 `steered=true`。
 - 同一 Run 重复提交相同 `client_message_id`：返回当前快照，不重复追加消息。
 
-steer 请求：
+用户主动消息请求：
 
 ```json
 {
@@ -221,7 +222,7 @@ steer 请求：
 }
 ```
 
-steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处于 `PAUSED` 或 `WAITING_USER` 时，steer 会把状态改为 `QUEUED`。终态 Run 返回 `409`，`CANCELING` 状态同样拒绝 steer。
+主动消息会先写入 `ChatSession` 用户消息并保存为 `AgentRunInput(PENDING)`，在当前模型步骤结束后注入。任务处于 `PAUSED` 或 `WAITING_USER` 时，主动消息会把状态改为 `QUEUED` 并清空当前交互。终态 Run 返回 `409`，`CANCELING` 状态同样拒绝。主输入框发送新指令时使用该接口；卡片选择、表单提交、审批决定和 Run 补充信息不得调用该接口。
 
 ### Run 快照
 
@@ -236,22 +237,54 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 | `toolCalls`、`maxToolCalls` | 已用工具调用与 Run 总预算 |
 | `effectiveMillis`、`maxDurationSeconds` | 有效执行时长与上限 |
 | `lastEventSequence` | 最后一条事件序号，用作重放游标 |
-| `pendingAction`、`pausedReason`、`lastError` | 待审批/待用户动作和暂停、错误原因 |
+| `pendingInteraction` | 当前唯一待处理交互；断线重连、刷新和任务中心恢复的唯一入口 |
+| `pendingAction`、`pausedReason`、`lastError` | 旧数据兼容字段和暂停、错误原因；新客户端不得据此推断交互类型 |
 | `attemptCount`、`recoveryCount`、`truncationCount` | 认领、租约恢复和截断重试次数 |
 | `finalAnswer`、`startedAt`、`finishedAt` | 最终答复与时间 |
 
 `status` 取值为 `QUEUED`、`RUNNING`、`WAITING_APPROVAL`、`WAITING_USER`、`PAUSED`、`SUCCEEDED`、`FAILED`、`CANCELING`、`CANCELLED`。`SUCCEEDED`、`FAILED` 和 `CANCELLED` 为终态。
 
-`WAITING_USER` 时，`pendingAction` 是包含完整问题的 JSON 字符串；客户端应优先读取该字段，而不是使用可能被截断的 `pausedReason`：
+`WAITING_USER` 和 `WAITING_APPROVAL` 是执行状态，不表示 UI 类型。客户端必须按 `pendingInteraction.kind` 内联渲染控件，不能仅凭状态自动打开弹窗。`pendingInteraction` 结构如下：
 
 ```json
 {
-  "type": "user",
-  "question": "请补充推送任务配置中的 Source、Topic、消费组和 DLQ Topic 实际值。"
+  "interactionId": "0fbd14d0-a220-4d86-a2c5-2f9ca79c4d33",
+  "kind": "card_decision",
+  "messageId": "message-001",
+  "partId": "part-001",
+  "workflowId": "metadata_config",
+  "stateRevision": 8,
+  "title": "确认元数据方案",
+  "prompt": "请确认当前候选配置",
+  "allowedActions": ["approve", "reject", "revise"],
+  "createdAt": "2026-10-30T06:30:12.000+00:00"
 }
 ```
 
-提交补充信息使用 `POST /runs/{runId}/steer`。服务端重新排队时会清空 `pendingAction`，客户端应更新 Run 快照并关闭输入框，避免继续展示过期问题。
+`kind` 固定为 `user_input`、`card_decision` 或 `mcp_approval`。`mcp_approval` 额外携带 `requestId`；`card_decision` 使用服务端保存的 `messageId`、`partId`、`workflowId` 和 `stateRevision` 定位卡片。一个 Run 同时只有一个活动交互；其余卡片只作为历史展示。
+
+### 统一交互响应
+
+所有交互响应都提交到 `POST /api/v1/dih/chat/runs/{runId}/interactions/{interactionId}/respond`：
+
+| `kind` | 请求字段 | 服务端行为 |
+| --- | --- | --- |
+| `user_input` | `message`、`attachments?` | 校验补充内容并记录 `AgentRunInput`；清空交互并重新排队 |
+| `card_decision` | `action`、`answers?`、`stateRevision`、`revision?` | 校验卡片版本、允许动作、必填项、严格选项和工作流状态；更新卡片后重新排队 |
+| `mcp_approval` | `decision`、`comment?` | 调用既有 MCP 审批服务，保留请求归属、过期、审批范围、工具审计和响应状态 |
+
+卡片响应必须携带 `stateRevision`；通用 `confirm`/`info-steps` 卡没有工作流版本时使用 `0`。统一交互请求以 camelCase 字段为准，同时兼容 `state_revision`。客户端不能提交 `chatId`、`messageId`、`partId`、`workflowId` 或 `requestId` 重新定位交互，服务端只使用已保存的交互记录，避免越权和错卡。
+
+`stateRevision` 是卡片提交版本，不是 Run 状态版本。服务端将请求值与 `pendingInteraction.stateRevision` 严格比较；字段缺失或版本不一致返回 `409`。收到“卡片版本已过期”时，客户端应重新读取 Run 快照并使用最新 `pendingInteraction` 重新渲染控件，不能用同一请求自动重试，也不能改用主动消息接口绕过校验。
+
+| 409 文案 | 含义 | 客户端处理 |
+| --- | --- | --- |
+| `卡片版本已过期，请刷新后使用最新卡片` | 统一交互请求缺少 `stateRevision` 或与服务端记录不一致 | 刷新 Run 和会话消息，从最新卡重新操作 |
+| `工作流卡片已经过期，请使用最新卡片` | 卡片元数据版本与工作流当前状态版本不一致 | 刷新并只使用工作流当前卡 |
+| `交互已处理或已失效，请刷新后重试` | `interactionId` 已被替换、清空或不属于当前 Run | 重新获取 `pendingInteraction`，不保留旧交互 ID |
+| `该交互已使用不同内容响应，请刷新后重试` | 同一 `interactionId` 的幂等重试内容发生变化 | 以首次已保存的响应为准，刷新后重新操作 |
+
+相同 `interactionId` 且响应内容完全相同时幂等返回 `duplicate=true`；不同内容返回 `409`。每次有效响应只生成一条带 `interactionId`、`interactionKind` 和 `responseJson` 的 `AgentRunInput` 审计，并向 `ChatSession` 写入卡片的 `interactionResponse` 元数据，但不追加用户消息。
 
 ### 事件流
 
@@ -287,7 +320,8 @@ steer 先保存为 `PENDING`，在当前模型步骤结束后注入。任务处�
 | `approval.required`、`approval.updated` | Run 等待审批状态和 `requestId` |
 | `rag.search` | 与 Chat `rag_search.data` 相同 |
 | `context.compacted` | 压缩阶段、原因、前后 Token/字符、预算、消息与附件计数、摘要预览 |
-| `steer.queued` | `inputId`、`message`、`messageId`、`status` |
+| `steer.queued` | 用户主动消息已保存；`inputId`、`message`、`messageId`、`status` |
+| `interaction.responded` | 统一交互响应已处理；`interactionId`、`kind`、动作或决策、卡片状态 |
 | `artifact.updated` | 报表文档、章节、哈希或正式修订信息 |
 | `run.queued`、`run.paused`、`run.resumed` | `reason` 等状态原因 |
 | `run.output_truncated` | `attempt`、`maxAttempts` |

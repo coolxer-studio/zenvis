@@ -205,7 +205,7 @@ public class ExampleController {
 - 前端浏览器代理：`/zenvis/api/v1/**`，代理时移除 `/zenvis`；
 - 动态插件 API：`/api/v1/plugin/{package_name}/**`；
 - Swagger：`http://localhost:11001/swagger-ui/index.html`；
-- 内置 MCP Server：六组 `/mcp/{serviceCode}/sse` 与 `/mcp/{serviceCode}/message`。
+- 内置 MCP Server：五组 `/mcp/{serviceCode}/sse` 与 `/mcp/{serviceCode}/message`。
 
 公开业务服务上报接口不要求 Session 或 Bearer Token，但生产环境必须在部署层限制来源、请求规模和调用频率。
 
@@ -247,10 +247,13 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 - 写工具必须保留审批、审计、参数校验和风险策略。
 - 普通问答和深度问答在全部未删除知识库中自动执行 RAG；业务 Agent / Skill 在所选启用 Skill 绑定知识库的并集内自动执行 RAG，未绑定时不检索也不回退全库。
 - 持久化执行由 `AgentRunService` 管理状态和事件，`AgentRunScheduler` 负责租约认领，`AgentRunExecutor` 执行单步决策；修改状态迁移时必须同步释放租约、等待动作和事件序号。
+- Run 审批事件必须写入与最终响应相同的 `McpToolLogStream` 证据，并在 `saveAgentRunResponse` 时合并 `toolEvidence.approvalParts()`。只记录 Run 事件或只在实时流中发送 `approval_required`，会导致刷新后消息缺少 `mcp-approval` 部件。
+- 前端从 `pendingInteraction.requestId` 恢复待审批卡片依赖审批记录和消息部件同时存在；只有旧快照才兼容 `pendingAction.requestId`。修改 `AgentRunExecutor.handleApprovalEvent`、Run 最终消息保存或审批查询接口时必须保持该契约。
 - `AgentRunContextAssembler`、`AIChatService` 和 `ContextWindowChatMemory` 在真实发生窗口裁剪、消息截断、Token 预算压缩或附件正文移除时，通过 `ContextCompactionObserver` 写入 `context.compacted`；普通聊天链路使用空实现，不产生 Run 事件。
 - `context.compacted` 的 `stage` 只能是 `run-context`、`model-input`、`history-window` 或 `attachment-memory`，字段使用 camelCase 的 `compactionId`、`beforeTokens`、`savedTokens` 等命名。不要把未发生裁剪的常规上下文组装记录成压缩事件。
 - Run 的 `events` 和 `events/list` 查询都保留可选 `types` 过滤；省略时维持全量行为。新增活动事件时必须同步过滤白名单、500 条分页约定和前端归并器。
-- `AgentRunService.steer` 对 `PAUSED` / `WAITING_USER` 重新排队时必须清空 `pendingAction`，避免客户端继续展示已过期的补充信息问题。
+- 用户主动消息 `AgentRunService.steer` 对 `PAUSED` / `WAITING_USER` 重新排队时必须同时清空 `interactionJson` 和兼容字段 `pendingAction`，避免客户端继续展示已过期的交互。
+- 持久化 Run 的交互 DTO 需要同时兼容前端 camelCase 和平台 snake_case。`AgentRunInteractionResponseDto.stateRevision` 必须保留 `@JsonAlias("stateRevision")`，否则全局 snake_case 策略会把前端提交的版本字段解析为 `null`，导致所有卡片动作误报“卡片版本已过期”。修改字段名时必须同步 `AgentRunInteractionResponseDtoTest` 和前端真实请求体测试。
 
 修改流式协议时必须保持文本、审批、完成、错误和富消息事件兼容，并同步前端类型和渲染逻辑。
 

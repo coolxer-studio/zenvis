@@ -39,6 +39,9 @@ import {
   AgentRunPlan,
   AgentRunPlanStep,
   AgentRunSteerParams,
+  AgentRunInteraction,
+  AgentRunInteractionResponse,
+  AgentRunInteractionResponseParams,
   AgentRunStatus,
 } from '@/types/type-dih';
 import { withBaseUrl } from '@u/url';
@@ -418,6 +421,46 @@ const normalizeAgentRunPlan = (plan: unknown): AgentRunPlan => {
   };
 };
 
+const normalizeAgentRunInteraction = (
+  value: unknown,
+): AgentRunInteraction | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const interactionId = String(raw.interaction_id || raw.interactionId || '');
+  const kind = String(raw.kind || '');
+  if (!interactionId || !['user_input', 'card_decision', 'mcp_approval'].includes(kind)) {
+    return null;
+  }
+  const allowedActions = raw.allowed_actions ?? raw.allowedActions;
+  const stateRevision = raw.state_revision ?? raw.stateRevision;
+  return {
+    interactionId,
+    kind: kind as AgentRunInteraction['kind'],
+    messageId: raw.message_id ? String(raw.message_id) : (
+      raw.messageId ? String(raw.messageId) : undefined
+    ),
+    partId: raw.part_id ? String(raw.part_id) : (
+      raw.partId ? String(raw.partId) : undefined
+    ),
+    workflowId: raw.workflow_id ? String(raw.workflow_id) : (
+      raw.workflowId ? String(raw.workflowId) : undefined
+    ),
+    stateRevision: stateRevision === null || stateRevision === undefined
+      ? undefined : Number(stateRevision),
+    requestId: raw.request_id ? String(raw.request_id) : (
+      raw.requestId ? String(raw.requestId) : undefined
+    ),
+    title: String(raw.title || ''),
+    prompt: String(raw.prompt || ''),
+    allowedActions: Array.isArray(allowedActions)
+      ? allowedActions.map(action => String(action))
+      : [],
+    createdAt: raw.created_at ? String(raw.created_at) : (
+      raw.createdAt ? String(raw.createdAt) : undefined
+    ),
+  };
+};
+
 const normalizeAgentRun = (item: RawAgentRun): AgentRun => ({
   runId: String(item.run_id || item.runId || ''),
   chatId: String(item.chat_id || item.chatId || ''),
@@ -449,6 +492,9 @@ const normalizeAgentRun = (item: RawAgentRun): AgentRun => ({
   pendingAction: item.pending_action
     ? String(item.pending_action)
     : (item.pendingAction ? String(item.pendingAction) : ''),
+  pendingInteraction: normalizeAgentRunInteraction(
+    item.pending_interaction || item.pendingInteraction,
+  ),
   attemptCount: Number(item.attempt_count ?? item.attemptCount ?? 0),
   recoveryCount: Number(item.recovery_count ?? item.recoveryCount ?? 0),
   truncationCount: Number(item.truncation_count ?? item.truncationCount ?? 0),
@@ -863,13 +909,34 @@ export class DihService {
       : [];
   }
 
-  static async steerAgentRun(runId: string, params: AgentRunSteerParams): Promise<AgentRun> {
+  static async sendAgentRunMessage(runId: string, params: AgentRunSteerParams): Promise<AgentRun> {
     const response = await request<RawAgentRun>(
-      `${prefix}/chat/runs/${encodeURIComponent(runId)}/steer`,
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/messages`,
       params,
       'POST',
     );
     return normalizeAgentRun(response);
+  }
+
+  static async respondAgentRunInteraction(
+    runId: string,
+    interactionId: string,
+    params: AgentRunInteractionResponseParams,
+  ): Promise<AgentRunInteractionResponse> {
+    const response = await request<Record<string, unknown>>(
+      `${prefix}/chat/runs/${encodeURIComponent(runId)}/interactions/${encodeURIComponent(interactionId)}/respond`,
+      params,
+      'POST',
+      { silent: true },
+    );
+    return {
+      accepted: Boolean(response.accepted),
+      duplicate: Boolean(response.duplicate),
+      interactionId: String(response.interaction_id || response.interactionId || interactionId),
+      partStatus: String(response.part_status || response.partStatus || ''),
+      summary: String(response.summary || ''),
+      run: normalizeAgentRun((response.run || {}) as RawAgentRun),
+    };
   }
 
   static async pauseAgentRun(runId: string, reason = '用户暂停'): Promise<AgentRun> {

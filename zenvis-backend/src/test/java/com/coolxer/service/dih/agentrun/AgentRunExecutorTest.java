@@ -55,6 +55,7 @@ class AgentRunExecutorTest {
                 mock(DihChatApplicationService.class),
                 mock(ReportDraftService.class),
                 mock(ChatAttachmentService.class),
+                mock(AgentRunInteractionService.class),
                 mock(AgentRunContextAssembler.class),
                 60L);
     }

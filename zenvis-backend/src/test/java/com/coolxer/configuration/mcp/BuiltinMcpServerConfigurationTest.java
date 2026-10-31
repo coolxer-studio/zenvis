@@ -34,7 +34,8 @@ class BuiltinMcpServerConfigurationTest {
             assertThat(matches(registry, "GET", "/sse")).isFalse();
             assertThat(matches(registry, "POST", "/mcp/message")).isFalse();
             assertThat(matches(registry, "POST", "/mcp/retrieval/message")).isTrue();
-            assertThat(matches(registry, "POST", "/mcp/entity/message")).isTrue();
+            assertThat(matches(registry, "GET", "/mcp/entity/sse")).isFalse();
+            assertThat(matches(registry, "POST", "/mcp/entity/message")).isFalse();
         }
     }
 

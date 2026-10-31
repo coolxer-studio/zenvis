@@ -66,8 +66,7 @@ public abstract class AbstractVisualizationWorkflowDefinition implements Workflo
         String action = text(metadata.get("action"));
         String prefix = VisualizationAgentTypes.actionPrefix(agentType());
         if (VisualizationAgentTypes.decisionPartType(agentType()).equals(part.getType())) {
-            if ((prefix + ".select_entity_from_meta").equals(action)
-                    || looksLikeEntitySelection(part, metadata)) {
+            if ((prefix + ".select_entity_from_meta").equals(action)) {
                 return AgentWorkflowStep.ENTITY_SELECTION;
             }
             if ((prefix + ".confirm_query_plan").equals(action)) {
@@ -100,6 +99,9 @@ public abstract class AbstractVisualizationWorkflowDefinition implements Workflo
                         && persistencePlanReady(state, metadata)
                         ? AgentWorkflowStep.PERSIST_CONFIRMATION
                         : AgentWorkflowStep.BLOCKED;
+            }
+            if (looksLikeEntitySelection(part, metadata)) {
+                return AgentWorkflowStep.ENTITY_SELECTION;
             }
             return AgentWorkflowStep.INTENT_CONFIRMATION;
         }

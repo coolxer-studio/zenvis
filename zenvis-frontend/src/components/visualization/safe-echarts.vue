@@ -109,7 +109,11 @@ const render = async () => {
 watch(
   displayError,
   error => {
-    if (!error || props.error || error === lastReportedError.value) return
+    if (!error) {
+      lastReportedError.value = ''
+      return
+    }
+    if (props.error || error === lastReportedError.value) return
     lastReportedError.value = error
     emit('renderFailed', error)
   },

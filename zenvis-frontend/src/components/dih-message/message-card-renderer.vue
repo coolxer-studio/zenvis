@@ -83,6 +83,10 @@
           @choose-visualization-dashboard-decision="emit('chooseVisualizationDashboardDecision', $event)"
         />
         <ConfigRecordMessagePart v-else-if="part.type === 'config-record'" :part="part" />
+        <DataPushServiceRecordMessagePart
+          v-else-if="part.type === 'data-push-service-record'"
+          :part="part"
+        />
         <NoticeMessagePart v-else-if="part.type === 'notice'" :part="part" />
         <TextMessagePart
           v-else
@@ -106,6 +110,7 @@ import ConfigMessagePart from './message-parts/config-message-part.vue';
 import DataAnalysisMessagePart from './message-parts/data-analysis-message-part.vue';
 import MetadataConfigDecisionMessagePart from './message-parts/metadata-config-decision-message-part.vue';
 import DataPushServiceDecisionMessagePart from './message-parts/data-push-service-decision-message-part.vue';
+import DataPushServiceRecordMessagePart from './message-parts/data-push-service-record-message-part.vue';
 import VisualizationAppDecisionMessagePart from './message-parts/visualization-app-decision-message-part.vue';
 import VisualizationChartDecisionMessagePart from './message-parts/visualization-chart-decision-message-part.vue';
 import VisualizationDashboardDecisionMessagePart from './message-parts/visualization-dashboard-decision-message-part.vue';
@@ -117,6 +122,7 @@ import VisualizationMessagePart from './message-parts/visualization-message-part
 import { createMarkdownRenderer, markdownRendererKey } from './message-parts/message-part-context';
 import { collapseLegacyToolCallParts, isToolCallPart } from './tool-call-parts';
 import { isRagSearchPart } from './rag-search-parts';
+import { isSupersededVisualizationPlanCard } from './workflow-card-state';
 import type { AgentRun } from '@/types/type-dih';
 import type { AgentRunEvent } from '@/types/type-dih';
 
@@ -161,7 +167,11 @@ const emit = defineEmits<{
   (e: 'addChartLibrary', part: ChatMessagePart): void;
   (e: 'chartRenderFailed', payload: { part: ChatMessagePart; error: string }): void;
   (e: 'resumeAgentRun', runId: string): void;
-  (e: 'replyAgentRun', payload: { runId: string; message: string }): void;
+  (e: 'replyAgentRun', payload: {
+    runId: string;
+    interactionId: string;
+    message: string;
+  }): void;
   (
     e: 'chooseMetadataConfigDecision',
     payload: {
@@ -289,15 +299,18 @@ const renderParts = computed<ChatMessagePart[]>(() => {
       ? props.message.parts
       : parseFallbackThinkingParts(props.message.content);
   const rendered = collapseLegacyToolCallParts(parts, props.message.id || 'message');
+  const visible = rendered.filter(
+    part => !isSupersededVisualizationPlanCard(part, props.workflowRevisions),
+  );
   const errorContent = props.message.isError ? (props.message.content || '').trim() : '';
   if (
     !errorContent ||
-    rendered.some(part => part.type === 'markdown' && (part.content || '').trim() === errorContent)
+    visible.some(part => part.type === 'markdown' && (part.content || '').trim() === errorContent)
   ) {
-    return rendered;
+    return visible;
   }
   return [
-    ...rendered,
+    ...visible,
     {
       id: `${props.message.id || 'message'}-stream-error`,
       type: 'markdown',

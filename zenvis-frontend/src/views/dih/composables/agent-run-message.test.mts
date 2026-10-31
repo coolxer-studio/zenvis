@@ -5,6 +5,7 @@ import {
   isAgentRunLive,
   isAgentRunRestorable,
   isAgentRunSubscribable,
+  resolveAgentRunPendingApprovalRequestId,
   resolveAgentRunStepStatus,
   resolveAgentRunWaitingQuestion,
   upsertAgentRunMessage,
@@ -324,6 +325,60 @@ test('等待用户时优先从 pendingAction 恢复完整问题而不是截断�
     pendingAction: 'not-json',
   }) as any), '旧任务只保留了原因');
   assert.equal(resolveAgentRunWaitingQuestion(run({ status: 'RUNNING' }) as any), '');
+});
+
+test('等待用户时以 pendingInteraction 作为唯一交互提示来源', () => {
+  const waitingRun = run({
+    status: 'WAITING_USER',
+    pausedReason: '旧原因',
+    pendingAction: JSON.stringify({ type: 'user', question: '旧问题' }),
+    pendingInteraction: {
+      interactionId: 'interaction-1',
+      kind: 'user_input',
+      title: '需要补充信息',
+      prompt: '请补充新的 Topic 与消费组',
+      allowedActions: [],
+    },
+  });
+
+  assert.equal(resolveAgentRunWaitingQuestion(waitingRun as any), '请补充新的 Topic 与消费组');
+});
+
+test('等待审批时从 pendingAction 恢复审批请求以便重连后展示审批卡', () => {
+  const waitingRun = run({
+    status: 'WAITING_APPROVAL',
+    pendingAction: JSON.stringify({
+      type: 'approval',
+      requestId: 'approval-request-1',
+    }),
+  });
+
+  assert.equal(resolveAgentRunPendingApprovalRequestId(waitingRun as any), 'approval-request-1');
+  assert.equal(resolveAgentRunPendingApprovalRequestId(run({
+    status: 'RUNNING',
+    pendingAction: JSON.stringify({ type: 'approval', requestId: 'approval-request-1' }),
+  }) as any), '');
+  assert.equal(resolveAgentRunPendingApprovalRequestId(run({
+    status: 'WAITING_APPROVAL',
+    pendingAction: 'not-json',
+  }) as any), '');
+});
+
+test('等待审批时优先使用 pendingInteraction.requestId', () => {
+  const waitingRun = run({
+    status: 'WAITING_APPROVAL',
+    pendingAction: JSON.stringify({ type: 'approval', requestId: 'legacy-request' }),
+    pendingInteraction: {
+      interactionId: 'approval-interaction-1',
+      kind: 'mcp_approval',
+      requestId: 'current-request',
+      title: 'MCP 工具审批',
+      prompt: '需要许可',
+      allowedActions: [],
+    },
+  });
+
+  assert.equal(resolveAgentRunPendingApprovalRequestId(waitingRun as any), 'current-request');
 });
 
 test('运行卡元数据持续携带当前 Run 的活动事件供执行过程展示', () => {

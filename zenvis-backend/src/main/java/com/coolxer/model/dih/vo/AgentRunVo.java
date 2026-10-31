@@ -3,6 +3,7 @@ package com.coolxer.model.dih.vo;
 import com.coolxer.commons.enums.AgentRunStatus;
 import com.coolxer.dao.mysql.entity.AgentRun;
 import com.coolxer.model.dih.agentrun.AgentRunPlan;
+import com.coolxer.model.dih.agentrun.AgentRunInteraction;
 import com.coolxer.utils.JacksonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.Data;
@@ -35,6 +36,7 @@ public class AgentRunVo {
     private String finalAnswer;
     private String pausedReason;
     private String pendingAction;
+    private AgentRunInteraction pendingInteraction;
     private Integer attemptCount;
     private Integer recoveryCount;
     private Integer truncationCount;
@@ -69,6 +71,7 @@ public class AgentRunVo {
         vo.setFinalAnswer(run.getFinalAnswer());
         vo.setPausedReason(run.getPausedReason());
         vo.setPendingAction(run.getPendingAction());
+        vo.setPendingInteraction(AgentRunInteraction.fromRun(run));
         vo.setAttemptCount(run.getAttemptCount());
         vo.setRecoveryCount(run.getRecoveryCount());
         vo.setTruncationCount(run.getTruncationCount());

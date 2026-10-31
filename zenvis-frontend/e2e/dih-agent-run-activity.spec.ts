@@ -57,6 +57,32 @@ const waitingUserRun = (question: string) => ({
   ...baseRun(4, 'WAITING_USER'),
   paused_reason: `${question.slice(0, 24)}…`,
   pending_action: JSON.stringify({ type: 'user', question }),
+  pending_interaction: {
+    interaction_id: 'interaction-1',
+    kind: 'user_input',
+    title: '需要补充信息',
+    prompt: question,
+    allowed_actions: [],
+  },
+})
+
+const blockedPushCardRun = () => ({
+  ...baseRun(7, 'WAITING_USER'),
+  chat_type: DATA_PUSH_SERVICE_TYPE,
+  agent_type: DATA_PUSH_SERVICE_TYPE,
+  paused_reason: '数据推送服务平台门禁未通过',
+  pending_action: null,
+  pending_interaction: {
+    interaction_id: 'interaction-1',
+    kind: 'card_decision',
+    message_id: 'message-push-blocked',
+    part_id: 'push-blocked-part',
+    workflow_id: 'workflow-push-1',
+    state_revision: 7,
+    title: '数据推送服务门禁未通过',
+    prompt: '请重新校验锁定的候选配置。',
+    allowed_actions: ['retry', 'revise'],
+  },
 })
 
 const mixedEvents = (includeCompaction = true) => {
@@ -150,7 +176,7 @@ const installMocks = async (
   },
 ) => {
   const activityListRequests: string[] = []
-  const steerPayloads: Array<Record<string, any>> = []
+  const interactionPayloads: Array<Record<string, any>> = []
   let detailRun = options.initialRun || baseRun(options.lastEventSequence, 'SUCCEEDED')
   let listRun = options.initialRun || baseRun(options.lastEventSequence)
   await page.route('**/api/v1/**', async route => {
@@ -221,15 +247,23 @@ const installMocks = async (
       await fulfillJson(route, ok(detailRun))
       return
     }
-    if (path.endsWith(`/chat/runs/${RUN_ID}/steer`) && method === 'POST') {
-      steerPayloads.push(request.postDataJSON() as Record<string, any>)
+    if (path.endsWith(`/chat/runs/${RUN_ID}/interactions/interaction-1/respond`) && method === 'POST') {
+      interactionPayloads.push(request.postDataJSON() as Record<string, any>)
       detailRun = {
         ...baseRun(options.lastEventSequence + 1, 'QUEUED'),
         paused_reason: '',
         pending_action: null,
+        pending_interaction: null,
       }
       listRun = detailRun
-      await fulfillJson(route, ok(detailRun))
+      await fulfillJson(route, ok({
+        accepted: true,
+        duplicate: false,
+        interaction_id: 'interaction-1',
+        part_status: 'submitted',
+        summary: '补充信息已提交',
+        run: detailRun,
+      }))
       return
     }
     if (path.endsWith('/chat/runs') && method === 'GET') {
@@ -241,7 +275,7 @@ const installMocks = async (
     }
     await fulfillJson(route, ok({}))
   })
-  return { activityListRequests, steerPayloads }
+  return { activityListRequests, interactionPayloads }
 }
 
 const openRunWorkspace = async (page: Page) => {
@@ -503,7 +537,7 @@ test('无活动时显示空状态，任务中心保留折叠的原始事件', as
   await expect(detail.locator('.event-list')).toContainText('暂无事件')
 })
 
-test('等待补充信息时自动弹出输入框，提交后任务继续执行', async ({ page }) => {
+test('等待补充信息时在运行卡内联提交，不新增用户气泡', async ({ page }) => {
   const question = [
     '要完成“按环境变量执行配置写入”，需要你补充两类信息：',
     '1）推送任务配置中的 Source、Topic、消费组和 DLQ Topic 实际值；',
@@ -521,20 +555,100 @@ test('等待补充信息时自动弹出输入框，提交后任务继续执行',
   const card = page.locator('.agent-run-card').first()
   await expect(card).toContainText('需要补充信息')
   await expect(card).toContainText(question)
-  const dialog = page.locator('.agent-run-user-input-dialog')
-  await expect(dialog).toBeVisible()
-  await expect(dialog).toContainText('任务需要补充信息')
-  await expect(dialog).toContainText(question)
+  await expect(page.locator('.agent-run-user-input-dialog')).toHaveCount(0)
 
-  await dialog.getByPlaceholder('请输入需要补充的信息').fill(
+  await card.getByPlaceholder('请输入需要补充的信息').fill(
     'Source=lab-access；Topic=lab-access-topic；DLQ=lab-dlq',
   )
-  await dialog.getByRole('button', { name: '提交并继续' }).click()
+  await card.getByRole('button', { name: '提交并继续' }).click()
 
-  await expect.poll(() => mocks.steerPayloads.length).toBe(1)
-  expect(mocks.steerPayloads[0]).toMatchObject({
+  await expect.poll(() => mocks.interactionPayloads.length).toBe(1)
+  expect(mocks.interactionPayloads[0]).toMatchObject({
     message: 'Source=lab-access；Topic=lab-access-topic；DLQ=lab-dlq',
   })
-  await expect(dialog).not.toBeVisible()
   await expect(page.locator('.agent-run-card').first()).toContainText('排队中')
+  await expect(page.locator('.user-message')).toHaveCount(0)
+})
+
+test('数据推送阻断卡展示逐项门禁原因并通过统一交互重新校验', async ({ page }) => {
+  const messageList = [{
+    id: 'message-push-blocked',
+    sender: 'ai',
+    content: '数据推送配置平台门禁未通过。',
+    time: '2026-10-30 10:00:00',
+    type: 'text',
+    run_id: RUN_ID,
+    parts: [{
+      id: 'push-blocked-part',
+      type: 'data-push-service-decision',
+      status: 'blocked',
+      title: '数据推送服务门禁未通过',
+      content: '配置测试已通过，但平台门禁无法证明锁定候选可执行。',
+      metadata: {
+        workflowId: 'workflow-push-1',
+        step: 'BLOCKED',
+        stateRevision: 7,
+        validationStatus: 'blocked',
+        candidateDigest: 'locked-candidate-123456',
+        metaRef: { fileName: 'user_event.json', contentDigest: 'locked-meta-123456' },
+        validation: {
+          passed: true,
+          blocked: false,
+          candidateDigest: 'stale-candidate-123456',
+          metaDigest: 'locked-meta-123456',
+          validationDigest: 'validation-stale',
+          tests: { present: true, total: 2, passed: 2, failed: 0 },
+          diagnostics: [],
+        },
+        allowedActions: ['retry', 'revise'],
+        blockingReasons: [{
+          code: 'PUSH_CANDIDATE_DIGEST_MISMATCH',
+          category: 'candidate',
+          message: '卡片校验对应的候选与平台锁定候选不一致。',
+          expected: 'locked-candi…',
+          actual: 'stale-candid…',
+          repairHint: '使用锁定候选重新校验并生成新的确认卡。',
+        }, {
+          code: 'PUSH_VALIDATION_EVIDENCE_DIGEST_MISSING',
+          category: 'evidence',
+          message: '校验工具回执缺少候选、Meta 或校验摘要，无法完成门禁核对。',
+          repairHint: '重新执行 push_task_validate_config 并保留完整回执。',
+        }],
+      },
+    }],
+  }]
+  const mocks = await installMocks(page, {
+    lastEventSequence: 7,
+    streamEvents: [],
+    historyEvents: [],
+    initialRun: blockedPushCardRun(),
+    chatType: DATA_PUSH_SERVICE_TYPE,
+    title: '数据推送服务阻断验收',
+    runs: [blockedPushCardRun()],
+    messageList,
+  })
+
+  await page.goto(`/#/service/dih?type=${DATA_PUSH_SERVICE_TYPE}&chatSessionId=${PUSH_CHAT_ID}&token=e2e-token`)
+  const card = page.locator('.data-push-service-decision-part').first()
+  await expect(card).toBeVisible({ timeout: 15_000 })
+  await expect(card).toContainText('门禁未通过')
+  await expect(card.locator('.data-push-gate-panel')).toContainText('平台门禁未通过（2 项）')
+  await expect(card.locator('.data-push-gate-panel'))
+    .toContainText('PUSH_CANDIDATE_DIGEST_MISMATCH')
+  await expect(card.locator('.data-push-gate-panel'))
+    .toContainText('期望 locked-candi…')
+  await expect(card.getByRole('button', { name: '重新校验并继续' })).toBeVisible()
+  await expect(card.getByRole('button', { name: '创建并启动服务' })).toHaveCount(0)
+
+  await page.reload()
+  await expect(card.getByRole('button', { name: '重新校验并继续' })).toBeVisible()
+  await card.getByRole('button', { name: '重新校验并继续' }).click()
+  await page.locator('.el-message-box__btns .el-button--primary').click()
+
+  await expect.poll(() => mocks.interactionPayloads.length).toBe(1)
+  expect(mocks.interactionPayloads[0]).toMatchObject({
+    action: 'retry',
+    stateRevision: 7,
+  })
+  await expect(page.locator('.user-message')).toHaveCount(0)
 })

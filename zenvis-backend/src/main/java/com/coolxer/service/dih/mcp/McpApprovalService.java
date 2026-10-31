@@ -73,6 +73,9 @@ public class McpApprovalService {
             McpInvocationStatus.APPROVED,
             McpInvocationStatus.RUNNING
     );
+    private static final Set<String> SAFE_UNKNOWN_RETRY_TOOL_KEYS = Set.of(
+            McpToolDescriptor.localKey("push_task_create_and_start")
+    );
 
     private final McpToolInvocationRepository invocationRepository;
     private final McpToolPolicyService policyService;
@@ -186,6 +189,7 @@ public class McpApprovalService {
                         McpInvocationStatus.SUCCEEDED));
         boolean approvalRequired = policy == McpApprovalPolicy.ASK
                 && !sessionGranted && !taskGranted && !taskAutoApproved && !runGranted;
+        boolean approvalStatusTracked = approvalRequired;
         McpApprovalScope automaticScope = sessionGranted ? McpApprovalScope.SESSION
                 : taskGranted ? McpApprovalScope.TASK_RUN
                 : taskAutoApproved ? McpApprovalScope.TASK_AUTO
@@ -201,15 +205,21 @@ public class McpApprovalService {
                     return invocation.getResult();
                 }
                 if (invocation.getStatus() == McpInvocationStatus.UNKNOWN
+                        && SAFE_UNKNOWN_RETRY_TOOL_KEYS.contains(descriptor.toolKey())) {
+                    // 创建推送任务已按 sourceMark 幂等：上次结果未知时允许重新走审批，
+                    // 由工具自身复用已创建任务，避免模型把“重新授权”误当成补充信息。
+                    invocation = null;
+                } else if (invocation.getStatus() == McpInvocationStatus.UNKNOWN
                         || invocation.getStatus() == McpInvocationStatus.RUNNING) {
                     throw new McpToolResultUnknownException(
                             invocation.getRequestId(),
                             "该工具上次已发出但结果未知，禁止自动重放: " + invocation.getRequestId());
-                }
-                if (invocation.getStatus() == McpInvocationStatus.APPROVED) {
+                } else if (invocation.getStatus() == McpInvocationStatus.APPROVED) {
                     approvalRequired = false;
+                    approvalStatusTracked = true;
                 } else if (invocation.getStatus() == McpInvocationStatus.PENDING) {
                     approvalRequired = true;
+                    approvalStatusTracked = true;
                 } else {
                     invocation = null;
                 }
@@ -308,7 +318,7 @@ public class McpApprovalService {
                     .setDurationMillis(elapsedMillis(startedAt))
                     .setFinishTime(new Date());
             invocationRepository.save(invocation);
-            if (approvalRequired) {
+            if (approvalStatusTracked) {
                 executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(invocation)));
             }
             return result;
@@ -324,14 +334,15 @@ public class McpApprovalService {
                 return deniedResult(invocation, executionContext, "AI分析任务已取消");
             }
             boolean unknownSideEffect = executionContext.isAgentRun()
-                    && !Boolean.TRUE.equals(descriptor.readOnlyHint());
+                    && !Boolean.TRUE.equals(descriptor.readOnlyHint())
+                    && !isPreExecutionFailure(e);
             invocation.setStatus(unknownSideEffect
                             ? McpInvocationStatus.UNKNOWN : McpInvocationStatus.FAILED)
                     .setErrorSummary(summarizeJson(e.getMessage(), MAX_ERROR_CHARS))
                     .setDurationMillis(elapsedMillis(startedAt))
                     .setFinishTime(new Date());
             invocationRepository.save(invocation);
-            if (approvalRequired) {
+            if (approvalStatusTracked) {
                 executionContext.emit(McpApprovalEvent.updated(new McpApprovalVo(invocation)));
             }
             if (e instanceof RuntimeException runtimeException) {
@@ -339,6 +350,17 @@ public class McpApprovalService {
             }
             throw new IllegalStateException(e);
         }
+    }
+
+    private boolean isPreExecutionFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof McpPreExecutionException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     public ManualGate prepareManual(McpToolDescriptor descriptor,

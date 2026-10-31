@@ -432,6 +432,46 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("等待用户问题应包含卡片说明和所有结构化补充要求")
+    void resolveUserDecisionQuestionIncludesInfoStepRequirements() {
+        String content = """
+                ```zenvis:info-steps
+                {"title":"需要补充信息","content":"请补充以下信息后继续。","steps":[{"id":"data_source","title":"数据源类型","description":"请选择或填写本次接入的数据来源。","required":true,"placeholder":"例如 Kafka"},{"id":"sample","title":"原始样例","description":"粘贴一条脱敏样例。","required":false,"placeholder":"例如 id=1"}]}
+                ```
+                """;
+
+        String question = parser.resolveUserDecisionQuestion(content);
+
+        assertTrue(question.contains("需要补充信息"));
+        assertTrue(question.contains("请补充以下信息后继续。"));
+        assertTrue(question.contains("1. 数据源类型：请选择或填写本次接入的数据来源。"));
+        assertTrue(question.contains("填写提示：例如 Kafka"));
+        assertTrue(question.contains("2. 原始样例（可选）：粘贴一条脱敏样例。"));
+        assertTrue(question.contains("填写提示：例如 id=1"));
+    }
+
+    @Test
+    @DisplayName("等待用户问题应保留确认卡的具体说明并忽略已处理卡片")
+    void resolveUserDecisionQuestionUsesPendingCardContent() {
+        String pending = """
+                ```zenvis:data-push-service-decision
+                {"title":"数据推送配置确认","content":"请确认 Source、Topic 和目标表后创建任务。"}
+                ```
+                """;
+        String resolved = """
+                ```zenvis:confirm
+                {"title":"旧确认","content":"这项已经处理。","status":"approved"}
+                ```
+                """;
+
+        String question = parser.resolveUserDecisionQuestion(pending + resolved);
+
+        assertTrue(question.contains("数据推送配置确认"));
+        assertTrue(question.contains("请确认 Source、Topic 和目标表后创建任务。"));
+        assertFalse(question.contains("这项已经处理。"));
+    }
+
+    @Test
     @DisplayName("元数据配置记录围栏应解析为记录片段")
     void parseMetaConfigRecordFence() {
         String content = """

@@ -19,6 +19,7 @@ import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.agentrun.AgentRunPlan;
 import com.coolxer.model.dih.agentrun.AgentRunPlanStep;
+import com.coolxer.model.dih.agentrun.AgentRunInteraction;
 import com.coolxer.model.dih.dto.AgentRunRequestDto;
 import com.coolxer.model.dih.dto.AgentRunSteerDto;
 import com.coolxer.model.dih.dto.ChatSessionDto;
@@ -349,6 +350,7 @@ public class AgentRunService {
                 || run.getStatus() == AgentRunStatus.WAITING_USER) {
             run.setStatus(AgentRunStatus.QUEUED)
                     .setPausedReason(null)
+                    .setInteractionJson(null)
                     .setPendingAction(null)
                     .setLeaseId(null)
                     .setLeaseUntil(null);
@@ -491,6 +493,8 @@ public class AgentRunService {
         }
         run.setStatus(AgentRunStatus.PAUSED)
                 .setPausedReason(StringUtils.left(StringUtils.defaultIfBlank(reason, "用户暂停"), 255))
+                .setInteractionJson(null)
+                .setPendingAction(null)
                 .setLeaseId(null)
                 .setLeaseUntil(null);
         runRepository.save(run);
@@ -504,8 +508,11 @@ public class AgentRunService {
         if (run.getStatus().isTerminal()) {
             throw new ApiException(409, "已结束的任务不能继续");
         }
-        if (run.getStatus() != AgentRunStatus.PAUSED
-                && run.getStatus() != AgentRunStatus.WAITING_USER) {
+        if (run.getStatus() == AgentRunStatus.WAITING_USER
+                && AgentRunInteraction.fromRun(run) != null) {
+            throw new ApiException(409, "请先处理当前交互再继续任务");
+        }
+        if (run.getStatus() != AgentRunStatus.PAUSED) {
             return AgentRunVo.from(run);
         }
         if (run.getDecisionSteps() >= run.getMaxSteps()) {
@@ -518,6 +525,8 @@ public class AgentRunService {
                 .setPausedReason(null)
                 .setLastError(null)
                 .setNoProgressCount(0)
+                .setInteractionJson(null)
+                .setPendingAction(null)
                 .setLeaseId(null)
                 .setLeaseUntil(null);
         runRepository.save(run);
@@ -539,6 +548,8 @@ public class AgentRunService {
         } else {
             run.setStatus(AgentRunStatus.CANCELLED)
                     .setFinishedAt(new Date())
+                    .setInteractionJson(null)
+                    .setPendingAction(null)
                     .setLeaseId(null)
                     .setLeaseUntil(null);
             recordTerminalMetric(AgentRunStatus.CANCELLED);
@@ -609,12 +620,62 @@ public class AgentRunService {
         if (run.getStatus().isTerminal()) {
             return run;
         }
+        AgentRunInteraction existing = AgentRunInteraction.fromRun(run);
+        String interactionId = existing != null
+                && AgentRunInteraction.KIND_USER_INPUT.equals(existing.getKind())
+                && StringUtils.isNotBlank(existing.getInteractionId())
+                ? existing.getInteractionId() : UUID.randomUUID().toString();
+        AgentRunInteraction interaction = AgentRunInteraction.builder()
+                .interactionId(interactionId)
+                .kind(AgentRunInteraction.KIND_USER_INPUT)
+                .title("需要补充信息")
+                .prompt(StringUtils.defaultIfBlank(question, "请补充必要信息后继续"))
+                .createdAt(new Date())
+                .build();
         run.setStatus(AgentRunStatus.WAITING_USER)
-                .setPendingAction(JacksonUtil.toJson(Map.of("type", "user", "question", question)))
+                .setInteractionJson(JacksonUtil.toJson(interaction))
+                .setPendingAction(JacksonUtil.toJson(Map.of(
+                        "type", "user",
+                        "question", StringUtils.defaultString(question),
+                        "interactionId", interactionId)))
                 .setPausedReason(StringUtils.left(StringUtils.defaultIfBlank(question, "等待用户输入"), 255))
                 .setLeaseId(null)
                 .setLeaseUntil(null);
-        appendEvent(run, "run.waiting_user", stepId, Map.of("question", question));
+        appendEvent(run, "run.waiting_user", stepId, Map.of(
+                "question", StringUtils.defaultString(question),
+                "interactionId", interactionId));
+        return runRepository.save(run);
+    }
+
+    @Transactional(transactionManager = "mysqlTransactionManager")
+    public AgentRun markWaitingForCard(String runId,
+                                       AgentRunInteraction interaction,
+                                       String stepId) {
+        AgentRun run = runRepository.findByRunIdForUpdate(runId)
+                .orElseThrow(() -> new ApiException(404, "任务不存在"));
+        if (run.getStatus().isTerminal()) {
+            return run;
+        }
+        if (interaction == null
+                || StringUtils.isBlank(interaction.getInteractionId())
+                || !AgentRunInteraction.KIND_CARD_DECISION.equals(interaction.getKind())) {
+            throw new IllegalArgumentException("卡片交互不能为空");
+        }
+        run.setStatus(AgentRunStatus.WAITING_USER)
+                .setInteractionJson(JacksonUtil.toJson(interaction))
+                .setPendingAction(JacksonUtil.toJson(Map.of(
+                        "type", "card",
+                        "interactionId", interaction.getInteractionId(),
+                        "partId", StringUtils.defaultString(interaction.getPartId()),
+                        "question", StringUtils.defaultString(interaction.getPrompt()))))
+                .setPausedReason(StringUtils.left(StringUtils.defaultIfBlank(
+                        interaction.getPrompt(), "请处理当前智能体工作流卡片后继续"), 255))
+                .setLeaseId(null)
+                .setLeaseUntil(null);
+        appendEvent(run, "run.waiting_user", stepId, Map.of(
+                "question", StringUtils.defaultString(interaction.getPrompt()),
+                "interactionId", interaction.getInteractionId(),
+                "kind", interaction.getKind()));
         return runRepository.save(run);
     }
 
@@ -630,6 +691,7 @@ public class AgentRunService {
                 .setFinishedAt(new Date())
                 .setLeaseId(null)
                 .setLeaseUntil(null)
+                .setInteractionJson(null)
                 .setPendingAction(null);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("answer", StringUtils.defaultString(answer));
@@ -746,6 +808,8 @@ public class AgentRunService {
         }
         run.setStatus(AgentRunStatus.CANCELLED)
                 .setFinishedAt(new Date())
+                .setInteractionJson(null)
+                .setPendingAction(null)
                 .setLeaseId(null)
                 .setLeaseUntil(null);
         appendEvent(run, "run.cancelled", stepId, Map.of());
@@ -774,11 +838,22 @@ public class AgentRunService {
     public void markApprovalRequired(String runId, String requestId, String stepId) {
         AgentRun run = runRepository.findByRunIdForUpdate(runId)
                 .orElseThrow(() -> new ApiException(404, "任务不存在"));
+        AgentRunInteraction interaction = AgentRunInteraction.builder()
+                .interactionId(UUID.randomUUID().toString())
+                .kind(AgentRunInteraction.KIND_MCP_APPROVAL)
+                .requestId(requestId)
+                .title("MCP 工具审批")
+                .prompt("该工具需要你的明确许可后才能执行。")
+                .createdAt(new Date())
+                .build();
         run.setStatus(AgentRunStatus.WAITING_APPROVAL)
+                .setInteractionJson(JacksonUtil.toJson(interaction))
                 .setPendingAction(JacksonUtil.toJson(Map.of("type", "approval", "requestId", requestId)))
                 .setLeaseId(null)
                 .setLeaseUntil(null);
-        appendEvent(run, "approval.required", stepId, Map.of("requestId", requestId));
+        appendEvent(run, "approval.required", stepId, Map.of(
+                "requestId", requestId,
+                "interactionId", interaction.getInteractionId()));
         runRepository.save(run);
     }
 
@@ -790,6 +865,7 @@ public class AgentRunService {
             boolean expired = McpInvocationStatus.EXPIRED.name().equals(status);
             run.setStatus(expired ? AgentRunStatus.PAUSED : AgentRunStatus.QUEUED)
                     .setPendingAction(null)
+                    .setInteractionJson(null)
                     .setPausedReason(expired ? "MCP工具审批已超时" : null)
                     .setLeaseId(null)
                     .setLeaseUntil(null);
@@ -862,6 +938,26 @@ public class AgentRunService {
             throw new ApiException(404, "任务不存在");
         }
         return run;
+    }
+
+    AgentRun lockOwnedRun(String runId, User currentUser) {
+        return requireOwnedRunForUpdate(runId, currentUser);
+    }
+
+    void completeInteraction(AgentRun run,
+                             String interactionId,
+                             String stepId,
+                             boolean requeue,
+                             Map<String, Object> payload) {
+        run.setInteractionJson(null).setPendingAction(null);
+        if (requeue) {
+            run.setStatus(AgentRunStatus.QUEUED)
+                    .setPausedReason(null)
+                    .setLeaseId(null)
+                    .setLeaseUntil(null);
+        }
+        appendEvent(run, "interaction.responded", stepId, payload);
+        runRepository.save(run);
     }
 
     private void appendEvent(AgentRun run, String type, String stepId, Object data) {

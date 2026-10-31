@@ -45,6 +45,7 @@ import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PluginMigrationService;
 import com.coolxer.service.system.PluginService;
+import com.coolxer.service.system.PushTaskConfigFormatDetector;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.utils.*;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -422,11 +423,13 @@ public class PluginServiceImpl implements PluginService {
                 }
                 // 2-3 构建push-task文件
                 List<PushTaskVo> pushTaskVoList = pushTaskService.findBySourceMark(plugin.getPackageName()).stream().map(pushTaskVo -> {
-                    String configFile = pushTaskVo.getId() + "." + pushTaskService.detectFormat(pushTaskVo.getConfig());
+                    String format = resolveStoredPushTaskFormat(pushTaskVo);
+                    String configFile = pushTaskVo.getId() + "." + format;
                     // 只需要name,description,config
                     PushTaskVo newPushTaskVo = new PushTaskVo();
                     newPushTaskVo.setConfig(configFile);
-                    pluginPackTool.writePushTaskToml(configFile, pushTaskVo.getConfig());
+                    newPushTaskVo.setFormat(format);
+                    pluginPackTool.writePushTaskConfigFile(configFile, pushTaskVo.getConfig());
                     newPushTaskVo.setName(pushTaskVo.getName());
                     newPushTaskVo.setDescription(pushTaskVo.getDescription());
                     return newPushTaskVo;
@@ -879,6 +882,40 @@ public class PluginServiceImpl implements PluginService {
         }
     }
 
+    private String resolveStoredPushTaskFormat(PushTaskVo pushTaskVo) {
+        PushTaskConfigFormatDetector.Detection detection =
+                PushTaskConfigFormatDetector.detect(
+                        pushTaskVo.getFormat(), pushTaskVo.getConfig());
+        if (!StringUtils.isNotBlank(detection.format())) {
+            throw new IllegalStateException(
+                    "推送任务缺少可识别的配置格式: " + pushTaskVo.getName());
+        }
+        return detection.format();
+    }
+
+    private String resolvePushTaskDefinitionFormat(String explicitFormat,
+                                                   String configRef,
+                                                   String config) {
+        String configFile = configRef == null ? "" : configRef.toLowerCase(Locale.ROOT);
+        String extensionFormat = "";
+        if (configFile.endsWith(".yaml") || configFile.endsWith(".yml")) {
+            extensionFormat = "yaml";
+        } else if (configFile.endsWith(".toml")) {
+            extensionFormat = "toml";
+        } else if (configFile.endsWith(".json")) {
+            extensionFormat = "json";
+        }
+        String requested = StringUtils.isNotBlank(explicitFormat)
+                ? explicitFormat : extensionFormat;
+        PushTaskConfigFormatDetector.Detection detection =
+                PushTaskConfigFormatDetector.detect(requested, config);
+        if (!StringUtils.isNotBlank(detection.format())) {
+            throw invalidPluginPackage(
+                    "推送任务配置格式缺失或无法识别，请显式提供 yaml、toml 或 json");
+        }
+        return detection.format();
+    }
+
     private List<PushTaskDto> readPushTaskDefinitions(PluginPackTool pluginPackTool) {
         List<PushTaskDto> definitions = JacksonUtil.toList(pluginPackTool.readPushTaskConfigFile(),
                 new TypeReference<List<PushTaskDto>>() { });
@@ -900,6 +937,8 @@ public class PluginServiceImpl implements PluginService {
                     throw invalidPluginPackage("读取推送任务配置失败: " + configRef);
                 }
             }
+            definition.setFormat(resolvePushTaskDefinitionFormat(
+                    definition.getFormat(), configRef, definition.getConfig()));
         }
         return definitions;
     }
@@ -1713,12 +1752,12 @@ public class PluginServiceImpl implements PluginService {
             nextNames.add(definition.getName());
             PushTaskVo existing = liveByName.get(definition.getName());
             if (existing == null) {
-                if (!pushTaskService.createAndStart(definition)) {
+                if (!pushTaskService.createAndStartForPlugin(definition)) {
                     throw new IllegalStateException("创建推送任务失败: " + definition.getName());
                 }
                 continue;
             }
-            if (!pushTaskService.update(existing.getId(), definition)) {
+            if (!pushTaskService.updateForPlugin(existing.getId(), definition)) {
                 throw new IllegalStateException("更新推送任务失败: " + definition.getName());
             }
             PushTaskVo old = oldByName.get(definition.getName());
@@ -1877,10 +1916,11 @@ public class PluginServiceImpl implements PluginService {
             dto.setName(oldTask.getName());
             dto.setDescription(oldTask.getDescription());
             dto.setConfig(oldTask.getConfig());
+            dto.setFormat(resolveStoredPushTaskFormat(oldTask));
             dto.setSource("SYSTEM");
             dto.setMark(packageName);
             if (live == null) {
-                if (!pushTaskService.createAndStart(dto)) {
+                if (!pushTaskService.createAndStartForPlugin(dto)) {
                     throw new IllegalStateException("恢复推送任务失败: " + oldTask.getName());
                 }
                 PushTaskVo recreated = pushTaskService.findBySourceMark(packageName).stream()
@@ -1894,7 +1934,7 @@ public class PluginServiceImpl implements PluginService {
             if (isRunningPushTask(live) && !pushTaskService.toggle(live.getId())) {
                 throw new IllegalStateException("暂停待恢复推送任务失败: " + oldTask.getName());
             }
-            if (!pushTaskService.update(live.getId(), dto)) {
+            if (!pushTaskService.updateForPlugin(live.getId(), dto)) {
                 throw new IllegalStateException("恢复推送任务定义失败: " + oldTask.getName());
             }
             if (isRunningPushTask(oldTask) && !pushTaskService.toggle(live.getId())) {
@@ -2606,12 +2646,15 @@ public class PluginServiceImpl implements PluginService {
         });
         pushTaskDtoList.forEach(pushTaskDto -> {
             String configRef = StringUtils.defaultString(pushTaskDto.getConfig());
-            if (configRef.endsWith(".toml") || configRef.endsWith(".yaml") || configRef.endsWith(".json")) {
+            if (configRef.endsWith(".toml") || configRef.endsWith(".yaml")
+                    || configRef.endsWith(".yml") || configRef.endsWith(".json")) {
                 pushTaskDto.setConfig(pluginPackTool.readPushTaskConfigFile(configRef));
             }
+            pushTaskDto.setFormat(resolvePushTaskDefinitionFormat(
+                    pushTaskDto.getFormat(), configRef, pushTaskDto.getConfig()));
             pushTaskDto.setSource("SYSTEM");
             pushTaskDto.setMark(packageName);
-            if (!pushTaskService.createAndStart(pushTaskDto)) {
+            if (!pushTaskService.createAndStartForPlugin(pushTaskDto)) {
                 writeLog(id, "push-task 创建失败: " + pushTaskDto.getName());
             }
         });
@@ -3327,7 +3370,7 @@ public class PluginServiceImpl implements PluginService {
             }
         }
 
-        public void writePushTaskToml(String configFile, String configContext) {
+        public void writePushTaskConfigFile(String configFile, String configContext) {
             try {
                 Files.write(pushTaskPath.resolve(configFile), configContext.getBytes());
             } catch (IOException e) {

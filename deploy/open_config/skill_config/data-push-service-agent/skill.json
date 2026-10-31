@@ -2,7 +2,7 @@
   "id": "data-push-service-agent",
   "name": "数据推送服务",
   "description": "系统内置数据推送服务智能体 Skill，基于已发布 Meta 创建、诊断和修复 PushTask。",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "author": "ZenVis",
   "agentTypes": [
     "agent_data_push_service"
@@ -28,12 +28,17 @@
           "config_read"
         ],
         "push-task": [
-          "push_task_detect_format",
-          "push_task_list_by_source_mark",
+          "push_task_validate_config",
+          "push_task_list",
+          "push_task_get",
           "push_task_create_and_start",
+          "push_task_update_and_restart",
           "push_task_get_log",
-          "push_task_repair_and_restart",
-          "push_task_delete_by_source_mark"
+          "push_task_diagnose",
+          "push_task_start",
+          "push_task_stop",
+          "push_task_restart",
+          "push_task_delete"
         ]
       }
     },

@@ -42,18 +42,6 @@ public enum BuiltinMcpServiceDefinition {
                     "entity_view"
             )),
 
-    ENTITY(
-            "entity",
-            "实体数据写入",
-            "提供动态实体记录新增、更新和删除工具",
-            List.of(
-                    "entity_add",
-                    "entity_delete",
-                    "entity_bulk_delete",
-                    "entity_update",
-                    "entity_bulk_update"
-            )),
-
     CONFIG(
             "config",
             "配置管理",
@@ -62,6 +50,7 @@ public enum BuiltinMcpServiceDefinition {
                     "config_tree",
                     "config_schema",
                     "config_read",
+                    "config_meta_draft",
                     "config_apply",
                     "config_add",
                     "config_rename",
@@ -75,12 +64,17 @@ public enum BuiltinMcpServiceDefinition {
             "数据推送任务",
             "提供受管数据推送任务的创建、诊断、修复和删除工具",
             List.of(
+                    "push_task_validate_config",
+                    "push_task_diagnose",
                     "push_task_create_and_start",
-                    "push_task_list_by_source_mark",
-                    "push_task_delete_by_source_mark",
+                    "push_task_update_and_restart",
+                    "push_task_list",
+                    "push_task_get",
                     "push_task_get_log",
-                    "push_task_repair_and_restart",
-                    "push_task_detect_format"
+                    "push_task_start",
+                    "push_task_stop",
+                    "push_task_restart",
+                    "push_task_delete"
             )),
 
     VISUALIZATION(

@@ -33,6 +33,7 @@ import com.coolxer.service.dih.mcp.AgentMcpToolService;
 import com.coolxer.service.dih.mcp.McpToolContext;
 import com.coolxer.service.dih.mcp.McpToolCallLoggingProvider;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
+import com.coolxer.service.dih.mcp.McpApprovalEvent;
 import com.coolxer.service.dih.workflow.AgentWorkflowState;
 import com.coolxer.service.dih.workflow.AgentWorkflowStep;
 import com.coolxer.service.dih.workflow.WorkflowStateStore;
@@ -122,6 +123,24 @@ class DihChatApplicationServiceTest {
                     .as("non-interactive record type %s", type)
                     .isFalse();
         }
+    }
+
+    @Test
+    void waitingQuestionUsesSpecificWorkflowCardRequirements() {
+        DihChatApplicationService service = streamingService();
+        String content = """
+                ```zenvis:info-steps
+                {"title":"缺少接入信息","content":"请补充后继续。","steps":[{"title":"Kafka 地址","description":"填写 Bootstrap Servers。","required":true,"placeholder":"kafka:9092"}]}
+                ```
+                """;
+
+        String question = service.resolveUserDecisionQuestion(content);
+
+        assertThat(question)
+                .contains("缺少接入信息")
+                .contains("Kafka 地址：填写 Bootstrap Servers。")
+                .contains("填写提示：kafka:9092")
+                .doesNotContain("请处理当前智能体工作流卡片后继续");
     }
 
     @Test
@@ -1096,6 +1115,60 @@ class DihChatApplicationServiceTest {
                 .contains("网络流量（traffic）", "创建时间（zenvis_insert_time，time）",
                         "事实类型（fact_type，dimension）");
 
+        ChatMessagePart allTimeDistributionPlan = ChatMessagePart.builder()
+                .type("confirm")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_chart.confirm_query_plan",
+                        "planId", "plan-all-time-distribution",
+                        "query", Map.of(
+                                "tool", "entity_distribution",
+                                "request", Map.of(
+                                        "entity", "traffic",
+                                        "time_field", "zenvis_insert_time",
+                                        "dimension", "fact_type",
+                                        "time_range", Map.of("preset", "ALL"),
+                                        "limit", 20)))))
+                .build();
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                null, List.of(allTimeDistributionPlan), evidence);
+        assertThat(allTimeDistributionPlan.getStatus()).isEqualTo("pending");
+        assertThat(allTimeDistributionPlan.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("metaVerified", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> allTimeQuery =
+                (Map<String, Object>) allTimeDistributionPlan.getMetadata().get("query");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> allTimeRequest =
+                (Map<String, Object>) allTimeQuery.get("request");
+        assertThat(allTimeRequest.get("time_range"))
+                .isEqualTo(Map.of("preset", "ALL_TIME"));
+
+        ChatMessagePart unsupportedAllTimeTrendPlan = ChatMessagePart.builder()
+                .type("confirm")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_chart.confirm_query_plan",
+                        "planId", "plan-unsupported-all-time-trend",
+                        "query", Map.of(
+                                "tool", "entity_trend",
+                                "request", Map.of(
+                                        "entities", List.of("traffic"),
+                                        "time_field", "zenvis_insert_time",
+                                        "granularity", "DAY",
+                                        "time_range", Map.of("preset", "ALL"))))))
+                .build();
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                null, List.of(unsupportedAllTimeTrendPlan), evidence);
+        assertThat(unsupportedAllTimeTrendPlan.getStatus()).isEqualTo("blocked");
+        assertThat(unsupportedAllTimeTrendPlan.getMetadata())
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("validationCode", "validation_failed")
+                .containsEntry("validationMessage",
+                        "时间范围无效：当前接口不支持ALL_TIME")
+                .doesNotContainKey("action");
+
         ChatMessagePart categorizedPlan = ChatMessagePart.builder()
                 .type("confirm")
                 .status("pending")
@@ -1224,8 +1297,9 @@ class DihChatApplicationServiceTest {
         assertThat(mismatchedPreview.getStatus()).isEqualTo("blocked");
         assertThat(mismatchedPreview.getMetadata())
                 .containsEntry("validationStatus", "blocked")
+                .containsEntry("validationCode", "query_parameter_mismatch")
                 .containsEntry("validationMessage",
-                        "实际数据 MCP 查询参数与已批准方案不一致，图表不能验证或入库");
+                        "数据查询参数与已确认方案不一致，本次结果未验证；请重新确认查询方案后重试");
     }
 
     @Test
@@ -1634,6 +1708,43 @@ class DihChatApplicationServiceTest {
                 .containsEntry("validationStatus", "success")
                 .containsEntry("metaVerified", true);
         assertThat(confirm.getStatus()).isNotEqualTo("blocked");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void agentRunResponsePersistsPendingMcpApprovalPart() throws Exception {
+        DihChatApplicationService service = streamingService();
+        Object evidence = newEvidenceOnlyStream();
+        McpToolInvocation invocation = new McpToolInvocation()
+                .setRequestId("approval-run-1")
+                .setToolKey("local::push_task_update_and_restart")
+                .setToolName("push_task_update_and_restart")
+                .setDescription("更新推送任务并重启")
+                .setRiskLevel(McpToolRiskLevel.HIGH)
+                .setChannel(McpInvocationChannel.CHAT_AGENT)
+                .setPolicySnapshot(McpApprovalPolicy.ASK)
+                .setStatus(McpInvocationStatus.PENDING)
+                .setRequesterUserId(42)
+                .setChatId("chat-run-1")
+                .setAgentRunId("run-1")
+                .setTurnId("run:run-1:7")
+                .setArguments("{}");
+        var recordApproval = evidence.getClass().getDeclaredMethod(
+                "recordApproval", McpApprovalEvent.class);
+        recordApproval.setAccessible(true);
+        recordApproval.invoke(evidence, McpApprovalEvent.required(new McpApprovalVo(invocation)));
+
+        Message message = ReflectionTestUtils.invokeMethod(
+                service, "saveAgentRunResponse",
+                null, null, "正在等待工具审批。", MessageType.TEXT, null, "run-1", evidence);
+
+        ChatMessagePart approval = message.getParts().stream()
+                .filter(part -> "mcp-approval".equals(part.getType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(approval.getId()).isEqualTo("approval-run-1");
+        assertThat(approval.getStatus()).isEqualTo("pending");
+        assertThat(approval.getContent()).isEqualTo("更新推送任务并重启");
     }
 
     private Object newEvidenceOnlyStream() throws Exception {

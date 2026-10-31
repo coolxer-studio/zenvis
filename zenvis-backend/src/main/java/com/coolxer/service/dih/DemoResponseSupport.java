@@ -4,6 +4,8 @@ import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.dao.mysql.entity.ChatSession;
 import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.model.dih.Message;
+import com.coolxer.model.system.vo.PushTaskPageVo;
+import com.coolxer.model.system.vo.PushTaskSummaryVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.McpToolContext;
@@ -188,28 +190,58 @@ final class DemoResponseSupport {
         return "";
     }
 
-    static List<PushTaskVo> listPushTasks(McpToolContext context,
-                                          String sourceMark) throws Exception {
+    static List<PushTaskSummaryVo> listPushTasks(McpToolContext context,
+                                                 String sourceMark) throws Exception {
         String result = callTool(
                 context,
-                "push_task_list_by_source_mark",
-                Map.of("sourceMark", sourceMark));
+                "push_task_list",
+                Map.of(
+                        "sourceMark", sourceMark,
+                        "source", "SYSTEM",
+                        "offset", 0,
+                        "limit", 100));
+        PushTaskPageVo page = JacksonConfig.OBJECT_MAPPER.readValue(
+                result, PushTaskPageVo.class);
+        if (page.isHasMore()) {
+            throw new IllegalStateException(
+                    "sourceMark=" + sourceMark + " 的任务超过单页上限，拒绝自动选择");
+        }
+        return page.getItems() == null ? List.of() : page.getItems();
+    }
+
+    static PushTaskVo getPushTask(McpToolContext context, Integer taskId) throws Exception {
+        String result = callTool(context, "push_task_get", Map.of("taskId", taskId));
+        return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskVo.class);
+    }
+
+    static Map<String, Object> validatePushConfig(McpToolContext context,
+                                                  String config,
+                                                  String format,
+                                                  String metaFileName,
+                                                  String metaContent) throws Exception {
+        String result = callTool(
+                context,
+                "push_task_validate_config",
+                Map.of(
+                        "config", config,
+                        "format", format,
+                        "metaFileName", firstNonBlank(metaFileName),
+                        "metaContent", firstNonBlank(metaContent)));
         return JacksonConfig.OBJECT_MAPPER.readValue(
                 result,
-                new TypeReference<List<PushTaskVo>>() {
+                new TypeReference<Map<String, Object>>() {
                 });
     }
 
     static Map<String, Object> readSystemLog(McpToolContext context,
-                                             PushTaskVo task,
-                                             String sourceMark) throws Exception {
+                                             PushTaskVo task) throws Exception {
         String result = callTool(
                 context,
                 "push_task_get_log",
                 Map.of(
                         "taskId", task.getId(),
-                        "sourceMark", sourceMark,
-                        "logType", "system"));
+                        "logType", "system",
+                        "tailLines", 100));
         return JacksonConfig.OBJECT_MAPPER.readValue(
                 result,
                 new TypeReference<Map<String, Object>>() {

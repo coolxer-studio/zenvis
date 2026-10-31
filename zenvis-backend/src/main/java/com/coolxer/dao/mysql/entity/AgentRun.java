@@ -98,6 +98,12 @@ public class AgentRun extends BaseEntity {
     @Column(name = "pending_action", columnDefinition = "LONGTEXT")
     private String pendingAction;
 
+    /**
+     * 当前唯一待处理的用户交互。pendingAction 仅作为旧数据兼容字段。
+     */
+    @Column(name = "interaction_json", columnDefinition = "LONGTEXT")
+    private String interactionJson;
+
     @Column(name = "last_event_sequence", nullable = false)
     private Long lastEventSequence = 0L;
 

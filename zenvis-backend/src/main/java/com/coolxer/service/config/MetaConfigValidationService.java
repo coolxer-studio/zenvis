@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -59,25 +60,13 @@ public class MetaConfigValidationService {
     private static final Pattern URI_SCHEME =
             Pattern.compile("^[A-Za-z][A-Za-z0-9+.-]*:");
 
-    private static final Set<String> TOP_LEVEL_FIELDS =
-            Set.of("entity", "attribute", "operator");
-    private static final Set<String> ENTITY_FIELDS = Set.of(
-            "id", "name", "label", "description", "table_name", "data_source",
-            "sort_column", "auto_create");
-    private static final Set<String> AUTO_CREATE_FIELDS = Set.of(
-            "engine", "order_by", "partition_by", "ttl");
-    private static final Set<String> TTL_FIELDS = Set.of(
-            "column", "expire_after", "unit");
-    private static final Set<String> ATTRIBUTE_FIELDS = Set.of(
-            "id", "entity", "name", "description", "label", "retrieval_type",
-            "search_type", "column_name", "column_type", "display_selected",
-            "display_name", "display_type", "operators", "must_candidate",
-            "auto_complete", "copyable", "required", "mapping", "enums",
-            "link_template", "link_condition");
-    private static final Set<String> LINK_CONDITION_FIELDS =
-            Set.of("field", "operator", "value");
-    private static final Set<String> OPERATOR_FIELDS =
-            Set.of("id", "name", "label");
+    private static final Set<String> CARD_ONLY_FIELDS = Set.of(
+            "fileName", "configKind", "overwrite", "candidateDigest",
+            "validationStatus", "validationId", "validationDigest", "config",
+            "actions", "allowedActions", "planId", "status", "forced",
+            "entityName", "entityLabel", "tableName", "recordKind", "source");
+    private static final Set<String> META_ROOT_ALIASES = Set.of(
+            "entity", "attribute", "operator", "entities", "attributes", "operators");
     private static final Set<String> RESERVED_ATTRIBUTES =
             Set.of("zenvis_id", "zenvis_insert_time");
     private static final Set<String> DEFAULT_OPERATORS =
@@ -147,12 +136,14 @@ public class MetaConfigValidationService {
 
     private final ConfigService configService;
     private final MetaDataService metaDataService;
+    private final MetaConfigContractService contractService;
 
     @Autowired
     public MetaConfigValidationService(ConfigService configService,
                                        MetaDataService metaDataService) {
         this.configService = configService;
         this.metaDataService = metaDataService;
+        this.contractService = new MetaConfigContractService(configService);
     }
 
     public ValidationResult validate(String fileName, String text) {
@@ -190,6 +181,14 @@ public class MetaConfigValidationService {
         }
 
         ObjectNode root = (ObjectNode) parsed;
+        CandidateInspection inspection = inspectCandidate(root);
+        if (!inspection.accepted()) {
+            diagnostics.add(new Diagnostic(
+                    "META_WRONG_OBJECT", "ERROR", "$",
+                    inspection.reason(),
+                    "只把 Meta 根对象放入 zenvis:meta-config；确认卡和记录卡字段必须留在各自卡片中。"));
+            return result(text, diagnostics, repairs);
+        }
         normalize(root, diagnostics, repairs);
         strictCheck(root, diagnostics);
         validateCandidateSemantics(root, diagnostics);
@@ -203,6 +202,7 @@ public class MetaConfigValidationService {
     private ValidationResult result(String normalizedText,
                                     List<Diagnostic> diagnostics,
                                     List<Repair> repairs) {
+        MetaConfigContractService.Snapshot contract = contractService.snapshot();
         List<String> errors = diagnostics.stream()
                 .filter(item -> "ERROR".equals(item.severity()))
                 .map(Diagnostic::message)
@@ -213,13 +213,75 @@ public class MetaConfigValidationService {
                 .toList();
         return new ValidationResult(
                 errors.isEmpty(),
-                normalizedText,
-                digest(normalizedText),
+                "meta-validation-" + UUID.randomUUID(),
+                contract.schemaVersion(),
+                contract.schemaHash(),
+                errors,
+                warnings,
                 List.copyOf(diagnostics),
                 List.copyOf(repairs),
-                errors,
-                warnings
+                digest(normalizedText),
+                normalizedText
         );
+    }
+
+    public static CandidateInspection inspectCandidate(String content) {
+        if (!StringUtils.hasText(content)) {
+            return new CandidateInspection(false, "候选配置不能为空。", List.of());
+        }
+        JsonNode parsed;
+        try {
+            parsed = JacksonConfig.OBJECT_MAPPER.readTree(content);
+        } catch (Exception e) {
+            return new CandidateInspection(false, "候选配置不是合法 JSON：" + e.getMessage(), List.of());
+        }
+        if (parsed == null || !parsed.isObject()) {
+            return new CandidateInspection(false, "候选配置必须是 JSON 对象。", List.of());
+        }
+        return inspectCandidate((ObjectNode) parsed);
+    }
+
+    private static CandidateInspection inspectCandidate(ObjectNode root) {
+        List<String> cardFields = new ArrayList<>();
+        root.fieldNames().forEachRemaining(name -> {
+            if (CARD_ONLY_FIELDS.contains(name)) {
+                cardFields.add(name);
+            }
+        });
+        if (!cardFields.isEmpty()) {
+            return new CandidateInspection(false,
+                    "检测到确认卡/记录卡字段混入 Meta 候选：" + String.join(", ", cardFields)
+                            + "。平台没有校验这份卡片对象。",
+                    List.copyOf(cardFields));
+        }
+        boolean hasMetaRoot = false;
+        List<String> unknownRoots = new ArrayList<>();
+        Iterator<String> names = root.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            if (META_ROOT_ALIASES.contains(name)) {
+                hasMetaRoot = true;
+            } else {
+                unknownRoots.add(name);
+            }
+        }
+        if (!hasMetaRoot) {
+            return new CandidateInspection(false,
+                    "候选配置顶层缺少 entity/attribute/operator 数组。", List.of());
+        }
+        if (!unknownRoots.isEmpty()) {
+            return new CandidateInspection(false,
+                    "候选配置包含 Meta 顶层未知字段：" + String.join(", ", unknownRoots),
+                    List.copyOf(unknownRoots));
+        }
+        for (String required : List.of("entity", "attribute", "operator")) {
+            JsonNode value = root.get(required);
+            if (value != null && !value.isArray()) {
+                return new CandidateInspection(false,
+                        "候选配置字段 " + required + " 必须是数组。", List.of(required));
+            }
+        }
+        return new CandidateInspection(true, "", List.of());
     }
 
     private void normalize(ObjectNode root,
@@ -410,13 +472,14 @@ public class MetaConfigValidationService {
     }
 
     private void strictCheck(ObjectNode root, List<Diagnostic> diagnostics) {
-        unknownFields(root, TOP_LEVEL_FIELDS, "$", diagnostics);
+        MetaConfigContractService.Snapshot contract = contractService.snapshot();
+        unknownFields(root, contract.topLevelFields(), "$", diagnostics);
         ensureArrayType(root, "entity", "$.entity", diagnostics);
         ensureArrayType(root, "attribute", "$.attribute", diagnostics);
         ensureArrayType(root, "operator", "$.operator", diagnostics);
-        checkObjects((ArrayNode) root.get("entity"), "$.entity", ENTITY_FIELDS, diagnostics);
-        checkObjects((ArrayNode) root.get("attribute"), "$.attribute", ATTRIBUTE_FIELDS, diagnostics);
-        checkObjects((ArrayNode) root.get("operator"), "$.operator", OPERATOR_FIELDS, diagnostics);
+        checkObjects((ArrayNode) root.get("entity"), "$.entity", contract.entityFields(), diagnostics);
+        checkObjects((ArrayNode) root.get("attribute"), "$.attribute", contract.attributeFields(), diagnostics);
+        checkObjects((ArrayNode) root.get("operator"), "$.operator", contract.operatorFields(), diagnostics);
         validateFieldTypes(root, diagnostics);
         for (int i = 0; i < root.get("entity").size(); i++) {
             JsonNode entity = root.get("entity").get(i);
@@ -425,11 +488,11 @@ public class MetaConfigValidationService {
             }
             JsonNode autoCreate = entity.get("auto_create");
             if (autoCreate != null && autoCreate.isObject()) {
-                unknownFields(autoCreate, AUTO_CREATE_FIELDS,
+                unknownFields(autoCreate, contract.autoCreateFields(),
                         "$.entity[" + i + "].auto_create", diagnostics);
                 JsonNode ttl = autoCreate.get("ttl");
                 if (ttl != null && ttl.isObject()) {
-                    unknownFields(ttl, TTL_FIELDS,
+                    unknownFields(ttl, contract.ttlFields(),
                             "$.entity[" + i + "].auto_create.ttl", diagnostics);
                 }
             }
@@ -441,7 +504,7 @@ public class MetaConfigValidationService {
             }
             JsonNode condition = attribute.get("link_condition");
             if (condition != null && condition.isObject()) {
-                unknownFields(condition, LINK_CONDITION_FIELDS,
+                unknownFields(condition, contract.linkConditionFields(),
                         "$.attribute[" + i + "].link_condition", diagnostics);
             }
         }
@@ -1014,17 +1077,38 @@ public class MetaConfigValidationService {
                     "检查 MetaDataService 配置。"));
             return;
         }
-        Path tempDir = null;
+        String candidateText = root.toPrettyString();
+        String candidateName = StringUtils.hasText(fileName)
+                && SAFE_FILE_NAME.matcher(fileName).matches()
+                ? fileName : "candidate.json";
+        Path candidateDir = null;
         try {
-            tempDir = Files.createTempDirectory("zenvis-meta-validate-");
-            copyExistingMeta(tempDir, fileName);
-            String candidateName = StringUtils.hasText(fileName)
-                    && SAFE_FILE_NAME.matcher(fileName).matches()
-                    ? fileName : "candidate.json";
-            Path candidate = tempDir.resolve(candidateName);
-            Files.writeString(candidate, root.toPrettyString(), StandardCharsets.UTF_8);
+            candidateDir = Files.createTempDirectory("zenvis-meta-candidate-");
+            Path candidate = candidateDir.resolve(candidateName);
+            Files.writeString(candidate, candidateText, StandardCharsets.UTF_8);
+            metaDataService.validateMetaDataFiles(List.of(candidate));
+        } catch (Exception e) {
+            diagnostics.add(new Diagnostic(
+                    "META_PLATFORM_INVALID", "ERROR", "$",
+                    "平台 Meta 加载校验失败：" + rootMessage(e),
+                    "根据错误定位实体、字段或跨文件冲突后重新生成。"));
+            return;
+        } finally {
+            if (candidateDir != null) {
+                deleteRecursively(candidateDir);
+            }
+        }
+        if (!hasOtherExistingMeta(fileName)) {
+            return;
+        }
+        Path mergedDir = null;
+        try {
+            mergedDir = Files.createTempDirectory("zenvis-meta-workspace-");
+            copyExistingMeta(mergedDir, fileName);
+            Path candidate = mergedDir.resolve(candidateName);
+            Files.writeString(candidate, candidateText, StandardCharsets.UTF_8);
             List<Path> files;
-            try (Stream<Path> stream = Files.walk(tempDir)) {
+            try (Stream<Path> stream = Files.walk(mergedDir)) {
                 files = stream.filter(Files::isRegularFile)
                         .filter(path -> path.toString().endsWith(".json"))
                         .sorted()
@@ -1033,13 +1117,30 @@ public class MetaConfigValidationService {
             metaDataService.validateMetaDataFiles(files);
         } catch (Exception e) {
             diagnostics.add(new Diagnostic(
-                    "META_PLATFORM_INVALID", "ERROR", "$",
-                    "平台 Meta 加载校验失败：" + rootMessage(e),
-                    "根据错误定位实体、字段或跨文件冲突后重新生成。"));
+                    "META_WORKSPACE_INVALID", "WARNING", "$",
+                    "候选自身已通过平台加载，但当前 Meta 工作区存在其他无效文件："
+                            + rootMessage(e),
+                    "候选可以继续确认；请另行修复现有 Meta 文件。",
+                    "workspace", "meta_config"));
         } finally {
-            if (tempDir != null) {
-                deleteRecursively(tempDir);
+            if (mergedDir != null) {
+                deleteRecursively(mergedDir);
             }
+        }
+    }
+
+    private boolean hasOtherExistingMeta(String fileName) {
+        Path metaPath = existingMetaPath();
+        if (metaPath == null) {
+            return false;
+        }
+        try (Stream<Path> stream = Files.walk(metaPath)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".json"))
+                    .anyMatch(path -> !StringUtils.hasText(fileName)
+                            || !fileName.equals(path.getFileName().toString()));
+        } catch (IOException e) {
+            return false;
         }
     }
 
@@ -1368,7 +1469,17 @@ public class MetaConfigValidationService {
                              String severity,
                              String path,
                              String message,
-                             String repairHint) {
+                             String repairHint,
+                             String scope,
+                             String sourceFile) {
+
+        public Diagnostic(String code,
+                          String severity,
+                          String path,
+                          String message,
+                          String repairHint) {
+            this(code, severity, path, message, repairHint, "candidate", "");
+        }
     }
 
     public record Repair(String path,
@@ -1377,22 +1488,45 @@ public class MetaConfigValidationService {
                          String reason) {
     }
 
+    public record CandidateInspection(boolean accepted,
+                                      String reason,
+                                      List<String> offendingFields) {
+    }
+
     public record ValidationResult(boolean passed,
-                                   String normalizedText,
-                                   String candidateDigest,
+                                   String validationId,
+                                   String schemaVersion,
+                                   String schemaHash,
+                                   List<String> errors,
+                                   List<String> warnings,
                                    List<Diagnostic> diagnostics,
                                    List<Repair> repairs,
-                                   List<String> errors,
-                                   List<String> warnings) {
+                                   String candidateDigest,
+                                   String normalizedText) {
+
+        public ValidationResult(boolean passed,
+                                String normalizedText,
+                                String candidateDigest,
+                                List<Diagnostic> diagnostics,
+                                List<Repair> repairs,
+                                List<String> errors,
+                                List<String> warnings) {
+            this(passed, "meta-validation-" + UUID.randomUUID(), "unknown", "",
+                    errors, warnings, diagnostics, repairs, candidateDigest, normalizedText);
+        }
 
         public Map<String, Object> toMap() {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("passed", passed);
+            result.put("validationId", validationId);
+            result.put("schemaVersion", schemaVersion);
+            result.put("schemaHash", schemaHash);
             result.put("candidateDigest", candidateDigest);
-            result.put("diagnostics", diagnostics);
-            result.put("repairs", repairs);
             result.put("errors", errors);
             result.put("warnings", warnings);
+            result.put("diagnostics", diagnostics);
+            result.put("repairs", repairs);
+            result.put("normalizedText", normalizedText);
             return result;
         }
     }

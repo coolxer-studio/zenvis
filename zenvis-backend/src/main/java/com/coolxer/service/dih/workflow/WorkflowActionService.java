@@ -36,20 +36,6 @@ public class WorkflowActionService {
             "submit", "approve", "force_approve", "reject", "revise", "retry",
             "add_to_library");
 
-    private static final Set<String> SAFE_CHART_TOOLS = Set.of(
-            "entity_overview",
-            "entity_summary",
-            "entity_trend",
-            "entity_distribution",
-            "entity_aggregate",
-            "entity_histogram",
-            "entity_scatter",
-            "entity_relations",
-            "entity_relation_timeline",
-            "entity_list",
-            "retrieval_search"
-    );
-
     private final ChatSessionService chatSessionService;
     private final WorkflowStateStore stateStore;
 
@@ -67,6 +53,16 @@ public class WorkflowActionService {
     }
 
     public WorkflowActionVo handle(WorkflowActionDto request, User currentUser) {
+        return handle(request, currentUser, false);
+    }
+
+    public WorkflowActionVo handleForAgentRun(WorkflowActionDto request, User currentUser) {
+        return handle(request, currentUser, true);
+    }
+
+    private WorkflowActionVo handle(WorkflowActionDto request,
+                                    User currentUser,
+                                    boolean allowPersistedRunCard) {
         require(request != null, "工作流动作请求不能为空");
         require(SUPPORTED_ACTIONS.contains(request.getAction()), "不支持的工作流动作");
         ChatSession chatSession = chatSessionService.getChatSessionBySessionId(
@@ -85,6 +81,13 @@ public class WorkflowActionService {
 
         WorkflowDefinition definition = workflowDefinition(chatSession.getType());
         require(definition != null, "当前智能体没有可用的共享工作流定义");
+        if ("add_to_library".equals(request.getAction())) {
+            return addChartPreviewToLibrary(chatSession, messages, located.part(),
+                    metadata, request, currentUser, definition);
+        }
+        if (!allowPersistedRunCard && StringUtils.hasText(located.message().getRunId())) {
+            throw new ApiException(409, "持久化任务卡片必须通过统一交互接口处理");
+        }
         AgentWorkflowState state = stateStore.load(chatSession, request.getWorkflowId())
                 .orElseGet(() -> restoreWorkflowState(
                         definition, located.part(), metadata, request));
@@ -135,20 +138,12 @@ public class WorkflowActionService {
             state.getContext().put("revision", request.getRevision().trim());
         }
 
-        Map<String, Object> continuation;
-        if ("add_to_library".equals(request.getAction())) {
-            require(VisualizationAgentTypes.isChart(state.getAgentType()),
-                    "只有临时图表工作流支持加入图表库");
-            addChartToLibrary(chatSession, state, located.part(), metadata);
-            continuation = Map.of();
-        } else {
-            AgentWorkflowStep next = definition.transition(
-                    state, request.getAction());
-            state.setStep(next);
-            state.setStatus(terminalStatus(next));
-            continuation = definition.continuation(
-                    state, request.getAction());
-        }
+        AgentWorkflowStep next = definition.transition(
+                state, request.getAction());
+        state.setStep(next);
+        state.setStatus(terminalStatus(next));
+        Map<String, Object> continuation = definition.continuation(
+                state, request.getAction());
 
         boolean retryIntoDataQuery = "retry".equals(request.getAction())
                 && state.getStep() == AgentWorkflowStep.DATA_QUERY
@@ -444,30 +439,24 @@ public class WorkflowActionService {
         return values;
     }
 
-    private void addChartToLibrary(
+    private WorkflowActionVo addChartPreviewToLibrary(
             ChatSession chatSession,
-            AgentWorkflowState state,
+            List<Message> messages,
             ChatMessagePart part,
-            Map<String, Object> metadata) {
-        require(state.getStep() == AgentWorkflowStep.ARTIFACT_READY,
-                "只有已生成的图表产物可以加入图表库");
+            Map<String, Object> metadata,
+            WorkflowActionDto request,
+            User currentUser,
+            WorkflowDefinition definition) {
+        require(VisualizationAgentTypes.isChart(definition.agentType()),
+                "只有临时图表工作流支持加入图表库");
         require("visualization-chart-preview".equals(part.getType()),
                 "当前卡片不是图表预览产物");
-        require("success".equals(text(metadata.get("validationStatus"))),
-                "图表产物尚未通过真实查询校验");
-        require("workflow".equals(text(metadata.get("source"))),
-                "普通图表库只接受共享工作流生成的真实查询产物");
+        Map<String, Object> option = visualizationChartOption(metadata);
+        require(!option.isEmpty(), "图表缺少可渲染的 ECharts 配置");
         String artifactId = firstText(
                 text(metadata.get("artifactId")),
-                state.getArtifactId());
+                text(part.getId()));
         require(StringUtils.hasText(artifactId), "图表产物缺少 artifactId");
-        require(StringUtils.hasText(text(metadata.get("planId"))), "图表产物缺少 planId");
-        Map<String, Object> query = map(metadata.get("query"));
-        require(SAFE_CHART_TOOLS.contains(text(query.get("tool"))),
-                "图表产物使用了非白名单查询工具");
-        require(!map(query.get("request")).isEmpty(), "图表产物缺少安全查询参数");
-        require(!map(metadata.get("echartsOption")).isEmpty(),
-                "图表产物缺少可渲染的 ECharts 配置");
 
         Map<String, Object> root = stateStore.parse(chatSession.getExtraData());
         Map<String, Object> visualization = map(root.get("visualizationChart"));
@@ -486,14 +475,66 @@ public class WorkflowActionService {
         record.put("status", "temporary");
         record.put("source", "workflow");
         record.put("addedAt", Instant.now().toString());
+        record.putIfAbsent("validationStatus", "unverified");
+        record.putIfAbsent("echartsOption", option);
         records.removeIf(item -> artifactId.equals(firstText(
                 text(item.get("artifactId")), text(item.get("id")))));
         records.add(record);
         visualization.put("chartLibrary", records);
         root.put("visualizationChart", visualization);
+        metadata.put("libraryArtifactId", artifactId);
         chatSession.setExtraData(JacksonUtil.toJson(root));
-        state.setArtifactId(artifactId);
-        state.getContext().put("libraryArtifactId", artifactId);
+        part.setStatus("added");
+        chatSession.setMessages(JacksonUtil.toJson(messages));
+        chatSessionService.updateWorkflowState(
+                (long) chatSession.getId(),
+                chatSession.getMessages(),
+                chatSession.getExtraData(),
+                currentUser);
+        return new WorkflowActionVo(
+                true,
+                request.getWorkflowId(),
+                firstText(text(metadata.get("step")), AgentWorkflowStep.ARTIFACT_READY.name()),
+                "added",
+                Map.of(),
+                false,
+                chatSession.getExtraData());
+    }
+
+    private Map<String, Object> visualizationChartOption(Map<String, Object> metadata) {
+        Map<String, Object> echarts = map(metadata.get("echarts"));
+        Map<String, Object> dataEcharts = map(map(metadata.get("data")).get("echarts"));
+        Map<String, Object> amisConfig = map(metadata.get("amisConfig"));
+        Map<String, Object> config = map(metadata.get("config"));
+        for (Object candidate : java.util.Arrays.asList(
+                metadata.get("echartsOption"),
+                echarts.get("option"),
+                dataEcharts.get("option"),
+                metadata.get("option"),
+                amisConfig.get("config"),
+                config.get("config"))) {
+            Map<String, Object> option = optionValue(candidate);
+            if (!option.isEmpty()) {
+                return option;
+            }
+        }
+        return Map.of();
+    }
+
+    private Map<String, Object> optionValue(Object value) {
+        if (value instanceof Map<?, ?>) {
+            return map(value);
+        }
+        if (value instanceof String text && StringUtils.hasText(text)) {
+            try {
+                Map<String, Object> parsed = JacksonUtil.toMap(
+                        text, new TypeReference<Map<String, Object>>() {});
+                return parsed == null ? Map.of() : new LinkedHashMap<>(parsed);
+            } catch (RuntimeException ignored) {
+                return Map.of();
+            }
+        }
+        return Map.of();
     }
 
     private boolean isAllowed(Map<String, Object> metadata, String action) {

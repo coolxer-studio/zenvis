@@ -655,13 +655,14 @@ class SkillServiceTest {
                 .contains("config_rename")
                 .contains("config_delete")
                 .contains("config_read")
+                .contains("config_meta_draft")
                 .contains("zenvis:meta-config-record")
                 .doesNotContain(
                         "数据推送服务分支",
                         "意图路由（最高优先级）",
                         "允许跳过元数据配置创建",
                         "PUSH_INPUT_COLLECTION",
-                        "push_task_repair_and_restart");
+                        "push_task_update_and_restart");
 
         var runtime = service.resolveRuntimeConfig(List.of("metadata-config-agent"));
         assertThat(runtime).isNotNull();
@@ -670,6 +671,7 @@ class SkillServiceTest {
                 "config_tree",
                 "config_schema",
                 "config_read",
+                "config_meta_draft",
                 "config_add",
                 "config_apply",
                 "config_validate",
@@ -679,7 +681,7 @@ class SkillServiceTest {
         assertThat(runtime.getTools().getLocal()).doesNotContainKey("push-task");
         assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(32);
         assertThat(runtime.getLimits().getMaxRepeatedFailures()).isEqualTo(2);
-        assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(8_000);
+        assertThat(runtime.getLimits().getMaxToolResultChars()).isEqualTo(32_000);
         assertThat(runtime.getLimits().getMaxAccumulatedToolResultChars()).isEqualTo(64_000);
         assertThat(runtime.getLimits().getMaxAccumulatedToolResultTokens()).isEqualTo(48_000);
     }
@@ -707,17 +709,26 @@ class SkillServiceTest {
                 .contains("kind=missing_meta")
                 .contains("agent_metadata_config")
                 .contains("PUSH_INPUT_COLLECTION")
-                .contains("push_task_detect_format")
-                .contains("push_task_list_by_source_mark")
+                .contains("push_task_validate_config")
+                .contains("push_task_diagnose")
+                .contains("push_task_list")
+                .contains("push_task_get")
                 .contains("push_task_create_and_start")
-                .contains("push_task_get_log")
-                .contains("push_task_repair_and_restart")
+                .contains("push_task_update_and_restart")
+                .contains("push_task_start")
+                .contains("push_task_stop")
+                .contains("push_task_restart")
+                .contains("push_task_delete")
                 .contains("最多 5 轮")
                 .contains("zenvis:vectum-task-record")
                 .doesNotContain(
                         "意图路由（最高优先级）",
                         "允许跳过元数据配置创建",
-                        "METADATA_INPUT_COLLECTION");
+                        "METADATA_INPUT_COLLECTION",
+                        "push_task_detect_format",
+                        "push_task_list_by_source_mark",
+                        "push_task_delete_by_source_mark",
+                        "push_task_repair_and_restart");
 
         var runtime = service.resolveRuntimeConfig(List.of("data-push-service-agent"));
         assertThat(runtime).isNotNull();
@@ -727,12 +738,17 @@ class SkillServiceTest {
                 "config_read"
         );
         assertThat(runtime.getTools().getLocal().get("push-task")).containsExactly(
-                "push_task_detect_format",
-                "push_task_list_by_source_mark",
+                "push_task_validate_config",
+                "push_task_list",
+                "push_task_get",
                 "push_task_create_and_start",
+                "push_task_update_and_restart",
                 "push_task_get_log",
-                "push_task_repair_and_restart",
-                "push_task_delete_by_source_mark"
+                "push_task_diagnose",
+                "push_task_start",
+                "push_task_stop",
+                "push_task_restart",
+                "push_task_delete"
         );
         assertThat(runtime.getTools().getMcp()).isEmpty();
         assertThat(runtime.getLimits().getMaxToolCalls()).isEqualTo(32);

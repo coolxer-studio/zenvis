@@ -291,7 +291,9 @@ DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、元�
 | `src/views/dih/components/view-center.vue` | 对话头部操作区，提供“智能体运行”入口并触发 `openAgentRuns` |
 | `src/views/dih/components/view-left.vue` | 会话侧栏，只保留新建会话、置顶和最近会话，不再放置任务入口 |
 | `src/views/dih/components/agent-run-center.vue` | 任务中心：状态筛选、详情、计划、事件、审批、暂停、继续和取消 |
-| `src/views/dih/composables/use-agent-run.ts` | 创建、订阅、steer、暂停、继续、取消和活动 Run 恢复 |
+| `src/views/dih/composables/use-agent-run.ts` | 创建、订阅、主动消息、统一交互响应、暂停、继续、取消和活动 Run 恢复 |
+| `src/views/dih/composables/use-chat-stream.ts` | 活动 Run 附加、待审批卡回填、主动消息和发送入口 |
+| `src/views/dih/composables/agent-run-interaction.ts` | 校验 `pendingInteraction` 与卡片定位，统一提交卡片和审批响应 |
 | `src/views/dih/composables/agent-run-replay.ts` | 本地事件游标读写和 `sequence` 去重判定 |
 | `src/views/dih/composables/agent-run-message.ts` | 把 Run 快照映射为聊天区 `agent-run` 部件和最终答复 |
 | `src/views/dih/composables/agent-run-activity.ts` | 把 Run 事件按 `searchId`、`callId`、`compactionId` 归并为检索、工具和压缩时间线 |
@@ -301,14 +303,18 @@ DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、元�
 交互约束：
 
 - 组件卸载只关闭 NDJSON 事件连接，不能调用取消接口；停止按钮才表示用户主动取消。
-- 新建消息时先查找会话活动 Run；存在则调用 steer，不存在才创建新 Run。
-- `WAITING_USER` 统一通过聊天页主输入框继续，不额外弹出补充信息对话框。
+- 用户在主输入框主动发送消息时才调用 Run `/messages`；该接口是唯一会追加用户气泡的 Run 入口。
+- `WAITING_USER`、`WAITING_APPROVAL` 只是执行状态。前端必须按 `pendingInteraction.kind` 在运行卡、任务中心或业务卡内联渲染控件，不能根据状态自动弹窗。
+- `user_input` 在运行卡和任务中心内联提交；`card_decision` 在对应业务卡内提交；`mcp_approval` 在 `mcp-approval` 部件内提交。三者统一调用 `/interactions/{interactionId}/respond`，不调用 `sendMessage()`，也不执行 `messages.push()`。
+- 卡片提交固定发送 camelCase 的 `pendingInteraction.stateRevision`；交互 ID、消息、部件、工作流和审批请求 ID 只从服务端 `pendingInteraction` 读取。后端兼容 `state_revision`，但前端不得依赖兼容字段或从卡片正文重新计算版本。
+- 收到“卡片版本已过期”时，重新加载会话消息和 Run 快照，按最新 `pendingInteraction` 重绘内联控件；不能自动重放同一请求，也不能改调 Run `/messages` 绕过交互校验。
 - 订阅前从 `lastEventSequence` 和 `localStorage` 游标取较大值，使用 `after` 续订。
 - 事件按 `sequence` 严格递增应用，最终状态以 Run 快照为准。
+- 恢复 `WAITING_APPROVAL` Run 时不能只依赖事件游标。应优先从 `pendingInteraction.requestId` 恢复 `mcp-approval` 部件；只有旧快照没有 `pendingInteraction` 时才读取 `pendingAction` 兼容字段。恢复活动 Run 和主动消息前都要执行该回填。
 - 会话消息必须保留接口返回的 `runId`。刷新或重载消息后，分页读取会话全部 Run，只把消息实际引用的 Run 恢复到对应 AI 消息；不能用当前 Run 覆盖历史卡，也不能把卡片挂到用户消息。
 - 收到 `run.waiting_user` 或 `run.succeeded` 时，先重新加载消息，再恢复全部已引用 Run，最后同步当前活动 Run 的事件。
-- `WAITING_USER` 的问题优先取 `pendingAction.question`，不要直接使用可能被截断的 `pausedReason`。首次进入等待状态自动弹窗；关闭后记录已提示的 Run/问题组合，避免轮询重复弹出。
-- 补充信息提交统一走 `steerAgentRun`，成功后刷新 Run、追加用户消息并重新订阅事件；任务中心和运行卡共用同一弹窗组件。
+- 等待问题优先取 `pendingInteraction.prompt`，不要使用可能被截断的 `pausedReason`。运行卡和任务中心直接展示内联输入，不再提供自动弹窗组件。
+- 交互成功后用响应中的 Run 快照刷新状态，并重新订阅事件；不得追加用户气泡。用户随后通过主输入框主动发送的新指令仍生成气泡。
 - 执行过程只请求 `rag.search`、工具生命周期、`tool.approval_*` 和 `context.compacted`。按 `sequence` 去重，按稳定 ID 合并；查询满 500 条时以最后一条 `sequence` 继续分页。
 - 对话头部入口与桌面的响应式规则一致，窄屏只显示图标和可访问名称。
 

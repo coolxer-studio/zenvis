@@ -235,60 +235,6 @@ public class RetrievalMcpTool {
     }
 
     /**
-     * 实体添加
-     */
-    @McpToolApproval(value = ASK, risk = HIGH)
-    @Tool(name = "entity_add", description = "向指定实体添加一条记录")
-    public Boolean entityAdd(@ToolParam(description = "实体名称") String entity,
-                             @ToolParam(description = "记录数据，Map形式") Map<String, Object> data) {
-        return entityCoreService.add(entity, data);
-    }
-
-    /**
-     * 实体删除
-     */
-    @McpToolApproval(value = ASK, risk = HIGH)
-    @Tool(name = "entity_delete", description = "删除指定实体的记录")
-    public Boolean entityDelete(@ToolParam(description = "实体名称") String entity,
-                                @ToolParam(description = "平台记录ID（zenvis_id UUID）") String id) {
-        entityCoreService.delete(entity, id);
-        return true;
-    }
-
-    /**
-     * 批量删除实体记录
-     */
-    @McpToolApproval(value = ASK, risk = HIGH)
-    @Tool(name = "entity_bulk_delete", description = "批量删除指定实体的记录")
-    public Boolean entityBulkDelete(@ToolParam(description = "实体名称") String entity,
-                                    @ToolParam(description = "平台记录ID列表（zenvis_id UUID）") List<String> ids) {
-        entityCoreService.deleteALL(entity, ids);
-        return true;
-    }
-
-    /**
-     * 更新实体记录
-     */
-    @McpToolApproval(value = ASK, risk = HIGH)
-    @Tool(name = "entity_update", description = "更新指定实体的记录")
-    public Boolean entityUpdate(@ToolParam(description = "实体名称") String entity,
-                                @ToolParam(description = "平台记录ID（zenvis_id UUID）") String id,
-                                @ToolParam(description = "更新数据，Map形式") Map<String, Object> data) {
-        return entityCoreService.update(entity, id, data);
-    }
-
-    /**
-     * 批量更新实体记录
-     */
-    @McpToolApproval(value = ASK, risk = HIGH)
-    @Tool(name = "entity_bulk_update", description = "批量更新指定实体的记录")
-    public Boolean entityBulkUpdate(@ToolParam(description = "实体名称") String entity,
-                                    @ToolParam(description = "平台记录ID列表（zenvis_id UUID）") String[] ids,
-                                    @ToolParam(description = "更新数据，Map形式") Map<String, Object> data) {
-        return entityCoreService.updateALL(entity, ids == null ? null : java.util.Arrays.asList(ids), data);
-    }
-
-    /**
      * 获取实体列表（分页）
      */
     @McpToolApproval(value = ALLOW, risk = LOW)

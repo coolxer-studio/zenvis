@@ -6,8 +6,11 @@ import com.coolxer.model.base.vo.PageRowsVo;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.dih.dto.AgentRunRequestDto;
 import com.coolxer.model.dih.dto.AgentRunSteerDto;
+import com.coolxer.model.dih.dto.AgentRunInteractionResponseDto;
 import com.coolxer.model.dih.vo.AgentRunEventVo;
+import com.coolxer.model.dih.vo.AgentRunInteractionResponseVo;
 import com.coolxer.model.dih.vo.AgentRunVo;
+import com.coolxer.service.dih.agentrun.AgentRunInteractionService;
 import com.coolxer.service.dih.agentrun.AgentRunService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,9 +33,12 @@ import java.util.List;
 public class AgentRunController extends BaseController {
 
     private final AgentRunService agentRunService;
+    private final AgentRunInteractionService interactionService;
 
-    public AgentRunController(AgentRunService agentRunService) {
+    public AgentRunController(AgentRunService agentRunService,
+                              AgentRunInteractionService interactionService) {
         this.agentRunService = agentRunService;
+        this.interactionService = interactionService;
     }
 
     @PostMapping
@@ -79,11 +85,21 @@ public class AgentRunController extends BaseController {
                 runId, after, types, getSessionUser()));
     }
 
-    @PostMapping("/{runId}/steer")
-    @Operation(summary = "向运行中的智能体任务追加指令")
-    public ResponseWrap<AgentRunVo> steer(@PathVariable("runId") String runId,
-                                          @RequestBody AgentRunSteerDto request) {
+    @PostMapping("/{runId}/messages")
+    @Operation(summary = "向运行中的智能体任务发送用户主动消息")
+    public ResponseWrap<AgentRunVo> sendMessage(@PathVariable("runId") String runId,
+                                                @RequestBody AgentRunSteerDto request) {
         return ResponseWrap.success(agentRunService.steer(runId, request, getSessionUser()));
+    }
+
+    @PostMapping("/{runId}/interactions/{interactionId}/respond")
+    @Operation(summary = "提交智能体任务交互响应")
+    public ResponseWrap<AgentRunInteractionResponseVo> respondInteraction(
+            @PathVariable("runId") String runId,
+            @PathVariable("interactionId") String interactionId,
+            @RequestBody AgentRunInteractionResponseDto request) {
+        return ResponseWrap.success(interactionService.respond(
+                runId, interactionId, request, getSessionUser()));
     }
 
     @PostMapping("/{runId}/pause")

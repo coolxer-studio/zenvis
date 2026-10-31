@@ -24,6 +24,23 @@ import static org.mockito.Mockito.when;
 class WorkflowActionServiceTest {
 
     @Test
+    void legacyWorkflowEndpointRejectsPersistentRunCard() {
+        ChatSession session = metadataSession();
+        ChatMessagePart part = metadataDecisionPart(List.of("approve", "reject", "revise"));
+        Message message = message("message-run", part);
+        message.setRunId("run-1");
+        session.setMessages(JacksonUtil.toJson(List.of(message)));
+        WorkflowActionService service = new WorkflowActionService(
+                chatService(session), new WorkflowStateStore());
+
+        assertThatThrownBy(() -> service.handle(request(
+                "chat-meta", "message-run", "part-meta",
+                "workflow-meta", "approve"), user()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("统一交互接口");
+    }
+
+    @Test
     void failedMetadataCandidateCannotBeNormallyApprovedButCanBeForceApproved() {
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = metadataSession();
@@ -342,6 +359,84 @@ class WorkflowActionServiceTest {
                             .containsEntry("artifactId", "artifact-1")
                             .containsEntry("planId", "plan-1");
                 });
+    }
+
+    @Test
+    void blockedPersistedPreviewCanBeAddedWithoutActiveWorkflowState() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = session();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("workflowId", "workflow-chart");
+        metadata.put("blockedAction", "visualization_chart.add_chart_library");
+        metadata.put("validationStatus", "blocked");
+        metadata.put("validationCode", "query_plan_unverified");
+        metadata.put("validationMessage", "查询方案未批准或本轮数据 MCP 未成功");
+        metadata.put("source", "workflow");
+        metadata.put("artifactId", "artifact-blocked");
+        metadata.put("planId", "plan-blocked");
+        metadata.put("step", "BLOCKED");
+        metadata.put("query", Map.of(
+                "tool", "entity_distribution",
+                "request", Map.of("entity", "school_info", "dimension", "school_level")));
+        metadata.put("echartsOption", Map.of(
+                "series", List.of(Map.of("type", "bar", "data", List.of(1, 2)))));
+        ChatMessagePart part = ChatMessagePart.builder()
+                .id("part-blocked-chart")
+                .type("visualization-chart-preview")
+                .title("阻塞但仍可渲染的图表")
+                .status("blocked")
+                .metadata(metadata)
+                .build();
+        Message message = message("message-blocked-chart", part);
+        message.setRunId("finished-run");
+        session.setMessages(JacksonUtil.toJson(List.of(message)));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        var result = service.handle(request(
+                "chat-1", "message-blocked-chart", "part-blocked-chart",
+                "workflow-chart", "add_to_library"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getPartStatus()).isEqualTo("added");
+        Map<String, Object> root = store.parse(session.getExtraData());
+        assertThat(listOfMaps(store.map(root.get("visualizationChart")).get("chartLibrary")))
+                .singleElement()
+                .satisfies(record -> assertThat(record)
+                        .containsEntry("artifactId", "artifact-blocked")
+                        .containsEntry("validationStatus", "blocked")
+                        .containsEntry("validationCode", "query_plan_unverified")
+                        .containsEntry("planId", "plan-blocked")
+                        .containsKey("query")
+                        .containsKey("echartsOption"));
+        List<Message> persisted = JacksonUtil.toList(
+                session.getMessages(), new com.fasterxml.jackson.core.type.TypeReference<List<Message>>() {});
+        assertThat(persisted.get(0).getParts().get(0).getStatus()).isEqualTo("added");
+    }
+
+    @Test
+    void addToLibraryRejectsPreviewWithoutRenderableOption() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = session();
+        ChatMessagePart part = ChatMessagePart.builder()
+                .id("part-without-option")
+                .type("visualization-chart-preview")
+                .title("缺少配置的图表")
+                .status("blocked")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "workflowId", "workflow-chart",
+                        "artifactId", "artifact-without-option",
+                        "validationStatus", "blocked")))
+                .build();
+        Message message = message("message-without-option", part);
+        message.setRunId("finished-run");
+        session.setMessages(JacksonUtil.toJson(List.of(message)));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        assertThatThrownBy(() -> service.handle(request(
+                "chat-1", "message-without-option", "part-without-option",
+                "workflow-chart", "add_to_library"), user()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("ECharts");
     }
 
     private Fixture selectionFixture() {

@@ -73,6 +73,7 @@ public class McpServerToolConfiguration {
         addToolDescriptors(descriptors, ConfigValidationMcpTool.class);
         addToolDescriptors(descriptors, MenuMcpTool.class);
         addToolDescriptors(descriptors, DashboardMcpTool.class);
+        policyService.deleteStaleLocalPolicies(descriptors.keySet());
 
         log.info("=== MethodToolCallbackProvider created successfully ===");
         return new McpApprovalToolCallbackProvider(provider, descriptors, approvalService, policyService);

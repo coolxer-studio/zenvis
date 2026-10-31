@@ -42,3 +42,25 @@ export const isCurrentWorkflowPart = (
   if (!id || current === undefined || own === undefined) return true;
   return own >= current;
 };
+
+/**
+ * Agent Run may persist the same pending query-plan card again after the user
+ * makes an entity selection. Keep only the latest workflow revision visible.
+ */
+export const isSupersededVisualizationPlanCard = (
+  part: ChatMessagePart,
+  revisions: WorkflowRevisionMap,
+): boolean => {
+  if (part.type !== 'visualization-chart-decision') return false;
+  const action = part.metadata?.action;
+  if (typeof action !== 'string' || action !== 'visualization_chart.confirm_query_plan') {
+    return false;
+  }
+  const status = typeof part.status === 'string' ? part.status.toLowerCase() : '';
+  if (status !== 'pending') return false;
+
+  const id = workflowId(part);
+  const current = id ? revisions[id] : undefined;
+  const own = workflowRevision(part);
+  return current !== undefined && own !== undefined && own < current;
+};

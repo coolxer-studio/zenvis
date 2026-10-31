@@ -33,6 +33,9 @@ public class ChatMessagePartParser {
             "visualization-app-decision",
             "visualization-dashboard-decision");
 
+    private static final Set<String> RESOLVED_DECISION_STATUSES = Set.of(
+            "approved", "rejected", "cancelled", "completed", "saved");
+
     private static final Pattern FENCE_PATTERN = Pattern.compile("```([^\\r\\n]*)\\R([\\s\\S]*?)\\R?```");
     private static final Pattern THINK_PATTERN = Pattern.compile("<think>([\\s\\S]*?)</think>", Pattern.CASE_INSENSITIVE);
     private static final Pattern MARKDOWN_HEADING_PATTERN = Pattern.compile("(?m)^(#{1,6})\\s+(.+?)\\s*$");
@@ -50,6 +53,97 @@ public class ChatMessagePartParser {
             parts.add(part("markdown").content(content == null ? "" : content).build());
         }
         return parts;
+    }
+
+    /**
+     * 从需要用户处理的交互卡片中提取可直接展示的问题和补充要求。
+     *
+     * @param content 模型返回内容
+     * @return 卡片标题、说明和结构化字段要求；没有待处理卡片时返回空字符串
+     */
+    public String resolveUserDecisionQuestion(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "";
+        }
+        List<String> blocks = new ArrayList<>();
+        for (ChatMessagePart part : parse(content, MessageType.TEXT)) {
+            if (!isPendingInteractiveDecision(part)) {
+                continue;
+            }
+            String block = describeDecision(part);
+            if (StringUtils.hasText(block)) {
+                blocks.add(block);
+            }
+        }
+        return String.join("\n\n", blocks).trim();
+    }
+
+    private boolean isPendingInteractiveDecision(ChatMessagePart part) {
+        if (part == null || !INTERACTIVE_DECISION_PART_TYPES.contains(part.getType())) {
+            return false;
+        }
+        String status = StringUtils.trimWhitespace(
+                part.getStatus() == null ? "" : part.getStatus()).toLowerCase();
+        return !RESOLVED_DECISION_STATUSES.contains(status);
+    }
+
+    private String describeDecision(ChatMessagePart part) {
+        List<String> lines = new ArrayList<>();
+        String title = StringUtils.trimWhitespace(part.getTitle());
+        String body = StringUtils.trimWhitespace(part.getContent());
+        if (StringUtils.hasText(title)) {
+            lines.add(title);
+        }
+        if (StringUtils.hasText(body) && !body.equals(title)) {
+            lines.add(body);
+        }
+        if ("info-steps".equals(part.getType())) {
+            appendInfoSteps(lines, part.getMetadata());
+        }
+        return String.join("\n", lines).trim();
+    }
+
+    private void appendInfoSteps(List<String> lines, Map<String, Object> metadata) {
+        if (metadata == null || !(metadata.get("steps") instanceof List<?> steps)) {
+            return;
+        }
+        List<String> requirements = new ArrayList<>();
+        for (Object value : steps) {
+            if (!(value instanceof Map<?, ?> rawStep)) {
+                continue;
+            }
+            String title = text(rawStep.get("title"));
+            String description = text(rawStep.get("description"));
+            String placeholder = text(rawStep.get("placeholder"));
+            if (!StringUtils.hasText(title) && !StringUtils.hasText(description)) {
+                continue;
+            }
+            StringBuilder requirement = new StringBuilder()
+                    .append(requirements.size() + 1)
+                    .append(". ")
+                    .append(StringUtils.hasText(title) ? title : "补充信息");
+            if (Boolean.FALSE.equals(rawStep.get("required"))) {
+                requirement.append("（可选）");
+            }
+            if (StringUtils.hasText(description)) {
+                requirement.append("：").append(description);
+            }
+            if (StringUtils.hasText(placeholder)) {
+                requirement.append("\n   填写提示：").append(placeholder);
+            }
+            requirements.add(requirement.toString());
+        }
+        if (!requirements.isEmpty()) {
+            if (!lines.isEmpty()) {
+                lines.add("");
+            }
+            lines.add("请补充以下信息：");
+            lines.addAll(requirements);
+        }
+    }
+
+    private String text(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
     private List<ChatMessagePart> parseThinkingAndContent(String content) {
@@ -165,7 +259,10 @@ public class ChatMessagePartParser {
                     .level(firstTextValue(node, "level", "type"))
                     .metadata(metadata);
             if (INTERACTIVE_DECISION_PART_TYPES.contains(type)) {
-                builder.status("pending");
+                String status = firstTextValue(node, "status", "state");
+                builder.id(StringUtils.hasText(textValue(node, "id"))
+                                ? textValue(node, "id") : UUID.randomUUID().toString())
+                        .status(StringUtils.hasText(status) ? status : "pending");
             } else if ("mcp-approval".equals(type) || "tool-call".equals(type)) {
                 builder.id(textValue(node, "id"))
                         .status(firstTextValue(node, "status", "state"));

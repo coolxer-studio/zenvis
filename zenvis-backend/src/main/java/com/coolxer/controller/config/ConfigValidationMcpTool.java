@@ -74,12 +74,18 @@ public class ConfigValidationMcpTool {
                     normalizedType,
                     fileName,
                     format,
+                    validation.validationId(),
+                    validation.schemaVersion(),
+                    validation.schemaHash(),
                     validation.errors(),
                     validation.warnings(),
-                    validation.normalizedText(),
-                    validation.candidateDigest(),
+                    validation.diagnostics(),
                     validation.repairs(),
-                    validation.diagnostics()
+                    validation.candidateDigest(),
+                    validation.normalizedText(),
+                    validation.passed()
+                            ? "候选已通过平台校验；请使用本次 validationId 与 candidateDigest 生成确认卡。"
+                            : "候选未通过平台校验；请按 diagnostics 修订后重新调用 config_validate。"
             );
         }
 
@@ -296,12 +302,16 @@ public class ConfigValidationMcpTool {
                 type,
                 fileName,
                 format,
+                "file-validation-" + java.util.UUID.randomUUID(),
+                "",
+                "",
                 List.copyOf(errors),
                 List.copyOf(warnings),
-                text,
-                MetaConfigValidationService.digest(text),
                 List.of(),
-                List.of()
+                List.of(),
+                MetaConfigValidationService.digest(text),
+                text,
+                passed ? "校验通过。" : "校验未通过。"
         );
     }
 
@@ -311,12 +321,16 @@ public class ConfigValidationMcpTool {
             String configType,
             String fileName,
             String format,
+            String validationId,
+            String schemaVersion,
+            String schemaHash,
             List<String> errors,
             List<String> warnings,
-            String normalizedText,
-            String candidateDigest,
+            List<MetaConfigValidationService.Diagnostic> diagnostics,
             List<MetaConfigValidationService.Repair> repairs,
-            List<MetaConfigValidationService.Diagnostic> diagnostics
+            String candidateDigest,
+            String normalizedText,
+            String summary
     ) {
     }
 }

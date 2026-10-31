@@ -12,6 +12,8 @@ import { upsertRagSearchPart } from '@/components/dih-message/rag-search-parts';
 import type {
   AgentRun,
   AgentRunEvent,
+  AgentRunInteractionResponse,
+  AgentRunInteractionResponseParams,
   ChatAttachment,
   ChatMessage,
   ChatMessagePart,
@@ -26,7 +28,11 @@ import {
   emitDihEvent,
 } from '../events';
 import { useAgentRun } from './use-agent-run';
-import { findAgentRunMessageIndex, upsertAgentRunMessage } from './agent-run-message';
+import {
+  findAgentRunMessageIndex,
+  resolveAgentRunPendingApprovalRequestId,
+  upsertAgentRunMessage,
+} from './agent-run-message';
 
 export type SendMessageOptions = {
   content?: string;
@@ -397,6 +403,24 @@ export const useChatStream = ({
     return index;
   };
 
+  const restoreAgentRunApproval = async (run: AgentRun) => {
+    const requestId = resolveAgentRunPendingApprovalRequestId(run);
+    if (!requestId) return;
+    try {
+      const approval = await DihService.getMcpApproval(requestId);
+      const index = findAgentRunMessageIndex(messages.value, run.runId);
+      if (index < 0) return;
+      upsertMcpApprovalPart(
+        messages.value[index],
+        approval,
+        messages.value[index].content || '',
+      );
+      await nextTick();
+    } catch (error) {
+      console.warn('恢复待审批 MCP 工具失败:', error);
+    }
+  };
+
   const syncAgentRunMessage = (runId: string) => {
     const run = agentRun.run.value;
     if (!run || run.runId !== runId) return;
@@ -482,6 +506,7 @@ export const useChatStream = ({
       if (!active) return;
       ensureAgentRunMessage(active);
       await agentRun.attach(active, { after: 0 });
+      await restoreAgentRunApproval(active);
     } catch (error) {
       console.warn('恢复智能体任务失败:', error);
     }
@@ -524,11 +549,10 @@ export const useChatStream = ({
         ? agentRun.run.value
         : await agentRun.findActive(sessionId);
       if (active) {
-        if (agentRun.run.value?.runId !== active.runId) {
-          ensureAgentRunMessage(active);
-          await agentRun.attach(active, { after: 0 });
-        }
-        const steered = await agentRun.steer(active.runId, {
+        ensureAgentRunMessage(active);
+        await agentRun.attach(active, { after: 0 });
+        await restoreAgentRunApproval(active);
+        const steered = await agentRun.sendMessage(active.runId, {
           message: requestMessage,
           attachments: messageAttachments,
           clientMessageId: generateUUID(),
@@ -594,24 +618,46 @@ export const useChatStream = ({
     return updated;
   };
 
-  const replyToWaitingAgentRun = async (runId: string, rawMessage: string) => {
-    const message = rawMessage.trim();
-    if (!runId || !message) return null;
-    const steered = await agentRun.steer(runId, {
-      message,
-      clientMessageId: generateUUID(),
-    });
-    messages.value.push({
-      sender: 'user',
-      content: message,
-      time: getCurrentFormattedDate(),
-    });
-    ensureAgentRunMessage(steered, agentRun.currentTool.value, agentRun.activityEvents.value);
-    await agentRun.attach(steered, { after: agentRun.lastSequence.value });
+  const applyInteractionResponse = async (
+    runId: string,
+    response: AgentRunInteractionResponse,
+    successMessage: string,
+  ) => {
+    const updated = response.run?.runId ? response.run : await agentRun.refreshRun(runId);
+    if (!updated) {
+      throw new Error('任务状态刷新失败，请稍后重试');
+    }
+    await reloadChatSessionMessages();
+    ensureAgentRunMessage(updated, agentRun.currentTool.value, agentRun.activityEvents.value);
+    await agentRun.attach(updated, { after: agentRun.lastSequence.value });
     await nextTick();
     void scrollToBottom();
-    ElMessage.success('补充信息已提交，任务将继续执行');
-    return steered;
+    if (successMessage) ElMessage.success(successMessage);
+    return updated;
+  };
+
+  const respondAgentRunInteraction = async (
+    runId: string,
+    interactionId: string,
+    params: AgentRunInteractionResponseParams,
+    successMessage = '',
+  ) => {
+    const response = await agentRun.respondInteraction(runId, interactionId, params);
+    const updated = await applyInteractionResponse(runId, response, successMessage);
+    return { ...response, run: updated };
+  };
+
+  const respondToWaitingAgentRun = async (
+    runId: string,
+    interactionId: string,
+    rawMessage: string,
+  ) => {
+    const message = rawMessage.trim();
+    if (!runId || !interactionId || !message) return null;
+    const response = await respondAgentRunInteraction(runId, interactionId, {
+      message,
+    }, '补充信息已提交，任务将继续执行');
+    return response.run;
   };
 
   const sendMessage = async (options: SendMessageOptions = {}) => {
@@ -684,7 +730,9 @@ export const useChatStream = ({
     sendMessage,
     stopCurrentChat,
     resumeAgentRun,
-    replyToWaitingAgentRun,
+    respondToWaitingAgentRun,
+    respondAgentRunInteraction,
+    getAgentRunSnapshot: () => agentRun.run.value,
     restoreActiveAgentRun,
   };
 };

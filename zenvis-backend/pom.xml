@@ -255,6 +255,18 @@
         </dependency>
 
         <dependency>
+            <groupId>org.tomlj</groupId>
+            <artifactId>tomlj</artifactId>
+            <version>1.1.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr4-runtime</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-collections4</artifactId>
             <version>${collections.version}</version>
@@ -331,6 +343,18 @@
 
     <build>
         <finalName>application</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}/../deploy/open_config/web_config/schema</directory>
+                <targetPath>schema</targetPath>
+                <includes>
+                    <include>meta_schema.json</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.graalvm.buildtools</groupId>

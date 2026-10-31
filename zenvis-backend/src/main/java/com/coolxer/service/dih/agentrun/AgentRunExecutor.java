@@ -16,6 +16,7 @@ import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
 import com.coolxer.dao.mysql.repository.UserRepository;
 import com.coolxer.model.dih.ChatAttachment;
 import com.coolxer.model.dih.ContextCompactionEventData;
+import com.coolxer.model.dih.Message;
 import com.coolxer.model.dih.RagSearchEventData;
 import com.coolxer.model.dih.agentrun.AgentRunPlan;
 import com.coolxer.model.dih.agentrun.AgentRunPlanStep;
@@ -88,7 +89,7 @@ public class AgentRunExecutor {
             可用控制工具：
             - run_update_plan：创建或调整完整计划。
             - run_update_step：步骤开始、完成、跳过或阻塞时更新状态；完成步骤必须写摘要。
-            - run_request_user：只有缺少必须由用户提供的信息时才暂停提问。
+            - run_request_user：只有缺少必须由用户提供的业务信息时才暂停提问；不得用它代替 MCP 审批、工具重试或等待“继续”。
             - run_finish：所有步骤完成或明确跳过后才提交最终答复。
             不要声称完成了未执行的工作。工具失败、输出截断或证据不足时，保留已完成成果并说明缺口。
             本步骤优先推进一个清晰目标；不要为了结束而跳过未完成步骤。
@@ -114,6 +115,7 @@ public class AgentRunExecutor {
     private final DihChatApplicationService chatApplicationService;
     private final ReportDraftService reportDraftService;
     private final ChatAttachmentService chatAttachmentService;
+    private final AgentRunInteractionService interactionService;
 
     @Autowired(required = false)
     private AttachmentToolProviderFactory attachmentToolProviderFactory;
@@ -136,6 +138,7 @@ public class AgentRunExecutor {
                             DihChatApplicationService chatApplicationService,
                             ReportDraftService reportDraftService,
                             ChatAttachmentService chatAttachmentService,
+                            AgentRunInteractionService interactionService,
                             AgentRunContextAssembler contextAssembler,
                             @org.springframework.beans.factory.annotation.Value(
                                     "${app.ai.agent-run.lease-seconds:60}") long leaseSeconds) {
@@ -150,6 +153,7 @@ public class AgentRunExecutor {
         this.chatApplicationService = chatApplicationService;
         this.reportDraftService = reportDraftService;
         this.chatAttachmentService = chatAttachmentService;
+        this.interactionService = interactionService;
         this.contextAssembler = contextAssembler;
         this.leaseSeconds = leaseSeconds;
         this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -334,7 +338,7 @@ public class AgentRunExecutor {
         }
         String assistantAnswer = assistantText.toString();
         if (chatApplicationService.requiresUserDecision(assistantAnswer)) {
-            chatApplicationService.saveAgentRunResponse(
+            Message responseMessage = chatApplicationService.saveAgentRunResponse(
                     session,
                     user,
                     assistantAnswer,
@@ -344,11 +348,18 @@ public class AgentRunExecutor {
                     toolEvidence);
             runService.checkpointStep(runId, elapsedMillis, toolCalls.get(), true, null, stepId);
             runService.saveCheckpoint(runId, StringUtils.left(assistantAnswer, 24_000));
-            runService.markWaitingUser(runId,
-                    state.isWaitingUser()
-                            ? state.getUserQuestion()
-                            : "请处理当前智能体工作流卡片后继续",
-                    stepId);
+            String decisionQuestion = chatApplicationService.resolveUserDecisionQuestion(
+                    assistantAnswer);
+            String question = state.isWaitingUser()
+                    ? state.getUserQuestion()
+                    : StringUtils.defaultIfBlank(decisionQuestion,
+                    "请处理当前智能体工作流卡片后继续");
+            var cardInteraction = interactionService.cardInteraction(responseMessage, question);
+            if (cardInteraction != null) {
+                runService.markWaitingForCard(runId, cardInteraction, stepId);
+            } else {
+                runService.markWaitingUser(runId, question, stepId);
+            }
             return;
         }
         boolean progressed = state.hasProgress();
@@ -456,7 +467,8 @@ public class AgentRunExecutor {
                 policy.agentType(),
                 null,
                 "agent-run:" + run.getRunId(),
-                event -> handleApprovalEvent(run.getRunId(), stepId, state, event));
+                event -> handleApprovalEvent(
+                        run.getRunId(), stepId, state, event, toolEvidence));
         ToolCallbackProvider logging = new McpToolCallLoggingProvider(merged, call -> {
             toolEvidence.emit(call);
             if ("started".equals(call.status())) {
@@ -495,7 +507,8 @@ public class AgentRunExecutor {
     private void handleApprovalEvent(String runId,
                                      String stepId,
                                      AgentRunExecutionState state,
-                                     McpApprovalEvent event) {
+                                     McpApprovalEvent event,
+                                     McpToolLogStream toolEvidence) {
         McpApprovalVo approval = event == null ? null : event.data();
         String requestId = approval == null ? "" : approval.getRequestId();
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -507,6 +520,9 @@ public class AgentRunExecutor {
             payload.put("riskLevel", approval.getRiskLevel());
             payload.put("agentRunId", approval.getAgentRunId());
             payload.put("runApprovalAllowed", approval.getRunApprovalAllowed());
+        }
+        if (toolEvidence != null) {
+            toolEvidence.recordApproval(event);
         }
         if (event != null && "approval_required".equals(event.event())) {
             state.markApprovalPending();

@@ -2,13 +2,16 @@ package com.coolxer.service.dih.agentrun;
 
 import com.coolxer.dao.mysql.entity.AgentRun;
 import com.coolxer.dao.mysql.entity.ChatSession;
+import com.coolxer.dao.mysql.entity.McpToolInvocation;
 import com.coolxer.dao.mysql.entity.User;
+import com.coolxer.commons.enums.McpInvocationStatus;
 import com.coolxer.dao.mysql.repository.AgentRunInputRepository;
 import com.coolxer.dao.mysql.repository.McpToolInvocationRepository;
 import com.coolxer.model.dih.ContextCompactionEventData;
 import com.coolxer.model.dih.Message;
 import com.coolxer.service.dih.ChatAttachmentService;
 import com.coolxer.service.dih.DihTokenEstimator;
+import com.coolxer.service.dih.mcp.McpToolDescriptor;
 import com.coolxer.utils.JacksonUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -108,6 +111,23 @@ class AgentRunContextAssemblerTest {
             assertThat(event.getBudgetChars()).isEqualTo(48_000);
             assertThat(event.getSavedTokens()).isPositive();
         });
+    }
+
+    @Test
+    void unknownPushCreatePointsModelToPlatformReapprovalInsteadOfUserInput() {
+        when(invocationRepository.findByAgentRunIdAndTurnIdOrderByCreateTimeDesc(
+                anyString(), anyString())).thenReturn(List.of(
+                new McpToolInvocation()
+                        .setToolKey(McpToolDescriptor.localKey("push_task_create_and_start"))
+                        .setToolName("push_task_create_and_start")
+                        .setStatus(McpInvocationStatus.UNKNOWN)));
+
+        AgentRunContextAssembler.PromptContext context = assembler.assemble(
+                run("推送数据", null), null, user(), "1", events -> {});
+
+        assertThat(context.text())
+                .contains("平台已按 sourceMark 为该工具启用幂等恢复")
+                .contains("不要调用 run_request_user");
     }
 
     private AgentRun run(String goal, String checkpoint) {

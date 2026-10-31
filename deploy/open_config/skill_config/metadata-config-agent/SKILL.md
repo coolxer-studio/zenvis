@@ -41,24 +41,28 @@
 ## 发现与候选生成
 
 1. 必须先读取 `config_tree(type="meta")` 的当前文件列表，并读取 `config_schema(type="meta", fileName="<目标文件>")`。平台可能已预执行并注入两者；仍以工具真实返回为准。
-2. 数据库固定为 `zenvis`；表名固定为 `zenvis.<table_name>`；`data_source` 固定为 `clickhouse`。
-3. 多实体写入同一个 Meta 文件；文件名使用稳定 snake_case，并以 `.json` 结尾。
-4. 默认生成 `auto_create`，引擎使用 `MergeTree`，`order_by` 使用业务字段或 `zenvis_insert_time`，禁止使用高基数 `zenvis_id`。
-5. 平台自动注入 `zenvis_id`（Nullable(UUID)）和 `zenvis_insert_time`（DateTime64(3)）。Meta、样例和后续映射均不得重复生成或写入这两个保留字段。
-6. 每个 attribute 必须包含 `entity`、`name`、`label`、`description`、`column_name`、`column_type`、`operators`；`id`、`display_selected` 可省略。不得编造缺失的业务字段。
-7. operator 使用 `name` + `label`，`id` 可省略；不得输出 `description` 代替 `label`。被 attribute 引用的 operator 必须在顶层 `operator` 数组中定义。
-8. `Array(String)` 使用 `display_type: "array"`；JSON 使用 `display_type: "json"`。
-9. `link_template` 只允许相对地址或 `http/https`，只能引用当前实体的逻辑属性 `name`；`{zenvis_id}` 是唯一隐藏字段例外。
+2. 不要让模型直接拼装完整 Meta。先调用 `config_meta_draft(fileName, draft)`，只提供 `entityName`、`entityLabel`、`description`、可选 `tableName` 与 `fields`。`fields` 每项为 `{name,label,description,type,sample,operators}`，工具会确定性补齐表名、字段类型、展示类型、操作符、`auto_create` 与保留字段规则。
+3. 把 `config_meta_draft` 返回的完整 `text` 原样交给 `config_validate`。如需手写，数据库固定为 `zenvis`；表名固定为 `zenvis.<table_name>`；`data_source` 固定为 `clickhouse`。
+4. 多实体写入同一个 Meta 文件；文件名使用稳定 snake_case，并以 `.json` 结尾。
+5. 默认生成 `auto_create`，引擎使用 `MergeTree`，`order_by` 使用业务字段或 `zenvis_insert_time`，禁止使用高基数 `zenvis_id`。
+6. 平台自动注入 `zenvis_id`（Nullable(UUID)）和 `zenvis_insert_time`（DateTime64(3)）。Meta、样例和后续映射均不得重复生成或写入这两个保留字段。
+7. 每个 attribute 必须包含 `entity`、`name`、`label`、`description`、`column_name`、`column_type`、`operators`；`id`、`display_selected` 可省略。不得编造缺失的业务字段。
+8. operator 使用 `name` + `label`，`id` 可省略；不得输出 `description` 代替 `label`。被 attribute 引用的 operator 必须在顶层 `operator` 数组中定义。
+9. `Array(String)` 使用 `display_type: "array"`；JSON 使用 `display_type: "json"`。
+10. `link_template` 只允许相对地址或 `http/https`，只能引用当前实体的逻辑属性 `name`；`{zenvis_id}` 是唯一隐藏字段例外。
+
+同一轮回复只能出现一个 `zenvis:meta-config`。最终候选必须是一个只含 `entity`、`attribute`、`operator` 的 Meta 根对象；确认卡和记录卡字段不能混入其中。
 
 ## 强制校验与修订
 
 生成完整候选后，必须把最终候选原文传给 `config_validate(type="meta", fileName="<目标文件>", text="<完整候选>")`。不得凭经验解释为已通过。
 
-- 只有工具返回 `passed=true` 才能进入正常确认。
-- `passed=false` 时逐条读取 `diagnostics[].code/path/message/repairHint`，保留正确字段，修订完整候选后再次调用校验。
+- 只有工具返回 `passed=true` 才能进入正常确认，并必须记录本次返回的 `validationId`、`candidateDigest`、`schemaVersion`、`schemaHash`。
+- `passed=false` 时优先读取 `diagnostics[].code/path/message/repairHint`，保留正确字段，修订完整候选后再次调用校验。`normalizedText` 位于结果末尾，诊断被截断时不得猜测已通过。
 - 单轮最多执行 3 次校验：首次生成 1 次，修订复验最多 2 次。
 - 3 次后仍有错误时，不得继续猜测或宣称成功；输出校验未通过说明和 `zenvis:metadata-config-decision`，由平台展示错误清单及强制写入入口。
 - 优先使用工具返回的 `normalizedText` 作为后续候选原文；`repairs` 仅表示平台做了确定性修复，不表示业务语义一定正确。
+- `scope=workspace` 的 `META_WORKSPACE_INVALID` 只表示其他既有 Meta 文件有问题，不阻断当前候选；不得把它写成当前候选失败。
 
 ## 展示与确认
 
@@ -66,10 +70,10 @@
 
 1. 配置摘要：目标文件、实体、目标表、字段数量、时间字段、自动建表方式、校验轮次、冲突规避结果。
 2. 完整配置卡：使用 `zenvis:meta-config`，不得省略字段。
-3. 用户选择卡：使用 `zenvis:metadata-config-decision`，携带 `fileName`、`configKind:"meta"`、`overwrite`、`candidateDigest` 和 `actions`。
+3. 用户选择卡：使用 `zenvis:metadata-config-decision`，携带 `fileName`、`configKind:"meta"`、`overwrite`、`validationId`、`candidateDigest` 和 `actions`。平台会以服务端锁定回执覆盖模型值；回执不匹配时拒绝批准。
 
 ```zenvis:metadata-config-decision
-{"title":"元数据配置已生成，请选择后续处理","content":"候选已通过平台校验，可以添加配置到系统、放弃本次配置，或补充调整要求。","fileName":"example_event.json","configKind":"meta","overwrite":false,"planId":"<工作流锁定 planId>","candidateDigest":"<工作流锁定摘要>","actions":["approve","reject","revise"]}
+{"title":"元数据配置已生成，请选择后续处理","content":"候选已通过平台校验，可以添加配置到系统、放弃本次配置，或补充调整要求。","fileName":"example_event.json","configKind":"meta","overwrite":false,"planId":"<工作流锁定 planId>","validationId":"<服务端校验回执>","candidateDigest":"<服务端锁定摘要>","actions":["approve","reject","revise"]}
 ```
 
 同名不同内容时，必须重新展示完整候选并输出 `overwrite:true` 的独立覆盖确认卡；未确认前不得调用 `config_apply`。平台校验失败时，正常 `approve` 不可用，只有用户显式选择“忽略校验并强制写入”才允许 `force_approve`。
@@ -112,7 +116,7 @@
 }
 ```
 
-`zenvis:meta-config-record` 不是工具名。记录中的 `config` 必须等于锁定候选。强制写入成功时保留 `forced:true` 与 `validationStatus:"forced"`，不得伪装成校验通过。
+`zenvis:meta-config-record` 不是工具名。记录中的 `config` 必须等于锁定候选。`config` 包装只允许出现在记录卡中，绝不能放入 `zenvis:meta-config`，也不能传给 `config_validate`。强制写入成功时保留 `forced:true` 与 `validationStatus:"forced"`，不得伪装成校验通过。
 
 文件已写入但 `config_apply`、严格 Meta 加载或 Schema 刷新失败时，仍输出记录，但必须使用：
 

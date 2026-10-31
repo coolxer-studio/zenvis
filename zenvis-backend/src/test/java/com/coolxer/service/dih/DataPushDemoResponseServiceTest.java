@@ -33,9 +33,10 @@ class DataPushDemoResponseServiceTest {
         McpToolContext context = toolContext(
                 callback("config_tree", calls, ignored -> "[]"),
                 callback("config_read", calls, ignored -> "{}"),
-                callback("push_task_detect_format", calls, ignored -> "\"toml\""),
-                callback("push_task_list_by_source_mark", calls, ignored -> "[]"),
-                callback("push_task_create_and_start", calls, ignored -> "true"),
+                callback("push_task_validate_config", calls, ignored -> validationJson()),
+                callback("push_task_list", calls, ignored -> emptyPageJson()),
+                callback("push_task_create_and_start", calls, ignored -> operationJson()),
+                callback("push_task_get", calls, ignored -> taskJson()),
                 callback("push_task_get_log", calls, ignored -> "{}")
         );
 
@@ -60,18 +61,21 @@ class DataPushDemoResponseServiceTest {
                 callback("config_tree", calls,
                         ignored -> "[{\"fileName\":\"user_event.json\",\"nodes\":[]}]"),
                 callback("config_read", calls, ignored -> metaContent),
-                callback("push_task_detect_format", calls, ignored -> "\"toml\""),
-                callback("push_task_list_by_source_mark", calls, ignored -> {
+                callback("push_task_validate_config", calls, ignored -> validationJson()),
+                callback("push_task_list", calls, ignored -> {
                     if (listCalls.incrementAndGet() == 1) {
-                        return "[]";
+                        return emptyPageJson();
                     }
                     return """
-                            [{"id":12,"source":"SYSTEM","mark":"data-push-demo:user-event:chat-1",
-                              "name":"用户事件数据推送服务","description":"demo","status":"running",
-                              "config":"[sources.demo]\\ntype = \\"demo_logs\\""}]
+                            {"items":[{"id":12,"source":"SYSTEM",
+                              "mark":"data-push-demo:user-event:chat-1",
+                              "name":"用户事件数据推送服务","description":"demo",
+                              "format":"toml","status":"running"}],
+                             "total":1,"offset":0,"limit":100,"has_more":false}
                             """;
                 }),
-                callback("push_task_create_and_start", calls, ignored -> "true"),
+                callback("push_task_create_and_start", calls, ignored -> operationJson()),
+                callback("push_task_get", calls, ignored -> taskJson()),
                 callback("push_task_get_log", calls, ignored -> """
                         {"taskId":12,"sourceMark":"data-push-demo:user-event:chat-1",
                          "taskStatus":"running","logType":"system","truncated":false,
@@ -100,10 +104,11 @@ class DataPushDemoResponseServiceTest {
         assertThat(calls).containsExactly(
                 "config_tree",
                 "config_read",
-                "push_task_detect_format",
-                "push_task_list_by_source_mark",
+                "push_task_validate_config",
+                "push_task_list",
                 "push_task_create_and_start",
-                "push_task_list_by_source_mark",
+                "push_task_list",
+                "push_task_get",
                 "push_task_get_log");
     }
 
@@ -114,7 +119,8 @@ class DataPushDemoResponseServiceTest {
         McpToolContext context = toolContext(
                 callback("config_tree", calls,
                         ignored -> "[{\"fileName\":\"user_event.json\",\"nodes\":[]}]"),
-                callback("config_read", calls, ignored -> metaContent)
+                callback("config_read", calls, ignored -> metaContent),
+                callback("push_task_validate_config", calls, ignored -> validationJson())
         );
 
         String push = ReflectionTestUtils.invokeMethod(
@@ -124,9 +130,13 @@ class DataPushDemoResponseServiceTest {
                 "\"action\":\"data_push.confirm_plan\"",
                 "\"metaRef\":{\"fileName\":\"user_event.json\"",
                 "\"contentDigest\":",
+                "\"validation\":",
+                "\"validationStatus\":\"passed\"",
+                "\"format\":\"toml\"",
                 "push_task_create_and_start",
                 "平台弹出 MCP 审批");
-        assertThat(calls).containsExactly("config_tree", "config_read");
+        assertThat(calls).containsExactly(
+                "config_tree", "config_read", "push_task_validate_config");
     }
 
     private McpToolContext toolContext(ToolCallback... callbacks) {
@@ -175,5 +185,34 @@ class DataPushDemoResponseServiceTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private String validationJson() {
+        return """
+                {"passed":true,"blocked":false,"format":"toml",
+                 "candidate_digest":"candidate","meta_digest":"meta",
+                 "validation_digest":"validation-1","vector_version":"vector 0.55.0",
+                 "diagnostics":[],"tests":{"present":true,"total":2,"passed":2,"failed":0}}
+                """;
+    }
+
+    private String emptyPageJson() {
+        return "{\"items\":[],\"total\":0,\"offset\":0,\"limit\":100,\"has_more\":false}";
+    }
+
+    private String operationJson() {
+        return """
+                {"action":"create_and_start","task_id":12,"previous_status":null,
+                 "status":"running","changed":true,"current_run_id":"run-1"}
+                """;
+    }
+
+    private String taskJson() {
+        return """
+                {"id":12,"name":"用户事件数据推送服务","description":"demo",
+                 "source":"SYSTEM","mark":"data-push-demo:user-event:chat-1",
+                 "config":"[sources.demo]\\ntype = \\"demo_logs\\"","format":"toml",
+                 "status":"running","current_run_id":"run-1"}
+                """;
     }
 }

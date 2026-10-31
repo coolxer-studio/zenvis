@@ -17,6 +17,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class McpToolPolicyService {
@@ -124,6 +125,14 @@ public class McpToolPolicyService {
         if (serverId != null) {
             repository.deleteAll(repository.findByServerId(serverId));
         }
+    }
+
+    @Transactional(transactionManager = "mysqlTransactionManager")
+    public void deleteStaleLocalPolicies(Set<String> activeToolKeys) {
+        Set<String> retained = activeToolKeys == null ? Set.of() : activeToolKeys;
+        repository.findBySourceTypeOrderByToolNameAsc(McpToolSourceType.LOCAL).stream()
+                .filter(config -> !retained.contains(config.getToolKey()))
+                .forEach(repository::delete);
     }
 
     public boolean isDenied(String toolKey, McpApprovalPolicy fallback) {

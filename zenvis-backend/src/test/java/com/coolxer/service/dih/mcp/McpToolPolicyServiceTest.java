@@ -9,10 +9,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class McpToolPolicyServiceTest {
@@ -77,6 +80,27 @@ class McpToolPolicyServiceTest {
         assertThat(config.getAvailable()).isFalse();
         service.register(descriptor(true, false, McpApprovalPolicy.ALLOW));
         assertThat(config.getAvailable()).isTrue();
+    }
+
+    @Test
+    void staleLocalPoliciesAreDeletedWithoutTouchingActiveLocalOrExternalPolicies() {
+        McpToolPolicyConfig activeLocal = new McpToolPolicyConfig()
+                .setToolKey("local::retrieval_search")
+                .setSourceType(McpToolSourceType.LOCAL);
+        McpToolPolicyConfig staleLocal = new McpToolPolicyConfig()
+                .setToolKey("local::entity_update")
+                .setSourceType(McpToolSourceType.LOCAL);
+        McpToolPolicyConfig external = new McpToolPolicyConfig()
+                .setToolKey("external::1::query")
+                .setSourceType(McpToolSourceType.EXTERNAL);
+        when(repository.findBySourceTypeOrderByToolNameAsc(McpToolSourceType.LOCAL))
+                .thenReturn(List.of(activeLocal, staleLocal));
+
+        service.deleteStaleLocalPolicies(Set.of("local::retrieval_search"));
+
+        verify(repository).delete(staleLocal);
+        verify(repository, never()).delete(activeLocal);
+        verify(repository, never()).delete(external);
     }
 
     private McpToolDescriptor descriptor(Boolean readOnly, Boolean destructive, McpApprovalPolicy policy) {

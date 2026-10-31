@@ -25,6 +25,8 @@ import java.util.UUID;
 @Component
 public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
 
+    private static final String CANDIDATE_ORDINAL = "__metaCandidateOrdinal";
+
     @Autowired(required = false)
     private MetaConfigValidationService metaConfigValidationService;
 
@@ -282,7 +284,7 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
         Map<String, Object> context = state.getContext();
         if ("config".equals(part.getType())
                 && "meta-config".equals(text(metadata.get("configKind")))) {
-            rememberCandidate(context, part.getContent());
+            rememberCandidateIfValid(state, part, metadata);
             return;
         }
         if ("metadata-config-decision".equals(part.getType())
@@ -308,6 +310,7 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
                 metadata.put("candidateDigest", candidate.get("digest"));
                 metadata.put("artifactId", candidate.get("artifactId"));
             }
+            metadata.put("validationId", text(context.get("validationId")));
             metadata.put("source", "workflow");
             decorateValidationMetadata(state, metadata);
         }
@@ -359,9 +362,21 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
         Map<String, Object> candidate = map(context.get("candidate"));
         String lockedDigest = text(candidate.get("digest"));
         String cardDigest = text(metadata.get("candidateDigest"));
+        String lockedValidationId = text(context.get("validationId"));
+        String cardValidationId = text(metadata.get("validationId"));
         if (Set.of("approve", "force_approve").contains(action)
                 && !StringUtils.hasText(cardDigest)) {
             return "确认卡缺少候选摘要，请重新生成";
+        }
+        if (Set.of("approve", "force_approve").contains(action)
+                && StringUtils.hasText(lockedValidationId)
+                && !StringUtils.hasText(cardValidationId)) {
+            return "确认卡缺少服务端校验回执，请重新生成";
+        }
+        if (Set.of("approve", "force_approve").contains(action)
+                && StringUtils.hasText(lockedValidationId)
+                && !Objects.equals(lockedValidationId, cardValidationId)) {
+            return "服务端校验回执已失效，请重新校验并生成确认卡";
         }
         if (StringUtils.hasText(cardDigest)
                 && !Objects.equals(lockedDigest, cardDigest)) {
@@ -416,13 +431,24 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
 
     private boolean validateCandidateForDecision(AgentWorkflowState state,
                                                  Map<String, Object> metadata) {
-        if (metaConfigValidationService == null || state.getContext() == null) {
-            return true;
+        if (state.getContext() == null) {
+            blockValidation(state, metadata,
+                    "META_CANDIDATE_MISSING", "$.candidate",
+                    "确认前缺少锁定的 Meta 候选。",
+                    "先输出合法的 zenvis:meta-config 候选，再重新生成确认卡。");
+            return false;
         }
         Map<String, Object> candidate = map(state.getContext().get("candidate"));
         String content = text(candidate.get("content"));
         String fileName = text(metadata.get("fileName"));
         if (!StringUtils.hasText(content) || !StringUtils.hasText(fileName)) {
+            blockValidation(state, metadata,
+                    "META_CANDIDATE_MISSING", "$.candidate",
+                    "确认前缺少锁定的 Meta 候选或目标文件名。",
+                    "先输出合法的 zenvis:meta-config 候选，再重新生成确认卡。");
+            return false;
+        }
+        if (metaConfigValidationService == null) {
             return true;
         }
         MetaConfigValidationService.ValidationResult validation;
@@ -462,11 +488,17 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
         state.getContext().put("validationDiagnostics", diagnostics);
         state.getContext().put("validationRepairs", repairs);
         state.getContext().put("validationDigest", validation.candidateDigest());
+        state.getContext().put("validationId", validation.validationId());
+        state.getContext().put("schemaVersion", validation.schemaVersion());
+        state.getContext().put("schemaHash", validation.schemaHash());
         String targetFileDigest = targetFileDigest(fileName);
         if (StringUtils.hasText(targetFileDigest)) {
             state.getContext().put("targetFileDigest", targetFileDigest);
         }
         metadata.put("candidateDigest", validation.candidateDigest());
+        metadata.put("validationId", validation.validationId());
+        metadata.put("schemaVersion", validation.schemaVersion());
+        metadata.put("schemaHash", validation.schemaHash());
         metadata.put("artifactId", normalizedCandidate.get("artifactId"));
         metadata.put("targetFileDigest", targetFileDigest);
         decorateValidationMetadata(state, metadata);
@@ -746,6 +778,9 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
         metadata.put("validationErrors", context.getOrDefault("validationErrors", List.of()));
         metadata.put("validationRepairs", context.getOrDefault("validationRepairs", List.of()));
         metadata.put("validationDigest", text(context.get("validationDigest")));
+        metadata.put("validationId", text(context.get("validationId")));
+        metadata.put("schemaVersion", text(context.get("schemaVersion")));
+        metadata.put("schemaHash", text(context.get("schemaHash")));
         metadata.put("targetFileDigest", text(context.get("targetFileDigest")));
         if (failed || blocked) {
             Object errors = context.get("validationErrors");
@@ -780,6 +815,8 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
                 text(map(state.getContext().get("candidate")).get("digest")));
         metadata.put("validationDigest",
                 text(state.getContext().get("validationDigest")));
+        metadata.put("validationId",
+                text(state.getContext().get("validationId")));
         metadata.put("validationErrors",
                 state.getContext().getOrDefault("validationErrors", List.of()));
         metadata.put("validationRepairs",
@@ -916,6 +953,93 @@ public class MetadataConfigWorkflowDefinition implements WorkflowDefinition {
             }
         }
         return AgentWorkflowStep.META_DISCOVERY;
+    }
+
+    private void rememberCandidateIfValid(AgentWorkflowState state,
+                                          ChatMessagePart part,
+                                          Map<String, Object> metadata) {
+        Map<String, Object> context = state.getContext();
+        int ordinal = integer(metadata.get(CANDIDATE_ORDINAL));
+        if (ordinal > 1) {
+            rejectCandidate(state, part, metadata,
+                    "META_MULTIPLE_CANDIDATES",
+                    "$.candidate",
+                    "同一轮回复只能提供一个 zenvis:meta-config 候选。",
+                    "保留唯一最终候选，删除重复或中间版本。");
+            return;
+        }
+        MetaConfigValidationService.CandidateInspection inspection =
+                MetaConfigValidationService.inspectCandidate(part.getContent());
+        if (!inspection.accepted()) {
+            rejectCandidate(state, part, metadata,
+                    "META_WRONG_OBJECT", "$.candidate",
+                    inspection.reason(),
+                    "只输出 entity、attribute、operator 组成的 Meta 根对象。");
+            return;
+        }
+        context.remove("candidateRejected");
+        context.remove("validationStatus");
+        context.remove("forceAllowed");
+        context.remove("validationErrors");
+        context.remove("validationDiagnostics");
+        context.remove("validationRepairs");
+        context.remove("validationDigest");
+        context.remove("validationId");
+        rememberCandidate(context, part.getContent());
+    }
+
+    private void rejectCandidate(AgentWorkflowState state,
+                                 ChatMessagePart part,
+                                 Map<String, Object> metadata,
+                                 String code,
+                                 String path,
+                                 String message,
+                                 String repairHint) {
+        List<Map<String, Object>> errors = List.of(diagnosticMetadata(
+                code, "ERROR", path, message, repairHint));
+        Map<String, Object> context = state.getContext();
+        context.put("validationStatus", "blocked");
+        context.put("forceAllowed", false);
+        context.put("candidateRejected", true);
+        context.put("validationErrors", errors);
+        context.put("validationDiagnostics", errors);
+        context.put("validationRepairs", List.of());
+        metadata.put("validationStatus", "blocked");
+        metadata.put("forceAllowed", false);
+        metadata.put("candidateRejected", true);
+        metadata.put("validationErrors", errors);
+        metadata.put("validationMessage", message);
+        part.setStatus("blocked");
+    }
+
+    private void blockValidation(AgentWorkflowState state,
+                                 Map<String, Object> metadata,
+                                 String code,
+                                 String path,
+                                 String message,
+                                 String repairHint) {
+        List<Map<String, Object>> errors = List.of(diagnosticMetadata(
+                code, "ERROR", path, message, repairHint));
+        state.getContext().put("validationStatus", "blocked");
+        state.getContext().put("forceAllowed", false);
+        state.getContext().put("validationErrors", errors);
+        state.getContext().put("validationDiagnostics", errors);
+        state.getContext().put("validationRepairs", List.of());
+        metadata.put("validationStatus", "blocked");
+        metadata.put("forceAllowed", false);
+        metadata.put("validationErrors", errors);
+        metadata.put("validationMessage", message);
+    }
+
+    private int integer(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(text(value));
+        } catch (RuntimeException ignored) {
+            return 0;
+        }
     }
 
     private void rememberCandidate(Map<String, Object> context, String content) {

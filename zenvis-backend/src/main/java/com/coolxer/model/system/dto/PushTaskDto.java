@@ -21,9 +21,14 @@ public class PushTaskDto {
     private String description;
 
     /**
-     * 配置
+     * 完整配置文本。
      */
     private String config;
+
+    /**
+     * 锁定配置格式：yaml、toml 或 json。
+     */
+    private String format;
 
     /**
      * 来源
@@ -39,6 +44,36 @@ public class PushTaskDto {
      * 更新时间
      */
     private Date updateTime;
+
+    /**
+     * 候选配置摘要，用于执行前防篡改校验。
+     */
+    private String candidateDigest;
+
+    /**
+     * 已发布 Meta 内容摘要。
+     */
+    private String metaDigest;
+
+    /**
+     * 平台校验摘要。
+     */
+    private String validationDigest;
+
+    /**
+     * 当前修复轮次。
+     */
+    private Integer repairRound;
+
+    /**
+     * 已发布 Meta 文件名。
+     */
+    private String metaFileName;
+
+    /**
+     * 已发布 Meta 原文，仅供服务端执行前复验。
+     */
+    private String metaContent;
 
 
 }

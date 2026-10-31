@@ -67,6 +67,7 @@ public class WorkflowOrchestrator {
         mergeEvidence(state, evidenceRefs);
 
         boolean changed = false;
+        int metaCandidateOrdinal = 0;
         for (ChatMessagePart part : parts) {
             if (!definition.supportsPart(part)) {
                 continue;
@@ -78,7 +79,12 @@ public class WorkflowOrchestrator {
 
             // Candidate config/code parts are captured but are not interactive states.
             if ("config".equals(part.getType()) || "code".equals(part.getType())) {
+                if ("config".equals(part.getType())
+                        && "meta-config".equals(text(metadata.get("configKind")))) {
+                    metadata.put("__metaCandidateOrdinal", ++metaCandidateOrdinal);
+                }
                 definition.updateContext(state, part, metadata);
+                metadata.remove("__metaCandidateOrdinal");
                 changed = true;
                 continue;
             }
@@ -338,6 +344,10 @@ public class WorkflowOrchestrator {
         failure.put("error", firstText(
                 text(metadata.get("validationMessage")),
                 "工作流校验失败"));
+        if (metadata.get("blockingReasons") instanceof List<?> blockingReasons
+                && !blockingReasons.isEmpty()) {
+            failure.put("blockingReasons", blockingReasons);
+        }
         failure.put("retryable", true);
         if (StringUtils.hasText(state.getArtifactId())) {
             failure.put("preservedArtifactId", state.getArtifactId());

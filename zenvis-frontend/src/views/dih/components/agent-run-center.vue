@@ -142,10 +142,38 @@
           </div>
         </section>
 
-        <section v-if="detail.status === 'WAITING_USER'" class="detail-section supplement-section">
-          <h3>需要补充信息</h3>
-          <p>{{ resolveAgentRunWaitingQuestion(detail) || '任务正在等待你补充继续执行所需的信息。' }}</p>
-          <el-button type="primary" size="small" @click="openSupplement(detail)">补充信息</el-button>
+        <section
+          v-if="detail.pendingInteraction && detail.pendingInteraction.kind !== 'mcp_approval'"
+          class="detail-section supplement-section"
+        >
+          <h3>{{ detail.pendingInteraction.title || '需要处理任务交互' }}</h3>
+          <p>
+            {{ detail.pendingInteraction.prompt
+              || resolveAgentRunWaitingQuestion(detail)
+              || '任务正在等待你补充继续执行所需的信息。' }}
+          </p>
+          <template v-if="detail.pendingInteraction.kind === 'user_input'">
+            <el-input
+              v-model="supplementAnswer"
+              type="textarea"
+              :rows="4"
+              :maxlength="8000"
+              resize="vertical"
+              placeholder="请输入需要补充的信息"
+              @keydown.meta.enter.prevent="submitSupplement"
+              @keydown.ctrl.enter.prevent="submitSupplement"
+            />
+            <el-button
+              type="primary"
+              size="small"
+              :loading="supplementSubmitting"
+              :disabled="!supplementAnswer.trim()"
+              @click="submitSupplement"
+            >提交并继续</el-button>
+          </template>
+          <el-button v-else type="primary" plain size="small" @click="openChat(detail)">
+            前往会话处理卡片
+          </el-button>
         </section>
 
         <section class="detail-section">
@@ -181,13 +209,6 @@
         </section>
       </div>
     </el-dialog>
-
-    <AgentRunUserInputDialog
-      v-model="supplementVisible"
-      :question="supplementQuestion"
-      :submitting="supplementSubmitting"
-      @submit="submitSupplement"
-    />
   </div>
 </template>
 
@@ -196,7 +217,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ArrowDown, ArrowUp, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { DihService } from '@/service/api';
-import AgentRunUserInputDialog from '@/components/dih-message/message-parts/agent-run-user-input-dialog.vue';
 import AgentRunActivity from '@/components/dih-message/message-parts/agent-run-activity.vue';
 import {
   AGENT_RUN_ACTIVITY_EVENT_TYPES,
@@ -209,7 +229,6 @@ import type {
   AgentRunStatus,
   McpApprovalData,
 } from '@/types/type-dih';
-import { generateUUID } from '@/utils/util-common';
 
 const emit = defineEmits<{
   (event: 'open-chat', run: AgentRun): void;
@@ -230,10 +249,8 @@ const activities = computed(() => buildAgentRunActivities(activityEvents.value))
 const approval = ref<McpApprovalData | null>(null);
 const approvalDeciding = ref('');
 const runAction = ref<{ id: string; action: string }>({ id: '', action: '' });
-const supplementVisible = ref(false);
-const supplementQuestion = ref('');
+const supplementAnswer = ref('');
 const supplementSubmitting = ref(false);
-const supplementRunId = ref('');
 let refreshTimer: number | null = null;
 
 const statusOptions = [
@@ -340,6 +357,17 @@ const loadAllActivityEvents = async (runId: string) => {
 
 const loadApproval = async (run: AgentRun) => {
   approval.value = null;
+  const interactionRequestId = run.pendingInteraction?.kind === 'mcp_approval'
+    ? String(run.pendingInteraction.requestId || '')
+    : '';
+  if (interactionRequestId) {
+    try {
+      approval.value = await DihService.getMcpApproval(interactionRequestId);
+    } catch (error) {
+      console.warn('加载任务审批失败:', error);
+    }
+    return;
+  }
   if (!run.pendingAction) return;
   try {
     const parsed = JSON.parse(run.pendingAction) as Record<string, unknown>;
@@ -354,18 +382,12 @@ const loadApproval = async (run: AgentRun) => {
 const openRun = async (run: AgentRun) => {
   detail.value = run;
   detailVisible.value = true;
+  supplementAnswer.value = '';
   await Promise.all([loadEvents(run.runId), loadApproval(run)]);
-  if (run.status === 'WAITING_USER') openSupplement(run);
 };
 
 const openChat = (run: AgentRun) => {
   emit('open-chat', run);
-};
-
-const openSupplement = (run: AgentRun) => {
-  supplementRunId.value = run.runId;
-  supplementQuestion.value = resolveAgentRunWaitingQuestion(run);
-  supplementVisible.value = true;
 };
 
 const setRun = (updated: AgentRun) => {
@@ -373,20 +395,22 @@ const setRun = (updated: AgentRun) => {
   if (detail.value?.runId === updated.runId) detail.value = updated;
 };
 
-const submitSupplement = async (message: string) => {
-  const runId = supplementRunId.value;
-  const answer = message.trim();
-  if (!runId || !answer) return;
+const submitSupplement = async () => {
+  const current = detail.value;
+  const interaction = current?.pendingInteraction;
+  const answer = supplementAnswer.value.trim();
+  if (!current || interaction?.kind !== 'user_input' || !answer) return;
   supplementSubmitting.value = true;
   try {
-    const updated = await DihService.steerAgentRun(runId, {
-      message: answer,
-      clientMessageId: generateUUID(),
-    });
-    setRun(updated);
-    supplementVisible.value = false;
+    const response = await DihService.respondAgentRunInteraction(
+      current.runId,
+      interaction.interactionId,
+      { message: answer },
+    );
+    setRun(response.run);
+    supplementAnswer.value = '';
     ElMessage.success('补充信息已提交，任务将继续执行');
-    if (detail.value?.runId === runId) await loadEvents(runId);
+    if (detail.value?.runId === current.runId) await loadEvents(current.runId);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '提交补充信息失败');
   } finally {
@@ -443,7 +467,19 @@ const decideApproval = async (decision: 'approved' | 'approved_run' | 'rejected'
   if (!approval.value?.requestId) return;
   approvalDeciding.value = decision;
   try {
-    await DihService.decideMcpApproval(approval.value.requestId, { decision });
+    const run = detail.value;
+    const interaction = run?.pendingInteraction;
+    if (run && interaction?.kind === 'mcp_approval'
+      && interaction.requestId === approval.value.requestId) {
+      const response = await DihService.respondAgentRunInteraction(
+        run.runId,
+        interaction.interactionId,
+        { decision },
+      );
+      setRun(response.run);
+    } else {
+      await DihService.decideMcpApproval(approval.value.requestId, { decision });
+    }
     approval.value = null;
     ElMessage.success(decision === 'rejected' ? '已拒绝工具调用' : '已批准工具调用');
     await loadRuns();

@@ -4,6 +4,8 @@ import type {
   AgentRun,
   AgentRunCreateParams,
   AgentRunEvent,
+  AgentRunInteractionResponse,
+  AgentRunInteractionResponseParams,
   AgentRunPlanStep,
   AgentRunSteerParams,
   McpApprovalData,
@@ -223,6 +225,9 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
           };
         }
         break;
+      case 'interaction.responded':
+        await refreshRun(event.run_id);
+        break;
       case 'run.succeeded':
         if (run.value) {
           run.value = {
@@ -337,10 +342,20 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
     return created;
   };
 
-  const steer = async (runId: string, params: AgentRunSteerParams): Promise<AgentRun> => {
-    const updated = await DihService.steerAgentRun(runId, params);
+  const sendMessage = async (runId: string, params: AgentRunSteerParams): Promise<AgentRun> => {
+    const updated = await DihService.sendAgentRunMessage(runId, params);
     mergeSnapshot(updated);
     return updated;
+  };
+
+  const respondInteraction = async (
+    runId: string,
+    interactionId: string,
+    params: AgentRunInteractionResponseParams,
+  ): Promise<AgentRunInteractionResponse> => {
+    const response = await DihService.respondAgentRunInteraction(runId, interactionId, params);
+    if (response.run?.runId) mergeSnapshot(response.run);
+    return response;
   };
 
   const pause = async (reason?: string) => {
@@ -396,7 +411,8 @@ export const useAgentRun = (options: UseAgentRunOptions = {}) => {
     liveAnswer,
     lastSequence,
     create,
-    steer,
+    sendMessage,
+    respondInteraction,
     pause,
     resume,
     resumeRun,

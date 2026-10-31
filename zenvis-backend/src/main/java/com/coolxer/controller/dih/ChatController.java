@@ -280,6 +280,9 @@ public class ChatController extends BaseController {
 
             List<Message> messages = JacksonUtil.toList(chatSession.getMessages(), new TypeReference<List<Message>>() {
             });
+            if (hasPersistentRunPart(messages, decisionDto)) {
+                return ResponseWrap.fail(409, "持久化任务卡片必须通过统一交互接口处理");
+            }
             boolean updated = updateDecisionPart(messages, decisionDto);
 
             if (!updated) {
@@ -378,6 +381,21 @@ public class ChatController extends BaseController {
         }
         matchedPart.setStatus(decisionDto.getDecision());
         return true;
+    }
+
+    private boolean hasPersistentRunPart(List<Message> messages,
+                                         ChatActionDecisionDto decisionDto) {
+        if (messages == null || messages.isEmpty()
+                || !StringUtils.hasText(decisionDto.getPartId())) {
+            return false;
+        }
+        return messages.stream()
+                .filter(message -> StringUtils.hasText(message.getRunId()))
+                .filter(message -> !StringUtils.hasText(decisionDto.getMessageId())
+                        || Objects.equals(message.getId(), decisionDto.getMessageId()))
+                .filter(message -> message.getParts() != null)
+                .anyMatch(message -> message.getParts().stream().anyMatch(part ->
+                        Objects.equals(part.getId(), decisionDto.getPartId())));
     }
 
     private ChatMessagePart findDecisionPart(List<Message> messages,

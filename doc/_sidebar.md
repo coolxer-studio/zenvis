@@ -75,6 +75,7 @@
   - [zenvis-frontend](/07-开发指南/zenvis-frontend-开发对接指南.md)
   - [zenvis-plugin](/07-开发指南/zenvis-plugin-开发对接指南.md)
   - [业务服务 Starter](/07-开发指南/zenvis-business-service-spring-boot-starter-开发对接指南.md)
+  - [UI 设计系统](/07-开发指南/zenvis-UI设计系统.md)
 
 - [API 参考](/08-API参考/README.md)
   - RESTful API

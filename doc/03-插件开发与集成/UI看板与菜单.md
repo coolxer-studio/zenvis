@@ -238,6 +238,7 @@ Dashboard `code` 全局唯一并保持稳定。升级时平台用它匹配原看
 - 外部链接只允许受控 `http/https`。
 - 不构造 `javascript:`、`data:`、`file:` 或协议相对 URL。
 - HTML 页面运行在 iframe 容器中，不依赖访问父窗口敏感状态。
+- iframe 内页面需要主题适配时，按 [UI 设计系统](/07-开发指南/zenvis-UI设计系统.md)中的 `zenvis:ui` 协议接收令牌。
 - 静态页面对 API 错误和未登录状态提供明确提示。
 - 不在 HTML、JSON 或浏览器日志中嵌入凭据。
 

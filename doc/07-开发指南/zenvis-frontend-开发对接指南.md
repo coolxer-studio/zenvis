@@ -134,6 +134,7 @@ yarn preview
 - 继续使用项目现有 Pinia `persist` 配置，不引入 `pinia-plugin-persistedstate`。
 - 新样式优先使用 scoped SCSS，穿透作用域使用 `:deep()`。
 - 格式以 `prettier.config.js` 为准，不在单个功能中修改全局格式规则。
+- UI 令牌、公共组件和页面模板遵循 [UI 设计系统](/07-开发指南/zenvis-UI设计系统.md)，不在业务组件中另建基础控件或散落品牌色。
 
 ### 路径别名
 
@@ -494,3 +495,4 @@ function greet(user: User) {
 - [数据检索与实体 REST API](/08-API参考/RestfulAPI/数据检索与实体.md)
 - [AI 与数据智能](/04-AI与数据智能/README.md)
 - [`zenvis-backend` 开发对接指南](/07-开发指南/zenvis-backend-开发对接指南.md)
+- [UI 设计系统](/07-开发指南/zenvis-UI设计系统.md)

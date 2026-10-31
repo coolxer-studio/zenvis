@@ -38,6 +38,7 @@ import com.coolxer.service.dih.mcp.McpInvocationContext;
 import com.coolxer.service.dih.mcp.ToolRuntimeContext;
 import com.coolxer.service.dih.workflow.AgentWorkflowState;
 import com.coolxer.service.dih.workflow.AgentWorkflowStep;
+import com.coolxer.service.dih.workflow.DataPushPlanSnapshot;
 import com.coolxer.service.dih.workflow.WorkflowEvidenceService;
 import com.coolxer.service.dih.workflow.WorkflowOrchestrator;
 import com.coolxer.service.dih.workflow.WorkflowStateStore;
@@ -95,6 +96,7 @@ import java.util.regex.Pattern;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.time.Instant;
 
 /**
  * DIH 聊天应用编排服务。
@@ -1154,7 +1156,8 @@ public class DihChatApplicationService {
         AgentWorkflowState workflow = workflowStateStore.loadActive(
                 chatSession, DataPushServiceAgent.AGENT_TYPE).orElse(null);
         if (workflow == null) {
-            return bootstrapDataPushMetaDiscovery(mcpToolContext, prompt, null);
+            workflow = newDataPushWorkflowState();
+            workflowStateStore.upsert(chatSession, workflow);
         }
         if (mcpToolContext == null || !mcpToolContext.hasTools()) {
             markWorkflowBlocked(
@@ -1172,7 +1175,7 @@ public class DihChatApplicationService {
         Map<String, Object> metaRef = mapValue(workflow.getContext().get("metaRef"));
         return switch (workflow.getStep()) {
             case PUSH_INPUT_COLLECTION -> bootstrapDataPushMetaDiscovery(
-                    mcpToolContext, prompt, metaRef);
+                    mcpToolContext, prompt, metaRef, chatSession, workflow);
             case PUSH_CONFIG_VALIDATION, PUSH_FORMAT_CHECK, PUSH_EXECUTING ->
                     executeApprovedPushTask(
                     mcpToolContext, prompt, chatSession, workflow);
@@ -1181,6 +1184,20 @@ public class DihChatApplicationService {
                     + "。Meta 只读，PushTask 配置和 MCP 参数均以服务端锁定状态为准；"
                     + "本轮不得调用 config_add/config_apply，也不得声明未经读回的成功结果。";
         };
+    }
+
+    private AgentWorkflowState newDataPushWorkflowState() {
+        String now = Instant.now().toString();
+        return new AgentWorkflowState()
+                .setWorkflowId(UUID.randomUUID().toString())
+                .setWorkflowType("data_push")
+                .setAgentType(DataPushServiceAgent.AGENT_TYPE)
+                .setObjectType("push_task")
+                .setStep(AgentWorkflowStep.PUSH_INPUT_COLLECTION)
+                .setStatus("active")
+                .setStateRevision(0)
+                .setCreatedAt(now)
+                .setUpdatedAt(now);
     }
 
     private String bootstrapMetadataMetaDiscovery(
@@ -1294,7 +1311,36 @@ public class DihChatApplicationService {
     private String bootstrapDataPushMetaDiscovery(
             McpToolContext mcpToolContext,
             String prompt,
-            Map<String, Object> lockedMetaRef) {
+            Map<String, Object> lockedMetaRef,
+            ChatSession chatSession,
+            AgentWorkflowState workflow) {
+        Map<String, Object> workflowContext = workflow.getContext() == null
+                ? new LinkedHashMap<>() : workflow.getContext();
+        DataPushPlanSnapshot lockedSnapshot =
+                DataPushPlanSnapshot.load(workflowContext);
+        if (lockedSnapshot.hasMetaRef()) {
+            if (!StringUtils.hasText(lockedSnapshot.sourceMark())) {
+                lockedSnapshot = lockedSnapshot.withMetaRef(
+                        lockedSnapshot.metaRef(),
+                        "data-push:" + workflow.getWorkflowId());
+                lockedSnapshot.persist(workflowContext);
+                workflow.setContext(workflowContext);
+                workflow.setStateRevision(workflow.getStateRevision() + 1);
+                workflow.setUpdatedAt(Instant.now().toString());
+                if (workflowStateStore != null) {
+                    workflowStateStore.upsert(chatSession, workflow);
+                }
+            }
+            return prompt + "\n\n【平台复用已锁定 Meta】\n"
+                    + "metaRef：" + JacksonUtil.toJson(lockedSnapshot.metaRef())
+                    + "\nsourceMark：" + lockedSnapshot.sourceMark()
+                    + "\n平台已在初始化阶段读取并锁定 Meta，本轮不再重复调用 "
+                    + "config_tree/config_read。请只基于该已发布 Meta 生成完整推送配置；"
+                    + "不得调用 config_add/config_apply。生成后必须先调用 "
+                    + "push_task_validate_config，只传入完整 config、metaFileName 和 format，"
+                    + "平台会按文件名重读 Meta。只有 passed=true 且 blocked=false 才可输出确认卡。"
+                    + "确认卡必须包含完整 request；平台会覆盖为锁定 metaRef、sourceMark 和校验回执。";
+        }
         ToolCallback treeTool = findToolCallback(mcpToolContext, "config_tree");
         if (treeTool == null) {
             return prompt + """
@@ -1317,22 +1363,24 @@ public class DihChatApplicationService {
                         + "\n请先确认用户要依赖的已发布 Meta 文件名，再调用 config_read；"
                         + "不得生成推送配置，也不得调用 config_add/config_apply。";
             }
-            PushMetaValidation validation = validatePushMeta(
+            PushMetaValidation validation = readPushMeta(
                     mcpToolContext, fileName);
             if (!validation.present()) {
                 return prompt + missingPushMetaInstruction(fileName)
                         + "\n\nconfig_tree 真实返回：" + treeResult;
             }
+            DataPushPlanSnapshot snapshot = lockPushMeta(
+                    chatSession, workflow, validation);
             return prompt + "\n\n【平台已完成 Meta 只读校验】\n"
                     + "工具顺序：config_tree → config_read\n"
                     + "metaRef：" + JacksonUtil.toJson(validation.metaRef())
+                    + "\nsourceMark：" + snapshot.sourceMark()
                     + "\nMeta 内容摘要：" + validation.resultSummary()
                     + "\n请只基于该已发布 Meta 生成完整推送配置；不得调用 "
                     + "config_add/config_apply。生成后必须先调用 push_task_validate_config，"
-                    + "传入完整 config、metaFileName、config_read 原文和 format；"
+                    + "只传入完整 config、metaFileName 和 format，平台会按文件名重读 Meta；"
                     + "只有 passed=true 且 blocked=false 才可输出确认卡。"
-                    + "确认卡必须包含上述 metaRef、稳定 sourceMark、完整 request、"
-                    + "真实验证结果 validation、validationStatus=passed 和 validationDigest；"
+                    + "确认卡必须包含完整 request；平台会覆盖为锁定 metaRef、sourceMark 和校验回执。"
                     + "校验失败时按 diagnostics[].path/repairHint 修订完整候选后复验。";
         } catch (RuntimeException e) {
             return prompt + "\n\n【平台 Meta 只读检查失败】\n真实错误："
@@ -1948,22 +1996,70 @@ public class DihChatApplicationService {
             if (!configTreeContainsFile(treeResult, fileName)) {
                 return PushMetaValidation.missing(fileName);
             }
-            String readResult = callTool(
-                    readTool,
-                    JacksonUtil.toJson(Map.of("type", "meta", "fileName", fileName)),
-                    mcpToolContext);
-            String content = decodeToolString(readResult);
-            if (!StringUtils.hasText(content)) {
-                return PushMetaValidation.missing(fileName);
-            }
-            Map<String, Object> metaRef = new LinkedHashMap<>();
-            metaRef.put("fileName", fileName);
-            metaRef.put("contentDigest", sha256(content));
-            return new PushMetaValidation(true, fileName, metaRef,
-                    abbreviateWorkflowValue(content, 500), content);
+            return readPushMetaWithTool(mcpToolContext, readTool, fileName);
         } catch (RuntimeException e) {
             return PushMetaValidation.missing(fileName);
         }
+    }
+
+    private PushMetaValidation readPushMeta(
+            McpToolContext mcpToolContext,
+            String fileName) {
+        if (!isSafeMetaFileName(fileName)) {
+            return PushMetaValidation.missing(fileName);
+        }
+        ToolCallback readTool = findToolCallback(mcpToolContext, "config_read");
+        if (readTool == null) {
+            return PushMetaValidation.missing(fileName);
+        }
+        try {
+            return readPushMetaWithTool(mcpToolContext, readTool, fileName);
+        } catch (RuntimeException e) {
+            return PushMetaValidation.missing(fileName);
+        }
+    }
+
+    private PushMetaValidation readPushMetaWithTool(
+            McpToolContext mcpToolContext,
+            ToolCallback readTool,
+            String fileName) {
+        String readResult = callTool(
+                readTool,
+                JacksonUtil.toJson(Map.of("type", "meta", "fileName", fileName)),
+                mcpToolContext);
+        String content = decodeToolString(readResult);
+        if (!StringUtils.hasText(content)) {
+            return PushMetaValidation.missing(fileName);
+        }
+        Map<String, Object> metaRef = new LinkedHashMap<>();
+        metaRef.put("fileName", fileName);
+        metaRef.put("contentDigest", sha256(content));
+        return new PushMetaValidation(true, fileName, metaRef,
+                abbreviateWorkflowValue(content, 500), content);
+    }
+
+    private DataPushPlanSnapshot lockPushMeta(
+            ChatSession chatSession,
+            AgentWorkflowState workflow,
+            PushMetaValidation validation) {
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : workflow.getContext();
+        DataPushPlanSnapshot before = DataPushPlanSnapshot.load(context);
+        String sourceMark = StringUtils.hasText(before.sourceMark())
+                ? before.sourceMark() : "data-push:" + workflow.getWorkflowId();
+        DataPushPlanSnapshot locked = before.withMetaRef(validation.metaRef(), sourceMark);
+        boolean changed = !Objects.equals(before.metaRef(), validation.metaRef())
+                || !Objects.equals(before.sourceMark(), sourceMark);
+        locked.persist(context);
+        workflow.setContext(context);
+        if (changed) {
+            workflow.setStateRevision(workflow.getStateRevision() + 1);
+            workflow.setUpdatedAt(Instant.now().toString());
+        }
+        if (workflowStateStore != null) {
+            workflowStateStore.upsert(chatSession, workflow);
+        }
+        return locked;
     }
 
     private record PushMetaValidation(
@@ -2373,13 +2469,14 @@ public class DihChatApplicationService {
         Map<String, Object> context = workflow.getContext() == null
                 ? new LinkedHashMap<>() : new LinkedHashMap<>(workflow.getContext());
         boolean revalidateOnly = Boolean.TRUE.equals(context.get("revalidateOnly"));
-        Map<String, Object> candidate = mapValue(context.get("candidate"));
+        DataPushPlanSnapshot snapshot = DataPushPlanSnapshot.load(context);
+        Map<String, Object> candidate = snapshot.candidate();
         String config = stringValue(candidate, "content", "");
         String candidateFormat = stringValue(candidate, "format", "");
-        String sourceMark = stringValue(context, "sourceMark", "");
+        String sourceMark = snapshot.sourceMark();
         Map<String, Object> lockedRequest =
-                new LinkedHashMap<>(mapValue(context.get("request")));
-        Map<String, Object> lockedMetaRef = mapValue(context.get("metaRef"));
+                new LinkedHashMap<>(snapshot.request());
+        Map<String, Object> lockedMetaRef = snapshot.metaRef();
         int repairRound = integerValue(context.get("repairRound"), 0);
         if (!StringUtils.hasText(config)
                 || !StringUtils.hasText(candidateFormat)
@@ -2422,6 +2519,11 @@ public class DihChatApplicationService {
         }
         if (!Objects.equals(stringValue(lockedMetaRef, "contentDigest", ""),
                 metaValidation.contentDigest())) {
+            DataPushPlanSnapshot refreshed = snapshot
+                    .withMetaRef(metaValidation.metaRef(), sourceMark)
+                    .withoutValidation();
+            refreshed.persist(context);
+            workflow.setContext(context);
             workflow.setStep(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
             workflow.setStatus("active");
             workflow.setStateRevision(workflow.getStateRevision() + 1);
@@ -2462,7 +2564,6 @@ public class DihChatApplicationService {
             PushTaskValidationVo validation = validatePushCandidate(
                     mcpToolContext, config,
                     stringValue(lockedMetaRef, "fileName", ""),
-                    metaValidation.content(),
                     candidateFormat);
             String validationFailure = pushValidationFailure(validation);
             if (StringUtils.hasText(validationFailure)) {
@@ -2487,13 +2588,13 @@ public class DihChatApplicationService {
             }
             lockedRequest.put("format", validation.getFormat());
             lockedRequest.put("validationDigest", validation.getValidationDigest());
+            snapshot = snapshot.withValidation(
+                    pushValidationMetadata(validation, repairRound));
+            snapshot.persist(context);
 
             if (revalidateOnly) {
                 Map<String, Object> validationMetadata = pushValidationMetadata(
                         validation, repairRound);
-                context.put("validation", validationMetadata);
-                context.put("validationStatus", "success");
-                context.put("validationDigest", validation.getValidationDigest());
                 context.remove("revalidateOnly");
                 workflow.setContext(context);
                 workflow.setStep(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
@@ -2598,8 +2699,8 @@ public class DihChatApplicationService {
             context.put("taskId", task.getId());
             context.put("runId", diagnosis.getRunId());
             context.put("taskStatus", "running");
-            context.put("validation", pushValidationMetadata(validation, repairRound));
-            context.put("validationDigest", validation.getValidationDigest());
+            snapshot.withValidation(pushValidationMetadata(validation, repairRound))
+                    .persist(context);
             context.put("repairRound", repairRound);
             context.remove("lastDiagnosis");
             workflow.setContext(context);
@@ -2663,17 +2764,15 @@ public class DihChatApplicationService {
             McpToolContext mcpToolContext,
             String config,
             String metaFileName,
-            String metaContent,
             String format) {
         String result = callNamedTool(
                 mcpToolContext, "push_task_validate_config",
                 Map.of(
                         "config", config,
                         "metaFileName", Objects.toString(metaFileName, ""),
-                        "metaContent", Objects.toString(metaContent, ""),
                         "format", Objects.toString(format, "")));
         try {
-            return JacksonConfig.OBJECT_MAPPER.readValue(
+            return JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(
                     result, PushTaskValidationVo.class);
         } catch (Exception e) {
             throw new IllegalStateException("push_task_validate_config 返回无法解析", e);
@@ -2687,7 +2786,7 @@ public class DihChatApplicationService {
                 mcpToolContext, "push_task_diagnose",
                 Map.of("taskId", taskId));
         try {
-            return JacksonConfig.OBJECT_MAPPER.readValue(
+            return JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(
                     result, PushTaskDiagnosticResultVo.class);
         } catch (Exception e) {
             throw new IllegalStateException("push_task_diagnose 返回无法解析", e);
@@ -2994,7 +3093,7 @@ public class DihChatApplicationService {
 
     private PushTaskPageVo readPushTaskPage(String result) {
         try {
-            return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskPageVo.class);
+            return JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(result, PushTaskPageVo.class);
         } catch (Exception e) {
             throw new IllegalStateException("PushTask 分页结果无法解析", e);
         }
@@ -3002,7 +3101,7 @@ public class DihChatApplicationService {
 
     private PushTaskVo readPushTaskGet(String result) {
         try {
-            return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskVo.class);
+            return JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(result, PushTaskVo.class);
         } catch (Exception e) {
             throw new IllegalStateException("PushTask 详情无法解析", e);
         }
@@ -3010,7 +3109,7 @@ public class DihChatApplicationService {
 
     private PushTaskOperationVo readPushTaskOperation(String result) {
         try {
-            return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskOperationVo.class);
+            return JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(result, PushTaskOperationVo.class);
         } catch (Exception e) {
             throw new IllegalStateException("PushTask 操作结果无法解析", e);
         }
@@ -7538,63 +7637,69 @@ public class DihChatApplicationService {
     }
 
     private boolean isDataPushServiceRecordPresent(Map<String, Object> record) {
+        String taskId = stringValue(record, "taskId", null);
         String sourceMark = stringValue(record, "sourceMark", null);
-        if (!StringUtils.hasText(sourceMark)) {
-            log.warn("忽略未验证的数据推送服务记录：缺少 sourceMark/mark，record={}", record);
+        if (!StringUtils.hasText(taskId) && !StringUtils.hasText(sourceMark)) {
+            log.warn("忽略数据推送服务记录：缺少 taskId 和 sourceMark，record={}", record);
             return false;
         }
         try {
-            List<PushTaskVo> tasks = pushTaskService.findBySourceMark(sourceMark);
-            if (tasks == null || tasks.isEmpty()) {
-                log.warn("忽略未验证的数据推送服务记录：未查询到 sourceMark={} 的推送任务", sourceMark);
+            PushTaskVo task = findDataPushServiceTask(taskId, sourceMark);
+            if (task == null || task.getId() == null) {
+                log.warn("忽略数据推送服务记录：未查询到真实任务，taskId={}, sourceMark={}",
+                        taskId, sourceMark);
                 return false;
             }
-            String taskId = stringValue(record, "taskId", null);
-            String name = stringValue(record, "name", null);
-            if (StringUtils.hasText(taskId)) {
-                boolean matchedById = tasks.stream()
-                        .anyMatch(task -> task.getId() != null && taskId.equals(String.valueOf(task.getId())));
-                if (!matchedById) {
-                    log.warn("忽略未验证的数据推送服务记录：sourceMark={} 下不存在 taskId={}", sourceMark, taskId);
-                    return false;
-                }
-            } else if (StringUtils.hasText(name)) {
-                boolean matchedByName = tasks.stream().anyMatch(task -> name.equals(task.getName()));
-                if (!matchedByName) {
-                    log.warn("忽略未验证的数据推送服务记录：sourceMark={} 下不存在 name={}", sourceMark, name);
-                    return false;
-                }
-            }
-            if ("workflow".equals(stringValue(record, "source", ""))) {
-                if (!"success".equals(
-                        stringValue(record, "validationStatus", ""))
-                        || !"running".equalsIgnoreCase(
-                        stringValue(record, "status", ""))) {
-                    log.warn("忽略普通工作流数据推送服务记录：缺少成功校验状态或 running 状态");
-                    return false;
-                }
-                String expectedConfig = stringValue(record, "config", "");
-                boolean matched = tasks.stream().anyMatch(task ->
-                        task != null
-                                && "SYSTEM".equals(task.getSource())
-                                && sourceMark.equals(task.getMark())
-                                && "running".equalsIgnoreCase(task.getStatus())
-                                && (!StringUtils.hasText(expectedConfig)
-                                || Objects.equals(expectedConfig.trim(),
-                                Objects.toString(task.getConfig(), "").trim())));
-                if (!matched) {
-                    log.warn("忽略普通工作流数据推送服务记录：任务读回状态或配置不一致");
-                    recordWorkflowReadBack("push_task", "mismatch");
-                    return false;
-                }
-            }
+            hydrateDataPushServiceRecord(record, task);
             recordWorkflowReadBack("push_task", "success");
             return true;
         } catch (Exception e) {
-            log.warn("忽略未验证的数据推送服务记录：校验 sourceMark={} 失败: {}", sourceMark, e.getMessage(), e);
+            log.warn("忽略数据推送服务记录：读取真实任务失败，taskId={}, sourceMark={}: {}",
+                    taskId, sourceMark, e.getMessage(), e);
             recordWorkflowReadBack("push_task", "failed");
             return false;
         }
+    }
+
+    private PushTaskVo findDataPushServiceTask(String taskId, String sourceMark) {
+        if (StringUtils.hasText(taskId)) {
+            try {
+                PushTaskVo task = pushTaskService.findById(Integer.valueOf(taskId));
+                if (task != null) {
+                    return task;
+                }
+            } catch (RuntimeException e) {
+                log.debug("按 taskId 读取数据推送任务失败，回退 sourceMark 查询: taskId={}, error={}",
+                        taskId, e.getMessage());
+            }
+        }
+        if (!StringUtils.hasText(sourceMark)) {
+            return null;
+        }
+        List<PushTaskVo> tasks = pushTaskService.findBySourceMark(sourceMark);
+        return tasks == null || tasks.isEmpty() ? null : tasks.get(0);
+    }
+
+    private void hydrateDataPushServiceRecord(Map<String, Object> record, PushTaskVo task) {
+        String taskId = String.valueOf(task.getId());
+        record.put("id", taskId);
+        record.put("taskId", taskId);
+        if (StringUtils.hasText(task.getName())) {
+            record.put("name", task.getName());
+        }
+        if (task.getDescription() != null) {
+            record.put("description", task.getDescription());
+        }
+        if (StringUtils.hasText(task.getStatus())) {
+            record.put("status", task.getStatus());
+        }
+        if (StringUtils.hasText(task.getMark())) {
+            record.put("sourceMark", task.getMark());
+        }
+        if (StringUtils.hasText(task.getValidationStatus())) {
+            record.put("validationStatus", task.getValidationStatus());
+        }
+        record.put("config", task.getConfig());
     }
 
     @SuppressWarnings("unchecked")

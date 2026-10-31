@@ -602,17 +602,10 @@ test('数据推送阻断卡展示逐项门禁原因并通过统一交互重新�
         },
         allowedActions: ['retry', 'revise'],
         blockingReasons: [{
-          code: 'PUSH_CANDIDATE_DIGEST_MISMATCH',
-          category: 'candidate',
-          message: '卡片校验对应的候选与平台锁定候选不一致。',
-          expected: 'locked-candi…',
-          actual: 'stale-candid…',
-          repairHint: '使用锁定候选重新校验并生成新的确认卡。',
-        }, {
-          code: 'PUSH_VALIDATION_EVIDENCE_DIGEST_MISSING',
-          category: 'evidence',
-          message: '校验工具回执缺少候选、Meta 或校验摘要，无法完成门禁核对。',
-          repairHint: '重新执行 push_task_validate_config 并保留完整回执。',
+          code: 'PUSH_VALIDATION_STALE',
+          category: 'validation',
+          message: '校验回执与当前锁定候选或 Meta 不一致。',
+          repairHint: '使用当前锁定配置重新校验并生成新的确认卡。',
         }],
       },
     }],
@@ -632,11 +625,11 @@ test('数据推送阻断卡展示逐项门禁原因并通过统一交互重新�
   const card = page.locator('.data-push-service-decision-part').first()
   await expect(card).toBeVisible({ timeout: 15_000 })
   await expect(card).toContainText('门禁未通过')
-  await expect(card.locator('.data-push-gate-panel')).toContainText('平台门禁未通过（2 项）')
+  await expect(card.locator('.data-push-gate-panel')).toContainText('平台门禁未通过（1 项）')
   await expect(card.locator('.data-push-gate-panel'))
-    .toContainText('PUSH_CANDIDATE_DIGEST_MISMATCH')
+    .toContainText('PUSH_VALIDATION_STALE')
   await expect(card.locator('.data-push-gate-panel'))
-    .toContainText('期望 locked-candi…')
+    .toContainText('校验回执与当前锁定候选或 Meta 不一致')
   await expect(card.getByRole('button', { name: '重新校验并继续' })).toBeVisible()
   await expect(card.getByRole('button', { name: '创建并启动服务' })).toHaveCount(0)
 

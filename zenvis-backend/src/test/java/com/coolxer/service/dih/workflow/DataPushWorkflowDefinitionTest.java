@@ -18,265 +18,227 @@ class DataPushWorkflowDefinitionTest {
     private static final String CONFIG = "sources: {}\nsinks: {}";
     private static final String CANDIDATE_DIGEST = digest(CONFIG);
     private static final String META_DIGEST = digest("{\"entity\":[]}");
-    private static final String SOURCE_MARK = "data-push:chat-1:probe";
+    private static final String SOURCE_MARK = "data-push:workflow-1";
 
     private final DataPushWorkflowDefinition definition =
             new DataPushWorkflowDefinition();
 
     @Test
-    void confirmationRequiresPassedValidationAndAllDigests() {
+    void confirmationRequiresCompleteSnapshotAndPassedMatchingReceipt() {
+        Map<String, Object> metadata = confirmMetadata();
+        AgentWorkflowState state = readyState();
+
+        assertThat(definition.resolveStep(state, part("confirm", metadata), metadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(metadata).containsEntry("candidateDigest", CANDIDATE_DIGEST)
+                .containsEntry("sourceMark", SOURCE_MARK);
+    }
+
+    @Test
+    void validationReceiptIsSelectedForTheLockedCandidateInsteadOfTheLatestToolCall() {
+        AgentWorkflowState state = readyState();
+        List<Map<String, Object>> evidenceRefs =
+                new ArrayList<>(state.getEvidenceRefs());
+        evidenceRefs.addAll(evidence(validation(
+                "newer-unrelated-candidate", META_DIGEST, true, false, "validation-2")));
+        state.setEvidenceRefs(evidenceRefs);
         Map<String, Object> metadata = confirmMetadata();
 
-        assertThat(definition.resolveStep(readyState(), part("confirm", metadata), metadata))
+        assertThat(definition.resolveStep(state, part("confirm", metadata), metadata))
                 .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
-
-        Map<String, Object> missingValidationDigest = confirmMetadata();
-        validation(missingValidationDigest).remove("validationDigest");
-        assertThat(definition.resolveStep(
-                readyState(), part("confirm", missingValidationDigest), missingValidationDigest))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(missingValidationDigest))
-                .contains("PUSH_VALIDATION_DIGEST_MISSING");
-
-        Map<String, Object> missingCandidateDigest = confirmMetadata();
-        validation(missingCandidateDigest).remove("candidateDigest");
-        assertThat(definition.resolveStep(
-                readyState(),
-                part("confirm", missingCandidateDigest), missingCandidateDigest))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(missingCandidateDigest))
-                .contains("PUSH_VALIDATION_CANDIDATE_DIGEST_MISSING");
-
-        Map<String, Object> failed = confirmMetadata();
-        validation(failed).put("passed", false);
-        assertThat(definition.resolveStep(readyState(), part("confirm", failed), failed))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(failed)).contains("PUSH_VALIDATION_FAILED");
-
-        Map<String, Object> mismatchedCandidate = confirmMetadata();
-        validation(mismatchedCandidate).put("candidateDigest", "stale-candidate");
-        assertThat(definition.resolveStep(
-                readyState(), part("confirm", mismatchedCandidate), mismatchedCandidate))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(mismatchedCandidate))
-                .contains("PUSH_CANDIDATE_DIGEST_MISMATCH");
-
-        Map<String, Object> mismatchedMeta = confirmMetadata();
-        validation(mismatchedMeta).put("metaDigest", "stale-meta");
-        assertThat(definition.resolveStep(
-                readyState(), part("confirm", mismatchedMeta), mismatchedMeta))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(mismatchedMeta))
-                .contains("PUSH_META_DIGEST_MISMATCH");
+        assertThat(metadata).doesNotContainKey("blockingReasons");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> lockedValidation =
+                (Map<String, Object>) metadata.get("validation");
+        assertThat(lockedValidation).containsEntry("candidateDigest", CANDIDATE_DIGEST)
+                .containsEntry("validationDigest", "validation-1");
     }
 
     @Test
-    void blockingReasonsCoverContentEvidenceAndValidationAvailability() {
-        Map<String, Object> candidateBodyMismatch = confirmMetadata();
-        AgentWorkflowState wrongCandidateDigest = readyState();
-        wrongCandidateDigest.getContext().put(
-                "candidate", Map.of("content", CONFIG, "digest", "stale-candidate"));
-        assertThat(definition.resolveStep(
-                wrongCandidateDigest,
-                part("confirm", candidateBodyMismatch), candidateBodyMismatch))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(candidateBodyMismatch))
-                .contains("PUSH_CANDIDATE_CONTENT_DIGEST_MISMATCH");
+    void incompleteSnapshotStillReachesConfirmationWithoutPlatformGate() {
+        AgentWorkflowState state = readyState();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> candidate =
+                (Map<String, Object>) state.getContext().get("candidate");
+        candidate.remove("format");
+        Map<String, Object> metadata = confirmMetadata();
 
-        Map<String, Object> unavailable = confirmMetadata();
-        validation(unavailable).put("blocked", true);
-        assertThat(definition.resolveStep(readyState(), part("confirm", unavailable), unavailable))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(unavailable)).contains("PUSH_VALIDATION_UNAVAILABLE");
-
-        Map<String, Object> missingMetaRef = confirmMetadata();
-        missingMetaRef.remove("metaRef");
-        AgentWorkflowState stateWithoutMetaRef = readyState();
-        stateWithoutMetaRef.getContext().remove("metaRef");
-        assertThat(definition.resolveStep(
-                stateWithoutMetaRef, part("confirm", missingMetaRef), missingMetaRef))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(missingMetaRef)).contains("PUSH_META_REFERENCE_MISSING");
-
-        Map<String, Object> missingEvidenceMetadata = confirmMetadata();
-        AgentWorkflowState stateWithoutEvidence = readyState();
-        stateWithoutEvidence.setEvidenceRefs(List.of());
-        assertThat(definition.resolveStep(
-                stateWithoutEvidence,
-                part("confirm", missingEvidenceMetadata), missingEvidenceMetadata))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(missingEvidenceMetadata))
-                .contains("PUSH_EVIDENCE_MISSING");
+        assertThat(definition.resolveStep(state, part("confirm", metadata), metadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(metadata).doesNotContainKey("blockingReasons");
     }
 
     @Test
-    void validationEvidenceMustCarrySnakeCaseDigestsAndMatchCard() {
-        Map<String, Object> missingEvidenceDigests = confirmMetadata();
-        AgentWorkflowState noDigestState = readyState();
-        validationEvidence(noDigestState).put("resultSummary",
-                "{\"passed\":true,\"format\":\"toml\"}");
-        assertThat(definition.resolveStep(
-                noDigestState, part("confirm", missingEvidenceDigests), missingEvidenceDigests))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(missingEvidenceDigests))
-                .contains("PUSH_VALIDATION_EVIDENCE_DIGEST_MISSING");
+    void validationFailuresDoNotBlockTheConfirmationCard() {
+        Map<String, Object> missingMetadata = confirmMetadata();
+        AgentWorkflowState missing = readyState();
+        missing.setEvidenceRefs(List.of());
+        assertThat(definition.resolveStep(missing, part("confirm", missingMetadata), missingMetadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(missingMetadata).doesNotContainKey("blockingReasons");
 
-        Map<String, Object> evidenceMismatch = confirmMetadata();
-        AgentWorkflowState staleEvidenceState = readyState();
-        validationEvidence(staleEvidenceState).put("resultSummary",
-                "{\"candidate_digest\":\"stale-candidate\","
-                        + "\"meta_digest\":\"stale-meta\","
-                        + "\"validation_digest\":\"stale-validation\"}");
+        Map<String, Object> unavailableMetadata = confirmMetadata();
+        AgentWorkflowState unavailable = readyState(validation(
+                CANDIDATE_DIGEST, META_DIGEST, false, true, "validation-1"));
         assertThat(definition.resolveStep(
-                staleEvidenceState, part("confirm", evidenceMismatch), evidenceMismatch))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-        assertThat(reasonCodes(evidenceMismatch)).contains(
-                "PUSH_VALIDATION_EVIDENCE_CANDIDATE_MISMATCH",
-                "PUSH_VALIDATION_EVIDENCE_META_MISMATCH",
-                "PUSH_VALIDATION_EVIDENCE_DIGEST_MISMATCH");
+                unavailable, part("confirm", unavailableMetadata), unavailableMetadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(unavailableMetadata).doesNotContainKey("blockingReasons");
+
+        Map<String, Object> staleMetadata = confirmMetadata();
+        AgentWorkflowState stale = readyState(validation(
+                "stale-candidate", META_DIGEST, true, false, "validation-1"));
+        assertThat(definition.resolveStep(stale, part("confirm", staleMetadata), staleMetadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(staleMetadata).doesNotContainKey("blockingReasons");
+
+        Map<String, Object> failedMetadata = confirmMetadata();
+        AgentWorkflowState failed = readyState(validation(
+                CANDIDATE_DIGEST, META_DIGEST, false, false, "validation-1"));
+        assertThat(definition.resolveStep(failed, part("confirm", failedMetadata), failedMetadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(failedMetadata).doesNotContainKey("blockingReasons");
     }
 
     @Test
-    void blockedCardOnlyAllowsRetryAndRetryRevalidatesTheLockedPlan() {
-        AgentWorkflowState blocked = readyState()
-                .setStep(AgentWorkflowStep.BLOCKED)
-                .setStatus("blocked");
+    void cardMetaRefBackfillsAMissingSnapshotMetaReference() {
+        AgentWorkflowState state = readyState();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = state.getContext();
+        context.remove("metaRef");
+        Map<String, Object> metadata = confirmMetadata();
 
+        assertThat(definition.resolveStep(state, part("confirm", metadata), metadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(context).containsEntry("metaRef", Map.of(
+                "fileName", "old.json", "contentDigest", "old-meta"));
+        assertThat(metadata).containsEntry("metaRef", Map.of(
+                "fileName", "old.json", "contentDigest", "old-meta"));
+    }
+
+    @Test
+    void cardCannotOverrideLockedMetaSourceOrReceipt() {
+        AgentWorkflowState state = readyState();
+        Map<String, Object> metadata = confirmMetadata();
+        metadata.put("sourceMark", "data-push:model-old");
+        metadata.put("metaRef", Map.of(
+                "fileName", "old.json", "contentDigest", "old-meta"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cardValidation =
+                (Map<String, Object>) metadata.get("validation");
+        cardValidation.put("candidateDigest", "old-candidate");
+        cardValidation.put("metaDigest", "old-meta");
+
+        assertThat(definition.resolveStep(state, part("confirm", metadata), metadata))
+                .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        assertThat(metadata).containsEntry("sourceMark", SOURCE_MARK)
+                .containsEntry("metaRef", Map.of(
+                        "fileName", "user_event.json", "contentDigest", META_DIGEST));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> lockedValidation =
+                (Map<String, Object>) metadata.get("validation");
+        assertThat(lockedValidation).containsEntry("candidateDigest", CANDIDATE_DIGEST);
+        assertThat(metadata).doesNotContainKey("blockingReasons");
+    }
+
+    @Test
+    void validatedCandidateIsSealedUntilRevision() {
+        AgentWorkflowState state = readyState();
+        Map<String, Object> context = state.getContext();
+        DataPushPlanSnapshot.load(context)
+                .withRequest(Map.of("name", "探针推送"))
+                .withValidation(validation(
+                        CANDIDATE_DIGEST, META_DIGEST, true, false, "validation-1"))
+                .persist(context);
+
+        ChatMessagePart replacement = ChatMessagePart.builder()
+                .type("code")
+                .language("yaml")
+                .content("sources: {}\nsinks: {changed: true}")
+                .build();
+        definition.updateContext(state, replacement, new LinkedHashMap<>());
+        assertThat(context).containsEntry("candidate", Map.of(
+                "content", CONFIG,
+                "digest", CANDIDATE_DIGEST,
+                "format", "yaml"));
+
+        state.setStep(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
+        definition.transition(state, "revise");
+        definition.updateContext(state, replacement, new LinkedHashMap<>());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> candidate =
+                (Map<String, Object>) context.get("candidate");
+        assertThat(candidate).containsEntry("content", replacement.getContent());
+        assertThat(context).doesNotContainKey("validation");
+    }
+
+    @Test
+    void blockedCardOnlyAllowsRetryAndRevise() {
+        AgentWorkflowState state = readyState();
         assertThat(definition.allowedActions(AgentWorkflowStep.BLOCKED, Map.of()))
                 .containsExactly("retry", "revise");
         assertThat(definition.isAllowedForState(AgentWorkflowStep.BLOCKED, "approve"))
                 .isFalse();
+        assertThat(definition.isAllowedForState(AgentWorkflowStep.BLOCKED, "retry"))
+                .isTrue();
 
-        AgentWorkflowStep retried = definition.transition(blocked, "retry");
-        assertThat(retried).isEqualTo(AgentWorkflowStep.PUSH_CONFIG_VALIDATION);
-        blocked.setStep(retried);
-        assertThat(blocked.getContext()).containsEntry("revalidateOnly", true);
-        assertThat(definition.continuation(blocked, "retry").get("request").toString())
-                .contains("重新校验", "不得创建或启动任务")
-                .doesNotContain("重新收集");
-    }
-
-    @Test
-    void successRecordRequiresRealTaskRunAndValidationIdentity() {
-        AgentWorkflowState state = verifiedState();
-
-        assertThat(definition.resolveStep(
-                state, part("data-push-service-record", recordMetadata()), recordMetadata()))
-                .isEqualTo(AgentWorkflowStep.PUSH_VERIFIED);
-
-        Map<String, Object> missingRun = recordMetadata();
-        missingRun.remove("runId");
-        assertThat(definition.resolveStep(
-                state, part("data-push-service-record", missingRun), missingRun))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-
-        Map<String, Object> staleValidation = recordMetadata();
-        staleValidation.put("validationDigest", "stale-validation");
-        assertThat(definition.resolveStep(
-                state, part("data-push-service-record", staleValidation), staleValidation))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-
-        Map<String, Object> wrongTask = recordMetadata();
-        wrongTask.put("taskId", "32");
-        assertThat(definition.resolveStep(
-                state, part("data-push-service-record", wrongTask), wrongTask))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-    }
-
-    @Test
-    void remembersExplicitFormatFromCodeFence() {
-        AgentWorkflowState state = readyState();
-        ChatMessagePart part = ChatMessagePart.builder()
-                .type("code")
-                .language("yml")
-                .content(CONFIG)
-                .build();
-
-        definition.updateContext(state, part, Map.of());
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> candidate =
-                (Map<String, Object>) state.getContext().get("candidate");
-        assertThat(candidate).containsEntry("format", "yaml");
+        state.setStep(AgentWorkflowStep.BLOCKED);
+        assertThat(definition.transition(state, "retry"))
+                .isEqualTo(AgentWorkflowStep.PUSH_CONFIG_VALIDATION);
+        assertThat(state.getContext()).containsEntry("revalidateOnly", true);
     }
 
     private AgentWorkflowState readyState() {
+        return readyState(validation(
+                CANDIDATE_DIGEST, META_DIGEST, true, false, "validation-1"));
+    }
+
+    private AgentWorkflowState readyState(Map<String, Object> validation) {
         Map<String, Object> context = new LinkedHashMap<>();
-        context.put("candidate", Map.of("content", CONFIG, "digest", CANDIDATE_DIGEST));
+        context.put("candidate", new LinkedHashMap<>(Map.of(
+                "content", CONFIG,
+                "digest", CANDIDATE_DIGEST,
+                "format", "yaml")));
         context.put("sourceMark", SOURCE_MARK);
         context.put("metaRef", Map.of(
                 "fileName", "user_event.json", "contentDigest", META_DIGEST));
         context.put("request", Map.of("name", "探针推送"));
-        return state(context, evidence(
-                "config_tree", "config_read", "push_task_validate_config"));
-    }
-
-    private AgentWorkflowState verifiedState() {
-        Map<String, Object> context = new LinkedHashMap<>();
-        context.put("candidate", Map.of("content", CONFIG, "digest", CANDIDATE_DIGEST));
-        context.put("sourceMark", SOURCE_MARK);
-        context.put("taskId", 31);
-        context.put("runId", "run-1");
-        context.put("validationDigest", "validation-1");
-        context.put("metaRef", Map.of(
-                "fileName", "user_event.json", "contentDigest", META_DIGEST));
-        return state(context, evidence(
-                "push_task_validate_config",
-                "push_task_list",
-                "push_task_diagnose"));
-    }
-
-    private AgentWorkflowState state(
-            Map<String, Object> context,
-            List<Map<String, Object>> evidence) {
         return new AgentWorkflowState()
                 .setWorkflowId("workflow-1")
                 .setWorkflowType("data_push")
-                .setAgentType("data-push-service-agent")
+                .setAgentType("agent_data_push_service")
                 .setObjectType("push_task")
                 .setStep(AgentWorkflowStep.PUSH_FORMAT_CHECK)
                 .setStatus("active")
                 .setContext(context)
-                .setEvidenceRefs(evidence);
+                .setEvidenceRefs(evidence(validation));
     }
 
-    private List<Map<String, Object>> evidence(String... tools) {
+    private List<Map<String, Object>> evidence(Map<String, Object> validation) {
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String tool : tools) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("tool", tool);
-            item.put("status", "succeeded");
-            if ("push_task_validate_config".equals(tool)) {
-                item.put("resultSummary", validationEvidenceSummary(
-                        CANDIDATE_DIGEST, META_DIGEST, "validation-1"));
-            }
-            result.add(item);
-        }
+        result.add(Map.of("tool", "config_tree", "status", "succeeded"));
+        result.add(Map.of("tool", "config_read", "status", "succeeded"));
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("tool", "push_task_validate_config");
+        item.put("status", "succeeded");
+        item.put("validation", validation);
+        result.add(item);
         return result;
     }
 
-    private Map<String, Object> validationEvidence(AgentWorkflowState state) {
-        return state.getEvidenceRefs().stream()
-                .filter(item -> "push_task_validate_config".equals(item.get("tool")))
-                .findFirst()
-                .orElseThrow();
-    }
-
-    private String validationEvidenceSummary(
-            String candidateDigest,
-            String metaDigest,
-            String validationDigest) {
-        return "{\"candidate_digest\":\"" + candidateDigest + "\","
-                + "\"meta_digest\":\"" + metaDigest + "\","
-                + "\"validation_digest\":\"" + validationDigest + "\"}";
-    }
-
-    private List<String> reasonCodes(Map<String, Object> metadata) {
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> reasons =
-                (List<Map<String, Object>>) metadata.get("blockingReasons");
-        assertThat(reasons).isNotNull();
-        return reasons.stream().map(reason -> String.valueOf(reason.get("code"))).toList();
+    private Map<String, Object> validation(String candidateDigest,
+                                           String metaDigest,
+                                           boolean passed,
+                                           boolean blocked,
+                                           String validationDigest) {
+        Map<String, Object> validation = new LinkedHashMap<>();
+        validation.put("passed", passed);
+        validation.put("blocked", blocked);
+        validation.put("format", "yaml");
+        validation.put("candidateDigest", candidateDigest);
+        validation.put("metaDigest", metaDigest);
+        validation.put("validationDigest", validationDigest);
+        return validation;
     }
 
     private ChatMessagePart part(String type, Map<String, Object> metadata) {
@@ -290,30 +252,17 @@ class DataPushWorkflowDefinitionTest {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("action", "data_push.confirm_plan");
         metadata.put("configKind", "push_task");
-        metadata.put("sourceMark", SOURCE_MARK);
+        metadata.put("sourceMark", "data-push:model-old");
         metadata.put("metaRef", Map.of(
-                "fileName", "user_event.json", "contentDigest", META_DIGEST));
+                "fileName", "old.json", "contentDigest", "old-meta"));
+        metadata.put("request", Map.of("name", "探针推送"));
         metadata.put("validation", new LinkedHashMap<>(Map.of(
                 "passed", true,
                 "blocked", false,
-                "candidateDigest", CANDIDATE_DIGEST,
-                "metaDigest", META_DIGEST,
-                "validationDigest", "validation-1")));
-        return metadata;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> validation(Map<String, Object> metadata) {
-        return (Map<String, Object>) metadata.get("validation");
-    }
-
-    private Map<String, Object> recordMetadata() {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("status", "running");
-        metadata.put("taskId", "31");
-        metadata.put("runId", "run-1");
-        metadata.put("sourceMark", SOURCE_MARK);
-        metadata.put("validationDigest", "validation-1");
+                "format", "yaml",
+                "candidateDigest", "card-old-candidate",
+                "metaDigest", "old-meta",
+                "validationDigest", "card-old-validation")));
         return metadata;
     }
 

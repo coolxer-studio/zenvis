@@ -71,7 +71,7 @@ class DataPushDemoResponseServiceTest {
                               "mark":"data-push-demo:user-event:chat-1",
                               "name":"用户事件数据推送服务","description":"demo",
                               "format":"toml","status":"running"}],
-                             "total":1,"offset":0,"limit":100,"has_more":false}
+                             "total":1,"offset":0,"limit":100,"hasMore":false}
                             """;
                 }),
                 callback("push_task_create_and_start", calls, ignored -> operationJson()),
@@ -190,20 +190,20 @@ class DataPushDemoResponseServiceTest {
     private String validationJson() {
         return """
                 {"passed":true,"blocked":false,"format":"toml",
-                 "candidate_digest":"candidate","meta_digest":"meta",
-                 "validation_digest":"validation-1","vector_version":"vector 0.55.0",
+                 "candidateDigest":"candidate","metaDigest":"meta",
+                 "validationDigest":"validation-1","vectorVersion":"vector 0.55.0",
                  "diagnostics":[],"tests":{"present":true,"total":2,"passed":2,"failed":0}}
                 """;
     }
 
     private String emptyPageJson() {
-        return "{\"items\":[],\"total\":0,\"offset\":0,\"limit\":100,\"has_more\":false}";
+        return "{\"items\":[],\"total\":0,\"offset\":0,\"limit\":100,\"hasMore\":false}";
     }
 
     private String operationJson() {
         return """
-                {"action":"create_and_start","task_id":12,"previous_status":null,
-                 "status":"running","changed":true,"current_run_id":"run-1"}
+                {"action":"create_and_start","taskId":12,"previousStatus":null,
+                 "status":"running","changed":true,"currentRunId":"run-1"}
                 """;
     }
 
@@ -212,7 +212,7 @@ class DataPushDemoResponseServiceTest {
                 {"id":12,"name":"用户事件数据推送服务","description":"demo",
                  "source":"SYSTEM","mark":"data-push-demo:user-event:chat-1",
                  "config":"[sources.demo]\\ntype = \\"demo_logs\\"","format":"toml",
-                 "status":"running","current_run_id":"run-1"}
+                 "status":"running","currentRunId":"run-1"}
                 """;
     }
 }

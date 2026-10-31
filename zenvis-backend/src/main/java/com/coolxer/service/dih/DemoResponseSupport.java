@@ -200,7 +200,7 @@ final class DemoResponseSupport {
                         "source", "SYSTEM",
                         "offset", 0,
                         "limit", 100));
-        PushTaskPageVo page = JacksonConfig.OBJECT_MAPPER.readValue(
+        PushTaskPageVo page = JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(
                 result, PushTaskPageVo.class);
         if (page.isHasMore()) {
             throw new IllegalStateException(
@@ -211,22 +211,20 @@ final class DemoResponseSupport {
 
     static PushTaskVo getPushTask(McpToolContext context, Integer taskId) throws Exception {
         String result = callTool(context, "push_task_get", Map.of("taskId", taskId));
-        return JacksonConfig.OBJECT_MAPPER.readValue(result, PushTaskVo.class);
+        return JacksonConfig.MCP_TOOL_RESULT_MAPPER.readValue(result, PushTaskVo.class);
     }
 
     static Map<String, Object> validatePushConfig(McpToolContext context,
                                                   String config,
                                                   String format,
-                                                  String metaFileName,
-                                                  String metaContent) throws Exception {
+                                                  String metaFileName) throws Exception {
         String result = callTool(
                 context,
                 "push_task_validate_config",
                 Map.of(
                         "config", config,
                         "format", format,
-                        "metaFileName", firstNonBlank(metaFileName),
-                        "metaContent", firstNonBlank(metaContent)));
+                        "metaFileName", firstNonBlank(metaFileName)));
         return JacksonConfig.OBJECT_MAPPER.readValue(
                 result,
                 new TypeReference<Map<String, Object>>() {

@@ -173,8 +173,7 @@ public class DataPushDemoResponseService {
         if (!validation.present()) {
             return missingMetaResponse();
         }
-        Map<String, Object> configValidation = validateDemoConfig(
-                mcpToolContext, validation);
+        Map<String, Object> configValidation = validateDemoConfig(mcpToolContext);
         if (!Boolean.TRUE.equals(configValidation.get("passed"))
                 || Boolean.TRUE.equals(configValidation.get("blocked"))) {
             return configValidationFailureResponse(configValidation);
@@ -230,8 +229,7 @@ public class DataPushDemoResponseService {
             return missingMetaResponse();
         }
         try {
-            Map<String, Object> configValidation = validateDemoConfig(
-                    mcpToolContext, validation);
+            Map<String, Object> configValidation = validateDemoConfig(mcpToolContext);
             if (!Boolean.TRUE.equals(configValidation.get("passed"))
                     || Boolean.TRUE.equals(configValidation.get("blocked"))) {
                 return runtimeFailureResponse(
@@ -477,15 +475,13 @@ public class DataPushDemoResponseService {
                 DemoResponseSupport.escapeJson(reason));
     }
 
-    private Map<String, Object> validateDemoConfig(McpToolContext mcpToolContext,
-                                                   MetaValidation validation) {
+    private Map<String, Object> validateDemoConfig(McpToolContext mcpToolContext) {
         try {
             return DemoResponseSupport.validatePushConfig(
                     mcpToolContext,
                     DEMO_PUSH_CONFIG,
                     DEMO_PUSH_FORMAT,
-                    DEMO_META_FILE,
-                    validation.content());
+                    DEMO_META_FILE);
         } catch (Exception e) {
             throw new IllegalStateException("执行数据推送配置校验失败", e);
         }

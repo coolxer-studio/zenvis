@@ -10,6 +10,7 @@ import com.coolxer.model.system.vo.PushTaskPageVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.dih.mcp.McpPreExecutionException;
 import com.coolxer.service.dih.mcp.McpToolApproval;
+import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.system.PushTaskConfigException;
 import com.coolxer.service.system.PushTaskConfigFormatDetector;
 import com.coolxer.service.system.PushTaskService;
@@ -40,10 +41,13 @@ public class PushTaskMcpTool {
     private static final int MAX_LOG_CHARS = 6_000;
 
     private final PushTaskService pushTaskService;
+    private final ConfigService configService;
     private final Object createLock = new Object();
 
-    public PushTaskMcpTool(PushTaskService pushTaskService) {
+    public PushTaskMcpTool(PushTaskService pushTaskService,
+                           ConfigService configService) {
         this.pushTaskService = pushTaskService;
+        this.configService = configService;
     }
 
     @McpToolApproval(value = ASK, risk = HIGH)
@@ -154,15 +158,30 @@ public class PushTaskMcpTool {
     public PushTaskValidationVo validateConfig(
             @ToolParam(description = "完整 Vector 配置文本") String config,
             @ToolParam(description = "配置格式 yaml、toml 或 json，必填") String format,
-            @ToolParam(description = "已发布 Meta 文件名；纯 source→sink 原始转发可留空") String metaFileName,
-            @ToolParam(description = "config_read 返回的已发布 Meta 原文") String metaContent) {
+            @ToolParam(description = "已发布 Meta 文件名；纯 source→sink 原始转发可留空") String metaFileName) {
         String normalizedFormat = requireFormat(format, config);
         PushTaskValidationRequest request = new PushTaskValidationRequest();
         request.setConfig(config);
         request.setFormat(normalizedFormat);
         request.setMetaFileName(metaFileName);
-        request.setMetaContent(metaContent);
+        request.setMetaContent(readPublishedMeta(metaFileName));
         return pushTaskService.validateConfig(request);
+    }
+
+    private String readPublishedMeta(String metaFileName) {
+        if (!StringUtils.hasText(metaFileName)) {
+            return "";
+        }
+        if (!configService.fileExistsInConfigPath("meta", metaFileName)) {
+            throw new McpPreExecutionException(
+                    "已发布 Meta 不存在或不可读取: " + metaFileName);
+        }
+        String content = configService.readFile("meta", metaFileName);
+        if (!StringUtils.hasText(content)) {
+            throw new McpPreExecutionException(
+                    "已发布 Meta 内容为空: " + metaFileName);
+        }
+        return content;
     }
 
     @McpToolApproval(value = ALLOW, risk = LOW)

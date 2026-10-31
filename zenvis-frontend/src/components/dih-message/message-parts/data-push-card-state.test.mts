@@ -61,6 +61,17 @@ test('缺少校验结果时工作流卡片不能创建任务', () => {
   assert.equal(state.statusText, '待校验');
 });
 
+test('工作流确认卡不再由前端校验结果阻断创建动作', () => {
+  const state = resolveDataPushCardState({
+    workflowId: 'workflow-1',
+    step: 'PUSH_PLAN_CONFIRMATION',
+    allowedActions: ['approve', 'reject', 'revise'],
+  });
+
+  assert.equal(state.validationPassed, false);
+  assert.equal(state.canApprove, true);
+});
+
 test('门禁阻断仍展示服务端允许的重新校验动作且隐藏创建动作', () => {
   const state = resolveDataPushCardState({
     workflowId: 'workflow-1',
@@ -75,12 +86,10 @@ test('门禁阻断仍展示服务端允许的重新校验动作且隐藏创建�
     },
     allowedActions: ['retry', 'revise'],
     blockingReasons: [{
-      code: 'PUSH_CANDIDATE_DIGEST_MISMATCH',
-      category: 'candidate',
-      message: '卡片校验对应的候选与平台锁定候选不一致。',
-      expected: 'locked-cand…',
-      actual: 'other-candi…',
-      repairHint: '使用锁定候选重新校验。',
+      code: 'PUSH_VALIDATION_STALE',
+      category: 'validation',
+      message: '校验回执与当前锁定候选或 Meta 不一致。',
+      repairHint: '使用当前锁定配置重新校验并生成新的确认卡。',
     }],
   }, 'blocked');
 
@@ -92,10 +101,10 @@ test('门禁阻断仍展示服务端允许的重新校验动作且隐藏创建�
   assert.equal(state.actionable, true);
   assert.equal(state.statusText, '门禁未通过');
   assert.equal(state.diagnostics.length, 0);
-  assert.equal(state.blockingReasons[0].code, 'PUSH_CANDIDATE_DIGEST_MISMATCH');
+  assert.equal(state.blockingReasons[0].code, 'PUSH_VALIDATION_STALE');
 });
 
-test('历史阻断卡可从候选摘要差异生成兼容原因', () => {
+test('阻断卡只展示后端原因并按 code 去重', () => {
   const state = resolveDataPushCardState({
     workflowId: 'workflow-1',
     step: 'BLOCKED',
@@ -105,14 +114,45 @@ test('历史阻断卡可从候选摘要差异生成兼容原因', () => {
     validation: {
       passed: true,
       candidateDigest: 'stale-candidate',
-      metaDigest: 'locked-meta',
+      metaDigest: 'stale-meta',
     },
+    blockingReasons: [{
+      code: 'PUSH_VALIDATION_STALE',
+      category: 'validation',
+      message: '服务端给出的唯一原因。',
+      repairHint: '重新校验。',
+    }, {
+      code: 'PUSH_VALIDATION_STALE',
+      category: 'validation',
+      message: '重复原因不应展示。',
+      repairHint: '重复建议。',
+    }],
   });
 
   assert.equal(state.gateBlocked, true);
-  assert.equal(state.blockingReasons[0].code, 'PUSH_CANDIDATE_DIGEST_MISMATCH');
-  assert.equal(state.blockingReasons[0].expected, 'locked-candi…');
-  assert.equal(state.blockingReasons[0].actual, 'stale-candid…');
+  assert.equal(state.blockingReasons.length, 1);
+  assert.equal(state.blockingReasons[0].code, 'PUSH_VALIDATION_STALE');
+  assert.equal(state.blockingReasons[0].message, '服务端给出的唯一原因。');
+});
+
+test('后端阻断原因不依赖前端自行推导门禁状态', () => {
+  const state = resolveDataPushCardState({
+    workflowId: 'workflow-1',
+    allowedActions: ['approve', 'retry', 'revise'],
+    validation: { passed: true, blocked: false },
+    blockingReasons: [{
+      code: 'PUSH_VALIDATION_STALE',
+      category: 'validation',
+      message: '校验回执已过期。',
+      repairHint: '重新校验。',
+    }],
+  });
+
+  assert.equal(state.gateBlocked, false);
+  assert.equal(state.gatePassed, false);
+  assert.equal(state.canApprove, false);
+  assert.equal(state.blockingReasons.length, 1);
+  assert.equal(state.blockingReasons[0].code, 'PUSH_VALIDATION_STALE');
 });
 
 test('配置测试通过但工作流门禁失败时不显示创建动作', () => {

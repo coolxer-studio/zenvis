@@ -11,6 +11,7 @@ import com.coolxer.model.system.vo.PushTaskPageVo;
 import com.coolxer.model.system.vo.PushTaskSummaryVo;
 import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.dih.mcp.McpPreExecutionException;
+import com.coolxer.service.config.ConfigService;
 import com.coolxer.service.system.PushTaskService;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,11 +25,14 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PushTaskMcpToolTest {
 
     private final FakePushTaskService service = new FakePushTaskService();
-    private final PushTaskMcpTool tool = new PushTaskMcpTool(service);
+    private final ConfigService configService = mock(ConfigService.class);
+    private final PushTaskMcpTool tool = new PushTaskMcpTool(service, configService);
 
     @Test
     void exposesExactlyElevenLifecycleToolsAndRemovesLegacyTools() {
@@ -219,6 +223,10 @@ class PushTaskMcpToolTest {
 
     @Test
     void validateConfigPassesExplicitFormatAndMeta() {
+        when(configService.fileExistsInConfigPath("meta", "user_event.json"))
+                .thenReturn(true);
+        when(configService.readFile("meta", "user_event.json"))
+                .thenReturn("{\"entity\":[]}");
         service.validationResult = PushTaskValidationVo.builder()
                 .passed(true)
                 .format("toml")
@@ -227,11 +235,12 @@ class PushTaskMcpToolTest {
 
         PushTaskValidationVo result = tool.validateConfig(
                 "[sources.demo]\ntype = \"demo_logs\"",
-                "toml", "user_event.json", "{}");
+                "toml", "user_event.json");
 
         assertThat(result.isPassed()).isTrue();
         assertThat(service.validationRequest.getFormat()).isEqualTo("toml");
         assertThat(service.validationRequest.getMetaFileName()).isEqualTo("user_event.json");
+        assertThat(service.validationRequest.getMetaContent()).isEqualTo("{\"entity\":[]}");
     }
 
     @Test

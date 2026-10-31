@@ -19,6 +19,7 @@ import com.coolxer.model.dih.dto.ChatSessionSearchDto;
 import com.coolxer.model.dih.dto.ReportActionDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.model.dih.vo.McpApprovalVo;
+import com.coolxer.model.system.vo.PushTaskVo;
 import com.coolxer.service.dih.agent.DataPushServiceAgent;
 import com.coolxer.service.dih.agent.MetadataConfigAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
@@ -926,6 +927,103 @@ class DihChatApplicationServiceTest {
                 .containsEntry("entity", "traffic")
                 .containsEntry("planId", "plan-1")
                 .containsEntry("validationStatus", "success");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void createdDataPushTaskIsRecordedEvenWhenWorkflowRecordIsBlocked() {
+        DihChatApplicationService service = emptyService();
+        PushTaskService pushTaskService = mock(PushTaskService.class);
+        PushTaskVo task = new PushTaskVo();
+        task.setId(7);
+        task.setName("学校信息演示数据推送（每10秒）");
+        task.setDescription("学校信息推送任务");
+        task.setMark("data-push:school_info");
+        task.setStatus("running");
+        task.setConfig("sources: {}");
+        when(pushTaskService.findById(7)).thenReturn(task);
+        ReflectionTestUtils.setField(service, "pushTaskService", pushTaskService);
+
+        ChatMessagePart part = ChatMessagePart.builder()
+                .type("data-push-service-record")
+                .status("blocked")
+                .metadata(Map.ofEntries(
+                        Map.entry("taskId", "7"),
+                        Map.entry("sourceMark", "data-push:school_info"),
+                        Map.entry("source", "workflow"),
+                        Map.entry("validationStatus", "blocked"),
+                        Map.entry("status", "running"),
+                        Map.entry("config", "different: config")))
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(part));
+
+        assertThat(patch).isNotNull();
+        Map<String, Object> dataPushService =
+                (Map<String, Object>) patch.get("dataPushService");
+        List<Map<String, Object>> records =
+                (List<Map<String, Object>>) dataPushService.get("records");
+        assertThat(records).singleElement().satisfies(record -> assertThat(record)
+                .containsEntry("id", "7")
+                .containsEntry("taskId", "7")
+                .containsEntry("name", "学校信息演示数据推送（每10秒）")
+                .containsEntry("status", "running")
+                .containsEntry("sourceMark", "data-push:school_info")
+                .containsEntry("config", "sources: {}"));
+        verify(pushTaskService).findById(7);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void dataPushServiceRecordFallsBackToSourceMarkWithoutTaskIdRelationCheck() {
+        DihChatApplicationService service = emptyService();
+        PushTaskService pushTaskService = mock(PushTaskService.class);
+        PushTaskVo task = new PushTaskVo();
+        task.setId(7);
+        task.setName("学校信息演示数据推送（每10秒）");
+        task.setMark("data-push:school_info");
+        task.setStatus("running");
+        when(pushTaskService.findById(999)).thenReturn(null);
+        when(pushTaskService.findBySourceMark("data-push:school_info"))
+                .thenReturn(List.of(task));
+        ReflectionTestUtils.setField(service, "pushTaskService", pushTaskService);
+        ChatMessagePart part = ChatMessagePart.builder()
+                .type("data-push-service-record")
+                .metadata(Map.of(
+                        "taskId", "999",
+                        "sourceMark", "data-push:school_info",
+                        "status", "created"))
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(part));
+
+        assertThat(patch).isNotNull();
+        Map<String, Object> dataPushService =
+                (Map<String, Object>) patch.get("dataPushService");
+        List<Map<String, Object>> records =
+                (List<Map<String, Object>>) dataPushService.get("records");
+        assertThat(records).singleElement().satisfies(record -> assertThat(record)
+                .containsEntry("taskId", "7")
+                .containsEntry("status", "running"));
+    }
+
+    @Test
+    void dataPushServiceRecordWithoutRealTaskIsNotPersisted() {
+        DihChatApplicationService service = emptyService();
+        PushTaskService pushTaskService = mock(PushTaskService.class);
+        when(pushTaskService.findById(404)).thenReturn(null);
+        ReflectionTestUtils.setField(service, "pushTaskService", pushTaskService);
+        ChatMessagePart part = ChatMessagePart.builder()
+                .type("data-push-service-record")
+                .metadata(Map.of("taskId", "404", "sourceMark", "data-push:missing"))
+                .build();
+
+        Map<String, Object> patch = ReflectionTestUtils.invokeMethod(
+                service, "buildStructuredExtraDataPatch", List.of(part));
+
+        assertThat(patch).isNull();
     }
 
     @Test

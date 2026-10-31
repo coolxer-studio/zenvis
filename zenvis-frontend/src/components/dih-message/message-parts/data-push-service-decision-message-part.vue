@@ -208,6 +208,7 @@ const categoryLabels: Record<string, string> = {
   candidate: '候选配置',
   validation: '配置校验',
   meta: 'Meta 引用',
+  snapshot: '方案快照',
   evidence: '工具证据',
   workflow: '工作流',
 };

@@ -23,7 +23,6 @@ import com.coolxer.service.dih.workflow.WorkflowStateStore;
 import com.coolxer.service.system.DashboardService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
-import com.coolxer.utils.JacksonUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
@@ -148,8 +147,8 @@ class DataPushWorkflowExecutionTest {
         PushBackend backend = new PushBackend(false, null);
         String failed = """
                 {"passed":false,"blocked":false,"format":"toml",
-                 "candidate_digest":"%s","meta_digest":"%s",
-                 "validation_digest":"validation-failed","diagnostics":[
+                 "candidateDigest":"%s","metaDigest":"%s",
+                 "validationDigest":"validation-failed","diagnostics":[
                    {"code":"VECTOR_SCHEMA_ARRAY_AS_MAP","severity":"ERROR","source":"VECTOR",
                     "path":"$sinks","message":"sinks 必须是映射","repairHint":"改为映射"}],
                  "tests":{"present":false,"total":0,"passed":0,"failed":0,"cases":[]}}
@@ -162,7 +161,8 @@ class DataPushWorkflowExecutionTest {
 
         String prompt = invoke(store, tools, session);
 
-        assertThat(prompt).contains("配置门禁未通过", "VECTOR_SCHEMA_ARRAY_AS_MAP");
+        assertThat(prompt).contains(
+                "配置门禁未通过", "VECTOR_SCHEMA_ARRAY_AS_MAP", "改为映射");
         assertThat(calls).doesNotContain(
                 "push_task_create_and_start", "push_task_update_and_restart");
         assertThat(store.loadActive(session, DataPushServiceAgent.AGENT_TYPE))
@@ -175,11 +175,11 @@ class DataPushWorkflowExecutionTest {
         List<String> calls = new ArrayList<>();
         PushBackend backend = new PushBackend(false, null);
         McpToolContext tools = workflowTools(calls, backend, passValidation(), """
-                {"verdict":"FAILED","run_id":"run-bad","task_status":"failed",
-                 "failure_stage":"STARTUP_CONFIG","repairable":true,
+                {"verdict":"FAILED","runId":"run-bad","taskStatus":"failed",
+                 "failureStage":"STARTUP_CONFIG","repairable":true,
                  "diagnostics":[{"code":"VECTOR_SCHEMA_INVALID","severity":"ERROR",
                    "source":"VECTUM","path":"$sinks.ch","message":"invalid sink schema",
-                   "repairHint":"修正 sink 字段"}],"log_excerpt":"Configuration error"}
+                   "repairHint":"修正 sink 字段"}],"logExcerpt":"Configuration error"}
                 """);
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -200,11 +200,11 @@ class DataPushWorkflowExecutionTest {
         List<String> calls = new ArrayList<>();
         PushBackend backend = new PushBackend(false, null);
         McpToolContext tools = workflowTools(calls, backend, passValidation(), """
-                {"verdict":"FAILED","run_id":"run-error","task_status":"running[error]",
-                 "failure_stage":"PROCESS_ERROR","repairable":true,
+                {"verdict":"FAILED","runId":"run-error","taskStatus":"running[error]",
+                 "failureStage":"PROCESS_ERROR","repairable":true,
                  "diagnostics":[{"code":"RUNTIME_PROCESS_FAILURE","severity":"ERROR",
                    "source":"PROCESS","path":"$process","message":"本轮日志包含错误",
-                   "repairHint":"依据本轮日志修复"}],"log_excerpt":"ERROR failed"}
+                   "repairHint":"依据本轮日志修复"}],"logExcerpt":"ERROR failed"}
                 """);
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -225,11 +225,11 @@ class DataPushWorkflowExecutionTest {
         List<String> calls = new ArrayList<>();
         PushBackend backend = new PushBackend(true, CONFIG);
         McpToolContext tools = workflowTools(calls, backend, passValidation(), """
-                {"verdict":"FAILED","run_id":"run-ext","task_status":"failed",
-                 "failure_stage":"EXTERNAL_DEPENDENCY","repairable":false,
+                {"verdict":"FAILED","runId":"run-ext","taskStatus":"failed",
+                 "failureStage":"EXTERNAL_DEPENDENCY","repairable":false,
                  "diagnostics":[{"code":"EXTERNAL_AUTH","severity":"ERROR","source":"VECTUM",
                    "path":"$sink.auth","message":"authentication failed",
-                   "repairHint":"修正凭据后重试"}],"log_excerpt":"Authentication failed"}
+                   "repairHint":"修正凭据后重试"}],"logExcerpt":"Authentication failed"}
                 """);
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -250,11 +250,11 @@ class DataPushWorkflowExecutionTest {
         List<String> calls = new ArrayList<>();
         PushBackend backend = new PushBackend(true, CONFIG);
         McpToolContext tools = workflowTools(calls, backend, passValidation(), """
-                {"verdict":"FAILED","run_id":"run-bad","task_status":"failed",
-                 "failure_stage":"STARTUP_CONFIG","repairable":true,
+                {"verdict":"FAILED","runId":"run-bad","taskStatus":"failed",
+                 "failureStage":"STARTUP_CONFIG","repairable":true,
                  "diagnostics":[{"code":"VECTOR_SCHEMA_INVALID","severity":"ERROR",
                    "source":"VECTUM","path":"$sinks.ch","message":"invalid sink schema",
-                   "repairHint":"修正字段"}],"log_excerpt":"Configuration error"}
+                   "repairHint":"修正字段"}],"logExcerpt":"Configuration error"}
                 """);
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -277,11 +277,11 @@ class DataPushWorkflowExecutionTest {
         List<String> calls = new ArrayList<>();
         PushBackend backend = new PushBackend(true, CONFIG);
         McpToolContext tools = workflowTools(calls, backend, passValidation(), """
-                {"verdict":"FAILED","run_id":"run-6","task_status":"failed",
-                 "failure_stage":"STARTUP_VRL","repairable":true,
+                {"verdict":"FAILED","runId":"run-6","taskStatus":"failed",
+                 "failureStage":"STARTUP_VRL","repairable":true,
                  "diagnostics":[{"code":"VRL_COMPILE_ERROR","severity":"ERROR",
                    "source":"VECTUM","path":"$transforms.t","message":"VRL compile failed",
-                   "repairHint":"修正 VRL"}],"log_excerpt":"VRL error"}
+                   "repairHint":"修正 VRL"}],"logExcerpt":"VRL error"}
                 """);
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -320,6 +320,24 @@ class DataPushWorkflowExecutionTest {
 
         assertThat(prompt).contains("Meta", "前往元数据配置");
         assertThat(calls).containsExactly("config_tree");
+    }
+
+    @Test
+    void planningReusesLockedMetaWithoutReadingItAgain() {
+        List<String> calls = new ArrayList<>();
+        PushBackend backend = new PushBackend(false, null);
+        McpToolContext tools = workflowTools(
+                calls, backend, passValidation(), successDiagnosis("run-1"));
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = session();
+        store.upsert(session, state(executionContext(CONFIG, "toml", 0, List.of()))
+                .setStep(AgentWorkflowStep.PUSH_INPUT_COLLECTION));
+
+        String prompt = invoke(store, tools, session);
+
+        assertThat(prompt).contains("平台复用已锁定 Meta", MARK, digest(META_CONTENT))
+                .contains("本轮不再重复调用 config_tree/config_read");
+        assertThat(calls).isEmpty();
     }
 
     @Test
@@ -497,8 +515,8 @@ class DataPushWorkflowExecutionTest {
     private String passValidation() {
         return """
                 {"passed":true,"blocked":false,"format":"toml",
-                 "candidate_digest":"%s","meta_digest":"%s",
-                 "validation_digest":"validation-1","vector_version":"vector 0.55.0",
+                 "candidateDigest":"%s","metaDigest":"%s",
+                 "validationDigest":"validation-1","vectorVersion":"vector 0.55.0",
                  "diagnostics":[],
                  "tests":{"present":true,"total":2,"passed":2,"failed":0,"cases":[]}}
                 """.formatted(digest(CONFIG), digest(META_CONTENT));
@@ -506,9 +524,9 @@ class DataPushWorkflowExecutionTest {
 
     private String successDiagnosis(String runId) {
         return """
-                {"verdict":"RUNNING","run_id":"%s","task_status":"running",
-                 "failure_stage":"NONE","repairable":false,"diagnostics":[],
-                 "log_excerpt":"started"}
+                {"verdict":"RUNNING","runId":"%s","taskStatus":"running",
+                 "failureStage":"NONE","repairable":false,"diagnostics":[],
+                 "logExcerpt":"started"}
                 """.formatted(runId);
     }
 
@@ -545,7 +563,7 @@ class DataPushWorkflowExecutionTest {
                 summary.setCurrentRunId(runId);
                 items.add(summary);
             }
-            return JacksonUtil.toJson(PushTaskPageVo.builder()
+            return toolJson(PushTaskPageVo.builder()
                     .items(items)
                     .total(items.size())
                     .offset(0)
@@ -577,11 +595,11 @@ class DataPushWorkflowExecutionTest {
             task.setFormat("toml");
             task.setStatus("running");
             task.setCurrentRunId(runId);
-            return JacksonUtil.toJson(task);
+            return toolJson(task);
         }
 
         private String operationJson(String action) {
-            return JacksonUtil.toJson(PushTaskOperationVo.builder()
+            return toolJson(PushTaskOperationVo.builder()
                     .action(action)
                     .taskId(31)
                     .previousStatus("stopped")
@@ -589,6 +607,14 @@ class DataPushWorkflowExecutionTest {
                     .changed(true)
                     .currentRunId(runId)
                     .build());
+        }
+
+        private String toolJson(Object value) {
+            try {
+                return JacksonConfig.MCP_TOOL_RESULT_MAPPER.writeValueAsString(value);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
         }
 
         private String nestedValue(String input, String parent, String field) {

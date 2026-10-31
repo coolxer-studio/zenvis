@@ -201,12 +201,13 @@ class WorkflowOrchestratorTest {
     }
 
     @Test
-    void dataPushPlanRequiresMetaReferenceAndReadEvidence() {
+    void dataPushPlanUsesServerLockedMetaAndValidationReceipt() {
         String content = "[sources.demo]\ntype = \"demo_logs\"";
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
                 .setType("agent_data_push_service");
+        seedDataPushWorkflow(store, session);
         ChatMessagePart candidate = ChatMessagePart.builder()
                 .id("code-1")
                 .type("code")
@@ -249,10 +250,13 @@ class WorkflowOrchestratorTest {
                                 "evidenceId", "validation-1",
                                 "tool", "push_task_validate_config",
                                 "status", "succeeded",
-                                "resultSummary", "{\"candidate_digest\":\""
-                                        + digest(content) + "\","
-                                        + "\"meta_digest\":\"digest-meta\","
-                                        + "\"validation_digest\":\"validation-1\"}")),
+                                "validation", Map.of(
+                                        "passed", true,
+                                        "blocked", false,
+                                        "format", "toml",
+                                        "candidateDigest", digest(content),
+                                        "metaDigest", "digest-meta",
+                                        "validationDigest", "validation-1"))),
                 "message-1");
 
         assertThat(decision.getMetadata())
@@ -265,19 +269,20 @@ class WorkflowOrchestratorTest {
                 .satisfies(state -> {
                     assertThat(state.getWorkflowType()).isEqualTo("data_push");
                     assertThat(state.getContext())
-                            .containsEntry("sourceMark", "data-push:chat-1:probe")
+                            .containsEntry("sourceMark", "data-push:workflow-orchestrator")
                             .containsKey("metaRef")
                             .containsKey("candidate");
                 });
     }
 
     @Test
-    void dataPushBlockedPlanPersistsItemizedReasonsInFailureLedger() {
+    void dataPushConfirmationDoesNotPersistPlatformGateFailures() {
         String content = "[sources.demo]\ntype = \"demo_logs\"";
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
                 .setType("agent_data_push_service");
+        seedDataPushWorkflow(store, session);
         ChatMessagePart candidate = ChatMessagePart.builder()
                 .id("code-blocked")
                 .type("code")
@@ -319,26 +324,29 @@ class WorkflowOrchestratorTest {
                         Map.of(
                                 "evidenceId", "validation-1",
                                 "tool", "push_task_validate_config",
-                                "status", "succeeded")),
+                                "status", "succeeded",
+                                "validation", Map.of(
+                                        "passed", true,
+                                        "blocked", false,
+                                        "format", "toml",
+                                        "candidateDigest", "stale-candidate",
+                                        "metaDigest", "digest-meta",
+                                        "validationDigest", "validation-1"))),
                 "message-1");
 
-        assertThat(decision.getStatus()).isEqualTo("blocked");
+        assertThat(decision.getStatus()).isEqualTo("pending");
         assertThat(decision.getMetadata())
-                .containsEntry("step", "BLOCKED")
-                .containsEntry("validationStatus", "blocked")
-                .containsEntry("allowedActions", List.of("retry", "revise"));
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> reasons =
-                (List<Map<String, Object>>) decision.getMetadata().get("blockingReasons");
-        assertThat(reasons).extracting(reason -> reason.get("code"))
-                .contains("PUSH_CANDIDATE_DIGEST_MISMATCH",
-                        "PUSH_VALIDATION_EVIDENCE_DIGEST_MISSING");
+                .containsEntry("step", "PUSH_PLAN_CONFIRMATION")
+                .containsEntry("validationStatus", "success")
+                .containsEntry("allowedActions", List.of("approve", "reject", "revise"))
+                .doesNotContainKey("blockingReasons");
         assertThat(store.loadActive(session, "agent_data_push_service"))
                 .get()
                 .satisfies(state -> {
-                    assertThat(state.getStep()).isEqualTo(AgentWorkflowStep.BLOCKED);
+                    assertThat(state.getStep())
+                            .isEqualTo(AgentWorkflowStep.PUSH_PLAN_CONFIRMATION);
                     assertThat(state.getContext())
-                            .containsEntry("sourceMark", "data-push:chat-1:probe")
+                            .containsEntry("sourceMark", "data-push:workflow-orchestrator")
                             .containsEntry("metaRef", Map.of(
                                     "fileName", "user_event.json",
                                     "contentDigest", "digest-meta"));
@@ -346,9 +354,7 @@ class WorkflowOrchestratorTest {
                     Map<String, Object> lockedCandidate =
                             (Map<String, Object>) state.getContext().get("candidate");
                     assertThat(lockedCandidate).containsEntry("digest", digest(content));
-                    assertThat(state.getFailures()).isNotEmpty();
-                    assertThat(state.getFailures().get(state.getFailures().size() - 1))
-                            .containsKey("blockingReasons");
+                    assertThat(state.getFailures()).isEmpty();
                 });
     }
 
@@ -554,5 +560,25 @@ class WorkflowOrchestratorTest {
                         "action", action,
                         "menu", Map.of("request", Map.of("name", "用户事件入口")))))
                 .build();
+    }
+
+    private void seedDataPushWorkflow(WorkflowStateStore store,
+                                      ChatSession session) {
+        String now = java.time.Instant.now().toString();
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("sourceMark", "data-push:workflow-orchestrator");
+        context.put("metaRef", Map.of(
+                "fileName", "user_event.json",
+                "contentDigest", "digest-meta"));
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("workflow-orchestrator")
+                .setWorkflowType("data_push")
+                .setAgentType("agent_data_push_service")
+                .setObjectType("push_task")
+                .setStep(AgentWorkflowStep.PUSH_INPUT_COLLECTION)
+                .setStatus("active")
+                .setContext(context)
+                .setCreatedAt(now)
+                .setUpdatedAt(now));
     }
 }

@@ -39,6 +39,13 @@ public class JacksonConfig {
                     .addDeserializer(MessageType.class, new MessageTypeDeserializer())
             );
 
+    /**
+     * MCP 工具结果由 Spring AI 按 Java 属性名输出 camelCase，不能复用
+     * snake_case 的全局 API mapper，否则多词字段会被静默忽略为 null。
+     */
+    public static final ObjectMapper MCP_TOOL_RESULT_MAPPER = OBJECT_MAPPER.copy()
+            .setPropertyNamingStrategy(PropertyNamingStrategies.LOWER_CAMEL_CASE);
+
     @Bean
     @Primary
     public ObjectMapper objectMapper() {

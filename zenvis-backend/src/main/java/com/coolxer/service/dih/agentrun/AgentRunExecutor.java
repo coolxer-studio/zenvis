@@ -30,6 +30,7 @@ import com.coolxer.service.dih.ContextCompactionObserver;
 import com.coolxer.service.dih.DihChatApplicationService;
 import com.coolxer.service.dih.DihChatApplicationService.McpToolLogStream;
 import com.coolxer.service.dih.DihChatExecutionPolicy;
+import com.coolxer.service.dih.agent.DataPushServiceAgent;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.attachment.AttachmentToolProviderFactory;
 import com.coolxer.service.dih.mcp.AgentMcpToolService;
@@ -227,7 +228,7 @@ public class AgentRunExecutor {
         ChatDto chatDto = buildChatDto(run, preparedPrompt.text(), preparedPrompt.attachments());
         long startedAt = System.nanoTime();
         try {
-            resumeApprovedTools(run, stepId, toolContext, state);
+            resumeApprovedTools(run, session, stepId, toolContext, state);
             String dispatchPrompt = chatApplicationService.bootstrapVisualizationWorkflow(
                     policy, toolContext, preparedPrompt.text(), session);
             AtomicBoolean cancellationRequested = new AtomicBoolean(false);
@@ -611,25 +612,23 @@ public class AgentRunExecutor {
     }
 
     private void resumeApprovedTools(AgentRun run,
+                                     ChatSession session,
                                      String stepId,
                                      McpToolContext toolContext,
                                      AgentRunExecutionState state) {
-        String turnId = "run:" + run.getRunId() + ":" + stepId;
+        String currentTurnId = "run:" + run.getRunId() + ":" + stepId;
+        boolean dataPush = session != null
+                && DataPushServiceAgent.AGENT_TYPE.equals(session.getType());
         List<McpToolInvocation> approved = invocationRepository
-                .findByAgentRunIdAndTurnIdAndStatusIn(runId(run), turnId,
+                .findByAgentRunIdAndStatusIn(runId(run),
                         List.of(com.coolxer.commons.enums.McpInvocationStatus.APPROVED));
         if (approved.isEmpty() || toolContext.toolCallbackProvider() == null) {
             return;
         }
-        Map<String, Object> contextMap = new LinkedHashMap<>();
-        if (toolContext.invocationContext() != null) {
-            contextMap.put(McpInvocationContext.TOOL_CONTEXT_KEY, toolContext.invocationContext());
-        }
-        if (toolContext.toolRuntimeContext() != null) {
-            contextMap.put(ToolRuntimeContext.TOOL_CONTEXT_KEY, toolContext.toolRuntimeContext());
-        }
-        ToolContext springToolContext = new ToolContext(contextMap);
         for (McpToolInvocation invocation : approved) {
+            if (!dataPush && !currentTurnId.equals(invocation.getTurnId())) {
+                continue;
+            }
             ToolCallback callback = findToolCallback(
                     toolContext.toolCallbackProvider(), invocation.getToolName());
             if (callback == null) {
@@ -638,8 +637,10 @@ public class AgentRunExecutor {
                                 "toolName", invocation.getToolName()));
                 continue;
             }
-            String result = callback.call(invocation.getArguments(), springToolContext);
+            String result = callback.call(invocation.getArguments(),
+                    restoredToolContext(toolContext, invocation));
             state.markToolSucceeded();
+            completeApprovedInvocationIfNeeded(invocation, result);
             runService.recordEvent(run.getRunId(), "tool.approval_executed", stepId,
                     Map.of("requestId", invocation.getRequestId(),
                             "toolName", invocation.getToolName(),
@@ -648,6 +649,49 @@ public class AgentRunExecutor {
                     "【已执行获批工具】" + invocation.getToolName() + "\n"
                             + StringUtils.defaultString(result), 24_000));
         }
+    }
+
+    private ToolContext restoredToolContext(McpToolContext toolContext,
+                                            McpToolInvocation invocation) {
+        Map<String, Object> contextMap = new LinkedHashMap<>();
+        McpInvocationContext current = toolContext.invocationContext();
+        if (current != null) {
+            McpInvocationContext restored = new McpInvocationContext(
+                    current.channel(),
+                    current.requesterUserId(),
+                    current.chatId(),
+                    invocation.getTurnId(),
+                    current.agentType(),
+                    current.mcpSessionId(),
+                    current.mcpClientInfo(),
+                    current.eventConsumer(),
+                    current.analysisTaskId(),
+                    current.executionId(),
+                    current.taskApprovalMode(),
+                    current.cancelled());
+            contextMap.put(McpInvocationContext.TOOL_CONTEXT_KEY, restored);
+        }
+        if (toolContext.toolRuntimeContext() != null) {
+            contextMap.put(ToolRuntimeContext.TOOL_CONTEXT_KEY,
+                    toolContext.toolRuntimeContext());
+        }
+        return new ToolContext(contextMap);
+    }
+
+    private void completeApprovedInvocationIfNeeded(McpToolInvocation invocation,
+                                                    String result) {
+        McpToolInvocation latest = invocationRepository
+                .findByRequestId(invocation.getRequestId())
+                .orElse(invocation);
+        if (latest.getStatus() != com.coolxer.commons.enums.McpInvocationStatus.APPROVED) {
+            return;
+        }
+        latest.setStatus(com.coolxer.commons.enums.McpInvocationStatus.SUCCEEDED)
+                .setResult(StringUtils.left(StringUtils.defaultString(result), 64_000))
+                .setResultLength((long) StringUtils.defaultString(result)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .setFinishTime(new Date());
+        invocationRepository.save(latest);
     }
 
     private ToolCallback findToolCallback(

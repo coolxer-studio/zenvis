@@ -5268,7 +5268,10 @@ public class DihChatApplicationService {
                 "info-steps", "confirm", "config",
                 "visualization-chart-preview", "visualization-chart-record",
                 "visualization-app-record", "visualization-dashboard-record")
-                .contains(part.getType()))) {
+                .contains(part.getType())
+                || VisualizationAgentTypes.ALL.stream()
+                .map(VisualizationAgentTypes::decisionPartType)
+                .anyMatch(part.getType()::equals))) {
             return;
         }
         boolean repaired = stripMalformedInfoStepsFences(parts);
@@ -5558,9 +5561,16 @@ public class DihChatApplicationService {
                     ? new LinkedHashMap<>() : new LinkedHashMap<>(part.getMetadata());
             part.setMetadata(raw);
             String action = stringValue(raw, "action", "");
-            if ("info-steps".equals(part.getType())
-                    && visualizationSession
-                    && isVisualizationEntitySelection(part, raw)) {
+            if (visualizationSession && isVisualizationEntitySelection(part, raw)) {
+                // Entity selection is an information-submission interaction. Some models
+                // still emit it as a visualization decision card, which has no options UI,
+                // so normalize the part type before filling the verified Meta suggestions.
+                if (!"info-steps".equals(part.getType())) {
+                    part.setType("info-steps");
+                    if (!StringUtils.hasText(part.getTitle())) {
+                        part.setTitle("选择分析实体");
+                    }
+                }
                 validateVisualizationEntitySelection(chatSession, part, raw, evidence);
                 continue;
             }
@@ -5905,10 +5915,14 @@ public class DihChatApplicationService {
     private boolean isVisualizationEntitySelection(
             ChatMessagePart part,
             Map<String, Object> raw) {
+        String action = stringValue(raw, "action", "");
         if (VisualizationAgentTypes.ALL.stream()
                 .map(VisualizationAgentTypes::selectEntityAction)
-                .anyMatch(stringValue(raw, "action", "")::equals)) {
+                .anyMatch(action::equals)) {
             return true;
+        }
+        if (StringUtils.hasText(action)) {
+            return false;
         }
         String title = StringUtils.hasText(part.getTitle()) ? part.getTitle() : "";
         if (title.contains("选择") && title.contains("实体")) {

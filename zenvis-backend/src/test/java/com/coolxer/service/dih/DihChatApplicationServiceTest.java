@@ -1977,6 +1977,48 @@ class DihChatApplicationServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void visualizationEntityDecisionCardIsNormalizedToInfoStepsWithVerifiedOptions() throws Exception {
+        DihChatApplicationService service = emptyService();
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "retrieval_list_display_entity", "{}",
+                "{\"entityList\":["
+                        + "{\"name\":\"traffic\",\"label\":\"网络流量\"},"
+                        + "{\"name\":\"probe_agent_message\",\"label\":\"探针消息\"}]}");
+        ChatSession session = new ChatSession();
+        session.setType(VisualizationChartAgent.AGENT_TYPE);
+
+        ChatMessagePart selection = ChatMessagePart.builder()
+                .type("visualization-chart-decision")
+                .title("请选择要统计分布的实体")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_chart.select_entity_from_meta",
+                        "steps", List.of(Map.of(
+                                "id", "analysis_entity",
+                                "title", "选择实体",
+                                "required", true)))))
+                .build();
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(selection), evidence);
+
+        assertThat(selection.getType()).isEqualTo("info-steps");
+        assertThat(selection.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("metaVerified", true);
+        List<Map<String, Object>> steps =
+                (List<Map<String, Object>>) selection.getMetadata().get("steps");
+        assertThat(steps).hasSize(1);
+        assertThat(steps.get(0)).containsEntry("strictOptions", true);
+        List<Map<String, Object>> suggestions =
+                (List<Map<String, Object>>) steps.get(0).get("suggestions");
+        assertThat(suggestions)
+                .extracting(option -> option.get("value"))
+                .containsExactly("traffic", "probe_agent_message");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void platformEntitySelectionCardIsSynthesizedWhenModelOnlyOutputsText() throws Exception {
         DihChatApplicationService service = emptyService();
         Object evidence = newEvidenceStream();

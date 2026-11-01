@@ -17,7 +17,7 @@
 
 1. `INTENT_CONFIRMATION`：确认用户要生成的临时图表目标。
 2. `ENTITY_META`：调用 `retrieval_list_display_entity` 或 `retrieval_list_entity`。
-3. `ENTITY_SELECTION`：仅当提示词和工作流上下文都无法唯一确定实体、存在多个合理候选时，输出严格选项选择卡并停止；目标实体已明确时跳过此阶段。
+3. `ENTITY_SELECTION`：仅当提示词和工作流上下文都无法唯一确定实体、存在多个合理候选时，输出 `zenvis:info-steps` 严格选项选择卡并停止；目标实体已明确时跳过此阶段。
 4. `ATTRIBUTE_META`：调用 `retrieval_list_display_attribute` 或 `retrieval_list_attribute` 获取字段。
 5. `QUERY_PLAN_CONFIRMATION`：输出查询方案确认卡并停止。
 6. `DATA_QUERY`：用户确认后，只调用确认卡中锁定的数据工具和参数。
@@ -30,13 +30,19 @@
 
 ## 决策协议
 
-所有决策卡使用：
+查询方案和缺失 Meta 决策卡使用：
 
 ```zenvis:visualization-chart-decision
 {"title":"确认实体与字段查询方案","content":"实体和字段均来自本轮 Meta 返回值。","action":"visualization_chart.confirm_query_plan","planId":"chart-plan-001","entity":"traffic","fields":[{"field":"server_time","role":"time"}],"query":{"tool":"entity_trend","request":{"entities":["traffic"],"time_field":"server_time","time_range":{"preset":"LAST_7_DAYS"},"granularity":"DAY"}},"actions":["approve","reject","revise"]}
 ```
 
-- 实体选择卡动作使用 `visualization_chart.select_entity_from_meta`。
+- 实体选择必须使用 `zenvis:info-steps`，动作使用 `visualization_chart.select_entity_from_meta`；`steps` 至少包含一个 `required=true`、`strictOptions=true` 的实体步骤，`suggestions` 只能来自本轮实体 Meta 返回值：
+
+```zenvis:info-steps
+{"title":"选择分析实体","content":"以下候选来自本轮实体 Meta 返回值。","action":"visualization_chart.select_entity_from_meta","steps":[{"id":"analysis_entity","title":"选择实体","description":"请选择要统计分布的实体。","required":true,"strictOptions":true,"suggestions":[{"label":"网络流量（traffic）","value":"traffic"},{"label":"探针消息（probe_agent_message）","value":"probe_agent_message"}]}]}
+```
+
+- 不得使用 `zenvis:visualization-chart-decision` 承载实体选择；该卡片只用于查询方案、写入和缺失 Meta 等决策。
 - 查询方案确认动作使用 `visualization_chart.confirm_query_plan`。
 - 确认卡必须携带 `planId`、真实实体、字段角色和完整 `query.tool` / `query.request`。
 - `time_range.preset` 只能使用 `TODAY`、`YESTERDAY`、`LAST_24_HOURS`、`LAST_7_DAYS`、`LAST_30_DAYS`、`THIS_MONTH`、`CUSTOM` 或 `ALL_TIME`；不限时间必须写 `ALL_TIME`，禁止写 `ALL`。

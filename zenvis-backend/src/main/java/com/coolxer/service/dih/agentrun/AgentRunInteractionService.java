@@ -52,7 +52,8 @@ public class AgentRunInteractionService {
             "data-push-service-decision",
             "visualization-chart-decision",
             "visualization-app-decision",
-            "visualization-dashboard-decision");
+            "visualization-dashboard-decision",
+            "visualization-dashboard-preview");
 
     private static final Set<String> RESOLVED_CARD_STATUSES = Set.of(
             "approved", "force_approved", "rejected", "revise", "cancelled",
@@ -64,7 +65,8 @@ public class AgentRunInteractionService {
             "data-push-service-decision",
             "visualization-chart-decision",
             "visualization-app-decision",
-            "visualization-dashboard-decision");
+            "visualization-dashboard-decision",
+            "visualization-dashboard-preview");
 
     private static final Set<String> CARD_ACTIONS = Set.of(
             "submit", "approve", "force_approve", "reject", "revise", "retry", "add_to_library");

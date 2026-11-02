@@ -25,7 +25,7 @@
         </el-button>
       </div>
       <div
-        v-else-if="interactive && hasAvailableAction && isPending"
+        v-else-if="interactive && hasAvailableAction && isActionable"
         class="visualization-decision-actions"
       >
         <el-button v-if="canApprove" size="small" type="primary" @click="requestDecision('apply_config')">
@@ -45,7 +45,7 @@
         {{ workflowValidationMessage }}
       </div>
       <div
-        v-if="interactive && reviseInputVisible && isPending && !isMissingMeta"
+        v-if="interactive && reviseInputVisible && isActionable && !isMissingMeta"
         class="visualization-decision-revise-box"
       >
         <el-input
@@ -148,10 +148,14 @@ const isBlocked = computed(
     metadata.value.step === 'BLOCKED' ||
     props.part.status === 'blocked',
 );
+const isActionable = computed(() => isPending.value || isBlocked.value);
 const action = computed(() => String(metadata.value.action || ''));
 const approveLabel = computed(() => {
   if (action.value.endsWith('.confirm_query_plan')) return '确认查询方案';
   if (action.value.endsWith('.confirm_application_plan')) return '确认应用方案';
+  if (action.value.endsWith('.confirm_dashboard_plan')) return '确认大屏方案';
+  if (action.value.endsWith('.confirm_publish')
+    && action.value.startsWith('visualization_dashboard.')) return '确认真实预览并发布';
   if (action.value.endsWith('.confirm_publish')) return '确认发布应用';
   if (action.value.endsWith('.retry_menu')) return '重试菜单发布';
   if (action.value.endsWith('.confirm_overwrite')) return '确认覆盖配置';

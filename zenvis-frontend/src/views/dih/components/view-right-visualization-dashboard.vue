@@ -32,11 +32,11 @@ const asRecordList = (value: unknown): VisualizationRecord[] => Array.isArray(va
 const sections = computed<VisualizationSection[]>(() => [
   {
     name: 'configs',
-    label: '看板配置',
+    label: '历史看板配置',
     items: configs.value,
     keyProp: 'configType',
     keyLabel: '配置类型',
-    emptyText: '暂无数据大屏配置',
+    emptyText: '新流程不再产生独立配置记录（历史记录只读展示）',
   },
   {
     name: 'dashboards',
@@ -48,11 +48,11 @@ const sections = computed<VisualizationSection[]>(() => [
   },
   {
     name: 'menus',
-    label: '菜单入口',
+    label: '历史菜单入口',
     items: menus.value,
     keyProp: 'menuId',
     keyLabel: '菜单ID',
-    emptyText: '暂无看板菜单入口',
+    emptyText: '新流程不创建菜单（历史记录只读展示）',
   },
 ]);
 

@@ -31,7 +31,8 @@ public class ChatMessagePartParser {
             "data-push-service-decision",
             "visualization-chart-decision",
             "visualization-app-decision",
-            "visualization-dashboard-decision");
+            "visualization-dashboard-decision",
+            "visualization-dashboard-preview");
 
     private static final Set<String> RESOLVED_DECISION_STATUSES = Set.of(
             "approved", "rejected", "cancelled", "completed", "saved");
@@ -213,6 +214,7 @@ public class ChatMessagePartParser {
                 && !"zenvis:visualization-app-decision".equals(info)
                 && !"zenvis:visualization-app-preview".equals(info)
                 && !"zenvis:visualization-dashboard-decision".equals(info)
+                && !"zenvis:visualization-dashboard-preview".equals(info)
                 && !"zenvis:meta-config-record".equals(info)
                 && !"zenvis:vectum-task-record".equals(info)
                 && !"zenvis:visualization-chart-preview".equals(info)
@@ -242,6 +244,7 @@ public class ChatMessagePartParser {
                 case "zenvis:visualization-app-decision" -> "visualization-app-decision";
                 case "zenvis:visualization-app-preview" -> "visualization-app-preview";
                 case "zenvis:visualization-dashboard-decision" -> "visualization-dashboard-decision";
+                case "zenvis:visualization-dashboard-preview" -> "visualization-dashboard-preview";
                 case "zenvis:meta-config-record" -> "metadata-config-record";
                 case "zenvis:vectum-task-record" -> "data-push-service-record";
                 case "zenvis:visualization-chart-preview" -> "visualization-chart-preview";
@@ -266,16 +269,25 @@ public class ChatMessagePartParser {
                                 ? textValue(node, "id") : UUID.randomUUID().toString())
                         .status(StringUtils.hasText(status) ? status : "pending");
             } else if ("mcp-approval".equals(type) || "tool-call".equals(type)
-                    || "visualization-app-preview".equals(type)) {
+                    || "visualization-app-preview".equals(type)
+                    || "visualization-dashboard-preview".equals(type)) {
                 String partId = textValue(node, "id");
                 builder.id(StringUtils.hasText(partId)
                                 ? partId : UUID.randomUUID().toString())
-                        .status(firstTextValue(node, "status", "state"));
+                        .status(("visualization-app-preview".equals(type)
+                                || "visualization-dashboard-preview".equals(type))
+                                ? defaultIfBlank(
+                                firstTextValue(node, "status", "state"), "pending")
+                                : firstTextValue(node, "status", "state"));
             }
             return builder.build();
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return StringUtils.hasText(value) ? value : fallback;
     }
 
     private ChatMessagePart parseConfigFence(String info, String body) {

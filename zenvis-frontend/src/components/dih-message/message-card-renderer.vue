@@ -91,6 +91,14 @@
             emit('chooseVisualizationDashboardDecision', $event)
           "
         />
+        <VisualizationDashboardPreviewMessagePart
+          v-else-if="part.type === 'visualization-dashboard-preview'"
+          :part="part"
+          :interactive="interactive"
+          @choose-visualization-dashboard-decision="
+            emit('chooseVisualizationDashboardDecision', $event)
+          "
+        />
         <ConfigRecordMessagePart v-else-if="part.type === 'config-record'" :part="part" />
         <DataPushServiceRecordMessagePart
           v-else-if="part.type === 'data-push-service-record'"
@@ -124,6 +132,7 @@ import VisualizationAppDecisionMessagePart from './message-parts/visualization-a
 import VisualizationAppPreviewMessagePart from './message-parts/visualization-app-preview-message-part.vue';
 import VisualizationChartDecisionMessagePart from './message-parts/visualization-chart-decision-message-part.vue';
 import VisualizationDashboardDecisionMessagePart from './message-parts/visualization-dashboard-decision-message-part.vue';
+import VisualizationDashboardPreviewMessagePart from './message-parts/visualization-dashboard-preview-message-part.vue';
 import NoticeMessagePart from './message-parts/notice-message-part.vue';
 import RagSearchPart from './message-parts/rag-search-part.vue';
 import TextMessagePart from './message-parts/text-message-part.vue';

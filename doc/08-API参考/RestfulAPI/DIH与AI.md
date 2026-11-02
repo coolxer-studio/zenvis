@@ -59,7 +59,7 @@
 | --- | --- |
 | `chat_id` | 会话标识 |
 | `message_id` | 承载卡片的 AI 消息 ID |
-| `part_id` | 卡片部件 ID |
+| `part_id` | 卡片部件 ID；最长 64 字符，必须与最新卡片完全一致 |
 | `workflow_id` | 服务端锁定的工作流 ID |
 | `action` | `submit`、`approve`、`force_approve`、`reject`、`revise`、`retry` 或 `add_to_library`；实际可选值以卡片 `allowedActions` 为准 |
 | `revision` | 修订要求或重试说明；按动作可选 |
@@ -154,6 +154,32 @@
 预览令牌保存在后端内存注册表，服务重启后全部失效；令牌超过默认 30 分钟有效期后同样失效。旧预览卡不能继续用于读取或发布，必须重新执行 `visualization_app_validate` 生成新的预览和摘要。
 
 应用发布不接受任意文件或 AMIS 正文。`visualization_app_apply` 和 `visualization_app_retry_menu` 只接受工作流锁定的 `candidate_digest` 与 `validation_digest`；配置和菜单一次审批、全量读回。具体工具契约见[数据应用工具](/08-API参考/MCPtool/数据应用工具.md)。
+
+### 数据大屏只读预览
+
+数据大屏工作流使用 `DASHBOARD_DISCOVERY → DASHBOARD_PLAN_CONFIRMATION →
+DASHBOARD_VALIDATING → 真实预览确认 → DASHBOARD_APPLYING → VERIFIED`。校验成功后生成
+工作流级只读预览；预览令牌绑定当前用户、会话、工作流和验证尝试，默认 30 分钟有效。
+
+| 方法 | 路径 | 输入 | 返回/用途 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/dih/chat/workflows/{workflowId}/dashboard-preview` | `chat_id`、`token` | 读取本次候选的 HTML 或低代码预览入口 |
+| GET | `/api/v1/dih/chat/workflows/{workflowId}/dashboard-preview/files` | `chat_id`、`token`、`path` | 读取清单内受控预览文件 |
+
+接口只从 `DashboardPreviewRegistry` 的编译产物读取，不直接访问配置目录，只允许清单内精确路径；
+`../`、未列入清单的文件、跨用户、跨会话、错误令牌或过期令牌均返回 404。响应使用
+`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`、CSP 和 `Referrer-Policy:
+no-referrer`。预览不提供任何记录写操作，发布后也不创建菜单。
+
+数据大屏发布只接受工作流锁定的 `candidate_digest` 与 `validation_digest`。`visualization_dashboard_apply`
+一次写入大屏配置和 Dashboard 并全量读回；配置或 Dashboard 写入、读回失败时恢复旧快照。
+服务重启会使内存预览令牌失效，必须重新执行 `visualization_dashboard_validate`。具体工具契约见
+[数据大屏工具](/08-API参考/MCPtool/数据大屏工具.md)。
+
+`visualization_dashboard_validate` 成功后，服务端会根据成功工具结果或锁定的 `DASHBOARD_VALIDATING`
+工作流补全 `visualization-dashboard-preview` 卡片，不要求模型完整回显工具结果。卡片 ID 稳定且
+不超过 64 字符，完整摘要保存在元数据；批准后 `status=approved`、`allowedActions=[]`，客户端不应
+再提供发布操作。聊天框文字“确认发布”不映射为 `approve`，发布确认必须通过卡片交互提交。
 
 ### 聊天附件
 

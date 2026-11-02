@@ -248,13 +248,12 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void visualizationDashboardSkillExposesDashboardMenuAndConfigTools() {
+    void visualizationDashboardSkillExposesOnlyDashboardLifecycleTools() {
         SkillService skillService = mock(SkillService.class);
         List<String> allowedTools = List.of(
                 "retrieval_search", "entity_view",
-                "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read",
-                "dashboard_create", "dashboard_list", "dashboard_view",
-                "menu_create", "menu_list", "menu_view");
+                "visualization_dashboard_list", "visualization_dashboard_get",
+                "visualization_dashboard_validate", "visualization_dashboard_apply");
         when(skillService.resolveRuntimeConfig(List.of("visualization-dashboard-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
@@ -274,6 +273,10 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("dashboard_create", "创建看板"),
                         new FakeToolCallback("dashboard_list", "查询看板"),
                         new FakeToolCallback("dashboard_view", "查看看板"),
+                        new FakeToolCallback("visualization_dashboard_list", "列出受管大屏"),
+                        new FakeToolCallback("visualization_dashboard_get", "读取受管大屏"),
+                        new FakeToolCallback("visualization_dashboard_validate", "校验大屏候选"),
+                        new FakeToolCallback("visualization_dashboard_apply", "发布大屏候选"),
                         new FakeToolCallback("menu_create", "创建菜单"),
                         new FakeToolCallback("menu_list", "查询菜单"),
                         new FakeToolCallback("menu_view", "查看菜单"),
@@ -292,7 +295,8 @@ class AgentMcpToolServiceTest {
                 .containsExactlyElementsOf(allowedTools);
         assertThat(context.systemPrompt())
                 .contains(allowedTools.toArray(String[]::new))
-                .doesNotContain("push_task_create_and_start", "analysis_task_delete", "external_write");
+                .doesNotContain("dashboard_create", "dashboard_view", "config_apply", "menu_create",
+                        "push_task_create_and_start", "analysis_task_delete", "external_write");
     }
 
     @Test

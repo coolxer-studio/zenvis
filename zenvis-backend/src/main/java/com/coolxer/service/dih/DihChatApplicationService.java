@@ -311,10 +311,7 @@ public class DihChatApplicationService {
                 && dataPushDemoResponseService != null;
         boolean visualizationChartDemo = VisualizationAgentTypes.isChart(chatType)
                 && visualizationChartDemoResponseService != null;
-        boolean visualizationDashboardDemo = VisualizationAgentTypes.isDashboard(chatType)
-                && visualizationDashboardDemoResponseService != null;
-        if ((metadataConfigDemo || dataPushDemo || visualizationChartDemo
-                || visualizationDashboardDemo)
+        if ((metadataConfigDemo || dataPushDemo || visualizationChartDemo)
                 && StringUtils.hasText(builtinDemoId)) {
             McpToolContext demoToolContext = agentMcpToolService == null
                     ? McpToolContext.empty()
@@ -333,9 +330,7 @@ public class DihChatApplicationService {
                                 ? McpInvocationContext.BUILTIN_METADATA_CONFIG_DEMO
                                 : dataPushDemo
                                 ? McpInvocationContext.BUILTIN_DATA_PUSH_DEMO
-                                : visualizationChartDemo
-                                ? McpInvocationContext.BUILTIN_VISUALIZATION_CHART_DEMO
-                                : McpInvocationContext.BUILTIN_VISUALIZATION_DASHBOARD_DEMO,
+                                : McpInvocationContext.BUILTIN_VISUALIZATION_CHART_DEMO,
                         builtinDemoToolStream::emitApproval
                 ));
                 demoToolContext = demoToolContext.withToolCallbackProvider(
@@ -360,11 +355,8 @@ public class DihChatApplicationService {
                         currentUser,
                         demoToolContext
                 );
-            } else if (visualizationChartDemo) {
-                builtinDemoResponse = visualizationChartDemoResponseService.findResponse(
-                        existingChatSession, chatId, userMessage, currentUser, demoToolContext);
             } else {
-                builtinDemoResponse = visualizationDashboardDemoResponseService.findResponse(
+                builtinDemoResponse = visualizationChartDemoResponseService.findResponse(
                         existingChatSession, chatId, userMessage, currentUser, demoToolContext);
             }
         } else if (StringUtils.hasText(builtinDemoId)) {
@@ -592,6 +584,11 @@ public class DihChatApplicationService {
                         chatSession, executionPolicy.chatType()).orElse(null);
         AgentWorkflowStep step = workflow == null ? AgentWorkflowStep.ENTITY_META
                 : workflow.getStep();
+        if (VisualizationAgentTypes.isDashboard(executionPolicy.chatType())
+                && (workflow == null || isDashboardWorkflowStep(step))) {
+            return bootstrapDashboardWorkflow(
+                    mcpToolContext, prompt, chatSession, workflow);
+        }
         if (VisualizationAgentTypes.isApp(executionPolicy.chatType())
                 && isDataAppWorkflowStep(step)) {
             return bootstrapDataAppWorkflow(
@@ -632,6 +629,146 @@ public class DihChatApplicationService {
                 AgentWorkflowStep.APP_APPLYING,
                 AgentWorkflowStep.PARTIAL_MENU,
                 AgentWorkflowStep.BLOCKED).contains(step);
+    }
+
+    private boolean isDashboardWorkflowStep(AgentWorkflowStep step) {
+        return Set.of(
+                AgentWorkflowStep.INTENT_CONFIRMATION,
+                AgentWorkflowStep.DASHBOARD_DISCOVERY,
+                AgentWorkflowStep.DASHBOARD_PLAN_CONFIRMATION,
+                AgentWorkflowStep.DASHBOARD_VALIDATING,
+                AgentWorkflowStep.DASHBOARD_APPLYING,
+                AgentWorkflowStep.VERIFIED,
+                AgentWorkflowStep.BLOCKED,
+                AgentWorkflowStep.CANCELLED).contains(step);
+    }
+
+    private String bootstrapDashboardWorkflow(McpToolContext mcpToolContext,
+                                              String prompt,
+                                              ChatSession chatSession,
+                                              AgentWorkflowState workflow) {
+        if (workflowStateStore == null) {
+            return prompt;
+        }
+        if (workflow == null) {
+            return prompt + "\n\n【数据大屏工作流：DASHBOARD_DISCOVERY】\n"
+                    + "先调用 visualization_dashboard_list 查看受管大屏，并按需调用 "
+                    + "visualization_dashboard_get 读取清单、版本、文件和 Spec 摘要。\n"
+                    + "随后只使用 retrieval 只读 Meta 工具确认实体、字段、时间口径和可用查询工具；"
+                    + "用户只描述主题时，主动推荐实体、指标、图表类型、时间范围和布局，"
+                    + "不要再次追问可由 Meta 推导的信息。\n"
+                    + "只生成完整 DashboardSpec 或 DashboardChangeSet，默认 mode=HTML_PAGE、"
+                    + "theme=DARK_TECH、refresh_interval_seconds=60。禁止生成 HTML、CSS、JavaScript、"
+                    + "AMIS、API URL、SQL、配置文件正文或菜单参数。\n"
+                    + "方案完成后输出 zenvis:visualization-dashboard-decision，"
+                    + "action=visualization_dashboard.confirm_dashboard_plan，并携带 dashboardId、name、"
+                    + "mode、theme、specDigest、区块摘要、查询口径和完整 spec。";
+        }
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(workflow.getContext());
+        AgentWorkflowStep step = workflow.getStep();
+        if (step == AgentWorkflowStep.CANCELLED) {
+            return prompt + "\n\n【数据大屏工作流已取消】\n不得继续校验或发布；如需继续，请创建新的方案。";
+        }
+        if (step == AgentWorkflowStep.BLOCKED) {
+            boolean applyBlocked = context.get("applyResult") != null
+                    || context.get("publishedDashboardId") != null;
+            Map<String, Object> plan = mapValue(context.get("dashboardPlan"));
+            Map<String, Object> lockedSpec = mapValue(plan.get("spec"));
+            return prompt + "\n\n【数据大屏工作流：BLOCKED】\n"
+                    + (!applyBlocked
+                    ? "上次 visualization_dashboard_validate 未通过。只按服务端 diagnostics 修订完整 "
+                    + "DashboardSpec 后重新调用校验；相同诊断修复最多 2 次，不得原样重复失败规格。"
+                    : "上次配置写入、Dashboard 发布或读回未完成。不得重复 apply 或声明成功；"
+                    + "先说明真实错误并等待 retry 或修订指令。")
+                    + (lockedSpec.isEmpty() ? ""
+                    : "\n锁定 DashboardSpec：" + JacksonUtil.toJson(lockedSpec));
+        }
+        if (step == AgentWorkflowStep.DASHBOARD_DISCOVERY) {
+            return prompt + "\n\n【数据大屏工作流：DASHBOARD_DISCOVERY】\n"
+                    + "先调用 visualization_dashboard_list，并按需调用 visualization_dashboard_get。"
+                    + "修改已有受管大屏时必须携带 base_dashboard_version、base_spec_digest 和 "
+                    + "base_file_digest；版本或文件摘要漂移时停止并要求重新读取。"
+                    + "无清单历史大屏只读，不自动接管。\n"
+                    + "只使用 retrieval 只读 Meta，生成完整 DashboardSpec 或 DashboardChangeSet；"
+                    + "默认 HTML_PAGE，低代码仅在用户明确要求时使用。"
+                    + "方案卡 action=visualization_dashboard.confirm_dashboard_plan。";
+        }
+        if (step == AgentWorkflowStep.DASHBOARD_PLAN_CONFIRMATION) {
+            return prompt + "\n\n【数据大屏工作流：DASHBOARD_PLAN_CONFIRMATION】\n"
+                    + "等待用户确认方案卡；不得提前写入或发布。";
+        }
+        if (step == AgentWorkflowStep.DASHBOARD_VALIDATING) {
+            String validationStatus = stringValue(context, "validationStatus", "");
+            if ("validated".equals(validationStatus)) {
+                return prompt + "\n\n【数据大屏工作流：DASHBOARD_VALIDATING（已锁定）】\n"
+                        + "只展示现成 visualization_dashboard_validate 的真实结果，"
+                        + "必须输出 zenvis:visualization-dashboard-preview，原样携带服务端返回的 "
+                        + "workflowId、candidate_digest、validation_digest、specDigest、fileDigest、"
+                        + "files、diagnostics、preview 和验证状态。"
+                        + "不得同一轮调用 visualization_dashboard_apply；等待用户确认发布。";
+            }
+            Map<String, Object> plan = mapValue(context.get("dashboardPlan"));
+            Map<String, Object> spec = mapValue(plan.get("spec"));
+            return prompt + "\n\n【数据大屏工作流：DASHBOARD_VALIDATING】\n"
+                    + "必须调用 visualization_dashboard_validate，只提供完整 spec 或完整 change_set，"
+                    + "平台将执行确定性 HTML/AMIS 编译、Meta 校验、布局校验、真实查询取样和受控预览。"
+                    + (spec.isEmpty() ? "" : "\n锁定 DashboardSpec：" + JacksonUtil.toJson(spec))
+                    + "\n校验失败时按 diagnostics 修订并重新校验；校验通过后只输出 "
+                    + "zenvis:visualization-dashboard-preview，不得自行生成 HTML 或 AMIS。"
+                    + "输出预览卡后停止本轮，等待用户点击确认发布。";
+        }
+        if (step == AgentWorkflowStep.DASHBOARD_APPLYING) {
+            String workflowId = stringValue(context, "workflowId", workflow.getWorkflowId());
+            String candidateDigest = stringValue(context, "candidateDigest", "");
+            String validationDigest = stringValue(context, "validationDigest", "");
+            Map<String, Object> arguments = new LinkedHashMap<>();
+            arguments.put("workflowId", workflowId);
+            arguments.put("candidateDigest", candidateDigest);
+            arguments.put("validationDigest", validationDigest);
+            try {
+                String result = callNamedTool(
+                        mcpToolContext, "visualization_dashboard_apply", arguments);
+                Map<String, Object> applied = mapValue(
+                        JacksonUtil.toMap(result, new TypeReference<Map<String, Object>>() {
+                        }));
+                String status = Objects.toString(applied.get("status"), "");
+                context.put("applyResult", applied);
+                workflow.setContext(context);
+                workflow.setStep("verified".equals(status)
+                        ? AgentWorkflowStep.VERIFIED : AgentWorkflowStep.BLOCKED);
+                workflow.setStatus("verified".equals(status) ? "completed" : "blocked");
+                workflow.setStateRevision(workflow.getStateRevision() + 1);
+                workflow.setUpdatedAt(Instant.now().toString());
+                persistWorkflowState(chatSession, workflow, mcpToolContext);
+                if ("verified".equals(status)) {
+                    return prompt + "\n\n【数据大屏发布真实结果】\n" + result
+                            + "\n只有 status=verified 才能声明发布成功，必须输出 "
+                            + "zenvis:visualization-dashboard-record，recordKind=dashboard，"
+                            + "并只使用真实 dashboardId、dashboardVersion、mode、fileDigest 和发布状态。"
+                            + "不得输出菜单或配置成功记录。";
+                }
+                return prompt + "\n\n【数据大屏发布被阻断】\n" + result
+                        + "\n不得声明发布成功；请说明真实错误并提供重试或修订入口。";
+            } catch (McpApprovalPendingException pending) {
+                throw pending;
+            } catch (RuntimeException e) {
+                markWorkflowBlocked(chatSession, workflow,
+                        AgentWorkflowStep.DASHBOARD_APPLYING,
+                        "visualization_dashboard_apply", safeWorkflowError(e));
+                return prompt + "\n\n【数据大屏发布失败】\n真实错误："
+                        + safeWorkflowError(e)
+                        + "\n不得声明发布成功；请提供 retry 或修订入口。";
+            }
+        }
+        if (step == AgentWorkflowStep.VERIFIED) {
+            Object applyResult = context.get("applyResult");
+            return prompt + "\n\n【数据大屏工作流：VERIFIED】\n"
+                    + "配置与 Dashboard 已发布并完成读回。只输出服务端真实结果对应的 "
+                    + "zenvis:visualization-dashboard-record，recordKind=dashboard；不得生成菜单记录。"
+                    + (applyResult == null ? "" : "\n真实发布结果：" + JacksonUtil.toJson(applyResult));
+        }
+        return prompt;
     }
 
     private String bootstrapDataAppWorkflow(McpToolContext mcpToolContext,
@@ -4090,10 +4227,6 @@ public class DihChatApplicationService {
             return visualizationChartDemoResponseService.findResponse(
                     chatSession, chatId, prompt, currentUser, McpToolContext.empty());
         }
-        if (VisualizationAgentTypes.isDashboard(chatType)) {
-            return visualizationDashboardDemoResponseService.findResponse(
-                    chatSession, chatId, prompt, currentUser, McpToolContext.empty());
-        }
         return findReportDemoResponse(chatType, chatId, prompt, currentUser, chatSession);
     }
 
@@ -4114,13 +4247,6 @@ public class DihChatApplicationService {
             if (VisualizationChartDemoResponseService.CHART_EXAMPLE_PROMPT
                     .equals(normalized)) {
                 return "visualization-chart:chart";
-            }
-        }
-        if (VisualizationAgentTypes.isDashboard(chatType)) {
-            String normalized = Objects.toString(prompt, "").trim();
-            if (VisualizationDashboardDemoResponseService.DASHBOARD_EXAMPLE_PROMPT
-                    .equals(normalized)) {
-                return "visualization-dashboard:dashboard";
             }
         }
         if (ReportAgent.AGENT_TYPE.equals(chatType)) {
@@ -4164,9 +4290,6 @@ public class DihChatApplicationService {
         if (VisualizationAgentTypes.isChart(chatType)) {
             return VisualizationChartDemoResponseService.isUserEventDemoRequirementPrompt(prompt);
         }
-        if (VisualizationAgentTypes.isDashboard(chatType)) {
-            return VisualizationDashboardDemoResponseService.isUserEventDemoRequirementPrompt(prompt);
-        }
         return ReportAgent.AGENT_TYPE.equals(chatType)
                 && ReportDemoResponseService.isReportDemoPrompt(prompt);
     }
@@ -4180,9 +4303,6 @@ public class DihChatApplicationService {
         }
         if (VisualizationAgentTypes.isChart(chatType)) {
             return "visualization-chart:chart";
-        }
-        if (VisualizationAgentTypes.isDashboard(chatType)) {
-            return "visualization-dashboard:dashboard";
         }
         if (ReportAgent.AGENT_TYPE.equals(chatType)) {
             return "report:user-event-analysis";
@@ -4652,6 +4772,19 @@ public class DihChatApplicationService {
     }
 
     /**
+     * A successful dashboard validation is already a user decision point even when
+     * the model only returns prose. The platform owns the real preview card, so a
+     * persistent Run must pause on the server-produced candidate as well as on a
+     * model-emitted structured card.
+     */
+    public boolean requiresUserDecision(String content,
+                                        ChatSession chatSession,
+                                        McpToolLogStream toolEvidence) {
+        return requiresUserDecision(content)
+                || platformDashboardPreview(chatSession, toolEvidence) != null;
+    }
+
+    /**
      * 将待处理卡片转换为补充信息弹窗中的具体问题，避免只展示通用占位说明。
      *
      * @param content 模型返回内容
@@ -4804,6 +4937,8 @@ public class DihChatApplicationService {
                 decorateDemoParts(parts, demoId);
             } else {
                 ensurePlatformVisualizationEntitySelection(
+                        chatSession, parts, toolActivityStream);
+                ensurePlatformVisualizationDashboardPreview(
                         chatSession, parts, toolActivityStream);
                 ensurePlatformVisualizationChartPreview(
                         chatSession, parts, toolActivityStream);
@@ -5452,7 +5587,8 @@ public class DihChatApplicationService {
         if (parts.stream().anyMatch(part -> Set.of(
                 "info-steps", "confirm", "config",
                 "visualization-chart-preview", "visualization-chart-record",
-                "visualization-app-record", "visualization-dashboard-record")
+                "visualization-app-record", "visualization-dashboard-record",
+                "visualization-dashboard-preview")
                 .contains(part.getType())
                 || VisualizationAgentTypes.ALL.stream()
                 .map(VisualizationAgentTypes::decisionPartType)
@@ -5575,6 +5711,302 @@ public class DihChatApplicationService {
             }
         }
         return false;
+    }
+
+    /**
+     * Validation already creates and locks a real read-only preview. Keep the
+     * publish confirmation deterministic instead of depending on the model to
+     * echo the full tool payload into a structured card.
+     */
+    private void ensurePlatformVisualizationDashboardPreview(
+            ChatSession chatSession,
+            List<ChatMessagePart> parts,
+            McpToolLogStream evidence) {
+        ChatMessagePart preview = platformDashboardPreview(chatSession, evidence);
+        if (preview == null || parts == null) {
+            return;
+        }
+        boolean hasMatchingPreview = parts.stream()
+                .filter(part -> "visualization-dashboard-preview".equals(part.getType()))
+                .anyMatch(part -> platformDashboardPreviewMatches(part, preview.getMetadata()));
+        parts.removeIf(part ->
+                "visualization-dashboard-preview".equals(part.getType())
+                        && !platformDashboardPreviewMatches(part, preview.getMetadata()));
+        if (hasMatchingPreview) {
+            return;
+        }
+        int markdownIndex = 0;
+        for (int index = 0; index < parts.size(); index++) {
+            if ("markdown".equals(parts.get(index).getType())) {
+                markdownIndex = index;
+                break;
+            }
+        }
+        parts.add(markdownIndex, preview);
+    }
+
+    private ChatMessagePart platformDashboardPreview(ChatSession chatSession,
+                                                     McpToolLogStream evidence) {
+        if (chatSession == null
+                || workflowStateStore == null
+                || evidence == null
+                || !VisualizationAgentTypes.isDashboard(chatSession.getType())) {
+            return null;
+        }
+        AgentWorkflowState workflow = workflowStateStore.loadActive(
+                chatSession, VisualizationAgentTypes.DASHBOARD).orElse(null);
+        if (workflow == null
+                || workflow.getStep() != AgentWorkflowStep.DASHBOARD_VALIDATING
+                || workflow.getContext() == null) {
+            return null;
+        }
+        McpToolLogStream.SuccessfulToolCall call =
+                evidence.successfulCall("visualization_dashboard_validate");
+        Map<String, Object> result = dashboardValidationPayload(
+                call == null ? "" : call.result());
+        if (result.isEmpty() || !dashboardValidationMatchesWorkflow(
+                result, workflow)) {
+            result = dashboardValidationFromWorkflow(workflow);
+        }
+        if (result.isEmpty()
+                || !"validated".equalsIgnoreCase(dashboardText(result, "status", "status"))
+                || !dashboardBoolean(result, "passed")) {
+            return null;
+        }
+        String resultWorkflowId = dashboardText(result, "workflowId", "workflow_id");
+        String candidateDigest = dashboardText(
+                result, "candidateDigest", "candidate_digest");
+        String validationDigest = dashboardText(
+                result, "validationDigest", "validation_digest");
+        Map<String, Object> context = workflow.getContext();
+        if (!workflow.getWorkflowId().equals(resultWorkflowId)
+                || !StringUtils.hasText(candidateDigest)
+                || !StringUtils.hasText(validationDigest)
+                || !candidateDigest.equals(stringValue(context, "candidateDigest", ""))
+                || !validationDigest.equals(stringValue(context, "validationDigest", ""))) {
+            return null;
+        }
+        Map<String, Object> preview = mapValue(dashboardValue(result, "preview", "preview"));
+        String previewUrl = firstNonBlank(
+                dashboardText(preview, "htmlUrl", "html_url"),
+                dashboardText(preview, "filesUrl", "files_url"));
+        String dashboardId = dashboardText(result, "dashboardId", "dashboard_id");
+        if (!StringUtils.hasText(previewUrl) || !StringUtils.hasText(dashboardId)) {
+            return null;
+        }
+        Map<String, Object> spec = mapValue(dashboardValue(result, "spec", "spec"));
+        String dashboardName = firstNonBlank(
+                dashboardText(spec, "name", "name"),
+                dashboardText(result, "name", "name"),
+                dashboardId);
+        String mode = firstNonBlank(
+                dashboardText(result, "mode", "mode"),
+                dashboardText(spec, "mode", "mode"),
+                "HTML_PAGE");
+        String theme = firstNonBlank(
+                dashboardText(spec, "theme", "theme"),
+                dashboardText(result, "theme", "theme"),
+                "DARK_TECH");
+        Integer dashboardVersion = intValue(dashboardValue(
+                result, "dashboardVersion", "dashboard_version"));
+        Integer refreshIntervalSeconds = intValue(dashboardValue(
+                spec, "refreshIntervalSeconds", "refresh_interval_seconds"));
+        String defaultTimeRange = dashboardText(
+                spec, "defaultTimeRange", "default_time_range");
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("dashboardId", dashboardId);
+        metadata.put("name", dashboardName);
+        metadata.put("dashboardVersion", dashboardVersion == null ? 1 : dashboardVersion);
+        metadata.put("mode", mode);
+        metadata.put("previousMode", dashboardText(result, "previousMode", "previous_mode"));
+        metadata.put("theme", theme);
+        metadata.put("refreshIntervalSeconds",
+                refreshIntervalSeconds == null ? 60 : refreshIntervalSeconds);
+        metadata.put("defaultTimeRange",
+                firstNonBlank(defaultTimeRange, "LAST_7_DAYS"));
+        metadata.put("workflowId", workflow.getWorkflowId());
+        metadata.put("validationStatus", "validated");
+        metadata.put("passed", true);
+        metadata.put("action", VisualizationAgentTypes.confirmPublishAction(
+                VisualizationAgentTypes.DASHBOARD));
+        metadata.put("allowedActions", List.of("approve", "reject", "revise"));
+        metadata.put("candidateDigest", candidateDigest);
+        metadata.put("validationDigest", validationDigest);
+        metadata.put("specDigest", dashboardText(result, "specDigest", "spec_digest"));
+        metadata.put("metaDigest", dashboardText(result, "metaDigest", "meta_digest"));
+        metadata.put("fileDigest", dashboardText(result, "fileDigest", "file_digest"));
+        metadata.put("spec", spec);
+        metadata.put("files", dashboardValue(result, "files", "files") instanceof List<?>
+                ? dashboardValue(result, "files", "files") : List.of());
+        metadata.put("diagnostics", dashboardValue(
+                result, "diagnostics", "diagnostics") instanceof List<?>
+                ? dashboardValue(result, "diagnostics", "diagnostics") : List.of());
+        metadata.put("preview", preview);
+
+        String message = dashboardText(result, "message", "message");
+        return ChatMessagePart.builder()
+                .id(dashboardPreviewPartId(workflow.getWorkflowId(), candidateDigest))
+                .type("visualization-dashboard-preview")
+                .title(dashboardName + " · 真实数据预览")
+                .content(StringUtils.hasText(message)
+                        ? message
+                        : "校验已通过。请确认真实数据预览；发布将写入大屏配置并创建或更新 Dashboard，不会创建菜单。")
+                .status("pending")
+                .metadata(metadata)
+                .build();
+    }
+
+    /**
+     * t_ai_agent_run_input.part_id is limited to 64 characters. The full workflow
+     * and candidate digests remain in metadata; the persisted card id only needs
+     * to be stable and unique within the preview payload.
+     */
+    private String dashboardPreviewPartId(String workflowId, String candidateDigest) {
+        String id = "dashboard-preview:" + workflowId + ":" + candidateDigest;
+        if (id.length() <= 64) {
+            return id;
+        }
+        int workflowLength = Math.min(8, workflowId.length());
+        int digestLength = Math.min(24, candidateDigest.length());
+        return "dashboard-preview:" + workflowId.substring(0, workflowLength)
+                + ":" + candidateDigest.substring(0, digestLength);
+    }
+
+    private Map<String, Object> dashboardValidationFromWorkflow(
+            AgentWorkflowState workflow) {
+        if (workflow == null || workflow.getContext() == null) {
+            return Map.of();
+        }
+        Map<String, Object> context = workflow.getContext();
+        Map<String, Object> validation = mapValue(context.get("validation"));
+        Map<String, Object> result = new LinkedHashMap<>(validation);
+        result.putIfAbsent("workflowId", workflow.getWorkflowId());
+        copyDashboardContextValue(result, context, "workflowId");
+        copyDashboardContextValue(result, context, "validationStatus");
+        copyDashboardContextValue(result, context, "dashboardId");
+        copyDashboardContextValue(result, context, "dashboardVersion");
+        copyDashboardContextValue(result, context, "candidateDigest");
+        copyDashboardContextValue(result, context, "validationDigest");
+        copyDashboardContextValue(result, context, "specDigest");
+        copyDashboardContextValue(result, context, "fileDigest");
+        copyDashboardContextValue(result, context, "metaDigest");
+        copyDashboardContextValue(result, context, "spec");
+        copyDashboardContextValue(result, context, "files");
+        copyDashboardContextValue(result, context, "diagnostics");
+        copyDashboardContextValue(result, context, "preview");
+        result.putIfAbsent("status",
+                dashboardText(context, "validationStatus", "validation_status"));
+        return dashboardValidationMatchesWorkflow(result, workflow) ? result : Map.of();
+    }
+
+    private void copyDashboardContextValue(Map<String, Object> target,
+                                           Map<String, Object> context,
+                                           String key) {
+        if (target.containsKey(key)) {
+            return;
+        }
+        Object value = context.get(key);
+        if (value == null && "spec".equals(key)) {
+            value = context.get("dashboardSpec");
+        }
+        if (value != null) {
+            target.put(key, value);
+        }
+    }
+
+    private boolean dashboardValidationMatchesWorkflow(
+            Map<String, Object> result, AgentWorkflowState workflow) {
+        if (result == null || result.isEmpty() || workflow == null) {
+            return false;
+        }
+        String workflowId = dashboardText(result, "workflowId", "workflow_id");
+        String candidateDigest = dashboardText(
+                result, "candidateDigest", "candidate_digest");
+        String validationDigest = dashboardText(
+                result, "validationDigest", "validation_digest");
+        Map<String, Object> context = workflow.getContext() == null
+                ? Map.of() : workflow.getContext();
+        return workflow.getWorkflowId().equals(workflowId)
+                && StringUtils.hasText(candidateDigest)
+                && StringUtils.hasText(validationDigest)
+                && candidateDigest.equals(stringValue(context, "candidateDigest", ""))
+                && validationDigest.equals(stringValue(context, "validationDigest", ""));
+    }
+
+    private boolean platformDashboardPreviewMatches(ChatMessagePart part,
+                                                    Map<String, Object> expected) {
+        if (part == null || part.getMetadata() == null || expected == null) {
+            return false;
+        }
+        Map<String, Object> metadata = part.getMetadata();
+        String candidateDigest = dashboardPreviewText(
+                metadata, "candidateDigest", "candidate_digest");
+        String validationDigest = dashboardPreviewText(
+                metadata, "validationDigest", "validation_digest");
+        String workflowId = dashboardPreviewText(metadata, "workflowId", "workflow_id");
+        Map<String, Object> preview = mapValue(dashboardPreviewValue(
+                metadata, "preview", "preview"));
+        String previewUrl = firstNonBlank(
+                dashboardText(preview, "htmlUrl", "html_url"),
+                dashboardText(preview, "filesUrl", "files_url"));
+        Map<String, Object> spec = mapValue(dashboardPreviewValue(
+                metadata, "spec", "spec"));
+        return candidateDigest.equals(stringValue(expected, "candidateDigest", ""))
+                && validationDigest.equals(stringValue(expected, "validationDigest", ""))
+                && workflowId.equals(stringValue(expected, "workflowId", ""))
+                && StringUtils.hasText(previewUrl)
+                && !spec.isEmpty()
+                && dashboardPreviewValue(metadata, "files", "files") instanceof List<?>
+                && dashboardPreviewValue(metadata, "diagnostics", "diagnostics") instanceof List<?>;
+    }
+
+    private Map<String, Object> dashboardValidationPayload(String rawResult) {
+        Map<String, Object> payload = parseJsonObject(rawResult);
+        Map<String, Object> data = mapValue(payload.get("data"));
+        if (!data.isEmpty()
+                && (dashboardValue(data, "status", "status") != null
+                || dashboardValue(data, "candidateDigest", "candidate_digest") != null
+                || dashboardValue(data, "passed", "passed") != null)) {
+            return data;
+        }
+        return payload;
+    }
+
+    private Object dashboardValue(Map<String, Object> map, String camelKey, String snakeKey) {
+        if (map == null) {
+            return null;
+        }
+        if (map.containsKey(camelKey)) {
+            return map.get(camelKey);
+        }
+        return map.get(snakeKey);
+    }
+
+    private String dashboardText(Map<String, Object> map, String camelKey, String snakeKey) {
+        Object value = dashboardValue(map, camelKey, snakeKey);
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private boolean dashboardBoolean(Map<String, Object> map, String key) {
+        Object value = dashboardValue(map, key, key);
+        return Boolean.TRUE.equals(value)
+                || (value != null && "true".equalsIgnoreCase(value.toString().trim()));
+    }
+
+    private Object dashboardPreviewValue(Map<String, Object> metadata,
+                                         String camelKey,
+                                         String snakeKey) {
+        Map<String, Object> validation = mapValue(metadata.get("validation"));
+        Object value = dashboardValue(validation, camelKey, snakeKey);
+        return value != null ? value : dashboardValue(metadata, camelKey, snakeKey);
+    }
+
+    private String dashboardPreviewText(Map<String, Object> metadata,
+                                        String camelKey,
+                                        String snakeKey) {
+        Object value = dashboardPreviewValue(metadata, camelKey, snakeKey);
+        return value == null ? "" : value.toString().trim();
     }
 
     private void ensurePlatformVisualizationChartPreview(
@@ -5925,19 +6357,20 @@ public class DihChatApplicationService {
             ChatMessagePart part,
             Map<String, Object> raw,
             McpToolLogStream evidence) {
-        AgentWorkflowState workflow = chatSession == null
-                || workflowStateStore == null
-                ? null
-                : workflowStateStore.loadActive(
-                chatSession, chatSession.getType()).orElse(null);
         String recordKind = visualizationRecordKind(part);
-        boolean applicationRecord = VisualizationAgentTypes.isApp(chatSession == null
-                ? "" : chatSession.getType())
+        String agentType = chatSession == null ? "" : chatSession.getType();
+        boolean applicationRecord = VisualizationAgentTypes.isApp(agentType)
                 && "application".equals(recordKind);
+        boolean managedDashboardRecord = VisualizationAgentTypes.isDashboard(agentType)
+                && "dashboard".equals(recordKind);
+        AgentWorkflowState workflow = loadVisualizationRecordWorkflow(
+                chatSession, recordKind, raw);
         boolean expectedStep = applicationRecord
                 ? workflow != null && Set.of(
                 AgentWorkflowStep.VERIFIED, AgentWorkflowStep.PARTIAL_MENU)
                 .contains(workflow.getStep())
+                : managedDashboardRecord
+                ? workflow != null && workflow.getStep() == AgentWorkflowStep.VERIFIED
                 : "menu".equals(recordKind)
                 ? workflow != null && workflow.getStep() == AgentWorkflowStep.MENU_PUBLISHING
                 : workflow != null && workflow.getStep() == AgentWorkflowStep.PERSISTING;
@@ -5947,6 +6380,8 @@ public class DihChatApplicationService {
                     raw,
                     applicationRecord
                             ? "数据应用发布记录没有处于已读回验证的 VERIFIED 或 PARTIAL_MENU 工作流阶段"
+                            : managedDashboardRecord
+                            ? "数据大屏发布记录没有处于已读回验证的 VERIFIED 工作流阶段"
                             : "menu".equals(recordKind)
                             ? "可视化菜单记录没有处于已批准的 MENU_PUBLISHING 工作流阶段"
                             : "可视化写入记录没有处于已批准的 PERSISTING 工作流阶段");
@@ -5954,11 +6389,10 @@ public class DihChatApplicationService {
         }
         Map<String, Object> workflowContext = workflow.getContext() == null
                 ? Map.of() : workflow.getContext();
-        String agentType = chatSession.getType();
         boolean supportedKind = VisualizationAgentTypes.isApp(agentType)
                 ? Set.of("application", "config", "menu").contains(recordKind)
                 : VisualizationAgentTypes.isDashboard(agentType)
-                ? Set.of("config", "dashboard", "menu").contains(recordKind)
+                ? "dashboard".equals(recordKind)
                 : false;
         if (!supportedKind) {
             blockVisualizationPart(
@@ -5969,6 +6403,10 @@ public class DihChatApplicationService {
         }
         if (applicationRecord) {
             validateDataApplicationRecord(part, raw, workflowContext, evidence);
+            return;
+        }
+        if (managedDashboardRecord) {
+            validateManagedDashboardRecord(part, raw, workflowContext);
             return;
         }
         Map<String, Object> persistenceCandidate = mapValue(
@@ -6085,12 +6523,16 @@ public class DihChatApplicationService {
             blockVisualizationPart(part, raw, "缺少服务端锁定的数据应用配置读回结果");
             return;
         }
-        String appId = stringValue(applyResult, "appId", "");
+        String appId = firstNonBlank(
+                stringValue(applyResult, "appId", null),
+                stringValue(applyResult, "app_id", null));
+        Integer appVersion = intValue(firstNonNull(
+                applyResult.get("appVersion"), applyResult.get("app_version")));
         if (!StringUtils.hasText(appId)
                 || (StringUtils.hasText(stringValue(raw, "appId", ""))
                 && !appId.equals(stringValue(raw, "appId", "")))
                 || (raw.get("app_version") != null
-                && !Objects.equals(String.valueOf(applyResult.get("appVersion")),
+                && !Objects.equals(String.valueOf(appVersion),
                 String.valueOf(raw.get("app_version"))))) {
             blockVisualizationPart(part, raw, "数据应用发布记录与工作流锁定应用不一致");
             return;
@@ -6102,13 +6544,14 @@ public class DihChatApplicationService {
             return;
         }
         raw.put("appId", appId);
-        raw.put("appVersion", applyResult.get("appVersion"));
+        raw.put("appVersion", appVersion);
         raw.put("mode", applyResult.get("mode"));
         raw.put("status", applyStatus);
         raw.put("publishStatus", applyStatus);
         raw.put("configStatus", "verified");
         raw.put("menuStatus", applyStatus);
-        raw.put("manifestDigest", applyResult.get("manifestDigest"));
+        raw.put("manifestDigest", firstNonNull(
+                applyResult.get("manifestDigest"), applyResult.get("manifest_digest")));
         raw.put("menu", applyResult.get("menu"));
         Map<String, Object> menu = mapValue(applyResult.get("menu"));
         raw.put("menuId", menu.get("id"));
@@ -6130,6 +6573,188 @@ public class DihChatApplicationService {
         }
         raw.put("validationStatus", "success");
         raw.put("validated", true);
+    }
+
+    private void validateManagedDashboardRecord(ChatMessagePart part,
+                                                Map<String, Object> raw,
+                                                Map<String, Object> workflowContext) {
+        Map<String, Object> applyResult = mapValue(workflowContext.get("applyResult"));
+        if (applyResult.isEmpty()
+                || !"verified".equals(stringValue(applyResult, "status", ""))) {
+            blockVisualizationPart(part, raw, "缺少服务端锁定的数据大屏发布读回结果");
+            return;
+        }
+        String dashboardId = firstNonBlank(
+                stringValue(applyResult, "dashboardId", null),
+                stringValue(applyResult, "dashboard_id", null));
+        String mode = stringValue(applyResult, "mode", "");
+        String fileDigest = firstNonBlank(
+                stringValue(applyResult, "fileDigest", null),
+                stringValue(applyResult, "file_digest", null));
+        Integer dashboardVersion = intValue(firstNonNull(
+                applyResult.get("dashboardVersion"),
+                applyResult.get("dashboard_version")));
+        Integer dashboardRecordId = intValue(firstNonNull(
+                applyResult.get("dashboardRecordId"),
+                applyResult.get("dashboard_record_id")));
+        List<String> missingApplyFields = new ArrayList<>();
+        if (!StringUtils.hasText(dashboardId)) {
+            missingApplyFields.add("dashboardId");
+        }
+        if (!Set.of("HTML_PAGE", "LOW_CODE_PAGE").contains(mode)) {
+            missingApplyFields.add("mode");
+        }
+        if (!StringUtils.hasText(fileDigest)) {
+            missingApplyFields.add("fileDigest");
+        }
+        if (dashboardVersion == null) {
+            missingApplyFields.add("dashboardVersion");
+        }
+        if (dashboardRecordId == null) {
+            missingApplyFields.add("dashboardRecordId");
+        }
+        if (!missingApplyFields.isEmpty()) {
+            blockVisualizationPart(part, raw,
+                    "数据大屏发布结果缺少稳定标识、版本、模式或文件摘要："
+                            + String.join(", ", missingApplyFields));
+            return;
+        }
+        try {
+            String configType = "HTML_PAGE".equals(mode) ? "html-page" : dashboardId;
+            String manifestPath = "HTML_PAGE".equals(mode)
+                    ? dashboardId + ".manifest.json" : "_dashboard.json";
+            Map<String, Object> manifest = parseJsonObject(readWithRetries(
+                    () -> configService.readFile(configType, manifestPath)));
+            if (!dashboardId.equals(firstNonBlank(
+                    stringValue(manifest, "dashboard_id", null),
+                    stringValue(manifest, "dashboardId", null), ""))
+                    || !Objects.equals(String.valueOf(dashboardVersion),
+                    String.valueOf(firstNonNull(
+                            manifest.get("dashboard_version"), manifest.get("dashboardVersion"))))
+                    || !fileDigest.equals(firstNonBlank(
+                    stringValue(manifest, "file_digest", null),
+                    stringValue(manifest, "fileDigest", null), ""))
+                    || !"published".equals(firstNonBlank(
+                    stringValue(manifest, "publish_status", null),
+                    stringValue(manifest, "publishStatus", null), ""))) {
+                blockVisualizationPart(part, raw, "数据大屏清单或文件摘要与锁定发布结果不一致");
+                return;
+            }
+            DashboardVo dashboard = readWithRetries(
+                    () -> dashboardService.info(dashboardRecordId.longValue()));
+            if (dashboard == null
+                    || !dashboardId.equals(dashboard.getCode())
+                    || !("dashboard:" + dashboardId).equals(dashboard.getSource())
+                    || dashboard.getType() == null
+                    || !mode.equals(dashboard.getType().name())) {
+                blockVisualizationPart(part, raw, "数据大屏 Dashboard 记录与受管清单不一致");
+                return;
+            }
+            raw.put("dashboardId", dashboardId);
+            raw.put("dashboardVersion", dashboardVersion);
+            raw.put("dashboardRecordId", dashboardRecordId);
+            raw.put("mode", mode);
+            raw.put("fileDigest", fileDigest);
+            raw.put("specDigest", firstNonBlank(
+                    stringValue(manifest, "spec_digest", null),
+                    stringValue(manifest, "specDigest", null), ""));
+            raw.put("code", dashboard.getCode());
+            raw.put("name", dashboard.getName());
+            raw.put("dashboardType", dashboard.getType().name());
+            raw.put("configIndex", dashboard.getConfigIndex());
+            raw.put("htmlPath", dashboard.getHtmlPath());
+            raw.put("recordKind", "dashboard");
+            raw.put("status", "verified");
+            raw.put("publishStatus", "published");
+            raw.put("workflowId", stringValue(workflowContext, "workflowId", ""));
+            raw.put("source", "workflow");
+            Map<String, Object> record = buildDashboardConfigRecord(part);
+            if (!isDashboardConfigRecordPresent(record)) {
+                blockVisualizationPart(part, raw, "数据大屏发布后的 Dashboard 读回不存在或关键字段不一致");
+                return;
+            }
+            raw.put("validationStatus", "success");
+            raw.put("validated", true);
+        } catch (RuntimeException e) {
+            blockVisualizationPart(part, raw, "数据大屏发布后的清单或 Dashboard 读回失败");
+        }
+    }
+
+    /**
+     * Publication workflows become terminal as soon as apply is read back. The final
+     * record card is emitted after that transition, so activeByAgent may already be
+     * empty or point at a newer unrelated card. Select by the immutable publication
+     * target and locked apply result instead of trusting whichever workflow is active.
+     */
+    private AgentWorkflowState loadVisualizationRecordWorkflow(
+            ChatSession chatSession,
+            String recordKind,
+            Map<String, Object> raw) {
+        if (chatSession == null || workflowStateStore == null) {
+            return null;
+        }
+        String agentType = chatSession.getType();
+        boolean applicationRecord = VisualizationAgentTypes.isApp(agentType)
+                && "application".equals(recordKind);
+        boolean managedDashboardRecord = VisualizationAgentTypes.isDashboard(agentType)
+                && "dashboard".equals(recordKind);
+        if (applicationRecord || managedDashboardRecord) {
+            AgentWorkflowState matched = workflowStateStore
+                    .loadAll(chatSession, agentType).stream()
+                    .filter(state -> applicationRecord
+                            ? Set.of(AgentWorkflowStep.VERIFIED,
+                            AgentWorkflowStep.PARTIAL_MENU).contains(state.getStep())
+                            : state.getStep() == AgentWorkflowStep.VERIFIED)
+                    .filter(state -> publicationRecordMatches(state, recordKind, raw))
+                    .findFirst()
+                    .orElse(null);
+            if (matched != null) {
+                return matched;
+            }
+        }
+        String workflowId = stringValue(raw, "workflowId", "");
+        if (StringUtils.hasText(workflowId)) {
+            AgentWorkflowState hinted = workflowStateStore
+                    .load(chatSession, workflowId).orElse(null);
+            if (hinted != null) {
+                return hinted;
+            }
+        }
+        return workflowStateStore.loadActive(chatSession, agentType).orElse(null);
+    }
+
+    private boolean publicationRecordMatches(AgentWorkflowState workflow,
+                                             String recordKind,
+                                             Map<String, Object> raw) {
+        Map<String, Object> context = workflow.getContext() == null
+                ? Map.of() : workflow.getContext();
+        Map<String, Object> applyResult = mapValue(context.get("applyResult"));
+        if ("dashboard".equals(recordKind)) {
+            String publishedId = firstNonBlank(
+                    stringValue(applyResult, "dashboardId", null),
+                    stringValue(applyResult, "dashboard_id", null));
+            String recordId = firstNonBlank(
+                    stringValue(raw, "dashboardId", null),
+                    stringValue(raw, "dashboard_id", null));
+            return "verified".equals(stringValue(applyResult, "status", ""))
+                    && StringUtils.hasText(publishedId)
+                    && (!StringUtils.hasText(recordId)
+                    || recordId.equals(publishedId));
+        }
+        if ("application".equals(recordKind)) {
+            String publishedId = firstNonBlank(
+                    stringValue(applyResult, "appId", null),
+                    stringValue(applyResult, "app_id", null));
+            String recordId = firstNonBlank(
+                    stringValue(raw, "appId", null),
+                    stringValue(raw, "app_id", null));
+            return Set.of("verified", "partial_menu")
+                    .contains(stringValue(applyResult, "status", ""))
+                    && StringUtils.hasText(publishedId)
+                    && (!StringUtils.hasText(recordId)
+                    || recordId.equals(publishedId));
+        }
+        return false;
     }
 
     private boolean matchesLockedPersistenceField(
@@ -8020,12 +8645,22 @@ public class DihChatApplicationService {
         String dashboardId = firstNonBlank(stringValue(raw, "dashboardId", null), stringValue(raw, "dashboard_id", null), stringValue(raw, "id", null));
         String code = firstNonBlank(stringValue(raw, "code", null), stringValue(raw, "dashboardCode", null), stringValue(raw, "dashboard_code", null));
         record.put("dashboardId", dashboardId);
+        record.put("dashboardVersion", firstNonNull(
+                raw.get("dashboardVersion"), raw.get("dashboard_version")));
+        record.put("dashboardRecordId", firstNonNull(
+                raw.get("dashboardRecordId"), raw.get("dashboard_record_id")));
         record.put("recordKind", "dashboard");
         record.put("code", code);
+        record.put("mode", firstNonBlank(
+                stringValue(raw, "mode", null), stringValue(raw, "dashboardMode", null)));
         record.put("dashboardType", firstNonBlank(stringValue(raw, "dashboardType", null), stringValue(raw, "type", null)));
         record.put("url", stringValue(raw, "url", ""));
         record.put("configIndex", firstNonBlank(stringValue(raw, "configIndex", null), stringValue(raw, "config_index", null)));
         record.put("htmlPath", firstNonBlank(stringValue(raw, "htmlPath", null), stringValue(raw, "html_path", null)));
+        record.put("specDigest", stringValue(raw, "specDigest", ""));
+        record.put("fileDigest", firstNonBlank(
+                stringValue(raw, "fileDigest", null), stringValue(raw, "file_digest", null)));
+        record.put("publishStatus", stringValue(raw, "publishStatus", ""));
         record.put("status", stringValue(raw, "status", "created"));
         record.put("source", firstNonBlank(
                 stringValue(raw, "source", null), "dashboard"));
@@ -8711,6 +9346,20 @@ public class DihChatApplicationService {
         }
         Object value = map.get(key);
         return value == null || !StringUtils.hasText(value.toString()) ? fallback : value.toString();
+    }
+
+    private Integer intValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null || !StringUtils.hasText(value.toString())) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.toString().trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String firstNonBlank(String... values) {

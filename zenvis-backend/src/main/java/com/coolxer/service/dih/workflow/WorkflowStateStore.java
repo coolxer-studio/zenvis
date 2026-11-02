@@ -7,7 +7,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -40,6 +42,34 @@ public class WorkflowStateStore {
             return Optional.empty();
         }
         return load(map(parse(chatSession.getExtraData()).get(RESERVED_KEY)), workflowId);
+    }
+
+    /**
+     * Returns the latest snapshots for one agent. A completed publication removes
+     * itself from activeByAgent, but the immutable snapshot stays available so the
+     * final read-only record card can still be tied to the workflow that produced it.
+     */
+    public List<AgentWorkflowState> loadAll(ChatSession chatSession, String agentType) {
+        if (chatSession == null || !StringUtils.hasText(agentType)) {
+            return List.of();
+        }
+        Map<String, Object> section = map(parse(chatSession.getExtraData())
+                .get(RESERVED_KEY));
+        return map(section.get(WORKFLOWS_KEY)).entrySet().stream()
+                .map(entry -> load(section, entry.getKey()))
+                .flatMap(Optional::stream)
+                .filter(state -> agentType.equals(state.getAgentType()))
+                .sorted(Comparator
+                        .comparing((AgentWorkflowState state) -> state.getUpdatedAt(),
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparingLong(AgentWorkflowState::getStateRevision)
+                        .reversed())
+                .toList();
+    }
+
+    public Optional<AgentWorkflowState> loadLatest(ChatSession chatSession,
+                                                   String agentType) {
+        return loadAll(chatSession, agentType).stream().findFirst();
     }
 
     public void upsert(ChatSession chatSession, AgentWorkflowState state) {

@@ -46,6 +46,7 @@ public class McpServerToolConfiguration {
                                                                     MenuMcpTool menuMcpTool,
                                                                     DashboardMcpTool dashboardMcpTool,
                                                                     DataAppMcpTool dataAppMcpTool,
+                                                                    com.coolxer.controller.dih.DashboardMcpTool visualizationDashboardMcpTool,
                                                                     McpApprovalService approvalService,
                                                                     McpToolPolicyService policyService) {
         log.info("=== Creating MethodToolCallbackProvider for MCP tools ===");
@@ -59,12 +60,14 @@ public class McpServerToolConfiguration {
         logToolMethods(MenuMcpTool.class);
         logToolMethods(DashboardMcpTool.class);
         logToolMethods(DataAppMcpTool.class);
+        logToolMethods(com.coolxer.controller.dih.DashboardMcpTool.class);
 
         // 创建 MethodToolCallbackProvider
         MethodToolCallbackProvider provider = MethodToolCallbackProvider.builder()
                 .toolObjects(retrievalMcpTool, analysisTaskMcpTool, analysisTaskScheduleMcpTool,
                         pushTaskMcpTool, configMcpTool,
-                        configValidationMcpTool, menuMcpTool, dashboardMcpTool, dataAppMcpTool)
+                        configValidationMcpTool, menuMcpTool, dashboardMcpTool, dataAppMcpTool,
+                        visualizationDashboardMcpTool)
                 .build();
 
         Map<String, McpToolDescriptor> descriptors = new LinkedHashMap<>();
@@ -77,6 +80,7 @@ public class McpServerToolConfiguration {
         addToolDescriptors(descriptors, MenuMcpTool.class);
         addToolDescriptors(descriptors, DashboardMcpTool.class);
         addToolDescriptors(descriptors, DataAppMcpTool.class);
+        addToolDescriptors(descriptors, com.coolxer.controller.dih.DashboardMcpTool.class);
         policyService.deleteStaleLocalPolicies(descriptors.keySet());
 
         log.info("=== MethodToolCallbackProvider created successfully ===");

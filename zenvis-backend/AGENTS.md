@@ -27,12 +27,12 @@ ZenVis Backend 的 AI Agent 基于 Spring AI、MCP 工具调用和 Skill 配置�
 - 分别使用独立会话类型、Skill、Workflow、决策协议和结果分区
 - 使用 `PromptDrivenAgentRuntime` 驱动对话，并复用统一聊天流式响应与会话保存逻辑
 - 先通过只读 retrieval MCP 获取实体与字段 Meta，再执行已批准的安全查询
-- 临时图表只生成 ECharts 快照；可视化应用生成配置与菜单；数据大屏生成配置、Dashboard 与菜单
+- 临时图表只生成 ECharts 快照；可视化应用生成 AMIS 配置与菜单；数据大屏只生成 `DashboardSpec`，由平台编译 HTML/AMIS 并发布配置与 Dashboard
 
 **工具边界**:
 - 临时图表只允许只读 retrieval、实体查询和 `add_to_library` 服务端动作，无配置、Dashboard、菜单或 Meta 写工具
-- 可视化应用允许 retrieval、配置写工具和 `menu_*`，无 Dashboard、推送或 Meta 写工具
-- 数据大屏允许 retrieval、配置写工具、Dashboard 工具和 `menu_*`，无推送或 Meta 写工具
+- 可视化应用只允许 retrieval、只读菜单查询和 `data-app` 的 `visualization_app_list/get/validate/apply/retry_menu`，无配置写、Dashboard、推送或 Meta 写工具
+- 数据大屏只允许 retrieval 只读工具和 `dashboard` 的 `visualization_dashboard_list/get/validate/apply`，无 `config_*`、`dashboard_create`、`menu_*`、推送或 Meta 写工具；发布不创建菜单
 - 只有临时图表可产生图表库记录；三者都不追加外部 MCP tools
 - 尊重 `app.ai.mcp.enabled=false` 的全局禁用
 

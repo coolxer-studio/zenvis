@@ -408,7 +408,7 @@ class ChatMessagePartParserTest {
                 {"title":"确认应用方案","action":"visualization_app.confirm_application_plan","appId":"user-event-analysis","specDigest":"sha256-app"}
                 ```
                 ```zenvis:visualization-dashboard-decision
-                {"title":"确认大屏写入方案","action":"visualization_dashboard.confirm_plan","planId":"dashboard-plan-001"}
+                {"title":"确认大屏方案","action":"visualization_dashboard.confirm_dashboard_plan","dashboardId":"user-event-dashboard","specDigest":"sha256-dashboard"}
                 ```
                 """;
 
@@ -424,7 +424,26 @@ class ChatMessagePartParserTest {
         assertEquals("chart-plan-001", parts.get(0).getMetadata().get("planId"));
         assertEquals("user-event-analysis", parts.get(1).getMetadata().get("appId"));
         assertEquals("sha256-app", parts.get(1).getMetadata().get("specDigest"));
-        assertEquals("dashboard-plan-001", parts.get(2).getMetadata().get("planId"));
+        assertEquals("user-event-dashboard", parts.get(2).getMetadata().get("dashboardId"));
+        assertEquals("sha256-dashboard", parts.get(2).getMetadata().get("specDigest"));
+    }
+
+    @Test
+    @DisplayName("数据大屏真实预览围栏应解析为待确认片段")
+    void parseVisualizationDashboardPreviewFence() {
+        String content = """
+                ```zenvis:visualization-dashboard-preview
+                {"dashboardId":"user-event-dashboard","dashboardVersion":2,"mode":"HTML_PAGE","validationStatus":"validated","candidateDigest":"candidate-1","validationDigest":"validation-1","preview":{"htmlUrl":"/api/v1/dih/chat/workflows/wf-1/dashboard-preview?token=t"}}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("visualization-dashboard-preview", parts.get(0).getType());
+        assertEquals("pending", parts.get(0).getStatus());
+        assertEquals("candidate-1", parts.get(0).getMetadata().get("candidateDigest"));
+        assertEquals("validation-1", parts.get(0).getMetadata().get("validationDigest"));
     }
 
     @Test

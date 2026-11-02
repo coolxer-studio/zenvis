@@ -47,10 +47,8 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'visualization_app.confirm_query_plan',
   'visualization_app.confirm_application_plan',
   'visualization_app.confirm_publish',
-  'visualization_dashboard.confirm_query_plan',
-  'visualization_dashboard.confirm_plan',
-  'visualization_dashboard.confirm_overwrite',
-  'visualization_dashboard.confirm_menu',
+  'visualization_dashboard.confirm_dashboard_plan',
+  'visualization_dashboard.confirm_publish',
 ]);
 
 const AUTO_REJECT_ACTIONS = new Set([
@@ -63,10 +61,8 @@ const AUTO_REJECT_ACTIONS = new Set([
   'visualization_app.confirm_application_plan',
   'visualization_app.confirm_publish',
   'visualization_app.retry_menu',
-  'visualization_dashboard.confirm_query_plan',
-  'visualization_dashboard.confirm_plan',
-  'visualization_dashboard.confirm_overwrite',
-  'visualization_dashboard.confirm_menu',
+  'visualization_dashboard.confirm_dashboard_plan',
+  'visualization_dashboard.confirm_publish',
 ]);
 
 const asObject = (value: unknown): Record<string, unknown> => {
@@ -133,8 +129,7 @@ const autoConfirmMessage = (action: string) => {
   if (action === 'visualization_chart.confirm_query_plan') {
     return '我已确认上一轮 Meta 查询得到的实体、字段角色、统计口径和查询参数。请严格按该 planId 调用卡片中的数据工具；成功后仅使用真实返回的 echarts.option 生成临时图表预览，不得入库、写配置或改用示例数据。';
   }
-  if (action === 'visualization_app.confirm_query_plan'
-    || action === 'visualization_dashboard.confirm_query_plan') {
+  if (action === 'visualization_app.confirm_query_plan') {
     return '我已确认本轮 Meta 查询方案。请严格按锁定 planId 和数据工具参数执行只读查询；查询结果只用于生成配置，不得写入临时图表库。';
   }
   if (action === 'visualization_app.confirm_application_plan') {
@@ -146,12 +141,11 @@ const autoConfirmMessage = (action: string) => {
   if (action === 'visualization_app.retry_menu') {
     return '我已确认重试当前锁定版本的菜单发布。请调用 visualization_app_retry_menu，不重写应用文件，并在菜单读回一致后输出发布结果。';
   }
-  if (action === 'visualization_dashboard.confirm_plan'
-    || action === 'visualization_dashboard.confirm_overwrite') {
-    return '我已确认写入锁定的大屏配置。请按确认卡执行配置写入与读回，再由平台按锁定 Dashboard 参数创建并读回 Dashboard；配置或 Dashboard 参数变化时必须重新确认。';
+  if (action === 'visualization_dashboard.confirm_dashboard_plan') {
+    return '我已确认大屏方案与查询口径。请调用 visualization_dashboard_validate 生成服务端确定性编译和真实数据预览；不得自行生成 HTML、AMIS、API URL 或 SQL，也不得在同一轮发布。';
   }
-  if (action === 'visualization_dashboard.confirm_menu') {
-    return '我已确认发布锁定菜单。请调用 menu_create 并接受高风险 MCP 审批，随后调用 menu_view 读回校验；只在读回一致时输出菜单记录。';
+  if (action === 'visualization_dashboard.confirm_publish') {
+    return '我已确认真实数据预览与发布内容。请调用 visualization_dashboard_apply，原样使用工作流锁定的 candidate_digest 和 validation_digest 一次发布配置与 Dashboard，并完成全量读回；不要创建菜单。';
   }
   return '我已确认本次操作，请继续执行下一阶段。';
 };
@@ -330,7 +324,7 @@ const visualizationDecisionMessage = (
     if (domain === 'app') {
       return '我已确认当前可视化应用阶段。若处于应用方案阶段，请调用 visualization_app_validate；若处于发布确认阶段，请按锁定摘要调用 visualization_app_apply 一次完成配置与菜单发布，并完成全量读回。不要创建 Dashboard，也不要写入临时图表库。';
     }
-    return '我已确认并授权应用上一轮数据大屏配置。请按锁定目标文件和内容写入配置并读回，再按锁定参数创建并读回 Dashboard；菜单发布必须单独确认，不要写入临时图表库。';
+    return '我已确认当前数据大屏阶段。若处于方案确认阶段，请调用 visualization_dashboard_validate；若处于真实预览阶段，请按锁定摘要调用 visualization_dashboard_apply 一次发布配置与 Dashboard 并完成读回，不要创建菜单或写入临时图表库。';
   }
   if (decision === 'abandon') {
     return `我选择放弃本次${label}配置。请记录本次操作已放弃，不要执行任何写入或创建动作。`;

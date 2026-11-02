@@ -17,6 +17,60 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkflowOrchestratorTest {
 
     @Test
+    void completedPublicationKeepsItsRecordCardOnTheOriginalWorkflow() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
+        ChatSession session = new ChatSession()
+                .setType("agent_visualization_dashboard");
+        String workflowId = "62a68ae6-6524-4168-b3d2-9860c4f3a412";
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId(workflowId)
+                .setAgentType("agent_visualization_dashboard")
+                .setWorkflowType("visualization_dashboard")
+                .setObjectType("dashboard")
+                .setStep(AgentWorkflowStep.VERIFIED)
+                .setStatus("completed")
+                .setStateRevision(6)
+                .setUpdatedAt("2026-11-02T06:53:17.728Z")
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "workflowId", workflowId,
+                        "applyResult", Map.of(
+                                "status", "verified",
+                                "dashboard_id", "user-event-dashboard",
+                                "dashboard_version", 1,
+                                "dashboard_record_id", 52)))));
+        ChatMessagePart record = ChatMessagePart.builder()
+                .id("record-1")
+                .type("visualization-dashboard-record")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "recordKind", "dashboard",
+                        "dashboardId", "user-event-dashboard",
+                        "dashboardVersion", 1,
+                        "dashboardRecordId", 52)))
+                .build();
+
+        orchestrator.prepareVisualizationParts(
+                session, List.of(record), List.of(), "message-final");
+
+        assertThat(record.getStatus()).isEqualTo("pending");
+        assertThat(record.getMetadata())
+                .containsEntry("workflowId", workflowId)
+                .containsEntry("step", "VERIFIED")
+                .containsEntry("validationStatus", "success")
+                .containsEntry("source", "workflow");
+        assertThat(store.loadAll(session, "agent_visualization_dashboard"))
+                .singleElement()
+                .satisfies(state -> {
+                    assertThat(state.getWorkflowId()).isEqualTo(workflowId);
+                    assertThat(state.getMessageId()).isEqualTo("message-final");
+                    assertThat(state.getPartId()).isEqualTo("record-1");
+                });
+        assertThat(store.loadActive(session, "agent_visualization_dashboard"))
+                .isEmpty();
+    }
+
+    @Test
     void entityOptionsBecomeStrictAndCarryMcpEvidence() {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
@@ -368,7 +422,7 @@ class WorkflowOrchestratorTest {
     }
 
     @Test
-    void visualizationPersistenceLocksCompleteDashboardRequest() {
+    void legacyDashboardPersistenceConfirmationIsBlocked() {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
@@ -416,18 +470,13 @@ class WorkflowOrchestratorTest {
                 "message-1");
 
         assertThat(confirmation.getMetadata())
-                .containsEntry("step", "PERSIST_CONFIRMATION")
-                .containsEntry("validationStatus", "success");
+                .containsEntry("step", "BLOCKED")
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("blockedAction", "visualization_dashboard.confirm_plan");
         assertThat(store.loadActive(session, "agent_visualization_dashboard"))
                 .get()
-                .satisfies(state -> assertThat(state.getContext())
-                        .containsEntry(
-                                "persistencePlan",
-                                Map.of(
-                                        "configType", "probe-message",
-                                        "configIndex", "probe-message",
-                                        "fileName", "index.json",
-                                        "dashboard", Map.of("request", dashboardRequest))));
+                .satisfies(state -> assertThat(state.getStep())
+                        .isEqualTo(AgentWorkflowStep.BLOCKED));
     }
 
     @Test
@@ -513,7 +562,7 @@ class WorkflowOrchestratorTest {
     }
 
     @Test
-    void dashboardMenuCardRequiresBothConfigAndDashboardRecords() {
+    void legacyDashboardMenuConfirmationIsAlwaysBlocked() {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession configOnly = new ChatSession()
@@ -538,13 +587,14 @@ class WorkflowOrchestratorTest {
                 .containsEntry("step", "BLOCKED")
                 .containsEntry("validationStatus", "blocked");
 
-        ChatMessagePart allowed = menuCard("visualization-dashboard-decision",
+        ChatMessagePart completeBlocked = menuCard("visualization-dashboard-decision",
                 "visualization_dashboard.confirm_menu");
         orchestrator.prepareParts(
-                complete, List.of(allowed), List.of(), "message-2");
-        assertThat(allowed.getMetadata())
-                .containsEntry("step", "MENU_CONFIRMATION")
-                .containsEntry("validationStatus", "success");
+                complete, List.of(completeBlocked), List.of(), "message-2");
+        assertThat(completeBlocked.getMetadata())
+                .containsEntry("step", "BLOCKED")
+                .containsEntry("validationStatus", "blocked")
+                .containsEntry("blockedAction", "visualization_dashboard.confirm_menu");
     }
 
     private ChatMessagePart menuCard(String partType, String action) {

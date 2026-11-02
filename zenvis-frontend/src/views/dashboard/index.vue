@@ -114,6 +114,7 @@ import linkBoard from './components/link-board/index.vue';
 import lowCodeBoard from './components/low-code-board/index.vue';
 import htmlBoard from './components/html-board/index.vue';
 import systemBoard from './components/system-board/index.vue';
+import { resolveDashboardForRoute } from './dashboard-selection';
 
 import { SystemService } from '@/service/api';
 
@@ -178,18 +179,12 @@ const selectDashboardFromRoute = () => {
     currentDashboard.value = { id: '', type: '', code: '' };
     return;
   }
-  const targetId = route.query.id?.toString() || '';
-  const targetCode = route.query.code?.toString() || '';
-  const targetName = route.query.name?.toString() || '';
-  const matched = dashboardListData.value.find(item => {
-    return (
-      (targetId && String(item.id) === targetId) ||
-      (targetCode && item.code === targetCode) ||
-      (targetName && item.name === targetName)
-    );
-  });
-  const defaultDashboard = dashboardListData.value.find(item => item.isDefault);
-  currentDashboard.value = matched || defaultDashboard || dashboardListData.value[0];
+  currentDashboard.value =
+    resolveDashboardForRoute(dashboardListData.value, route.query) || {
+      id: '',
+      type: '',
+      code: '',
+    };
 };
 
 const setDashboard = item => {

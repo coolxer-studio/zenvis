@@ -1,6 +1,7 @@
 package com.coolxer.service.dih;
 
 import com.coolxer.commons.enums.MessageType;
+import com.coolxer.commons.enums.DashboardType;
 import com.coolxer.commons.enums.McpApprovalPolicy;
 import com.coolxer.commons.enums.McpInvocationChannel;
 import com.coolxer.commons.enums.McpInvocationStatus;
@@ -20,6 +21,7 @@ import com.coolxer.model.dih.dto.ReportActionDto;
 import com.coolxer.model.dih.vo.ChatSessionVo;
 import com.coolxer.model.dih.vo.McpApprovalVo;
 import com.coolxer.model.system.vo.PushTaskVo;
+import com.coolxer.model.system.vo.DashboardVo;
 import com.coolxer.service.dih.agent.DataPushServiceAgent;
 import com.coolxer.service.dih.agent.MetadataConfigAgent;
 import com.coolxer.service.dih.agent.ReportAgent;
@@ -87,7 +89,8 @@ class DihChatApplicationServiceTest {
                 "confirm",
                 "info-steps",
                 "metadata-config-decision",
-                "data-push-service-decision"));
+                "data-push-service-decision",
+                "visualization-dashboard-preview"));
         VisualizationAgentTypes.ALL.stream()
                 .map(VisualizationAgentTypes::decisionPartType)
                 .forEach(interactiveTypes::add);
@@ -161,6 +164,22 @@ class DihChatApplicationServiceTest {
         assertThat(message.getParts()).singleElement()
                 .satisfies(part -> assertThat(part.getType())
                         .isEqualTo("metadata-config-decision"));
+    }
+
+    @Test
+    void dashboardPreviewPartIdFitsPersistedRunInputColumn() {
+        DihChatApplicationService service = emptyService();
+        String workflowId = "da347dde-9cb6-443e-9284-f79c61bb6b39";
+        String candidateDigest =
+                "3d26da0c8c2171abb7c9384412ad3d30e243404fbfb324d4f4e1fe5fd9b086be";
+
+        String partId = ReflectionTestUtils.invokeMethod(
+                service, "dashboardPreviewPartId", workflowId, candidateDigest);
+
+        assertThat(partId)
+                .startsWith("dashboard-preview:da347dde:")
+                .contains(candidateDigest.substring(0, 24))
+                .hasSizeLessThanOrEqualTo(64);
     }
 
     @Test
@@ -2006,6 +2025,362 @@ class DihChatApplicationServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void successfulDashboardValidationProducesPublishPreviewWhenModelReturnsOnlyText() throws Exception {
+        DihChatApplicationService service = streamingService();
+        WorkflowStateStore store = mock(WorkflowStateStore.class);
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("wf-dashboard")
+                .setAgentType(VisualizationDashboardAgent.AGENT_TYPE)
+                .setStep(AgentWorkflowStep.DASHBOARD_VALIDATING)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "validationStatus", "validated",
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1")));
+        when(store.loadActive(any(), any())).thenReturn(Optional.of(workflow));
+        ReflectionTestUtils.setField(service, "workflowStateStore", store);
+        ChatSession session = new ChatSession();
+        session.setType(VisualizationDashboardAgent.AGENT_TYPE);
+
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "visualization_dashboard_validate", "{}", """
+                {
+                  "passed": true,
+                  "status": "validated",
+                  "workflow_id": "wf-dashboard",
+                  "dashboard_id": "sales-dashboard",
+                  "dashboard_version": 2,
+                  "mode": "HTML_PAGE",
+                  "previous_mode": "LOW_CODE_PAGE",
+                  "candidate_digest": "candidate-1",
+                  "validation_digest": "validation-1",
+                  "spec_digest": "spec-1",
+                  "meta_digest": "meta-1",
+                  "file_digest": "file-1",
+                  "spec": {
+                    "dashboard_id": "sales-dashboard",
+                    "name": "经营数据大屏",
+                    "mode": "HTML_PAGE",
+                    "theme": "DARK_TECH",
+                    "refresh_interval_seconds": 60,
+                    "default_time_range": "LAST_7_DAYS",
+                    "blocks": [{"block_id": "kpi", "type": "metrics"}]
+                  },
+                  "files": [{"path": "sales-dashboard.html", "digest": "file-1", "size": 123}],
+                  "diagnostics": [],
+                  "preview": {
+                    "htmlUrl": "/api/v1/dih/chat/workflows/wf-dashboard/dashboard-preview?token=preview-1",
+                    "querySamples": {"kpi": {"empty": false, "row_count": 4}}
+                  },
+                  "message": "候选已通过真实查询取样，请确认发布。"
+                }
+                """);
+        ChatMessagePart markdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content("校验已完成，请确认。")
+                .build();
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(markdown));
+
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationDashboardPreview",
+                session, parts, evidence);
+
+        assertThat(parts).hasSize(2);
+        ChatMessagePart preview = parts.get(0);
+        assertThat(preview.getType()).isEqualTo("visualization-dashboard-preview");
+        assertThat(preview.getStatus()).isEqualTo("pending");
+        assertThat(preview.getTitle()).contains("经营数据大屏");
+        assertThat(preview.getMetadata())
+                .containsEntry("dashboardId", "sales-dashboard")
+                .containsEntry("dashboardVersion", 2)
+                .containsEntry("mode", "HTML_PAGE")
+                .containsEntry("validationStatus", "validated")
+                .containsEntry("passed", true)
+                .containsEntry("action", "visualization_dashboard.confirm_publish")
+                .containsEntry("candidateDigest", "candidate-1")
+                .containsEntry("validationDigest", "validation-1")
+                .containsEntry("workflowId", "wf-dashboard");
+        Map<String, Object> previewMetadata = (Map<String, Object>) preview.getMetadata().get("preview");
+        assertThat(previewMetadata).containsEntry(
+                "htmlUrl",
+                "/api/v1/dih/chat/workflows/wf-dashboard/dashboard-preview?token=preview-1");
+        assertThat(parts.get(1).getType()).isEqualTo("markdown");
+        assertThat(service.requiresUserDecision("校验已完成，请确认。", session,
+                (DihChatApplicationService.McpToolLogStream) evidence)).isTrue();
+
+        ChatMessagePart modelPreview = ChatMessagePart.builder()
+                .id("model-dashboard-preview")
+                .type("visualization-dashboard-preview")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "workflowId", "wf-dashboard",
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1",
+                        "spec", Map.of("dashboard_id", "sales-dashboard"),
+                        "files", List.of(),
+                        "diagnostics", List.of(),
+                        "preview", Map.of("htmlUrl", previewMetadata.get("htmlUrl")))))
+                .build();
+        List<ChatMessagePart> keptParts = new ArrayList<>(List.of(modelPreview, markdown));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationDashboardPreview",
+                session, keptParts, evidence);
+
+        assertThat(keptParts).hasSize(2);
+        assertThat(keptParts.get(0).getId()).isEqualTo("model-dashboard-preview");
+
+        ChatMessagePart incompletePreview = ChatMessagePart.builder()
+                .id("model-dashboard-preview-incomplete")
+                .type("visualization-dashboard-preview")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "workflowId", "wf-dashboard",
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1",
+                        "files", List.of(),
+                        "diagnostics", List.of(),
+                        "preview", Map.of("htmlUrl", previewMetadata.get("htmlUrl")))))
+                .build();
+        List<ChatMessagePart> replacedParts =
+                new ArrayList<>(List.of(incompletePreview, markdown));
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationDashboardPreview",
+                session, replacedParts, evidence);
+
+        assertThat(replacedParts).hasSize(2);
+        assertThat(replacedParts.get(0).getId())
+                .startsWith("dashboard-preview:wf-dashboard:candidate-1")
+                .hasSizeLessThanOrEqualTo(64);
+        assertThat((Map<String, Object>) replacedParts.get(0)
+                .getMetadata().get("spec")).isNotEmpty();
+    }
+
+    @Test
+    void dashboardPreviewFallbackRejectsValidationWithMismatchedLockedDigests() throws Exception {
+        DihChatApplicationService service = streamingService();
+        WorkflowStateStore store = mock(WorkflowStateStore.class);
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("wf-dashboard")
+                .setAgentType(VisualizationDashboardAgent.AGENT_TYPE)
+                .setStep(AgentWorkflowStep.DASHBOARD_VALIDATING)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "candidateDigest", "locked-candidate",
+                        "validationDigest", "locked-validation")));
+        when(store.loadActive(any(), any())).thenReturn(Optional.of(workflow));
+        ReflectionTestUtils.setField(service, "workflowStateStore", store);
+        ChatSession session = new ChatSession();
+        session.setType(VisualizationDashboardAgent.AGENT_TYPE);
+        Object evidence = newEvidenceStream();
+        emitEvidenceSuccess(evidence, "visualization_dashboard_validate", "{}", """
+                {
+                  "passed": true,
+                  "status": "validated",
+                  "workflow_id": "wf-dashboard",
+                  "dashboard_id": "sales-dashboard",
+                  "candidate_digest": "stale-candidate",
+                  "validation_digest": "stale-validation",
+                  "preview": {"htmlUrl": "/stale-preview"}
+                }
+                """);
+        ChatMessagePart markdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content("校验摘要已变化，请重新校验。")
+                .build();
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(markdown));
+
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationDashboardPreview",
+                session, parts, evidence);
+
+        assertThat(parts).containsExactly(markdown);
+        assertThat(service.requiresUserDecision("校验摘要已变化，请重新校验。", session,
+                        (DihChatApplicationService.McpToolLogStream) evidence))
+                .isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void dashboardPreviewFallbackRebuildsFromLockedWorkflowWithoutToolEvidence() throws Exception {
+        DihChatApplicationService service = streamingService();
+        WorkflowStateStore store = mock(WorkflowStateStore.class);
+        AgentWorkflowState workflow = new AgentWorkflowState()
+                .setWorkflowId("wf-dashboard")
+                .setAgentType(VisualizationDashboardAgent.AGENT_TYPE)
+                .setStep(AgentWorkflowStep.DASHBOARD_VALIDATING)
+                .setContext(new LinkedHashMap<>(Map.ofEntries(
+                        Map.entry("validationStatus", "validated"),
+                        Map.entry("validation", Map.of(
+                                "passed", true,
+                                "status", "validated",
+                                "message", "候选已通过真实查询取样，请确认发布。")),
+                        Map.entry("dashboardId", "school-dashboard"),
+                        Map.entry("dashboardVersion", 2),
+                        Map.entry("candidateDigest", "candidate-1"),
+                        Map.entry("validationDigest", "validation-1"),
+                        Map.entry("specDigest", "spec-1"),
+                        Map.entry("metaDigest", "meta-1"),
+                        Map.entry("fileDigest", "file-1"),
+                        Map.entry("dashboardSpec", Map.of(
+                                "dashboard_id", "school-dashboard",
+                                "name", "学校数据大屏",
+                                "mode", "HTML_PAGE",
+                                "theme", "DARK_TECH",
+                                "refresh_interval_seconds", 60,
+                                "default_time_range", "LAST_7_DAYS",
+                                "blocks", List.of(Map.of(
+                                        "block_id", "kpis",
+                                        "type", "metrics")))),
+                        Map.entry("files", List.of(Map.of(
+                                "path", "school-dashboard.html",
+                                "digest", "file-1",
+                                "size", 2048))),
+                        Map.entry("diagnostics", List.of()),
+                        Map.entry("preview", Map.of(
+                                "htmlUrl",
+                                "/api/v1/dih/chat/workflows/wf-dashboard/dashboard-preview?token=preview-1",
+                                "querySamples", Map.of(
+                                        "kpis", Map.of("empty", false, "row_count", 5)))))));
+        when(store.loadActive(any(), any())).thenReturn(Optional.of(workflow));
+        ReflectionTestUtils.setField(service, "workflowStateStore", store);
+        ChatSession session = new ChatSession();
+        session.setType(VisualizationDashboardAgent.AGENT_TYPE);
+        ChatMessagePart markdown = ChatMessagePart.builder()
+                .type("markdown")
+                .content("校验已完成，请确认发布。")
+                .build();
+        List<ChatMessagePart> parts = new ArrayList<>(List.of(markdown));
+
+        ReflectionTestUtils.invokeMethod(service, "ensurePlatformVisualizationDashboardPreview",
+                session, parts, newEvidenceStream());
+
+        assertThat(parts).hasSize(2);
+        ChatMessagePart preview = parts.get(0);
+        assertThat(preview.getType()).isEqualTo("visualization-dashboard-preview");
+        assertThat(preview.getMetadata())
+                .containsEntry("dashboardId", "school-dashboard")
+                .containsEntry("dashboardVersion", 2)
+                .containsEntry("mode", "HTML_PAGE")
+                .containsEntry("theme", "DARK_TECH")
+                .containsEntry("validationStatus", "validated")
+                .containsEntry("passed", true)
+                .containsEntry("candidateDigest", "candidate-1")
+                .containsEntry("validationDigest", "validation-1");
+        Map<String, Object> previewMetadata =
+                (Map<String, Object>) preview.getMetadata().get("preview");
+        assertThat(previewMetadata).containsEntry(
+                "htmlUrl",
+                "/api/v1/dih/chat/workflows/wf-dashboard/dashboard-preview?token=preview-1");
+        assertThat(preview.getMetadata().get("diagnostics")).isEqualTo(List.of());
+        assertThat(preview.getMetadata().get("files")).isEqualTo(List.of(Map.of(
+                "path", "school-dashboard.html",
+                "digest", "file-1",
+                "size", 2048)));
+        assertThat(service.requiresUserDecision("校验已完成，请确认发布。", session,
+                (DihChatApplicationService.McpToolLogStream) newEvidenceStream())).isTrue();
+    }
+
+    @Test
+    void dashboardRecordUsesVerifiedPublicationWorkflowWhenBlockedWorkflowIsActive()
+            throws Exception {
+        ConfigService configService = mock(ConfigService.class);
+        DashboardService dashboardService = mock(DashboardService.class);
+        WorkflowStateStore store = new WorkflowStateStore();
+        DihChatApplicationService service = emptyService();
+        ReflectionTestUtils.setField(service, "configService", configService);
+        ReflectionTestUtils.setField(service, "dashboardService", dashboardService);
+        ReflectionTestUtils.setField(service, "workflowStateStore", store);
+
+        ChatSession session = new ChatSession();
+        session.setType(VisualizationDashboardAgent.AGENT_TYPE);
+        String publishedWorkflowId = "62a68ae6-6524-4168-b3d2-9860c4f3a412";
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId(publishedWorkflowId)
+                .setAgentType(VisualizationDashboardAgent.AGENT_TYPE)
+                .setWorkflowType("visualization_dashboard")
+                .setObjectType("dashboard")
+                .setStep(AgentWorkflowStep.VERIFIED)
+                .setStatus("completed")
+                .setStateRevision(6)
+                .setUpdatedAt("2026-11-02T06:53:17.728Z")
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "workflowId", publishedWorkflowId,
+                        "applyResult", Map.of(
+                                "status", "verified",
+                                "dashboard_id", "user-event-dashboard",
+                                "dashboard_version", 1,
+                                "mode", "HTML_PAGE",
+                                "file_digest", "file-digest",
+                                "dashboard_record_id", 52)))));
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("21edb810-70f9-4a13-b979-dd96f72e20c0")
+                .setAgentType(VisualizationDashboardAgent.AGENT_TYPE)
+                .setWorkflowType("visualization_dashboard")
+                .setObjectType("dashboard")
+                .setStep(AgentWorkflowStep.BLOCKED)
+                .setStatus("blocked")
+                .setStateRevision(1)
+                .setUpdatedAt("2026-11-02T06:53:29.431Z")
+                .setContext(new LinkedHashMap<>()));
+
+        when(configService.readFile("html-page",
+                "user-event-dashboard.manifest.json")).thenReturn("""
+                {
+                  "dashboard_id": "user-event-dashboard",
+                  "dashboard_version": 1,
+                  "file_digest": "file-digest",
+                  "spec_digest": "spec-digest",
+                  "publish_status": "published"
+                }
+                """);
+        DashboardVo dashboard = new DashboardVo();
+        dashboard.setId(52);
+        dashboard.setName("用户事件数据大屏");
+        dashboard.setCode("user-event-dashboard");
+        dashboard.setSource("dashboard:user-event-dashboard");
+        dashboard.setType(DashboardType.HTML_PAGE);
+        dashboard.setHtmlPath("user-event-dashboard.html");
+        when(dashboardService.info(52L)).thenReturn(dashboard);
+        when(dashboardService.findAll()).thenReturn(List.of(dashboard));
+
+        ChatMessagePart record = ChatMessagePart.builder()
+                .id("dashboard-record-1")
+                .type("visualization-dashboard-record")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "recordKind", "dashboard",
+                        "dashboardId", "user-event-dashboard",
+                        "dashboardVersion", 1,
+                        "dashboardRecordId", 52,
+                        "mode", "HTML_PAGE",
+                        "fileDigest", "file-digest")))
+                .build();
+
+        AgentWorkflowState selected = ReflectionTestUtils.invokeMethod(
+                service, "loadVisualizationRecordWorkflow",
+                session, "dashboard", record.getMetadata());
+        assertThat(selected).isNotNull();
+        assertThat(selected.getWorkflowId()).isEqualTo(publishedWorkflowId);
+        assertThat(selected.getContext().get("applyResult"))
+                .isInstanceOf(Map.class)
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("status", "verified")
+                .containsEntry("dashboard_id", "user-event-dashboard")
+                .containsEntry("dashboard_version", 1)
+                .containsEntry("file_digest", "file-digest")
+                .containsEntry("dashboard_record_id", 52);
+
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                session, List.of(record), newEvidenceStream());
+
+        assertThat(record.getStatus())
+                .as("dashboard record metadata: %s", record.getMetadata())
+                .isNotEqualTo("blocked");
+        assertThat(record.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("validated", true)
+                .containsEntry("workflowId", publishedWorkflowId)
+                .containsEntry("dashboardId", "user-event-dashboard")
+                .containsEntry("dashboardRecordId", 52)
+                .containsEntry("status", "verified");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void visualizationEntityDecisionCardIsNormalizedToInfoStepsWithVerifiedOptions() throws Exception {
         DihChatApplicationService service = emptyService();
         Object evidence = newEvidenceStream();
@@ -2940,11 +3315,6 @@ class DihChatApplicationServiceTest {
                                 .CHART_EXAMPLE_PROMPT,
                         "demoId", "visualization-chart:chart"),
                 Map.of(
-                        "type", VisualizationDashboardAgent.AGENT_TYPE,
-                        "prompt", VisualizationDashboardDemoResponseService
-                                .DASHBOARD_EXAMPLE_PROMPT,
-                        "demoId", "visualization-dashboard:dashboard"),
-                Map.of(
                         "type", ReportAgent.AGENT_TYPE,
                         "prompt", ReportDemoResponseService
                                 .REPORT_USER_EVENT_ANALYSIS_EXAMPLE_PROMPT,
@@ -2985,6 +3355,12 @@ class DihChatApplicationServiceTest {
                 "resolveBuiltinDemoId",
                 VisualizationAppAgent.AGENT_TYPE,
                 VisualizationAppDemoResponseService.SIDEBAR_APP_EXAMPLE_PROMPT,
+                null)).isBlank();
+        assertThat((String) ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveBuiltinDemoId",
+                VisualizationDashboardAgent.AGENT_TYPE,
+                VisualizationDashboardDemoResponseService.DASHBOARD_EXAMPLE_PROMPT,
                 null)).isBlank();
         assertThat((String) ReflectionTestUtils.invokeMethod(
                 service,

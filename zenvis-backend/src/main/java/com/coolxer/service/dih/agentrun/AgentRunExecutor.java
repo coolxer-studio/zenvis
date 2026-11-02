@@ -337,8 +337,13 @@ public class AgentRunExecutor {
             }
             return;
         }
+        // MCP tools persist workflow state independently while this worker still
+        // holds the session snapshot loaded before the model call. Reload before
+        // deciding whether this step produced a card that must pause the Run.
+        session = chatSessionRepository.findById(run.getChatSessionId()).orElse(session);
         String assistantAnswer = assistantText.toString();
-        if (chatApplicationService.requiresUserDecision(assistantAnswer)) {
+        if (chatApplicationService.requiresUserDecision(
+                assistantAnswer, session, toolEvidence)) {
             Message responseMessage = chatApplicationService.saveAgentRunResponse(
                     session,
                     user,

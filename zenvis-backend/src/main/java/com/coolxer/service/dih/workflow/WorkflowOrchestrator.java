@@ -63,7 +63,11 @@ public class WorkflowOrchestrator {
         }
         AgentWorkflowState state = stateStore
                 .loadActive(chatSession, definition.agentType())
-                .orElseGet(() -> newState(definition));
+                .orElseGet(() -> completedPublicationState(
+                        chatSession, definition, parts));
+        if (state == null) {
+            state = newState(definition);
+        }
         mergeEvidence(state, evidenceRefs);
 
         boolean changed = false;
@@ -183,6 +187,63 @@ public class WorkflowOrchestrator {
                 .setStateRevision(0)
                 .setCreatedAt(now)
                 .setUpdatedAt(now);
+    }
+
+    private AgentWorkflowState completedPublicationState(
+            ChatSession chatSession,
+            WorkflowDefinition definition,
+            List<ChatMessagePart> parts) {
+        ChatMessagePart record = parts.stream()
+                .filter(this::isManagedPublicationRecord)
+                .findFirst()
+                .orElse(null);
+        if (record == null) {
+            return null;
+        }
+        return stateStore.loadAll(chatSession, definition.agentType()).stream()
+                .filter(state -> state.getStep() == AgentWorkflowStep.VERIFIED
+                        || state.getStep() == AgentWorkflowStep.PARTIAL_MENU)
+                .filter(state -> publicationRecordMatches(state, record))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isManagedPublicationRecord(ChatMessagePart part) {
+        return part != null
+                && Set.of("visualization-app-record", "visualization-dashboard-record")
+                .contains(part.getType());
+    }
+
+    private boolean publicationRecordMatches(AgentWorkflowState state,
+                                             ChatMessagePart part) {
+        Map<String, Object> metadata = part.getMetadata() == null
+                ? Map.of() : part.getMetadata();
+        Map<String, Object> context = state.getContext() == null
+                ? Map.of() : state.getContext();
+        Map<String, Object> applyResult = map(context.get("applyResult"));
+        if ("visualization-dashboard-record".equals(part.getType())) {
+            String publishedId = firstText(
+                    text(applyResult.get("dashboardId")),
+                    text(applyResult.get("dashboard_id")));
+            String recordId = firstText(
+                    text(metadata.get("dashboardId")),
+                    text(metadata.get("dashboard_id")));
+            return "verified".equals(text(applyResult.get("status")))
+                    && StringUtils.hasText(publishedId)
+                    && (!StringUtils.hasText(recordId)
+                    || recordId.equals(publishedId));
+        }
+        String publishedId = firstText(
+                text(applyResult.get("appId")),
+                text(applyResult.get("app_id")));
+        String recordId = firstText(
+                text(metadata.get("appId")),
+                text(metadata.get("app_id")));
+        return Set.of("verified", "partial_menu")
+                .contains(text(applyResult.get("status")))
+                && StringUtils.hasText(publishedId)
+                && (!StringUtils.hasText(recordId)
+                || recordId.equals(publishedId));
     }
 
     /**

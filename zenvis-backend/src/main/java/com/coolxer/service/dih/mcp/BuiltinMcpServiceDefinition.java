@@ -117,6 +117,17 @@ public enum BuiltinMcpServiceDefinition {
                     "visualization_app_retry_menu"
             )),
 
+    DASHBOARD(
+            "dashboard",
+            "数据大屏",
+            "提供受管数据大屏的发现、校验、真实预览和原子发布工具",
+            List.of(
+                    "visualization_dashboard_list",
+                    "visualization_dashboard_get",
+                    "visualization_dashboard_validate",
+                    "visualization_dashboard_apply"
+            )),
+
     ANALYSIS_TASK(
             "analysis-task",
             "AI 分析任务",

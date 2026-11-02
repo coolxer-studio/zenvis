@@ -244,7 +244,7 @@ PUSH_INPUT_COLLECTION
 | --- | --- | --- |
 | `VisualizationChartAgent` | `visualization_chart` | 无配置、Dashboard、菜单或 Meta 写工具；只生成临时图表和图表库快照 |
 | `VisualizationAppAgent` | `visualization_app` | 只生成 `DataAppSpec`/`DataAppChangeSet`，由 `data-app` 编译 AMIS 并一次发布配置与菜单；不写 Dashboard、图表库或 Meta |
-| `VisualizationDashboardAgent` | `visualization_dashboard` | 写配置、Dashboard 与菜单；不写图表库或 Meta |
+| `VisualizationDashboardAgent` | `visualization_dashboard` | 提交 `DashboardSpec`，由平台编译 HTML/AMIS、发布配置与 Dashboard；不写图表库、菜单或 Meta |
 
 - 三者都不接入外部 MCP、不执行任意 SQL，也不新增、修改或删除动态实体数据。
 - 先查询实体和字段 Meta，再调用实体分析白名单；`entity_aggregate`、`entity_histogram`、`entity_scatter` 仅对这三个可视化 Agent 类型开放，且仍需 Skill 显式允许。

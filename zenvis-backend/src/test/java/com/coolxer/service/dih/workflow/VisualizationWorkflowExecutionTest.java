@@ -43,7 +43,9 @@ class VisualizationWorkflowExecutionTest {
                 .isTrue();
         assertThat(dashboard.supportsPart(part("visualization-dashboard-record")))
                 .isTrue();
-        assertThat(dashboard.supportsPart(part("config"))).isTrue();
+        assertThat(dashboard.supportsPart(part("visualization-dashboard-preview")))
+                .isTrue();
+        assertThat(dashboard.supportsPart(part("config"))).isFalse();
         assertThat(dashboard.supportsPart(part("visualization-app-record"))).isFalse();
         assertThat(dashboard.supportsPart(part("visualization-chart-record"))).isFalse();
     }
@@ -115,25 +117,56 @@ class VisualizationWorkflowExecutionTest {
     }
 
     @Test
-    void dashboardMenuConfirmationRequiresBothConfigAndDashboardRecords() {
+    void dashboardPreviewRequiresLockedDigestsAndPublishConfirmation() {
         AgentWorkflowState state = state(
-                VisualizationAgentTypes.DASHBOARD, AgentWorkflowStep.ARTIFACT_READY);
-        ChatMessagePart confirmMenu = decision(
-                VisualizationAgentTypes.DASHBOARD,
-                "confirm_menu",
-                Map.of("menu", Map.of("request", Map.of("name", "用户事件看板入口"))));
-        ChatMessagePart configRecord = record(
-                "visualization-dashboard-record", "config");
+                VisualizationAgentTypes.DASHBOARD, AgentWorkflowStep.DASHBOARD_VALIDATING);
+        state.getContext().put("candidateDigest", "candidate-1");
+        state.getContext().put("validationDigest", "validation-1");
+        ChatMessagePart preview = part("visualization-dashboard-preview", Map.of(
+                "validationStatus", "validated",
+                "candidateDigest", "candidate-1",
+                "validationDigest", "validation-1"));
+        ChatMessagePart confirm = decision(
+                VisualizationAgentTypes.DASHBOARD, "confirm_publish", Map.of(
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1"));
 
-        dashboard.updateContext(state, configRecord, configRecord.getMetadata());
-        assertThat(dashboard.resolveStep(state, confirmMenu, confirmMenu.getMetadata()))
+        assertThat(dashboard.resolveStep(state, preview, preview.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.DASHBOARD_VALIDATING);
+        assertThat(dashboard.resolveStep(state, confirm, confirm.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.DASHBOARD_VALIDATING);
+        assertThat(dashboard.validateAction(state, confirm, confirm.getMetadata(), "approve"))
+                .isBlank();
+        assertThat(dashboard.transition(state, "approve"))
+                .isEqualTo(AgentWorkflowStep.DASHBOARD_APPLYING);
+
+        Map<String, Object> stale = new LinkedHashMap<>(preview.getMetadata());
+        stale.put("validationDigest", "validation-old");
+        ChatMessagePart stalePreview = part("visualization-dashboard-preview", stale);
+        assertThat(dashboard.resolveStep(state, stalePreview, stalePreview.getMetadata()))
                 .isEqualTo(AgentWorkflowStep.BLOCKED);
+    }
 
-        ChatMessagePart dashboardRecord = record(
-                "visualization-dashboard-record", "dashboard");
-        dashboard.updateContext(state, dashboardRecord, dashboardRecord.getMetadata());
-        assertThat(dashboard.resolveStep(state, confirmMenu, confirmMenu.getMetadata()))
-                .isEqualTo(AgentWorkflowStep.MENU_CONFIRMATION);
+    @Test
+    void dashboardPlanAndPublishCanOnlyUseTheNewLifecycleActions() {
+        AgentWorkflowState state = state(
+                VisualizationAgentTypes.DASHBOARD, AgentWorkflowStep.DASHBOARD_DISCOVERY);
+        ChatMessagePart plan = decision(
+                VisualizationAgentTypes.DASHBOARD,
+                "confirm_dashboard_plan",
+                Map.of("dashboardId", "user-event-dashboard", "specDigest", "spec-1"));
+        assertThat(dashboard.resolveStep(state, plan, plan.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.DASHBOARD_PLAN_CONFIRMATION);
+
+        state.setStep(AgentWorkflowStep.DASHBOARD_DISCOVERY);
+        for (String legacy : new String[]{"confirm_plan", "confirm_overwrite", "confirm_menu"}) {
+            ChatMessagePart old = decision(
+                    VisualizationAgentTypes.DASHBOARD,
+                    legacy,
+                    Map.of("menu", Map.of("request", Map.of("name", "历史入口"))));
+            assertThat(dashboard.resolveStep(state, old, old.getMetadata()))
+                    .isEqualTo(AgentWorkflowStep.BLOCKED);
+        }
     }
 
     @Test

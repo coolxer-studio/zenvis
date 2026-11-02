@@ -225,22 +225,62 @@ public class WorkflowActionService {
                                                  ChatMessagePart part,
                                                  Map<String, Object> metadata,
                                                  String action) {
-        if (!"approve".equals(action)
-                || !VisualizationAgentTypes.isApp(definition.agentType())
-                || !AgentWorkflowStep.PERSIST_CONFIRMATION.name()
+        if (!"approve".equals(action)) {
+            return false;
+        }
+        if (VisualizationAgentTypes.isApp(definition.agentType())) {
+            return reconcileAppPublishConfirmation(state, part, metadata);
+        }
+        if (VisualizationAgentTypes.isDashboard(definition.agentType())) {
+            return reconcileDashboardPublishConfirmation(state, definition, part, metadata);
+        }
+        return false;
+    }
+
+    private boolean reconcileAppPublishConfirmation(AgentWorkflowState state,
+                                                    ChatMessagePart part,
+                                                    Map<String, Object> metadata) {
+        if (!AgentWorkflowStep.PERSIST_CONFIRMATION.name()
                 .equals(text(metadata.get("step")))
                 || !("visualization-app-preview".equals(part.getType())
-                || "visualization-app-decision".equals(part.getType()))) {
+                || "visualization-app-decision".equals(part.getType()))
+                || !publishDigestsMatch(state, metadata)
+                || (state.getStep() != AgentWorkflowStep.APP_VALIDATING
+                && state.getStep() != AgentWorkflowStep.PERSIST_CONFIRMATION)) {
             return false;
         }
-        if (!publishDigestsMatch(state, metadata)) {
+        repairPublishCardState(state, part, metadata,
+                AgentWorkflowStep.PERSIST_CONFIRMATION);
+        return true;
+    }
+
+    private boolean reconcileDashboardPublishConfirmation(AgentWorkflowState state,
+                                                          WorkflowDefinition definition,
+                                                          ChatMessagePart part,
+                                                          Map<String, Object> metadata) {
+        String action = text(metadata.get("action"));
+        boolean publishCard = "visualization-dashboard-preview".equals(part.getType())
+                || ("visualization-dashboard-decision".equals(part.getType())
+                && VisualizationAgentTypes.confirmPublishAction(definition.agentType())
+                .equals(action));
+        if (!AgentWorkflowStep.DASHBOARD_VALIDATING.name()
+                .equals(text(metadata.get("step")))
+                || !publishCard
+                || !publishDigestsMatch(state, metadata)
+                || (state.getStep() != AgentWorkflowStep.DASHBOARD_VALIDATING
+                && state.getStep() != AgentWorkflowStep.BLOCKED)) {
             return false;
         }
-        if (state.getStep() != AgentWorkflowStep.APP_VALIDATING
-                && state.getStep() != AgentWorkflowStep.PERSIST_CONFIRMATION) {
-            return false;
-        }
-        state.setStep(AgentWorkflowStep.PERSIST_CONFIRMATION);
+        repairPublishCardState(state, part, metadata,
+                AgentWorkflowStep.DASHBOARD_VALIDATING);
+        return true;
+    }
+
+    private void repairPublishCardState(AgentWorkflowState state,
+                                        ChatMessagePart part,
+                                        Map<String, Object> metadata,
+                                        AgentWorkflowStep expectedStep) {
+        state.setStep(expectedStep);
         state.setStatus("active");
         long cardRevision = revision(metadata.get("stateRevision"));
         if (cardRevision > state.getStateRevision()) {
@@ -248,7 +288,6 @@ public class WorkflowActionService {
         }
         state.setPartId(part.getId());
         state.setUpdatedAt(Instant.now().toString());
-        return true;
     }
 
     private boolean publishDigestsMatch(AgentWorkflowState state,

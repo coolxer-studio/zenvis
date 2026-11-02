@@ -837,7 +837,7 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinVisualizationDashboardSkillDocumentsDashboardAndMenuWorkflow() throws Exception {
+    void builtinVisualizationDashboardSkillDocumentsSpecValidateApplyWorkflow() throws Exception {
         Path repoSkill = Path.of("../deploy/open_config/skill_config/visualization-dashboard-agent");
         writeSkill(
                 skillRoot.resolve("visualization-dashboard-agent"),
@@ -854,23 +854,48 @@ class SkillServiceTest {
 
         assertThat(prompt)
                 .contains("数据大屏")
-                .contains("config_ensure_root")
-                .contains("dashboard_create")
-                .contains("dashboard_view")
-                .contains("menu_create")
+                .contains("DashboardSpec")
+                .contains("DashboardChangeSet")
+                .contains("DASHBOARD_DISCOVERY")
+                .contains("DASHBOARD_PLAN_CONFIRMATION")
+                .contains("DASHBOARD_VALIDATING")
+                .contains("DASHBOARD_APPLYING")
+                .contains("visualization_dashboard_list")
+                .contains("visualization_dashboard_get")
+                .contains("visualization_dashboard_validate")
+                .contains("visualization_dashboard_apply")
+                .contains("visualization_dashboard.confirm_dashboard_plan")
+                .contains("visualization_dashboard.confirm_publish")
+                .contains("zenvis:visualization-dashboard-preview")
                 .contains("zenvis:visualization-dashboard-record")
-                .contains("visualization_dashboard.confirm_query_plan")
-                .contains("visualization_dashboard.confirm_plan")
-                .contains("visualization_dashboard.confirm_overwrite")
-                .contains("visualization_dashboard.confirm_menu")
-                .contains("不得写入图表库")
+                .contains("recordKind=dashboard")
+                .contains("不得生成 HTML")
+                .contains("HTML_PAGE")
+                .contains("LOW_CODE_PAGE")
                 .doesNotContain("```zenvis:visualization-chart-preview")
-                .doesNotContain("visualization-app-record");
+                .doesNotContain("visualization-app-record")
+                .doesNotContain("visualization_dashboard.confirm_query_plan")
+                .doesNotContain("visualization_dashboard.confirm_plan")
+                .doesNotContain("visualization_dashboard.confirm_overwrite")
+                .doesNotContain("visualization_dashboard.confirm_menu")
+                .doesNotContain("zenvis:low-code-page-config");
         assertThat(prompt)
                 .doesNotContain("config_modify")
                 .doesNotContain("使用系统预置的固定结果")
                 .doesNotContain("menu_delete")
                 .doesNotContain("dashboard_delete");
+
+        var runtime = service.resolveRuntimeConfig(List.of("visualization-dashboard-agent"));
+        assertThat(runtime).isNotNull();
+        assertThat(runtime.getTools().getLocal()).containsOnlyKeys("retrieval", "dashboard");
+        assertThat(runtime.getTools().getLocal().get("dashboard")).containsExactly(
+                "visualization_dashboard_list",
+                "visualization_dashboard_get",
+                "visualization_dashboard_validate",
+                "visualization_dashboard_apply");
+        assertThat(runtime.getTools().getLocal().get("retrieval"))
+                .doesNotContain("config_apply", "dashboard_create", "menu_create",
+                        "push_task_create_and_start");
     }
 
     @Test

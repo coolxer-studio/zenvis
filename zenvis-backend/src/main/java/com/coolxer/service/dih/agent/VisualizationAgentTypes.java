@@ -78,6 +78,10 @@ public final class VisualizationAgentTypes {
         return actionPrefix(agentType) + ".confirm_application_plan";
     }
 
+    public static String confirmDashboardPlanAction(String agentType) {
+        return actionPrefix(agentType) + ".confirm_dashboard_plan";
+    }
+
     public static String confirmPublishAction(String agentType) {
         return actionPrefix(agentType) + ".confirm_publish";
     }

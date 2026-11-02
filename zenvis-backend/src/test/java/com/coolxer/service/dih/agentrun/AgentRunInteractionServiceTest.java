@@ -301,6 +301,24 @@ class AgentRunInteractionServiceTest {
         assertThat(genericSelected.getStateRevision()).isZero();
     }
 
+    @Test
+    void dashboardPreviewIsSelectableAsAWorkflowPublishCard() {
+        ChatMessagePart preview = part("dashboard-preview", "visualization-dashboard-preview",
+                "pending", Map.of(
+                        "workflowId", "workflow-1",
+                        "stateRevision", 9));
+
+        AgentRunInteraction selected = service.cardInteraction(
+                message(preview), "请确认真实数据预览后发布");
+
+        assertThat(selected).isNotNull();
+        assertThat(selected.getPartId()).isEqualTo("dashboard-preview");
+        assertThat(selected.getWorkflowId()).isEqualTo("workflow-1");
+        assertThat(selected.getStateRevision()).isEqualTo(9);
+        assertThat(selected.getAllowedActions())
+                .containsExactly("approve", "reject", "revise");
+    }
+
     private void completeByRequeueing(AgentRun run) {
         doAnswer(invocation -> {
             run.setInteractionJson(null).setPendingAction(null).setStatus(AgentRunStatus.QUEUED);

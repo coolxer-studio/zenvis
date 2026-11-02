@@ -3,7 +3,7 @@
     :part="part"
     :interactive="interactive"
     agent-label="数据大屏"
-    revise-placeholder="输入需要调整的看板、配置、Dashboard 或菜单参数"
+    revise-placeholder="输入需要调整的主题、实体、指标、时间口径、图表类型或布局"
     @choose-decision="emit('chooseVisualizationDashboardDecision', $event)"
   />
 </template>

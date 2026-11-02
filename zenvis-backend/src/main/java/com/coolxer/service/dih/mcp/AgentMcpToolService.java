@@ -53,17 +53,11 @@ public class AgentMcpToolService {
     private static final Set<String> VISUALIZATION_RETRIEVAL_WRITE_TOOLS = Set.of(
             "retrieval_create_rule", "retrieval_update_rule", "retrieval_delete_rule");
 
-    private static final Set<String> VISUALIZATION_CONFIG_TOOLS = Set.of(
-            "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read");
-
     private static final Set<String> VISUALIZATION_MENU_TOOLS = Set.of(
             "menu_create", "menu_list", "menu_view", "menu_type_options", "menu_parent_options");
 
     private static final Set<String> VISUALIZATION_MENU_READ_TOOLS = Set.of(
             "menu_list", "menu_view", "menu_type_options", "menu_parent_options");
-
-    private static final Set<String> VISUALIZATION_DASHBOARD_TOOLS = Set.of(
-            "dashboard_create", "dashboard_list", "dashboard_view");
 
     private static final String MCP_TOOL_USAGE_PROMPT = """
             【MCP工具使用规则】
@@ -77,6 +71,7 @@ public class AgentMcpToolService {
             例如 `zenvis:notice`、`zenvis:info-steps`、`zenvis:data-analysis-record`、`zenvis:config-record`、`zenvis:metadata-config-decision`、`zenvis:data-push-service-decision`、`zenvis:meta-config-record`、
             `zenvis:vectum-task-record`、`zenvis:visualization-chart-preview`、`zenvis:visualization-chart-decision`、
             `zenvis:visualization-app-decision`、`zenvis:visualization-app-preview`、`zenvis:visualization-dashboard-decision`、
+            `zenvis:visualization-dashboard-preview`、
             `zenvis:visualization-chart-record`、`zenvis:visualization-app-record`、`zenvis:visualization-dashboard-record`，
             必须作为 Markdown 围栏代码块输出，绝不能作为工具调用。
 
@@ -260,12 +255,14 @@ public class AgentMcpToolService {
         if (service == BuiltinMcpServiceDefinition.DATA_APP) {
             return VisualizationAgentTypes.isApp(agentType);
         }
+        if (service == BuiltinMcpServiceDefinition.DASHBOARD) {
+            return VisualizationAgentTypes.isDashboard(agentType);
+        }
         if (service == BuiltinMcpServiceDefinition.RETRIEVAL) {
             return !VISUALIZATION_RETRIEVAL_WRITE_TOOLS.contains(toolName);
         }
         if (service == BuiltinMcpServiceDefinition.CONFIG) {
-            return !VisualizationAgentTypes.isApp(agentType)
-                    && VISUALIZATION_CONFIG_TOOLS.contains(toolName);
+            return false;
         }
         if (service != BuiltinMcpServiceDefinition.VISUALIZATION) {
             return false;
@@ -276,9 +273,7 @@ public class AgentMcpToolService {
         if (VisualizationAgentTypes.isApp(agentType)) {
             return VISUALIZATION_MENU_READ_TOOLS.contains(toolName);
         }
-        return VisualizationAgentTypes.isDashboard(agentType)
-                && (VISUALIZATION_DASHBOARD_TOOLS.contains(toolName)
-                || VISUALIZATION_MENU_TOOLS.contains(toolName));
+        return false;
     }
 
     private void appendExternalTools(Scope scope,

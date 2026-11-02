@@ -159,8 +159,36 @@
       // 获取site配置参数的值
       const siteConfig = urlParams.get('config');
       const apiBaseUrl = (urlParams.get('baseUrl') || '').replace(/\/+$/, '');
+      const sameOriginSiteApi = (raw) => {
+        if (!raw) return '';
+        try {
+          const parsed = new URL(raw, window.location.origin);
+          if (parsed.origin !== window.location.origin) return '';
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+          return parsed.pathname + parsed.search + parsed.hash;
+        } catch (error) {
+          return '';
+        }
+      };
+      const siteApi = sameOriginSiteApi(urlParams.get('siteApi'));
       const withApiBaseUrl = function (path) {
         return apiBaseUrl + (path.charAt(0) === '/' ? path : '/' + path);
+      };
+      const rewritePreviewSchemaApis = function (payload) {
+        if (!apiBaseUrl || !payload || !payload.data || !Array.isArray(payload.data.pages)) {
+          return payload;
+        }
+        const rewritePage = function (page) {
+          if (!page || typeof page !== 'object') return;
+          if (typeof page.schemaApi === 'string' && page.schemaApi.indexOf('get:/api/') === 0) {
+            page.schemaApi = 'get:' + apiBaseUrl + page.schemaApi.slice(4);
+          }
+          if (Array.isArray(page.children)) {
+            page.children.forEach(rewritePage);
+          }
+        };
+        payload.data.pages.forEach(rewritePage);
+        return payload;
       };
 
       const app = {
@@ -173,7 +201,12 @@
         //            tpl: '<div class="flex justify-between"><div>顶部区域左侧</div><div>顶部区域右侧</div></div>'
         //         },
         // footer: '<div class="p-2 text-center bg-light">Copyright © 2026 coolXer团队. All rights reserved.</div>',
-        api: withApiBaseUrl('/api/v1/config/' + encodeURIComponent(siteConfig || '') + '/get?file_name=site.json')
+        api: {
+          url: siteApi
+            ? withApiBaseUrl(siteApi)
+            : withApiBaseUrl('/api/v1/config/' + encodeURIComponent(siteConfig || '') + '/get?file_name=site.json'),
+          adaptor: rewritePreviewSchemaApis
+        }
       };
 
       function normalizeLink(to, location = history.location) {

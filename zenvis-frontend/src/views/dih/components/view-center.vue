@@ -434,7 +434,7 @@ import {
   VideoPlay,
   WarningFilled,
 } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { DihService } from '@/service/api';
 import { useRouter } from 'vue-router';
 import { generateUUID } from '@/utils/util-common';
@@ -447,7 +447,13 @@ import { useChatSession } from '../composables/use-chat-session';
 import { useChatStream } from '../composables/use-chat-stream';
 import { useMcpApproval } from '../composables/use-mcp-approval';
 import { usePanelRecordSync } from '../composables/use-panel-record-sync';
-import { VISUALIZATION_CHART_DATA_EVENT, emitDihEvent } from '../events';
+import {
+  DATA_VISUALIZATION_APP_RETRY_EVENT,
+  VISUALIZATION_CHART_DATA_EVENT,
+  emitDihEvent,
+  useDihEventListener,
+} from '../events';
+import type { VisualizationAppRetryEventDetail } from '../events';
 import type { ChatMessage, ChatMessagePart } from '@/types/type-dih';
 import type { TAnalysisTaskQueue } from '@/types/type-analysis-task';
 
@@ -955,6 +961,52 @@ const {
   sendMessage,
   respondAgentRunInteraction,
   getAgentRunSnapshot,
+});
+
+const handleVisualizationAppRetryRequest = async (
+  detail: VisualizationAppRetryEventDetail,
+) => {
+  const targetWorkflowId = String(detail?.workflowId || '');
+  let target: { message: ChatMessage; part: ChatMessagePart } | undefined;
+  for (let messageIndex = messages.value.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages.value[messageIndex];
+    for (let partIndex = (message.parts?.length || 0) - 1; partIndex >= 0; partIndex -= 1) {
+      const part = message.parts?.[partIndex];
+      if (part?.type !== 'visualization-app-preview'
+        || (part.status && part.status !== 'pending')) {
+        continue;
+      }
+      const workflowId = String(part.metadata?.workflowId || part.metadata?.workflow_id || '');
+      if (targetWorkflowId && workflowId !== targetWorkflowId) continue;
+      if ((!part.metadata?.candidateDigest && !part.metadata?.candidate_digest)
+        || (!part.metadata?.validationDigest && !part.metadata?.validation_digest)) continue;
+      target = { message, part };
+      break;
+    }
+    if (target) break;
+  }
+  if (!target) {
+    ElMessage.warning('未找到可操作的菜单重试卡片，请重新校验应用或发送“继续”');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      '仅重试当前锁定版本的菜单发布，不会重写应用配置。确认继续？',
+      '重试菜单发布',
+      { confirmButtonText: '确认重试', cancelButtonText: '返回', type: 'warning' },
+    );
+    await handleVisualizationAppDecision(target.message, {
+      part: target.part,
+      decision: 'retry',
+    });
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(error instanceof Error ? error.message : '菜单重试失败');
+  }
+};
+
+useDihEventListener(DATA_VISUALIZATION_APP_RETRY_EVENT, detail => {
+  void handleVisualizationAppRetryRequest(detail);
 });
 
 const handleResumeAgentRun = async (runId: string) => {

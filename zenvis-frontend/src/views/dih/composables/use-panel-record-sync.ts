@@ -167,6 +167,7 @@ export const usePanelRecordSync = ({
   const extractVisualizationAppRecords = () => {
     const visualizationApp = asObject(parseSessionExtraData().visualizationApp);
     return {
+      applications: asRecordList(visualizationApp.applications),
       configs: asRecordList(visualizationApp.configs),
       menus: asRecordList(visualizationApp.menus),
       extraData: chatSessionExtraData.value,

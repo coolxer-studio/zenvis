@@ -45,12 +45,11 @@ const AUTO_CONFIRM_ACTIONS = new Set([
   'config.confirm_apply',
   'visualization_chart.confirm_query_plan',
   'visualization_app.confirm_query_plan',
+  'visualization_app.confirm_application_plan',
+  'visualization_app.confirm_publish',
   'visualization_dashboard.confirm_query_plan',
-  'visualization_app.confirm_plan',
   'visualization_dashboard.confirm_plan',
-  'visualization_app.confirm_overwrite',
   'visualization_dashboard.confirm_overwrite',
-  'visualization_app.confirm_menu',
   'visualization_dashboard.confirm_menu',
 ]);
 
@@ -61,12 +60,12 @@ const AUTO_REJECT_ACTIONS = new Set([
   'config.confirm_apply',
   'visualization_chart.confirm_query_plan',
   'visualization_app.confirm_query_plan',
+  'visualization_app.confirm_application_plan',
+  'visualization_app.confirm_publish',
+  'visualization_app.retry_menu',
   'visualization_dashboard.confirm_query_plan',
-  'visualization_app.confirm_plan',
   'visualization_dashboard.confirm_plan',
-  'visualization_app.confirm_overwrite',
   'visualization_dashboard.confirm_overwrite',
-  'visualization_app.confirm_menu',
   'visualization_dashboard.confirm_menu',
 ]);
 
@@ -138,16 +137,20 @@ const autoConfirmMessage = (action: string) => {
     || action === 'visualization_dashboard.confirm_query_plan') {
     return '我已确认本轮 Meta 查询方案。请严格按锁定 planId 和数据工具参数执行只读查询；查询结果只用于生成配置，不得写入临时图表库。';
   }
-  if (action === 'visualization_app.confirm_plan'
-    || action === 'visualization_app.confirm_overwrite') {
-    return '我已确认写入锁定的可视化应用配置。请按确认卡中的目标文件和内容执行配置写入与读回校验；配置成功后再单独确认菜单发布，不得在本轮直接创建菜单，也不得创建 Dashboard。';
+  if (action === 'visualization_app.confirm_application_plan') {
+    return '我已确认应用方案与查询口径。请调用 visualization_app_validate 生成服务端编译结果和真实数据预览；不得自行生成 AMIS、API URL、adaptor 或 JavaScript。';
+  }
+  if (action === 'visualization_app.confirm_publish') {
+    return '我已确认真实数据预览与发布内容。请调用 visualization_app_apply，使用工作流锁定的 candidate_digest 和 validation_digest 一次发布配置与菜单，并完成全量读回。';
+  }
+  if (action === 'visualization_app.retry_menu') {
+    return '我已确认重试当前锁定版本的菜单发布。请调用 visualization_app_retry_menu，不重写应用文件，并在菜单读回一致后输出发布结果。';
   }
   if (action === 'visualization_dashboard.confirm_plan'
     || action === 'visualization_dashboard.confirm_overwrite') {
     return '我已确认写入锁定的大屏配置。请按确认卡执行配置写入与读回，再由平台按锁定 Dashboard 参数创建并读回 Dashboard；配置或 Dashboard 参数变化时必须重新确认。';
   }
-  if (action === 'visualization_app.confirm_menu'
-    || action === 'visualization_dashboard.confirm_menu') {
+  if (action === 'visualization_dashboard.confirm_menu') {
     return '我已确认发布锁定菜单。请调用 menu_create 并接受高风险 MCP 审批，随后调用 menu_view 读回校验；只在读回一致时输出菜单记录。';
   }
   return '我已确认本次操作，请继续执行下一阶段。';
@@ -325,7 +328,7 @@ const visualizationDecisionMessage = (
       return '我已确认并授权按上一轮查询方案生成临时图表。请执行锁定查询并仅使用真实 echarts.option 生成预览，不要写入图表库、配置、Dashboard 或菜单。';
     }
     if (domain === 'app') {
-      return '我已确认并授权应用上一轮可视化应用配置。请按锁定目标文件和内容写入配置并读回；配置成功后单独请求菜单发布确认，不要创建 Dashboard，也不要写入临时图表库。';
+      return '我已确认当前可视化应用阶段。若处于应用方案阶段，请调用 visualization_app_validate；若处于发布确认阶段，请按锁定摘要调用 visualization_app_apply 一次完成配置与菜单发布，并完成全量读回。不要创建 Dashboard，也不要写入临时图表库。';
     }
     return '我已确认并授权应用上一轮数据大屏配置。请按锁定目标文件和内容写入配置并读回，再按锁定参数创建并读回 Dashboard；菜单发布必须单独确认，不要写入临时图表库。';
   }
@@ -661,6 +664,8 @@ export const useChatMessageActions = ({
     }
     if (payload.decision === 'revise' && (
       action.endsWith('.confirm_plan')
+      || action.endsWith('.confirm_application_plan')
+      || action.endsWith('.confirm_publish')
       || action.endsWith('.confirm_overwrite')
       || action.endsWith('.confirm_menu')
     )) {

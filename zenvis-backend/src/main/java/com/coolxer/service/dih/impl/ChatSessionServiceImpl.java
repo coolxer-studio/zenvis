@@ -245,11 +245,15 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     private String mergeReservedExtraData(String currentExtraData, String incomingExtraData) {
         Map<String, Object> current = workflowStateStore.parse(currentExtraData);
         Map<String, Object> incoming = workflowStateStore.parse(incomingExtraData);
-        for (String key : List.of(
-                WorkflowStateStore.RESERVED_KEY, AgentDemoStateStore.RESERVED_KEY)) {
-            if (incoming.containsKey(key)) {
-                current.put(key, incoming.get(key));
-            }
+        Map<String, Object> mergedWorkflow = workflowStateStore.parse(
+                workflowStateStore.mergeReserved(currentExtraData, incomingExtraData));
+        if (mergedWorkflow.containsKey(WorkflowStateStore.RESERVED_KEY)) {
+            current.put(WorkflowStateStore.RESERVED_KEY,
+                    mergedWorkflow.get(WorkflowStateStore.RESERVED_KEY));
+        }
+        if (incoming.containsKey(AgentDemoStateStore.RESERVED_KEY)) {
+            current.put(AgentDemoStateStore.RESERVED_KEY,
+                    incoming.get(AgentDemoStateStore.RESERVED_KEY));
         }
         return JacksonUtil.toJson(current);
     }

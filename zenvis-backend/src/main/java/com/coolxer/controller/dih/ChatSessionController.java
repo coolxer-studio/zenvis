@@ -152,8 +152,8 @@ public class ChatSessionController extends BaseController {
             com.coolxer.service.dih.DataPushDemoResponseService.USER_EVENT_EXAMPLE_PROMPT;
     private static final String PROLOGUE_AGENT_VISUALIZATION_CHART = "我是临时图表智能体，只基于已发布 Meta 查询真实数据并生成临时 ECharts 图表。\n" +
             "我不会写入配置、创建应用、看板或菜单；只有经过查询方案确认和真实数据校验的图表才能加入本次会话图表库。";
-    private static final String PROLOGUE_AGENT_VISUALIZATION_APP = "我是可视化应用智能体，只基于已发布 Meta 生成低代码单页、侧边栏应用或静态 HTML 页面，并按需创建应用菜单。\n" +
-            "配置写入前会先锁定并展示确认卡，写入后必须读回一致；我不会创建数据大屏。";
+    private static final String PROLOGUE_AGENT_VISUALIZATION_APP = "我是可视化应用智能体，只基于已发布 Meta 创建和修改 AMIS 数据应用。\n" +
+            "我会先确认应用方案与查询口径，再展示真实数据预览；配置和菜单一次审批发布并全量读回。支持多页导航、图表、筛选和单条增删改查，不会创建数据大屏。";
     private static final String PROLOGUE_AGENT_VISUALIZATION_DASHBOARD = "我是数据大屏智能体，只基于已发布 Meta 生成低代码或静态 HTML 看板，并创建看板入口和配置管理菜单。\n" +
             "我不会写入 Meta，也不会生成普通可视化应用页面；Dashboard 与菜单都必须真实创建并读回。";
     private static final String PROLOGUE_AGENT_VISUALIZATION_EXAMPLE_INTRO = "可以点击下面的示例快速填入提示词。";

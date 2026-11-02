@@ -35,7 +35,7 @@
           取消本步骤
         </el-button>
         <el-button v-if="canRetry" size="small" type="primary" @click="requestDecision('retry')">
-          重试当前阶段
+          {{ retryLabel }}
         </el-button>
         <el-button v-if="canRevise" size="small" type="warning" plain @click="requestDecision('revise')">
           补充信息继续调整
@@ -151,12 +151,18 @@ const isBlocked = computed(
 const action = computed(() => String(metadata.value.action || ''));
 const approveLabel = computed(() => {
   if (action.value.endsWith('.confirm_query_plan')) return '确认查询方案';
+  if (action.value.endsWith('.confirm_application_plan')) return '确认应用方案';
+  if (action.value.endsWith('.confirm_publish')) return '确认发布应用';
+  if (action.value.endsWith('.retry_menu')) return '重试菜单发布';
   if (action.value.endsWith('.confirm_overwrite')) return '确认覆盖配置';
   if (action.value.endsWith('.confirm_menu')) return '确认发布菜单';
   if (action.value.endsWith('.confirm_plan')) return '确认写入配置';
   if (action.value.endsWith('.select_entity_from_meta')) return '确认实体';
   return '确认执行';
 });
+const retryLabel = computed(() =>
+  action.value.endsWith('.retry_menu') ? '重试菜单发布' : '重试当前阶段',
+);
 const statusTagType = computed(() => {
   if (isMissingMeta.value || isBlocked.value) return 'danger';
   if (props.part.status === 'apply_config' || props.part.status === 'approved') return 'success';
@@ -183,7 +189,7 @@ const requestDecision = async (decision: VisualizationDecision) => {
     decision === 'apply_config'
       ? approveLabel.value
       : decision === 'retry'
-        ? '重试当前阶段'
+        ? retryLabel.value
         : '取消当前步骤';
   try {
     await ElMessageBox.confirm(`确认${label}？`, props.agentLabel, {

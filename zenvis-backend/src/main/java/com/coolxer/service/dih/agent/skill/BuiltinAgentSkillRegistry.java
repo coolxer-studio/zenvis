@@ -42,7 +42,7 @@ public final class BuiltinAgentSkillRegistry {
                     AGENT_VISUALIZATION_APP,
                     "可视化应用",
                     21,
-                    "可视化应用智能体生成低代码单页、侧边栏应用和静态 HTML 页面，并按需发布应用菜单。"
+                    "可视化应用智能体通过 DataAppSpec 对话式创建多页 AMIS 数据应用，支持分析、筛选和单条 CRUD，并一次发布配置与菜单。"
             ),
             new BuiltinAgentSkill(
                     "visualization-dashboard-agent",

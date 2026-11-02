@@ -124,7 +124,7 @@ interface:
 - 运行时元数据配置智能体只允许 `config_tree/config_schema/config_read/config_meta_draft/config_add/config_apply/config_validate/config_rename/config_delete`，不得调用 `push_task_*`。`config_meta_draft` 只读展开精简 Meta 草稿；校验结果中的 `validationId` 必须与确认卡锁定回执一致。
 - 运行时数据推送服务智能体只允许 `config_tree/config_read/push_task_*`，不得调用 `config_add/config_apply`；Meta 始终只读。
 - 临时图表智能体只允许 retrieval 元数据与实体查询工具，不得调用 `config_*`、`dashboard_*`、`menu_*` 或 `push_task_*`。
-- 可视化应用智能体允许 retrieval、配置写工具和 `menu_*`，不得调用 `dashboard_*`、`push_task_*` 或 Meta 写工具。
+- 可视化应用智能体只允许 retrieval、只读菜单查询和 `data-app` 的 `visualization_app_list/get/validate/apply/retry_menu`；不得调用 `config_*` 写工具、`menu_*` 写工具、`dashboard_*`、`push_task_*` 或 Meta 写工具。
 - 数据大屏智能体允许 retrieval、配置写工具、`dashboard_*` 和 `menu_*`，不得调用 `push_task_*` 或 Meta 写工具。
 - `config_rename/config_delete` 只授予元数据配置智能体；其他智能体不得获得目录或文件改名、删除能力。
 - 只有临时图表可以生成 `visualizationChart.chartLibrary` 记录；应用和大屏查询结果只用于生成配置。

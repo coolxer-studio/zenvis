@@ -16,18 +16,18 @@ class BuiltinMcpServiceDefinitionTest {
                 .extracting(BuiltinMcpServiceDefinition::code)
                 .containsExactly(
                         "retrieval", "config", "push-task",
-                        "visualization", "analysis-task");
+                        "visualization", "data-app", "analysis-task");
         assertThat(BuiltinMcpServiceDefinition.orderedValues())
                 .extracting(service -> service.toolNames().size())
-                .containsExactly(22, 10, 11, 21, 16);
+                .containsExactly(22, 10, 11, 21, 5, 16);
 
         List<String> tools = BuiltinMcpServiceDefinition.orderedValues().stream()
                 .flatMap(service -> service.toolNames().stream())
                 .toList();
         Set<String> unique = new LinkedHashSet<>(tools);
 
-        assertThat(tools).hasSize(80);
-        assertThat(unique).hasSize(80);
+        assertThat(tools).hasSize(85);
+        assertThat(unique).hasSize(85);
         assertThat(BuiltinMcpServiceDefinition.allToolNames()).containsExactlyInAnyOrderElementsOf(unique);
     }
 

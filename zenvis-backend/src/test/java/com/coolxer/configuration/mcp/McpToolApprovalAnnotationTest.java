@@ -2,6 +2,7 @@ package com.coolxer.configuration.mcp;
 
 import com.coolxer.controller.config.ConfigMcpTool;
 import com.coolxer.controller.config.ConfigValidationMcpTool;
+import com.coolxer.controller.dih.DataAppMcpTool;
 import com.coolxer.controller.retrieval.RetrievalMcpTool;
 import com.coolxer.controller.system.AnalysisTaskMcpTool;
 import com.coolxer.controller.system.DashboardMcpTool;
@@ -32,7 +33,8 @@ class McpToolApprovalAnnotationTest {
             ConfigMcpTool.class,
             ConfigValidationMcpTool.class,
             MenuMcpTool.class,
-            DashboardMcpTool.class
+            DashboardMcpTool.class,
+            DataAppMcpTool.class
     );
 
     @Test
@@ -42,7 +44,7 @@ class McpToolApprovalAnnotationTest {
                 .filter(method -> method.isAnnotationPresent(Tool.class))
                 .toList();
 
-        assertThat(methods).hasSize(74);
+        assertThat(methods).hasSize(79);
         assertThat(methods).allSatisfy(method -> {
             McpToolApproval approval = method.getAnnotation(McpToolApproval.class);
             assertThat(approval)
@@ -54,6 +56,38 @@ class McpToolApprovalAnnotationTest {
                             method.getDeclaringClass().getSimpleName(), method.getName())
                     .isNotEqualTo(com.coolxer.commons.enums.McpToolRiskLevel.UNKNOWN);
         });
+    }
+
+    @Test
+    void dataAppToolsUseOneHighRiskApprovalForPublishAndRetry() {
+        Map<String, Method> tools = List.of(DataAppMcpTool.class.getDeclaredMethods()).stream()
+                .filter(method -> method.isAnnotationPresent(Tool.class))
+                .collect(Collectors.toMap(
+                        method -> method.getAnnotation(Tool.class).name(),
+                        method -> method
+                ));
+
+        assertThat(tools).containsOnlyKeys(
+                "visualization_app_list",
+                "visualization_app_get",
+                "visualization_app_validate",
+                "visualization_app_apply",
+                "visualization_app_retry_menu");
+        for (String toolName : List.of(
+                "visualization_app_list",
+                "visualization_app_get",
+                "visualization_app_validate")) {
+            McpToolApproval approval = tools.get(toolName).getAnnotation(McpToolApproval.class);
+            assertThat(approval.value()).isEqualTo(ALLOW);
+            assertThat(approval.risk()).isEqualTo(LOW);
+        }
+        for (String toolName : List.of(
+                "visualization_app_apply",
+                "visualization_app_retry_menu")) {
+            McpToolApproval approval = tools.get(toolName).getAnnotation(McpToolApproval.class);
+            assertThat(approval.value()).isEqualTo(ASK);
+            assertThat(approval.risk()).isEqualTo(HIGH);
+        }
     }
 
     @Test

@@ -78,6 +78,7 @@ class BuiltinMcpServiceCatalogTest {
                         org.assertj.core.groups.Tuple.tuple("config", 10),
                         org.assertj.core.groups.Tuple.tuple("push-task", 11),
                         org.assertj.core.groups.Tuple.tuple("visualization", 21),
+                        org.assertj.core.groups.Tuple.tuple("data-app", 5),
                         org.assertj.core.groups.Tuple.tuple("analysis-task", 16));
         assertThat(catalog.listTools("retrieval"))
                 .hasSize(22)

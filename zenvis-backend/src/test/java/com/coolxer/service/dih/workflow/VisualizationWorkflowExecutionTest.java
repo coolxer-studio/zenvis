@@ -34,7 +34,8 @@ class VisualizationWorkflowExecutionTest {
 
         assertThat(app.supportsPart(part("visualization-app-decision"))).isTrue();
         assertThat(app.supportsPart(part("visualization-app-record"))).isTrue();
-        assertThat(app.supportsPart(part("config"))).isTrue();
+        assertThat(app.supportsPart(part("visualization-app-preview"))).isTrue();
+        assertThat(app.supportsPart(part("config"))).isFalse();
         assertThat(app.supportsPart(part("visualization-chart-preview"))).isFalse();
         assertThat(app.supportsPart(part("visualization-dashboard-record"))).isFalse();
 
@@ -100,23 +101,17 @@ class VisualizationWorkflowExecutionTest {
     }
 
     @Test
-    void appMenuConfirmationRequiresAReadBackVerifiedConfigRecord() {
+    void appLegacyPlanOverwriteAndMenuActionsAreBlocked() {
         AgentWorkflowState state = state(
-                VisualizationAgentTypes.APP, AgentWorkflowStep.ARTIFACT_READY);
-        ChatMessagePart confirmMenu = decision(
-                VisualizationAgentTypes.APP,
-                "confirm_menu",
-                Map.of("menu", Map.of("request", Map.of("name", "用户事件入口"))));
-
-        assertThat(app.resolveStep(state, confirmMenu, confirmMenu.getMetadata()))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
-
-        ChatMessagePart configRecord = record(
-                "visualization-app-record", "config");
-        app.updateContext(state, configRecord, configRecord.getMetadata());
-
-        assertThat(app.resolveStep(state, confirmMenu, confirmMenu.getMetadata()))
-                .isEqualTo(AgentWorkflowStep.MENU_CONFIRMATION);
+                VisualizationAgentTypes.APP, AgentWorkflowStep.APP_DISCOVERY);
+        for (String legacy : new String[]{"confirm_plan", "confirm_overwrite", "confirm_menu"}) {
+            ChatMessagePart card = decision(
+                    VisualizationAgentTypes.APP,
+                    legacy,
+                    Map.of("menu", Map.of("request", Map.of("name", "用户事件入口"))));
+            assertThat(app.resolveStep(state, card, card.getMetadata()))
+                    .isEqualTo(AgentWorkflowStep.BLOCKED);
+        }
     }
 
     @Test
@@ -142,56 +137,88 @@ class VisualizationWorkflowExecutionTest {
     }
 
     @Test
-    void rejectingAMenuKeepsTheWorkflowVerifiedInsteadOfCancellingPersistedArtifacts() {
+    void appPreviewRequiresTheLockedDigestsAndOpensPublishConfirmation() {
         AgentWorkflowState state = state(
-                VisualizationAgentTypes.APP, AgentWorkflowStep.MENU_CONFIRMATION);
+                VisualizationAgentTypes.APP, AgentWorkflowStep.APP_VALIDATING);
+        state.getContext().put("candidateDigest", "candidate-1");
+        state.getContext().put("validationDigest", "validation-1");
+
+        ChatMessagePart preview = part("visualization-app-preview", Map.of(
+                "validationStatus", "validated",
+                "candidateDigest", "candidate-1",
+                "validationDigest", "validation-1"));
+
+        assertThat(app.resolveStep(state, preview, preview.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.PERSIST_CONFIRMATION);
+
+        Map<String, Object> stale = new LinkedHashMap<>(preview.getMetadata());
+        stale.put("validationDigest", "validation-old");
+        ChatMessagePart stalePreview = part("visualization-app-preview", stale);
+        assertThat(app.resolveStep(state, stalePreview, stalePreview.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.BLOCKED);
+    }
+
+    @Test
+    void partialMenuRecordKeepsRetryStateInsteadOfClaimingVerified() {
+        AgentWorkflowState state = state(
+                VisualizationAgentTypes.APP, AgentWorkflowStep.PARTIAL_MENU);
+        ChatMessagePart record = part("visualization-app-record", Map.of(
+                "recordKind", "application",
+                "publishStatus", "partial_menu",
+                "status", "partial_menu"));
+
+        assertThat(app.resolveStep(state, record, record.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.PARTIAL_MENU);
+        assertThat(app.allowedActions(AgentWorkflowStep.PARTIAL_MENU, record.getMetadata()))
+                .contains("retry", "revise", "reject");
+    }
+
+    @Test
+    void menuRetryMustUseTheWorkflowLockedDigests() {
+        AgentWorkflowState state = state(
+                VisualizationAgentTypes.APP, AgentWorkflowStep.PARTIAL_MENU);
+        state.getContext().put("candidateDigest", "candidate-1");
+        state.getContext().put("validationDigest", "validation-1");
+        ChatMessagePart retry = decision(VisualizationAgentTypes.APP, "retry_menu", Map.of(
+                "candidateDigest", "candidate-1",
+                "validationDigest", "validation-1"));
+        ChatMessagePart stale = decision(VisualizationAgentTypes.APP, "retry_menu", Map.of(
+                "candidateDigest", "candidate-1",
+                "validationDigest", "validation-old"));
+
+        assertThat(app.resolveStep(state, retry, retry.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.PARTIAL_MENU);
+        assertThat(app.validateAction(state, retry, retry.getMetadata(), "retry"))
+                .isBlank();
+        assertThat(app.resolveStep(state, stale, stale.getMetadata()))
+                .isEqualTo(AgentWorkflowStep.BLOCKED);
+        assertThat(app.validateAction(state, stale, stale.getMetadata(), "retry"))
+                .contains("锁定");
+    }
+
+    @Test
+    void rejectingPartialMenuKeepsPublishedConfigurationAndRetryState() {
+        AgentWorkflowState state = state(
+                VisualizationAgentTypes.APP, AgentWorkflowStep.PARTIAL_MENU);
 
         assertThat(app.transition(state, "reject"))
-                .isEqualTo(AgentWorkflowStep.VERIFIED);
+                .isEqualTo(AgentWorkflowStep.PARTIAL_MENU);
     }
 
     @Test
-    void revisingAMenuOnlyReopensMenuConfirmation() {
-        AgentWorkflowState state = state(
-                VisualizationAgentTypes.APP, AgentWorkflowStep.MENU_CONFIRMATION);
-
-        assertThat(app.transition(state, "revise"))
-                .isEqualTo(AgentWorkflowStep.MENU_CONFIRMATION);
-        assertThat(app.continuation(state, "revise").get("request"))
-                .asString()
-                .contains("只重新生成菜单确认卡")
-                .contains("不得重复写入");
-    }
-
-    @Test
-    void persistencePlanRejectsMenusAndDashboardResourcesForAppWorkflow() {
+    void appWorkflowRejectsLegacyConfigResources() {
         AgentWorkflowState appState = state(
                 VisualizationAgentTypes.APP, AgentWorkflowStep.ARTIFACT_READY);
         appState.getContext().put("persistenceCandidate",
                 Map.of("content", "{\"type\":\"page\"}"));
 
-        ChatMessagePart mixed = decision(
-                VisualizationAgentTypes.APP,
-                "confirm_plan",
-                Map.of(
-                        "configType", "user-event-page",
-                        "fileName", "index.json",
-                        "menu", Map.of("request", Map.of("name", "用户事件入口"))));
+        ChatMessagePart mixed = decision(VisualizationAgentTypes.APP, "confirm_plan", Map.of(
+                "configType", "user-event-page",
+                "fileName", "index.json",
+                "menu", Map.of("request", Map.of("name", "用户事件入口"))));
         assertThat(app.resolveStep(appState, mixed, mixed.getMetadata()))
                 .isEqualTo(AgentWorkflowStep.BLOCKED);
-
-        ChatMessagePart dashboardResource = decision(
-                VisualizationAgentTypes.APP,
-                "confirm_plan",
-                Map.of(
-                        "configType", "user-event-page",
-                        "fileName", "index.json",
-                        "dashboard", Map.of("request", Map.of(
-                                "name", "错误看板",
-                                "code", "wrong-dashboard"))));
-        assertThat(app.resolveStep(appState, dashboardResource,
-                dashboardResource.getMetadata()))
-                .isEqualTo(AgentWorkflowStep.BLOCKED);
+        assertThat(app.supportsPart(part("config"))).isFalse();
     }
 
     @Test

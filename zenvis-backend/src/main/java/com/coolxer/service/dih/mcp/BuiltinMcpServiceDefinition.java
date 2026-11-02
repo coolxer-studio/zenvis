@@ -105,6 +105,18 @@ public enum BuiltinMcpServiceDefinition {
                     "menu_level_options"
             )),
 
+    DATA_APP(
+            "data-app",
+            "数据应用",
+            "提供受管数据应用的发现、校验、预览、发布和菜单重试工具",
+            List.of(
+                    "visualization_app_list",
+                    "visualization_app_get",
+                    "visualization_app_validate",
+                    "visualization_app_apply",
+                    "visualization_app_retry_menu"
+            )),
+
     ANALYSIS_TASK(
             "analysis-task",
             "AI 分析任务",

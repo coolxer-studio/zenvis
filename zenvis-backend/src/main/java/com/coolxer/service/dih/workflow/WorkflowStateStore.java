@@ -49,6 +49,10 @@ public class WorkflowStateStore {
         Map<String, Object> root = parse(chatSession.getExtraData());
         Map<String, Object> section = new LinkedHashMap<>(map(root.get(RESERVED_KEY)));
         Map<String, Object> workflows = new LinkedHashMap<>(map(section.get(WORKFLOWS_KEY)));
+        Object existing = workflows.get(state.getWorkflowId());
+        if (revision(existing) > state.getStateRevision()) {
+            return;
+        }
         workflows.put(state.getWorkflowId(), JacksonUtil.toMap(state));
         section.put(WORKFLOWS_KEY, workflows);
         Map<String, Object> activeByAgent =
@@ -75,6 +79,94 @@ public class WorkflowStateStore {
             incoming.remove(RESERVED_KEY);
         }
         return JacksonUtil.toJson(incoming);
+    }
+
+    /**
+     * Merges a possibly stale in-memory workflow snapshot with the current one.
+     * Tool calls persist their own workflow updates while the surrounding chat run
+     * still holds the session object loaded at the start of the turn. Comparing
+     * state revisions prevents that stale snapshot from rolling back a successful
+     * validation and its locked candidate digests.
+     */
+    public String mergeReserved(String currentExtraData, String incomingExtraData) {
+        Map<String, Object> current = parse(currentExtraData);
+        Map<String, Object> incoming = parse(incomingExtraData);
+        Map<String, Object> merged = new LinkedHashMap<>(current);
+        incoming.forEach((key, value) -> {
+            if (!RESERVED_KEY.equals(key)) {
+                merged.put(key, value);
+            }
+        });
+        if (current.containsKey(RESERVED_KEY) || incoming.containsKey(RESERVED_KEY)) {
+            merged.put(RESERVED_KEY, mergeSection(
+                    map(current.get(RESERVED_KEY)), map(incoming.get(RESERVED_KEY))));
+        }
+        return JacksonUtil.toJson(merged);
+    }
+
+    private Map<String, Object> mergeSection(Map<String, Object> current,
+                                             Map<String, Object> incoming) {
+        Map<String, Object> section = new LinkedHashMap<>(current);
+        Map<String, Object> currentWorkflows = map(current.get(WORKFLOWS_KEY));
+        Map<String, Object> incomingWorkflows = map(incoming.get(WORKFLOWS_KEY));
+        Map<String, Object> workflows = new LinkedHashMap<>(currentWorkflows);
+        incomingWorkflows.forEach((workflowId, value) -> {
+            if (!(value instanceof Map<?, ?>)) {
+                return;
+            }
+            if (!workflows.containsKey(workflowId)
+                    || revision(value) > revision(workflows.get(workflowId))) {
+                workflows.put(workflowId, value);
+            }
+        });
+        if (!workflows.isEmpty()) {
+            section.put(WORKFLOWS_KEY, workflows);
+        }
+
+        Map<String, Object> active = new LinkedHashMap<>(
+                map(current.get(ACTIVE_BY_AGENT_KEY)));
+        map(incoming.get(ACTIVE_BY_AGENT_KEY)).forEach((agentType, workflowId) -> {
+            if (!(workflowId instanceof String id) || !StringUtils.hasText(id)) {
+                return;
+            }
+            String currentId = string(active.get(agentType));
+            if (!StringUtils.hasText(currentId)
+                    || (!currentId.equals(id)
+                    && revision(workflows.get(id)) > revision(workflows.get(currentId)))) {
+                active.put(agentType, id);
+            }
+        });
+        active.entrySet().removeIf(entry -> {
+            Object workflow = workflows.get(string(entry.getValue()));
+            String status = workflow instanceof Map<?, ?> map
+                    ? string(map.get("status")) : "";
+            return "completed".equals(status) || "cancelled".equals(status);
+        });
+        section.put(ACTIVE_BY_AGENT_KEY, active);
+        return section;
+    }
+
+    private long revision(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return -1L;
+        }
+        Object revision = map.get("stateRevision");
+        if (revision == null) {
+            // Workflow snapshots are serialized by the global Jackson mapper with
+            // snake_case names, while card metadata uses camelCase.
+            revision = map.get("state_revision");
+        }
+        if (revision instanceof Number number) {
+            return number.longValue();
+        }
+        if (revision != null) {
+            try {
+                return Long.parseLong(revision.toString());
+            } catch (NumberFormatException ignored) {
+                return -1L;
+            }
+        }
+        return -1L;
     }
 
     public Map<String, Object> parse(String value) {

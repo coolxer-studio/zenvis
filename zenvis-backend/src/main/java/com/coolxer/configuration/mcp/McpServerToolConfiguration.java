@@ -4,6 +4,7 @@ import com.coolxer.commons.enums.McpApprovalPolicy;
 import com.coolxer.commons.enums.McpToolSourceType;
 import com.coolxer.controller.config.ConfigMcpTool;
 import com.coolxer.controller.config.ConfigValidationMcpTool;
+import com.coolxer.controller.dih.DataAppMcpTool;
 import com.coolxer.controller.retrieval.RetrievalMcpTool;
 import com.coolxer.controller.system.AnalysisTaskMcpTool;
 import com.coolxer.controller.system.AnalysisTaskScheduleMcpTool;
@@ -44,6 +45,7 @@ public class McpServerToolConfiguration {
                                                                     ConfigValidationMcpTool configValidationMcpTool,
                                                                     MenuMcpTool menuMcpTool,
                                                                     DashboardMcpTool dashboardMcpTool,
+                                                                    DataAppMcpTool dataAppMcpTool,
                                                                     McpApprovalService approvalService,
                                                                     McpToolPolicyService policyService) {
         log.info("=== Creating MethodToolCallbackProvider for MCP tools ===");
@@ -56,12 +58,13 @@ public class McpServerToolConfiguration {
         logToolMethods(ConfigValidationMcpTool.class);
         logToolMethods(MenuMcpTool.class);
         logToolMethods(DashboardMcpTool.class);
+        logToolMethods(DataAppMcpTool.class);
 
         // 创建 MethodToolCallbackProvider
         MethodToolCallbackProvider provider = MethodToolCallbackProvider.builder()
                 .toolObjects(retrievalMcpTool, analysisTaskMcpTool, analysisTaskScheduleMcpTool,
                         pushTaskMcpTool, configMcpTool,
-                        configValidationMcpTool, menuMcpTool, dashboardMcpTool)
+                        configValidationMcpTool, menuMcpTool, dashboardMcpTool, dataAppMcpTool)
                 .build();
 
         Map<String, McpToolDescriptor> descriptors = new LinkedHashMap<>();
@@ -73,6 +76,7 @@ public class McpServerToolConfiguration {
         addToolDescriptors(descriptors, ConfigValidationMcpTool.class);
         addToolDescriptors(descriptors, MenuMcpTool.class);
         addToolDescriptors(descriptors, DashboardMcpTool.class);
+        addToolDescriptors(descriptors, DataAppMcpTool.class);
         policyService.deleteStaleLocalPolicies(descriptors.keySet());
 
         log.info("=== MethodToolCallbackProvider created successfully ===");

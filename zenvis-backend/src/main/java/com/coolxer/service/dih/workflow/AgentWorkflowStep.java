@@ -2,6 +2,11 @@ package com.coolxer.service.dih.workflow;
 
 public enum AgentWorkflowStep {
     INTENT_CONFIRMATION,
+    APP_DISCOVERY,
+    APP_PLAN_CONFIRMATION,
+    APP_VALIDATING,
+    APP_APPLYING,
+    PARTIAL_MENU,
     ENTITY_META,
     ENTITY_SELECTION,
     ATTRIBUTE_META,

@@ -74,6 +74,18 @@ public final class VisualizationAgentTypes {
         return actionPrefix(agentType) + ".confirm_menu";
     }
 
+    public static String confirmApplicationPlanAction(String agentType) {
+        return actionPrefix(agentType) + ".confirm_application_plan";
+    }
+
+    public static String confirmPublishAction(String agentType) {
+        return actionPrefix(agentType) + ".confirm_publish";
+    }
+
+    public static String retryMenuAction(String agentType) {
+        return actionPrefix(agentType) + ".retry_menu";
+    }
+
     public static String decisionPartType(String agentType) {
         return actionPrefix(agentType).replace('_', '-') + "-decision";
     }

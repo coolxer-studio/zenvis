@@ -205,7 +205,7 @@ public class ExampleController {
 - 前端浏览器代理：`/zenvis/api/v1/**`，代理时移除 `/zenvis`；
 - 动态插件 API：`/api/v1/plugin/{package_name}/**`；
 - Swagger：`http://localhost:11001/swagger-ui/index.html`；
-- 内置 MCP Server：五组 `/mcp/{serviceCode}/sse` 与 `/mcp/{serviceCode}/message`。
+- 内置 MCP Server：六组 `/mcp/{serviceCode}/sse` 与 `/mcp/{serviceCode}/message`。
 
 公开业务服务上报接口不要求 Session 或 Bearer Token，但生产环境必须在部署层限制来源、请求规模和调用频率。
 
@@ -243,7 +243,7 @@ mvn -Dtest='WhereExpressionParserTest,RetrievalRuleLifecycleTest,RetrievalRuleSe
 
 - 普通 `ask` 不加载 Skill，也不调用 MCP 或本地工具。
 - 业务 Agent 通过 `PromptDrivenAgentRuntime` 执行，通过 `AgentMcpToolService` 获取工具白名单。
-- 临时图表只使用只读 retrieval MCP 工具；可视化应用和数据大屏分别使用独立的配置、Dashboard 和菜单工具白名单，三者都不生成或执行任意 SQL。
+- 临时图表只使用只读 retrieval MCP 工具；可视化应用只使用 retrieval、只读菜单查询和 `data-app` 的五个受管工具，数据大屏使用独立的配置、Dashboard 和菜单工具白名单。三者都不生成或执行任意 SQL。
 - 写工具必须保留审批、审计、参数校验和风险策略。
 - 普通问答和深度问答在全部未删除知识库中自动执行 RAG；业务 Agent / Skill 在所选启用 Skill 绑定知识库的并集内自动执行 RAG，未绑定时不检索也不回退全库。
 - 持久化执行由 `AgentRunService` 管理状态和事件，`AgentRunScheduler` 负责租约认领，`AgentRunExecutor` 执行单步决策；修改状态迁移时必须同步释放租约、等待动作和事件序号。

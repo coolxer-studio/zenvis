@@ -211,6 +211,7 @@ public class ChatMessagePartParser {
                 && !"zenvis:data-push-service-decision".equals(info)
                 && !"zenvis:visualization-chart-decision".equals(info)
                 && !"zenvis:visualization-app-decision".equals(info)
+                && !"zenvis:visualization-app-preview".equals(info)
                 && !"zenvis:visualization-dashboard-decision".equals(info)
                 && !"zenvis:meta-config-record".equals(info)
                 && !"zenvis:vectum-task-record".equals(info)
@@ -239,6 +240,7 @@ public class ChatMessagePartParser {
                 case "zenvis:data-push-service-decision" -> "data-push-service-decision";
                 case "zenvis:visualization-chart-decision" -> "visualization-chart-decision";
                 case "zenvis:visualization-app-decision" -> "visualization-app-decision";
+                case "zenvis:visualization-app-preview" -> "visualization-app-preview";
                 case "zenvis:visualization-dashboard-decision" -> "visualization-dashboard-decision";
                 case "zenvis:meta-config-record" -> "metadata-config-record";
                 case "zenvis:vectum-task-record" -> "data-push-service-record";
@@ -263,8 +265,11 @@ public class ChatMessagePartParser {
                 builder.id(StringUtils.hasText(textValue(node, "id"))
                                 ? textValue(node, "id") : UUID.randomUUID().toString())
                         .status(StringUtils.hasText(status) ? status : "pending");
-            } else if ("mcp-approval".equals(type) || "tool-call".equals(type)) {
-                builder.id(textValue(node, "id"))
+            } else if ("mcp-approval".equals(type) || "tool-call".equals(type)
+                    || "visualization-app-preview".equals(type)) {
+                String partId = textValue(node, "id");
+                builder.id(StringUtils.hasText(partId)
+                                ? partId : UUID.randomUUID().toString())
                         .status(firstTextValue(node, "status", "state"));
             }
             return builder.build();

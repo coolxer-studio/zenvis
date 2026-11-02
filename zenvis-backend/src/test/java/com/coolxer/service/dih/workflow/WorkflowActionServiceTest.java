@@ -113,6 +113,90 @@ class WorkflowActionServiceTest {
     }
 
     @Test
+    void staleAppValidationStateAcceptsLockedPreviewConfirmation() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = appSession();
+        ChatMessagePart preview = appPreviewPart("part-preview", 8,
+                "candidate-1", "validation-1");
+        session.setMessages(JacksonUtil.toJson(List.of(
+                message("message-preview", preview))));
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("workflow-app")
+                .setAgentType("agent_visualization_app")
+                .setStep(AgentWorkflowStep.APP_VALIDATING)
+                .setStatus("active")
+                .setMessageId("old-message")
+                .setPartId("old-part")
+                .setStateRevision(7)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1"))));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        var result = service.handle(request(
+                "chat-app", "message-preview", "part-preview",
+                "workflow-app", "approve"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getState()).isEqualTo("APP_APPLYING");
+        AgentWorkflowState persisted = store.load(session, "workflow-app").orElseThrow();
+        assertThat(persisted.getStep()).isEqualTo(AgentWorkflowStep.APP_APPLYING);
+        assertThat(persisted.getStateRevision()).isEqualTo(9);
+        assertThat(persisted.getPartId()).isEqualTo("part-preview");
+        List<Message> messages = JacksonUtil.toList(
+                session.getMessages(),
+                new com.fasterxml.jackson.core.type.TypeReference<List<Message>>() {});
+        assertThat(messages.get(0).getParts().get(0).getMetadata())
+                .containsEntry("step", "APP_APPLYING")
+                .containsEntry("stateRevision", 9);
+    }
+
+    @Test
+    void previewCardRemainsActionableWhenPublishDecisionCardIsCurrentPart() {
+        WorkflowStateStore store = new WorkflowStateStore();
+        ChatSession session = appSession();
+        ChatMessagePart preview = appPreviewPart("part-preview", 8,
+                "candidate-1", "validation-1");
+        ChatMessagePart decision = ChatMessagePart.builder()
+                .id("part-decision")
+                .type("visualization-app-decision")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "workflowId", "workflow-app",
+                        "action", "visualization_app.confirm_publish",
+                        "step", "PERSIST_CONFIRMATION",
+                        "stateRevision", 9,
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1",
+                        "allowedActions", List.of("approve", "reject", "revise"))))
+                .build();
+        session.setMessages(JacksonUtil.toJson(List.of(
+                messageWithParts("message-preview", preview, decision))));
+        store.upsert(session, new AgentWorkflowState()
+                .setWorkflowId("workflow-app")
+                .setAgentType("agent_visualization_app")
+                .setStep(AgentWorkflowStep.PERSIST_CONFIRMATION)
+                .setStatus("active")
+                .setMessageId("message-preview")
+                .setPartId("part-decision")
+                .setStateRevision(9)
+                .setContext(new LinkedHashMap<>(Map.of(
+                        "candidateDigest", "candidate-1",
+                        "validationDigest", "validation-1"))));
+        WorkflowActionService service = new WorkflowActionService(chatService(session), store);
+
+        var result = service.handle(request(
+                "chat-app", "message-preview", "part-preview",
+                "workflow-app", "approve"), user());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getState()).isEqualTo("APP_APPLYING");
+        AgentWorkflowState persisted = store.load(session, "workflow-app").orElseThrow();
+        assertThat(persisted.getStateRevision()).isEqualTo(10);
+        assertThat(persisted.getPartId()).isEqualTo("part-preview");
+    }
+
+    @Test
     void restoresWorkflowStateFromPendingCardWhenSessionStateWasLost() {
         WorkflowStateStore store = new WorkflowStateStore();
         ChatSession session = session();
@@ -540,6 +624,35 @@ class WorkflowActionServiceTest {
         return session;
     }
 
+    private ChatSession appSession() {
+        ChatSession session = new ChatSession()
+                .setSessionId("chat-app")
+                .setType("agent_visualization_app");
+        session.setId(1);
+        session.setCreateBy(9);
+        return session;
+    }
+
+    private ChatMessagePart appPreviewPart(String id,
+                                            long revision,
+                                            String candidateDigest,
+                                            String validationDigest) {
+        return ChatMessagePart.builder()
+                .id(id)
+                .type("visualization-app-preview")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "workflowId", "workflow-app",
+                        "step", "PERSIST_CONFIRMATION",
+                        "stateRevision", revision,
+                        "candidateDigest", candidateDigest,
+                        "validationDigest", validationDigest,
+                        "validationStatus", "validated",
+                        "passed", true,
+                        "allowedActions", List.of("approve", "reject", "revise"))))
+                .build();
+    }
+
     private User user() {
         User user = new User();
         user.setId(9);
@@ -552,6 +665,15 @@ class WorkflowActionServiceTest {
         message.setSender("ai");
         message.setContent("");
         message.setParts(List.of(part));
+        return message;
+    }
+
+    private Message messageWithParts(String id, ChatMessagePart... parts) {
+        Message message = new Message();
+        message.setId(id);
+        message.setSender("ai");
+        message.setContent("");
+        message.setParts(List.of(parts));
         return message;
     }
 

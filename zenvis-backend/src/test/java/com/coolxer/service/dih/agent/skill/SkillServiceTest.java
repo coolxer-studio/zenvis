@@ -799,7 +799,7 @@ class SkillServiceTest {
     }
 
     @Test
-    void builtinVisualizationAppSkillDocumentsAppAndMenuWorkflow() throws Exception {
+    void builtinVisualizationAppSkillDocumentsDataAppWorkflow() throws Exception {
         Path repoSkill = Path.of("../deploy/open_config/skill_config/visualization-app-agent");
         writeSkill(
                 skillRoot.resolve("visualization-app-agent"),
@@ -815,16 +815,22 @@ class SkillServiceTest {
                 List.of("visualization-app-agent"));
 
         assertThat(prompt)
-                .contains("低代码单页")
-                .contains("侧边栏")
-                .contains("静态 HTML")
-                .contains("config_ensure_root")
-                .contains("menu_create")
+                .contains("DataAppSpec")
+                .contains("DataAppChangeSet")
+                .contains("AMIS")
+                .contains("visualization_app_validate")
+                .contains("visualization_app_apply")
+                .contains("visualization_app_retry_menu")
                 .contains("zenvis:visualization-app-record")
-                .contains("visualization_app.confirm_query_plan")
-                .contains("visualization_app.confirm_plan")
-                .contains("visualization_app.confirm_overwrite")
-                .contains("visualization_app.confirm_menu")
+                .contains("zenvis:visualization-app-preview")
+                .contains("visualization_app.confirm_application_plan")
+                .contains("visualization_app.confirm_publish")
+                .contains("visualization_app.retry_menu")
+                .doesNotContain("config_ensure_root")
+                .doesNotContain("menu_create")
+                .doesNotContain("visualization_app.confirm_plan")
+                .doesNotContain("visualization_app.confirm_menu")
+                .doesNotContain("静态 HTML 页面和对应菜单发布")
                 .doesNotContain("dashboard_create")
                 .doesNotContain("```zenvis:visualization-chart-preview")
                 .doesNotContain("visualization-dashboard-record");

@@ -31,7 +31,7 @@ public class VisualizationAppDemoResponseService {
     }
 
     public static boolean isUserEventDemoRequirementPrompt(String prompt) {
-        return VisualizationDemoSupport.isAppDemoPrompt(prompt);
+        return false;
     }
 
     public Optional<Flux<String>> findResponse(ChatSession chatSession,
@@ -39,6 +39,9 @@ public class VisualizationAppDemoResponseService {
                                                String prompt,
                                                User user,
                                                McpToolContext mcpToolContext) {
-        return support.findResponse(chatSession, chatId, prompt, user, mcpToolContext);
+        // The visualization app lifecycle is now owned by the formal workflow
+        // and the data-app MCP service. Example prompts must go through that
+        // path instead of the legacy config/menu demo writer.
+        return Optional.empty();
     }
 }

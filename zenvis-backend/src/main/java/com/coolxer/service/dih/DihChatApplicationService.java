@@ -311,12 +311,10 @@ public class DihChatApplicationService {
                 && dataPushDemoResponseService != null;
         boolean visualizationChartDemo = VisualizationAgentTypes.isChart(chatType)
                 && visualizationChartDemoResponseService != null;
-        boolean visualizationAppDemo = VisualizationAgentTypes.isApp(chatType)
-                && visualizationAppDemoResponseService != null;
         boolean visualizationDashboardDemo = VisualizationAgentTypes.isDashboard(chatType)
                 && visualizationDashboardDemoResponseService != null;
         if ((metadataConfigDemo || dataPushDemo || visualizationChartDemo
-                || visualizationAppDemo || visualizationDashboardDemo)
+                || visualizationDashboardDemo)
                 && StringUtils.hasText(builtinDemoId)) {
             McpToolContext demoToolContext = agentMcpToolService == null
                     ? McpToolContext.empty()
@@ -337,8 +335,6 @@ public class DihChatApplicationService {
                                 ? McpInvocationContext.BUILTIN_DATA_PUSH_DEMO
                                 : visualizationChartDemo
                                 ? McpInvocationContext.BUILTIN_VISUALIZATION_CHART_DEMO
-                                : visualizationAppDemo
-                                ? McpInvocationContext.BUILTIN_VISUALIZATION_APP_DEMO
                                 : McpInvocationContext.BUILTIN_VISUALIZATION_DASHBOARD_DEMO,
                         builtinDemoToolStream::emitApproval
                 ));
@@ -366,9 +362,6 @@ public class DihChatApplicationService {
                 );
             } else if (visualizationChartDemo) {
                 builtinDemoResponse = visualizationChartDemoResponseService.findResponse(
-                        existingChatSession, chatId, userMessage, currentUser, demoToolContext);
-            } else if (visualizationAppDemo) {
-                builtinDemoResponse = visualizationAppDemoResponseService.findResponse(
                         existingChatSession, chatId, userMessage, currentUser, demoToolContext);
             } else {
                 builtinDemoResponse = visualizationDashboardDemoResponseService.findResponse(
@@ -599,6 +592,11 @@ public class DihChatApplicationService {
                         chatSession, executionPolicy.chatType()).orElse(null);
         AgentWorkflowStep step = workflow == null ? AgentWorkflowStep.ENTITY_META
                 : workflow.getStep();
+        if (VisualizationAgentTypes.isApp(executionPolicy.chatType())
+                && isDataAppWorkflowStep(step)) {
+            return bootstrapDataAppWorkflow(
+                    mcpToolContext, prompt, chatSession, workflow);
+        }
         if (step == AgentWorkflowStep.DATA_QUERY) {
             return executeApprovedVisualizationQuery(mcpToolContext, prompt, workflow);
         }
@@ -624,6 +622,204 @@ public class DihChatApplicationService {
         }
         return bootstrapVisualizationEntityMeta(
                 mcpToolContext, prompt, chatSession, workflow, true);
+    }
+
+    private boolean isDataAppWorkflowStep(AgentWorkflowStep step) {
+        return Set.of(
+                AgentWorkflowStep.APP_DISCOVERY,
+                AgentWorkflowStep.APP_PLAN_CONFIRMATION,
+                AgentWorkflowStep.APP_VALIDATING,
+                AgentWorkflowStep.APP_APPLYING,
+                AgentWorkflowStep.PARTIAL_MENU,
+                AgentWorkflowStep.BLOCKED).contains(step);
+    }
+
+    private String bootstrapDataAppWorkflow(McpToolContext mcpToolContext,
+                                            String prompt,
+                                            ChatSession chatSession,
+                                            AgentWorkflowState workflow) {
+        if (workflow == null) {
+            return prompt;
+        }
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(workflow.getContext());
+        AgentWorkflowStep step = workflow.getStep();
+        if (step == AgentWorkflowStep.BLOCKED) {
+            // Historical snapshots were written as BLOCKED before the validation result
+            // was persisted. Any blocked workflow without an apply attempt is therefore
+            // resumable through visualization_app_validate instead of waiting forever.
+            boolean applyBlocked = context.get("applyResult") != null
+                    || context.get("publishedAppId") != null;
+            Map<String, Object> lockedSpec = mapValue(
+                    mapValue(context.get("applicationPlan")).get("spec"));
+            String recoveryInstruction = "\n\n【数据应用工作流：BLOCKED】\n"
+                    + (!applyBlocked
+                    ? "上次 visualization_app_validate 未通过。按真实 diagnostics 修订 DataAppSpec 后直接重新调用校验；"
+                    + "校验工具允许从该 BLOCKED 快照恢复，不得重复原样提交同一失败规格。"
+                    : "上次写入或读回未完成。不得重复 apply 或声明成功；"
+                    + "先向用户说明真实错误并等待 retry 或修订指令。")
+                    + "同一诊断修复最多 2 次；只有 Meta 缺失才停止并交接。";
+            if (!applyBlocked && !lockedSpec.isEmpty()) {
+                recoveryInstruction += "\n锁定 DataAppSpec：" + JacksonUtil.toJson(lockedSpec);
+            }
+            return prompt + recoveryInstruction;
+        }
+        if (step == AgentWorkflowStep.APP_DISCOVERY) {
+            return prompt + "\n\n【数据应用工作流：APP_DISCOVERY】\n"
+                    + "先调用 visualization_app_list，并按需调用 visualization_app_get；"
+                    + "再使用 retrieval 只读 Meta 工具确认实体和字段。只生成 DataAppSpec 或 DataAppChangeSet，"
+                    + "不得生成 AMIS 节点、API URL、adaptor、JavaScript 或配置文件正文。"
+                    + "完成方案后输出 zenvis:visualization-app-decision，"
+                    + "action=visualization_app.confirm_application_plan，并携带 appId、specDigest、"
+                    + "pages、查询口径摘要和完整 spec。";
+        }
+        if (step == AgentWorkflowStep.APP_VALIDATING) {
+            Map<String, Object> plan = mapValue(context.get("applicationPlan"));
+            Map<String, Object> spec = mapValue(plan.get("spec"));
+            return prompt + "\n\n【数据应用工作流：APP_VALIDATING】\n"
+                    + "必须调用 visualization_app_validate。"
+                    + (spec.isEmpty() ? "" : "\n锁定 DataAppSpec：" + JacksonUtil.toJson(spec))
+                    + "\n不得自行编译 AMIS。校验通过后只输出 zenvis:visualization-app-preview，"
+                    + "原样携带服务端 candidate_digest、validation_digest、files、menu、diagnostics 和 preview。"
+                    + "\n输出预览卡后本轮必须停止，等待用户点击确认发布；"
+                    + "不得在同一轮自行调用 visualization_app_apply。";
+        }
+        if (step == AgentWorkflowStep.PERSIST_CONFIRMATION) {
+            return prompt + "\n\n【数据应用工作流：PERSIST_CONFIRMATION】\n"
+                    + "只展示 visualization_app_validate 的真实结果和预览，不得重新生成 AMIS 或查询参数。"
+                    + "发布确认 action=visualization_app.confirm_publish，"
+                    + "candidate_digest 与 validation_digest 必须来自服务端校验结果。";
+        }
+        if (step == AgentWorkflowStep.APP_APPLYING) {
+            String workflowId = stringValue(context, "workflowId", "");
+            String candidateDigest = stringValue(context, "candidateDigest", "");
+            String validationDigest = stringValue(context, "validationDigest", "");
+            Map<String, Object> arguments = new LinkedHashMap<>();
+            arguments.put("workflowId", StringUtils.hasText(workflowId)
+                    ? workflowId : workflow.getWorkflowId());
+            arguments.put("candidateDigest", candidateDigest);
+            arguments.put("validationDigest", validationDigest);
+            try {
+                String result = callNamedTool(
+                        mcpToolContext, "visualization_app_apply", arguments);
+                Map<String, Object> applied = mapValue(
+                        JacksonUtil.toMap(result, new TypeReference<Map<String, Object>>() {
+                        }));
+                String status = Objects.toString(applied.get("status"), "");
+                context.put("applyResult", applied);
+                context.put("dataAppApplied",
+                        "verified".equals(status) || "partial_menu".equals(status));
+                workflow.setContext(context);
+                workflow.setStep("partial_menu".equals(status)
+                        ? AgentWorkflowStep.PARTIAL_MENU
+                        : "verified".equals(status)
+                        ? AgentWorkflowStep.VERIFIED : AgentWorkflowStep.BLOCKED);
+                workflow.setStatus("verified".equals(status) ? "completed"
+                        : "partial_menu".equals(status) ? "active" : "blocked");
+                workflow.setStateRevision(workflow.getStateRevision() + 1);
+                workflowStateStore.upsert(chatSession, workflow);
+                persistWorkflowState(chatSession, workflow, mcpToolContext);
+                if ("partial_menu".equals(status)) {
+                    return prompt + "\n\n【数据应用配置已发布，菜单部分成功】\n"
+                            + result + "\n旧入口保持可用，应用版本已锁定。请输出菜单重试决策卡，"
+                            + "action=visualization_app.retry_menu，并携带相同 candidate_digest 和 validation_digest；"
+                            + "不得重写应用文件或重新校验覆盖当前版本。";
+                }
+                return prompt + "\n\n【数据应用发布真实结果】\n" + result
+                        + "\n只有 status=verified 才能声明发布成功，并必须输出 "
+                        + "zenvis:visualization-app-record，recordKind=application。";
+            } catch (McpApprovalPendingException pending) {
+                throw pending;
+            } catch (RuntimeException e) {
+                markWorkflowBlocked(chatSession, workflow,
+                        AgentWorkflowStep.APP_APPLYING, "visualization_app_apply",
+                        safeWorkflowError(e));
+                return prompt + "\n\n【数据应用发布失败】\n真实错误："
+                        + safeWorkflowError(e) + "\n不得声明发布成功，请提供 retry 或修订入口。";
+            }
+        }
+        if (step == AgentWorkflowStep.PARTIAL_MENU) {
+            if (Boolean.TRUE.equals(context.get("menuRetryRequired"))) {
+                return executeDataAppMenuRetry(mcpToolContext, prompt, chatSession, workflow);
+            }
+            String candidateDigest = stringValue(context, "candidateDigest", "");
+            String validationDigest = stringValue(context, "validationDigest", "");
+            Object applyResult = context.get("applyResult");
+            return prompt + "\n\n【数据应用工作流：PARTIAL_MENU】\n"
+                    + "配置已发布并读回，但菜单失败；当前版本锁定，只允许预览、读取和重试菜单。"
+                    + "输出 zenvis:visualization-app-preview（validationStatus=partial_menu），"
+                    + "提供 action=visualization_app.retry_menu 的重试入口；不得重写配置或重新生成 AMIS。"
+                    + "\n锁定 candidate_digest=" + candidateDigest
+                    + "，validation_digest=" + validationDigest
+                    + (applyResult == null ? "" : "\n真实发布结果：" + JacksonUtil.toJson(applyResult));
+        }
+        return prompt;
+    }
+
+    private String executeDataAppMenuRetry(McpToolContext mcpToolContext,
+                                           String prompt,
+                                           ChatSession chatSession,
+                                           AgentWorkflowState workflow) {
+        Map<String, Object> context = workflow.getContext() == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(workflow.getContext());
+        String workflowId = stringValue(context, "workflowId", workflow.getWorkflowId());
+        String candidateDigest = stringValue(context, "candidateDigest", "");
+        String validationDigest = stringValue(context, "validationDigest", "");
+        if (!StringUtils.hasText(candidateDigest) || !StringUtils.hasText(validationDigest)) {
+            context.remove("menuRetryRequired");
+            workflow.setContext(context);
+            return prompt + "\n\n【数据应用菜单重试不可用】\n缺少锁定摘要，请重新校验应用后再发布。";
+        }
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("workflowId", workflowId);
+        arguments.put("candidateDigest", candidateDigest);
+        arguments.put("validationDigest", validationDigest);
+        try {
+            String result = callNamedTool(
+                    mcpToolContext, "visualization_app_retry_menu", arguments);
+            Map<String, Object> retried = mapValue(
+                    JacksonUtil.toMap(result, new TypeReference<Map<String, Object>>() {
+                    }));
+            String status = Objects.toString(retried.get("status"), "");
+            context.remove("menuRetryRequired");
+            context.put("menuRetryResult", retried);
+            workflow.setContext(context);
+            workflow.setStep("verified".equals(status)
+                    ? AgentWorkflowStep.VERIFIED
+                    : "blocked".equals(status)
+                    ? AgentWorkflowStep.BLOCKED : AgentWorkflowStep.PARTIAL_MENU);
+            workflow.setStatus("verified".equals(status) ? "completed"
+                    : "blocked".equals(status) ? "blocked" : "active");
+            workflow.setStateRevision(workflow.getStateRevision() + 1);
+            workflowStateStore.upsert(chatSession, workflow);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            if ("verified".equals(status)) {
+                return prompt + "\n\n【数据应用菜单重试真实结果】\n" + result
+                        + "\n菜单已发布并读回。只有此真实结果允许声明发布成功，必须输出 "
+                        + "zenvis:visualization-app-record，recordKind=application。";
+            }
+            if ("blocked".equals(status)) {
+                return prompt + "\n\n【数据应用菜单重试被阻断】\n" + result
+                        + "\n不得声明发布成功；请输出阻断说明和可修订入口。";
+            }
+            return prompt + "\n\n【数据应用菜单重试未完成】\n" + result
+                    + "\n旧入口保持可用，请继续输出 zenvis:visualization-app-preview"
+                    + "（validationStatus=partial_menu）和菜单重试入口，不得声明发布成功。";
+        } catch (McpApprovalPendingException pending) {
+            throw pending;
+        } catch (RuntimeException e) {
+            context.remove("menuRetryRequired");
+            context.put("menuRetryError", safeWorkflowError(e));
+            workflow.setContext(context);
+            workflow.setStep(AgentWorkflowStep.PARTIAL_MENU);
+            workflow.setStatus("active");
+            workflow.setStateRevision(workflow.getStateRevision() + 1);
+            workflowStateStore.upsert(chatSession, workflow);
+            persistWorkflowState(chatSession, workflow, mcpToolContext);
+            return prompt + "\n\n【数据应用菜单重试失败】\n真实错误："
+                    + safeWorkflowError(e)
+                    + "\n不得声明发布成功；配置保持已发布，请继续输出 preview 菜单重试入口。";
+        }
     }
 
     private String executeApprovedVisualizationPersistence(
@@ -3894,10 +4090,6 @@ public class DihChatApplicationService {
             return visualizationChartDemoResponseService.findResponse(
                     chatSession, chatId, prompt, currentUser, McpToolContext.empty());
         }
-        if (VisualizationAgentTypes.isApp(chatType)) {
-            return visualizationAppDemoResponseService.findResponse(
-                    chatSession, chatId, prompt, currentUser, McpToolContext.empty());
-        }
         if (VisualizationAgentTypes.isDashboard(chatType)) {
             return visualizationDashboardDemoResponseService.findResponse(
                     chatSession, chatId, prompt, currentUser, McpToolContext.empty());
@@ -3922,21 +4114,6 @@ public class DihChatApplicationService {
             if (VisualizationChartDemoResponseService.CHART_EXAMPLE_PROMPT
                     .equals(normalized)) {
                 return "visualization-chart:chart";
-            }
-        }
-        if (VisualizationAgentTypes.isApp(chatType)) {
-            String normalized = Objects.toString(prompt, "").trim();
-            if (VisualizationAppDemoResponseService.PAGE_EXAMPLE_PROMPT
-                    .equals(normalized)) {
-                return "visualization-app:single-page";
-            }
-            if (VisualizationAppDemoResponseService.SIDEBAR_APP_EXAMPLE_PROMPT
-                    .equals(normalized)) {
-                return "visualization-app:sidebar";
-            }
-            if (VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT
-                    .equals(normalized)) {
-                return "visualization-app:menu";
             }
         }
         if (VisualizationAgentTypes.isDashboard(chatType)) {
@@ -3987,9 +4164,6 @@ public class DihChatApplicationService {
         if (VisualizationAgentTypes.isChart(chatType)) {
             return VisualizationChartDemoResponseService.isUserEventDemoRequirementPrompt(prompt);
         }
-        if (VisualizationAgentTypes.isApp(chatType)) {
-            return VisualizationAppDemoResponseService.isUserEventDemoRequirementPrompt(prompt);
-        }
         if (VisualizationAgentTypes.isDashboard(chatType)) {
             return VisualizationDashboardDemoResponseService.isUserEventDemoRequirementPrompt(prompt);
         }
@@ -4006,9 +4180,6 @@ public class DihChatApplicationService {
         }
         if (VisualizationAgentTypes.isChart(chatType)) {
             return "visualization-chart:chart";
-        }
-        if (VisualizationAgentTypes.isApp(chatType)) {
-            return "visualization-app:single-page";
         }
         if (VisualizationAgentTypes.isDashboard(chatType)) {
             return "visualization-dashboard:dashboard";
@@ -4611,6 +4782,7 @@ public class DihChatApplicationService {
                                    ReportActionDto reportAction,
                                    boolean outputTruncated,
                                    String runId) {
+        chatSession = refreshChatSession(chatSession, currentUser);
         Message aiMessage = new Message("ai", content, type);
         aiMessage.setRunId(runId);
         List<ChatMessagePart> parts = List.of();
@@ -4693,6 +4865,19 @@ public class DihChatApplicationService {
             log.error("保存模型响应到会话失败: {}", e.getMessage(), e);
         }
         return aiMessage;
+    }
+
+    private ChatSession refreshChatSession(ChatSession chatSession, User currentUser) {
+        if (chatSession == null
+                || chatSession.getId() == null
+                || !StringUtils.hasText(chatSession.getSessionId())
+                || chatSessionService == null
+                || currentUser == null) {
+            return chatSession;
+        }
+        ChatSession latest = chatSessionService.getChatSessionBySessionId(
+                chatSession.getSessionId(), currentUser);
+        return latest == null ? chatSession : latest;
     }
 
     private List<Map<String, Object>> buildReportEvidenceRefs(
@@ -5746,14 +5931,23 @@ public class DihChatApplicationService {
                 : workflowStateStore.loadActive(
                 chatSession, chatSession.getType()).orElse(null);
         String recordKind = visualizationRecordKind(part);
-        boolean expectedStep = "menu".equals(recordKind)
+        boolean applicationRecord = VisualizationAgentTypes.isApp(chatSession == null
+                ? "" : chatSession.getType())
+                && "application".equals(recordKind);
+        boolean expectedStep = applicationRecord
+                ? workflow != null && Set.of(
+                AgentWorkflowStep.VERIFIED, AgentWorkflowStep.PARTIAL_MENU)
+                .contains(workflow.getStep())
+                : "menu".equals(recordKind)
                 ? workflow != null && workflow.getStep() == AgentWorkflowStep.MENU_PUBLISHING
                 : workflow != null && workflow.getStep() == AgentWorkflowStep.PERSISTING;
         if (workflow == null || !expectedStep) {
             blockVisualizationPart(
                     part,
                     raw,
-                    "menu".equals(recordKind)
+                    applicationRecord
+                            ? "数据应用发布记录没有处于已读回验证的 VERIFIED 或 PARTIAL_MENU 工作流阶段"
+                            : "menu".equals(recordKind)
                             ? "可视化菜单记录没有处于已批准的 MENU_PUBLISHING 工作流阶段"
                             : "可视化写入记录没有处于已批准的 PERSISTING 工作流阶段");
             return;
@@ -5762,7 +5956,7 @@ public class DihChatApplicationService {
                 ? Map.of() : workflow.getContext();
         String agentType = chatSession.getType();
         boolean supportedKind = VisualizationAgentTypes.isApp(agentType)
-                ? Set.of("config", "menu").contains(recordKind)
+                ? Set.of("application", "config", "menu").contains(recordKind)
                 : VisualizationAgentTypes.isDashboard(agentType)
                 ? Set.of("config", "dashboard", "menu").contains(recordKind)
                 : false;
@@ -5771,6 +5965,10 @@ public class DihChatApplicationService {
                     part,
                     raw,
                     "当前可视化智能体不支持该记录类型：" + recordKind);
+            return;
+        }
+        if (applicationRecord) {
+            validateDataApplicationRecord(part, raw, workflowContext, evidence);
             return;
         }
         Map<String, Object> persistenceCandidate = mapValue(
@@ -5868,6 +6066,66 @@ public class DihChatApplicationService {
                     part,
                     raw,
                     "写入后的服务端读回不存在或关键字段不一致");
+            return;
+        }
+        raw.put("validationStatus", "success");
+        raw.put("validated", true);
+    }
+
+    private void validateDataApplicationRecord(ChatMessagePart part,
+                                               Map<String, Object> raw,
+                                               Map<String, Object> workflowContext,
+                                               McpToolLogStream evidence) {
+        Map<String, Object> applyResult = mapValue(workflowContext.get("applyResult"));
+        if (applyResult.isEmpty()) {
+            applyResult = mapValue(workflowContext.get("menuRetryResult"));
+        }
+        String applyStatus = stringValue(applyResult, "status", "");
+        if (applyResult.isEmpty() || !Set.of("verified", "partial_menu").contains(applyStatus)) {
+            blockVisualizationPart(part, raw, "缺少服务端锁定的数据应用配置读回结果");
+            return;
+        }
+        String appId = stringValue(applyResult, "appId", "");
+        if (!StringUtils.hasText(appId)
+                || (StringUtils.hasText(stringValue(raw, "appId", ""))
+                && !appId.equals(stringValue(raw, "appId", "")))
+                || (raw.get("app_version") != null
+                && !Objects.equals(String.valueOf(applyResult.get("appVersion")),
+                String.valueOf(raw.get("app_version"))))) {
+            blockVisualizationPart(part, raw, "数据应用发布记录与工作流锁定应用不一致");
+            return;
+        }
+        boolean retried = evidence.hasSuccessfulTool("visualization_app_retry_menu");
+        if (!retried && !evidence.hasSuccessfulTool("visualization_app_apply")
+                && !Boolean.TRUE.equals(workflowContext.get("dataAppApplied"))) {
+            blockVisualizationPart(part, raw, "缺少当前轮次数据应用发布与读回工具成功证据");
+            return;
+        }
+        raw.put("appId", appId);
+        raw.put("appVersion", applyResult.get("appVersion"));
+        raw.put("mode", applyResult.get("mode"));
+        raw.put("status", applyStatus);
+        raw.put("publishStatus", applyStatus);
+        raw.put("configStatus", "verified");
+        raw.put("menuStatus", applyStatus);
+        raw.put("manifestDigest", applyResult.get("manifestDigest"));
+        raw.put("menu", applyResult.get("menu"));
+        Map<String, Object> menu = mapValue(applyResult.get("menu"));
+        raw.put("menuId", menu.get("id"));
+        raw.put("menuName", menu.get("name"));
+        raw.put("menuType", menu.get("type"));
+        raw.put("menuRoute", menu.get("route"));
+        raw.put("menuParams", menu.get("params"));
+        Map<String, Object> appSpec = mapValue(workflowContext.get("appSpec"));
+        raw.put("homePageId", appSpec.get("homePageId"));
+        raw.put("pages", appSpec.get("pages"));
+        raw.put("name", firstNonBlank(
+                stringValue(raw, "name", null), stringValue(appSpec, "name", null), appId));
+        raw.put("workflowId", stringValue(workflowContext, "workflowId", ""));
+        raw.put("source", "workflow");
+        Map<String, Object> record = buildDataApplicationRecord(part);
+        if (!isDataApplicationRecordPresent(record)) {
+            blockVisualizationPart(part, raw, "数据应用发布后的服务端读回不存在或关键字段不一致");
             return;
         }
         raw.put("validationStatus", "success");
@@ -6143,11 +6401,14 @@ public class DihChatApplicationService {
             return "实体 Meta MCP 未返回可用的逻辑实体名称";
         }
 
-        Map<String, Object> query = mapValue(raw.get("query"));
+        Map<String, Object> query = visualizationPlanQuery(raw);
+        if (query.isEmpty()) {
+            return "查询方案未提供可校验的 query 或 queries 参数";
+        }
         Map<String, Object> request = mapValue(query.get("request"));
         List<String> requestedEntities = visualizationRequestEntities(request);
         if (requestedEntities.isEmpty()) {
-            String fallbackEntity = stringValue(raw, "entity", "");
+            String fallbackEntity = visualizationEntityName(raw.get("entity"));
             if (StringUtils.hasText(fallbackEntity)) {
                 requestedEntities = List.of(fallbackEntity);
             }
@@ -6160,6 +6421,7 @@ public class DihChatApplicationService {
                 return "实体 Meta MCP 返回结果中不存在逻辑实体：" + entity;
             }
         }
+        request = normalizeVisualizationRequestEntities(request);
         String entityName = requestedEntities.get(0);
         Map<String, Object> entityMeta = entitiesByName.get(entityName);
 
@@ -6248,19 +6510,100 @@ public class DihChatApplicationService {
 
     private List<String> visualizationRequestEntities(Map<String, Object> request) {
         LinkedHashSet<String> entities = new LinkedHashSet<>();
-        addVisualizationEntity(entities, stringValue(request, "entity", ""));
+        addVisualizationEntity(entities, visualizationEntityName(request.get("entity")));
         for (Object value : listValue(request.get("entities"))) {
-            if (value instanceof String entity) {
-                addVisualizationEntity(entities, entity);
-            }
+            addVisualizationEntity(entities, visualizationEntityName(value));
         }
         for (String collection : List.of("mappings", "series", "display_list")) {
             for (Object value : listValue(request.get(collection))) {
                 addVisualizationEntity(
-                        entities, stringValue(mapValue(value), "entity", ""));
+                        entities, visualizationEntityName(mapValue(value).get("entity")));
             }
         }
         return List.copyOf(entities);
+    }
+
+    private Map<String, Object> visualizationPlanQuery(Map<String, Object> raw) {
+        Map<String, Object> query = mapValue(raw == null ? null : raw.get("query"));
+        if (!query.isEmpty()) {
+            return query;
+        }
+        for (Object value : listValue(raw == null ? null : raw.get("queries"))) {
+            Map<String, Object> candidate = mapValue(value);
+            if (!candidate.isEmpty()) {
+                return candidate;
+            }
+        }
+        return Map.of();
+    }
+
+    private String visualizationEntityName(Object value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof String text) {
+            return text.trim();
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> entity = mapValue(map);
+            return firstNonBlank(
+                    stringValue(entity, "name", ""),
+                    stringValue(entity, "entity", ""),
+                    stringValue(entity, "entityName", ""),
+                    stringValue(entity, "entity_name", ""),
+                    stringValue(entity, "value", ""));
+        }
+        return "";
+    }
+
+    private Map<String, Object> normalizeVisualizationRequestEntities(
+            Map<String, Object> request) {
+        if (request == null || request.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>(request);
+        if (normalized.containsKey("entity")) {
+            String entity = visualizationEntityName(normalized.get("entity"));
+            if (StringUtils.hasText(entity)) {
+                normalized.put("entity", entity);
+            } else {
+                normalized.remove("entity");
+            }
+        }
+        if (normalized.get("entities") instanceof List<?> entities) {
+            List<String> names = entities.stream()
+                    .map(this::visualizationEntityName)
+                    .filter(StringUtils::hasText)
+                    .toList();
+            if (names.isEmpty()) {
+                normalized.remove("entities");
+            } else {
+                normalized.put("entities", names);
+            }
+        }
+        for (String collection : List.of("mappings", "series", "display_list")) {
+            if (!(normalized.get(collection) instanceof List<?> items)) {
+                continue;
+            }
+            List<Object> normalizedItems = new ArrayList<>(items.size());
+            for (Object item : items) {
+                Map<String, Object> entry = mapValue(item);
+                if (entry.isEmpty() || !entry.containsKey("entity")) {
+                    normalizedItems.add(item);
+                    continue;
+                }
+                String entity = visualizationEntityName(entry.get("entity"));
+                Map<String, Object> normalizedEntry = new LinkedHashMap<>(entry);
+                if (StringUtils.hasText(entity)) {
+                    normalizedEntry.put("entity", entity);
+                } else {
+                    normalizedEntry.remove("entity");
+                }
+                normalizedItems.add(normalizedEntry);
+            }
+            normalized.put(collection, normalizedItems);
+        }
+        return normalized;
     }
 
     private void addVisualizationEntity(Set<String> entities, String entity) {
@@ -6846,7 +7189,7 @@ public class DihChatApplicationService {
     }
 
     private boolean hasSafeVisualizationQuery(Map<String, Object> raw) {
-        Map<String, Object> query = mapValue(raw.get("query"));
+        Map<String, Object> query = visualizationPlanQuery(raw);
         String tool = stringValue(query, "tool", "");
         Map<String, Object> request = mapValue(query.get("request"));
         return VISUALIZATION_DATA_TOOLS.contains(tool)
@@ -7006,7 +7349,8 @@ public class DihChatApplicationService {
         mergeSectionRecords(extraData, patch, "metadataConfig", List.of("records"));
         mergeSectionRecords(extraData, patch, "dataPushService", List.of("records"));
         mergeSectionRecords(extraData, patch, "visualizationChart", List.of("chartLibrary"));
-        mergeSectionRecords(extraData, patch, "visualizationApp", List.of("configs", "menus"));
+        mergeSectionRecords(extraData, patch, "visualizationApp",
+                List.of("applications", "configs", "menus"));
         mergeSectionRecords(extraData, patch, "visualizationDashboard",
                 List.of("configs", "dashboards", "menus"));
         mergeSectionRecords(extraData, patch, "dataAnalysis", List.of(
@@ -7240,6 +7584,7 @@ public class DihChatApplicationService {
 
     private Map<String, Object> buildVisualizationExtraDataPatch(List<ChatMessagePart> parts) {
         List<Map<String, Object>> chartLibrary = new ArrayList<>();
+        List<Map<String, Object>> appApplications = new ArrayList<>();
         List<Map<String, Object>> appConfigs = new ArrayList<>();
         List<Map<String, Object>> appMenus = new ArrayList<>();
         List<Map<String, Object>> dashboardConfigs = new ArrayList<>();
@@ -7256,14 +7601,22 @@ public class DihChatApplicationService {
                             part.getMetadata());
                 }
             } else if ("visualization-app-record".equals(part.getType())) {
-                Map<String, Object> record = buildVisualizationConfigRecord(part);
-                if ("menu".equals(visualizationRecordKind(part))) {
-                    record = buildMenuConfigRecord(part);
+                String kind = visualizationRecordKind(part);
+                if ("application".equals(kind)) {
+                    Map<String, Object> record = buildDataApplicationRecord(part);
+                    if (isDataApplicationRecordPresent(record)) {
+                        appApplications.add(record);
+                    }
+                } else if ("menu".equals(kind)) {
+                    Map<String, Object> record = buildMenuConfigRecord(part);
                     if (isMenuConfigRecordPresent(record)) {
                         appMenus.add(record);
                     }
-                } else if (isVisualizationConfigRecordPresent(record)) {
-                    appConfigs.add(record);
+                } else {
+                    Map<String, Object> record = buildVisualizationConfigRecord(part);
+                    if (isVisualizationConfigRecordPresent(record)) {
+                        appConfigs.add(record);
+                    }
                 }
             } else if ("visualization-dashboard-record".equals(part.getType())) {
                 String kind = visualizationRecordKind(part);
@@ -7285,7 +7638,8 @@ public class DihChatApplicationService {
                 }
             }
         }
-        if (chartLibrary.isEmpty() && appConfigs.isEmpty() && appMenus.isEmpty()
+        if (chartLibrary.isEmpty() && appApplications.isEmpty()
+                && appConfigs.isEmpty() && appMenus.isEmpty()
                 && dashboardConfigs.isEmpty() && dashboards.isEmpty()
                 && dashboardMenus.isEmpty()) {
             return null;
@@ -7295,8 +7649,11 @@ public class DihChatApplicationService {
         if (!chartLibrary.isEmpty()) {
             metadata.put("visualizationChart", Map.of("chartLibrary", chartLibrary));
         }
-        if (!appConfigs.isEmpty() || !appMenus.isEmpty()) {
+        if (!appApplications.isEmpty() || !appConfigs.isEmpty() || !appMenus.isEmpty()) {
             Map<String, Object> section = new LinkedHashMap<>();
+            if (!appApplications.isEmpty()) {
+                section.put("applications", appApplications);
+            }
             if (!appConfigs.isEmpty()) {
                 section.put("configs", appConfigs);
             }
@@ -7627,6 +7984,36 @@ public class DihChatApplicationService {
         return record;
     }
 
+    private Map<String, Object> buildDataApplicationRecord(ChatMessagePart part) {
+        Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
+        Map<String, Object> record = baseVisualizationRecord(raw, part, "数据应用");
+        String appId = stringValue(raw, "appId", null);
+        if (StringUtils.hasText(appId)) {
+            record.put("id", appId);
+        }
+        record.put("appId", appId);
+        record.put("recordKind", "application");
+        record.put("appVersion", raw.get("appVersion"));
+        record.put("mode", stringValue(raw, "mode", ""));
+        record.put("homePageId", stringValue(raw, "homePageId", ""));
+        record.put("pages", listOfMaps(raw.get("pages")));
+        record.put("pageCount", listOfMaps(raw.get("pages")).size());
+        record.put("publishStatus", stringValue(raw, "publishStatus", "verified"));
+        record.put("configStatus", stringValue(raw, "configStatus", "verified"));
+        record.put("menuStatus", stringValue(raw, "menuStatus", "verified"));
+        record.put("manifestDigest", stringValue(raw, "manifestDigest", ""));
+        record.put("menuId", stringValue(raw, "menuId", null));
+        record.put("menuName", stringValue(raw, "menuName", ""));
+        record.put("menuType", stringValue(raw, "menuType", ""));
+        record.put("route", stringValue(raw, "menuRoute", ""));
+        record.put("params", stringValue(raw, "menuParams", appId));
+        record.put("workflowId", stringValue(raw, "workflowId", ""));
+        record.put("status", stringValue(raw, "status", "verified"));
+        record.put("source", firstNonBlank(stringValue(raw, "source", null), "workflow"));
+        record.put("raw", raw);
+        return record;
+    }
+
     private Map<String, Object> buildDashboardConfigRecord(ChatMessagePart part) {
         Map<String, Object> raw = part.getMetadata() == null ? Map.of() : part.getMetadata();
         Map<String, Object> record = baseVisualizationRecord(raw, part, "数据看板配置");
@@ -7821,6 +8208,52 @@ public class DihChatApplicationService {
         }
     }
 
+    private boolean isDataApplicationRecordPresent(Map<String, Object> record) {
+        String appId = stringValue(record, "appId", null);
+        String menuId = stringValue(record, "menuId", null);
+        String requestedPublishStatus = stringValue(record, "publishStatus", "");
+        boolean partialMenu = "partial_menu".equals(requestedPublishStatus);
+        if (!StringUtils.hasText(appId) || record.get("appVersion") == null
+                || (!partialMenu && !StringUtils.hasText(menuId))) {
+            recordWorkflowReadBack("application", "mismatch");
+            return false;
+        }
+        try {
+            Map<String, Object> manifest = parseJsonObject(readWithRetries(
+                    () -> configService.readFile(appId, "_app.json")));
+            String publishStatus = firstNonBlank(
+                    stringValue(manifest, "publish_status", null),
+                    stringValue(manifest, "publishStatus", null), "");
+            String expectedPublishStatus = partialMenu ? "partial_menu" : "published";
+            boolean manifestMatched = appId.equals(firstNonBlank(
+                    stringValue(manifest, "app_id", null),
+                    stringValue(manifest, "appId", null), ""))
+                    && Objects.equals(
+                    String.valueOf(record.get("appVersion")),
+                    String.valueOf(firstNonNull(
+                            manifest.get("app_version"), manifest.get("appVersion"))))
+                    && expectedPublishStatus.equals(publishStatus);
+            boolean menuMatched;
+            if ("partial_menu".equals(expectedPublishStatus)) {
+                menuMatched = true;
+            } else try {
+                menuMatched = menuService.info(Long.parseLong(menuId)) != null;
+            } catch (NumberFormatException e) {
+                menuMatched = false;
+            }
+            boolean matched = manifestMatched && menuMatched;
+            if (!matched) {
+                log.warn("忽略未验证的数据应用发布记录：清单或菜单读回不一致，record={}", record);
+            }
+            recordWorkflowReadBack("application", matched ? "success" : "mismatch");
+            return matched;
+        } catch (Exception e) {
+            log.warn("忽略未验证的数据应用发布记录：读回失败: {}", e.getMessage(), e);
+            recordWorkflowReadBack("application", "failed");
+            return false;
+        }
+    }
+
     private void recordWorkflowReadBack(String objectType, String status) {
         if (workflowMetrics != null) {
             workflowMetrics.readBack(objectType, status);
@@ -7952,6 +8385,7 @@ public class DihChatApplicationService {
                 stringValue(record, "code", null),
                 stringValue(record, "dashboardId", null),
                 stringValue(record, "menuId", null),
+                stringValue(record, "appId", null),
                 stringValue(record, "taskId", null),
                 stringValue(record, "version", null),
                 stringValue(record, "name", null)
@@ -7969,6 +8403,7 @@ public class DihChatApplicationService {
                     stringValue(item, "code", null),
                     stringValue(item, "dashboardId", null),
                     stringValue(item, "menuId", null),
+                    stringValue(item, "appId", null),
                     stringValue(item, "taskId", null),
                     stringValue(item, "version", null),
                     stringValue(item, "name", null)

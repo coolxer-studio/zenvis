@@ -22,6 +22,7 @@ export const DATA_VISUALIZATION_CHART_EXTRA_DATA_CHANGED_EVENT =
 export const DATA_VISUALIZATION_APP_RECORD_EVENT = 'dihVisualizationAppRecordsUpdated';
 export const DATA_VISUALIZATION_APP_RECORD_REQUEST_EVENT =
   'dihVisualizationAppRecordsRequested';
+export const DATA_VISUALIZATION_APP_RETRY_EVENT = 'dihVisualizationAppRetryRequested';
 export const DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT =
   'dihVisualizationDashboardRecordsUpdated';
 export const DATA_VISUALIZATION_DASHBOARD_RECORD_REQUEST_EVENT =
@@ -54,10 +55,16 @@ export type VisualizationChartRecordEventDetail = {
 };
 
 export type VisualizationAppRecordEventDetail = {
+  applications?: unknown[];
   configs?: unknown[];
   menus?: unknown[];
   extraData?: string;
   sessionRecordId?: string;
+};
+
+export type VisualizationAppRetryEventDetail = {
+  appId?: string;
+  workflowId?: string;
 };
 
 export type VisualizationDashboardRecordEventDetail = {
@@ -139,6 +146,7 @@ export type DihEventPayloadMap = {
     VisualizationChartExtraDataChangedEventDetail;
   [DATA_VISUALIZATION_APP_RECORD_EVENT]: VisualizationAppRecordEventDetail;
   [DATA_VISUALIZATION_APP_RECORD_REQUEST_EVENT]: undefined;
+  [DATA_VISUALIZATION_APP_RETRY_EVENT]: VisualizationAppRetryEventDetail;
   [DATA_VISUALIZATION_DASHBOARD_RECORD_EVENT]: VisualizationDashboardRecordEventDetail;
   [DATA_VISUALIZATION_DASHBOARD_RECORD_REQUEST_EVENT]: undefined;
   [DATA_ANALYSIS_RECORD_EVENT]: DataAnalysisRecordEventDetail;

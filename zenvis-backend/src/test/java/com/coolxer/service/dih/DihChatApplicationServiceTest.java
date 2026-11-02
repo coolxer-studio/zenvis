@@ -1214,6 +1214,35 @@ class DihChatApplicationServiceTest {
                 .contains("网络流量（traffic）", "创建时间（zenvis_insert_time，time）",
                         "事实类型（fact_type，dimension）");
 
+        ChatSession dataAppSession = new ChatSession();
+        dataAppSession.setType("agent_visualization_app");
+        ChatMessagePart dataAppPlan = ChatMessagePart.builder()
+                .type("confirm")
+                .status("pending")
+                .metadata(new LinkedHashMap<>(Map.of(
+                        "action", "visualization_app.confirm_query_plan",
+                        "planId", "app-plan-entity-object",
+                        "entity", Map.of("name", "traffic", "label", "网络流量"),
+                        "queries", List.of(Map.of(
+                                "tool", "entity_distribution",
+                                "request", Map.of(
+                                        "entity", Map.of("name", "traffic", "label", "网络流量"),
+                                        "time_field", "zenvis_insert_time",
+                                        "dimension", "fact_type",
+                                        "limit", 20))))))
+                .build();
+        ReflectionTestUtils.invokeMethod(service, "validateDataVisualizationParts",
+                dataAppSession, List.of(dataAppPlan), evidence);
+        assertThat(dataAppPlan.getStatus()).isEqualTo("pending");
+        assertThat(dataAppPlan.getMetadata())
+                .containsEntry("validationStatus", "success")
+                .containsEntry("entity", "traffic");
+        Map<String, Object> dataAppQuery =
+                (Map<String, Object>) dataAppPlan.getMetadata().get("query");
+        assertThat(dataAppQuery.get("request"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("entity", "traffic");
+
         ChatMessagePart allTimeDistributionPlan = ChatMessagePart.builder()
                 .type("confirm")
                 .status("pending")
@@ -2344,6 +2373,71 @@ class DihChatApplicationServiceTest {
         );
     }
 
+    private DihChatApplicationService serviceWithReadBack(ConfigService configService,
+                                                          MenuService menuService) {
+        return new DihChatApplicationService(
+                null, null, null, null, null, null, null, null,
+                null,
+                (ReportAgent) null, (MetadataConfigAgent) null,
+                (DataPushServiceAgent) null, (VisualizationChartAgent) null,
+                (VisualizationAppAgent) null, (VisualizationDashboardAgent) null,
+                null, null, null, (AgentMcpToolService) null, (SkillService) null,
+                configService, (PushTaskService) null, (DashboardService) null, menuService
+        );
+    }
+
+    @Test
+    void partialMenuApplicationRecordDoesNotRequireAMenuId() {
+        ConfigService configService = mock(ConfigService.class);
+        MenuService menuService = mock(MenuService.class);
+        when(configService.readFile("user-event-analysis", "_app.json")).thenReturn("""
+                {"app_id":"user-event-analysis","app_version":1,"publish_status":"partial_menu"}
+                """);
+        DihChatApplicationService service = serviceWithReadBack(configService, menuService);
+
+        Boolean matched = ReflectionTestUtils.invokeMethod(
+                service,
+                "isDataApplicationRecordPresent",
+                Map.of(
+                        "appId", "user-event-analysis",
+                        "appVersion", 1,
+                        "publishStatus", "partial_menu",
+                        "configStatus", "verified",
+                        "menuStatus", "partial_menu"));
+
+        assertThat(matched).isTrue();
+        verify(menuService, never()).info(any());
+    }
+
+    @Test
+    void verifiedApplicationRecordStillRequiresAReadableMenu() {
+        ConfigService configService = mock(ConfigService.class);
+        MenuService menuService = mock(MenuService.class);
+        when(configService.readFile("user-event-analysis", "_app.json")).thenReturn("""
+                {"app_id":"user-event-analysis","app_version":1,"publish_status":"published"}
+                """);
+        DihChatApplicationService service = serviceWithReadBack(configService, menuService);
+
+        Boolean withoutMenuId = ReflectionTestUtils.invokeMethod(
+                service,
+                "isDataApplicationRecordPresent",
+                Map.of(
+                        "appId", "user-event-analysis",
+                        "appVersion", 1,
+                        "publishStatus", "verified"));
+        assertThat(withoutMenuId).isFalse();
+
+        Boolean missingMenu = ReflectionTestUtils.invokeMethod(
+                service,
+                "isDataApplicationRecordPresent",
+                Map.of(
+                        "appId", "user-event-analysis",
+                        "appVersion", 1,
+                        "publishStatus", "verified",
+                        "menuId", "34"));
+        assertThat(missingMenu).isFalse();
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void buildStructuredExtraDataPatchIncludesConfigurationRecords() {
@@ -2846,25 +2940,10 @@ class DihChatApplicationServiceTest {
                                 .CHART_EXAMPLE_PROMPT,
                         "demoId", "visualization-chart:chart"),
                 Map.of(
-                        "type", VisualizationAppAgent.AGENT_TYPE,
-                        "prompt", VisualizationAppDemoResponseService
-                                .PAGE_EXAMPLE_PROMPT,
-                        "demoId", "visualization-app:single-page"),
-                Map.of(
-                        "type", VisualizationAppAgent.AGENT_TYPE,
-                        "prompt", VisualizationAppDemoResponseService
-                                .SIDEBAR_APP_EXAMPLE_PROMPT,
-                        "demoId", "visualization-app:sidebar"),
-                Map.of(
                         "type", VisualizationDashboardAgent.AGENT_TYPE,
                         "prompt", VisualizationDashboardDemoResponseService
                                 .DASHBOARD_EXAMPLE_PROMPT,
                         "demoId", "visualization-dashboard:dashboard"),
-                Map.of(
-                        "type", VisualizationAppAgent.AGENT_TYPE,
-                        "prompt", VisualizationAppDemoResponseService
-                                .MENU_EXAMPLE_PROMPT,
-                        "demoId", "visualization-app:menu"),
                 Map.of(
                         "type", ReportAgent.AGENT_TYPE,
                         "prompt", ReportDemoResponseService
@@ -2894,6 +2973,25 @@ class DihChatApplicationServiceTest {
                         example.get("prompt"),
                         null))
                 .isEqualTo(example.get("demoId")));
+
+        assertThat((String) ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveBuiltinDemoId",
+                VisualizationAppAgent.AGENT_TYPE,
+                VisualizationAppDemoResponseService.PAGE_EXAMPLE_PROMPT,
+                null)).isBlank();
+        assertThat((String) ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveBuiltinDemoId",
+                VisualizationAppAgent.AGENT_TYPE,
+                VisualizationAppDemoResponseService.SIDEBAR_APP_EXAMPLE_PROMPT,
+                null)).isBlank();
+        assertThat((String) ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveBuiltinDemoId",
+                VisualizationAppAgent.AGENT_TYPE,
+                VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT,
+                null)).isBlank();
         assertThat((String) ReflectionTestUtils.invokeMethod(
                 service,
                 "resolveBuiltinDemoId",

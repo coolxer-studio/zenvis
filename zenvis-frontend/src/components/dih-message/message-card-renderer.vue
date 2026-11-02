@@ -77,6 +77,12 @@
           :interactive="interactive"
           @choose-visualization-app-decision="emit('chooseVisualizationAppDecision', $event)"
         />
+        <VisualizationAppPreviewMessagePart
+          v-else-if="part.type === 'visualization-app-preview'"
+          :part="part"
+          :interactive="interactive"
+          @choose-visualization-app-decision="emit('chooseVisualizationAppDecision', $event)"
+        />
         <VisualizationDashboardDecisionMessagePart
           v-else-if="part.type === 'visualization-dashboard-decision'"
           :part="part"
@@ -115,6 +121,7 @@ import MetadataConfigDecisionMessagePart from './message-parts/metadata-config-d
 import DataPushServiceDecisionMessagePart from './message-parts/data-push-service-decision-message-part.vue';
 import DataPushServiceRecordMessagePart from './message-parts/data-push-service-record-message-part.vue';
 import VisualizationAppDecisionMessagePart from './message-parts/visualization-app-decision-message-part.vue';
+import VisualizationAppPreviewMessagePart from './message-parts/visualization-app-preview-message-part.vue';
 import VisualizationChartDecisionMessagePart from './message-parts/visualization-chart-decision-message-part.vue';
 import VisualizationDashboardDecisionMessagePart from './message-parts/visualization-dashboard-decision-message-part.vue';
 import NoticeMessagePart from './message-parts/notice-message-part.vue';

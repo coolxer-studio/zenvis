@@ -487,7 +487,7 @@ class WorkflowOrchestratorTest {
     }
 
     @Test
-    void appMenuCardCanResumeOnlyAfterAConfigRecordExistsInTheSession() {
+    void appLegacyMenuCardIsBlockedByTheDataAppWorkflow() {
         WorkflowStateStore store = new WorkflowStateStore();
         WorkflowOrchestrator orchestrator = new WorkflowOrchestrator(store);
         ChatSession session = new ChatSession()
@@ -508,12 +508,8 @@ class WorkflowOrchestratorTest {
                 session, List.of(card), List.of(), "message-1");
 
         assertThat(card.getMetadata())
-                .containsEntry("step", "MENU_CONFIRMATION")
-                .containsEntry("validationStatus", "success");
-        assertThat(store.loadActive(session, "agent_visualization_app"))
-                .get()
-                .satisfies(state -> assertThat(state.getContext())
-                        .containsEntry("verifiedPersistedConfig", true));
+                .containsEntry("step", "BLOCKED")
+                .containsEntry("validationStatus", "blocked");
     }
 
     @Test

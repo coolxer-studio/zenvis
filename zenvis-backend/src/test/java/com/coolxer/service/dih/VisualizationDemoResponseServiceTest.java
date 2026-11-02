@@ -30,34 +30,22 @@ import static org.mockito.Mockito.when;
 class VisualizationDemoResponseServiceTest {
 
     @Test
-    void appConfigDemoWritesOnlyConfigAndNeverTouchesMenus() {
-        List<String> calls = new ArrayList<>();
-        VisualizationDemoSupport support = support(
-                new VisualizationAppDemoResponseService(mock(ConfigService.class)));
-        String pageConfig = (String) ReflectionTestUtils.getField(
-                support, "USER_EVENT_PAGE_CONFIG");
-        McpToolContext context = toolContext(
-                callback("config_tree", calls, ignored -> "[]"),
-                callback("config_ensure_root", calls, ignored -> "true"),
-                callback("config_add", calls, ignored -> "true"),
-                callback("config_apply", calls, ignored -> "true"),
-                callback("config_read", calls, ignored -> JacksonUtil.toJson(pageConfig)),
-                callback("menu_create", calls, ignored ->
-                        fail("可视化应用配置写入不得调用 menu_create")),
-                callback("dashboard_create", calls, ignored ->
-                        fail("可视化应用配置写入不得调用 dashboard_create"))
-        );
+    void appDemoServiceDefersExamplePromptsToTheFormalDataAppWorkflow() {
+        VisualizationAppDemoResponseService service =
+                new VisualizationAppDemoResponseService(mock(ConfigService.class));
 
-        String response = ReflectionTestUtils.invokeMethod(
-                support, "applySinglePageLowCode", context);
-
-        assertThat(response)
-                .contains("zenvis:visualization-app-record")
-                .contains("\"recordKind\": \"config\"")
-                .doesNotContain("zenvis:visualization-app-record\n{\n  \"recordKind\": \"menu")
-                .doesNotContain("zenvis:visualization-dashboard-record");
-        assertThat(calls).containsExactly(
-                "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read");
+        assertThat(service.findResponse(
+                null,
+                "chat-1",
+                VisualizationAppDemoResponseService.PAGE_EXAMPLE_PROMPT,
+                null,
+                McpToolContext.empty())).isEmpty();
+        assertThat(service.findResponse(
+                null,
+                "chat-1",
+                VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT,
+                null,
+                McpToolContext.empty())).isEmpty();
     }
 
     @Test
@@ -98,46 +86,6 @@ class VisualizationDemoResponseServiceTest {
     }
 
     @Test
-    void menuDemoStillCreatesAndReadsBackTheMenu() throws Exception {
-        List<String> calls = new ArrayList<>();
-        VisualizationDemoSupport support = support(
-                new VisualizationAppDemoResponseService(mock(ConfigService.class)));
-        String pageConfig = (String) ReflectionTestUtils.getField(
-                support, "USER_EVENT_PAGE_CONFIG");
-        AtomicReference<Map<String, Object>> menuRequest = new AtomicReference<>();
-        McpToolContext context = toolContext(
-                callback("config_tree", calls, ignored ->
-                        "[{\"fileName\":\"index.json\"}]"),
-                callback("config_read", calls, ignored -> JacksonUtil.toJson(pageConfig)),
-                callback("menu_list", calls, ignored -> "{\"rows\":[]}"),
-                callback("menu_create", calls, input -> {
-                    menuRequest.set(JacksonUtil.toMap(
-                            JacksonUtil.toMap(input,
-                                    new TypeReference<Map<String, Object>>() {
-                                    }).get("request")));
-                    return "{\"id\":34}";
-                }),
-                callback("menu_view", calls, ignored -> {
-                    Map<String, Object> readBack = new LinkedHashMap<>(menuRequest.get());
-                    readBack.put("id", 34);
-                    return JacksonUtil.toJson(readBack);
-                })
-        );
-        ChatSession session = new ChatSession();
-
-        String response = ReflectionTestUtils.invokeMethod(
-                support, "applyMenuDemo", session, context);
-
-        assertThat(response)
-                .contains("zenvis:visualization-app-record")
-                .contains("\"recordKind\": \"menu\"")
-                .contains("\"menuId\": \"34\"");
-        assertThat(calls).containsExactly(
-                "config_tree", "config_tree", "config_read",
-                "menu_list", "menu_create", "menu_view");
-    }
-
-    @Test
     void eachDemoServiceRoutesOnlyItsOwnScenario() {
         assertThat(VisualizationChartDemoResponseService.isUserEventDemoRequirementPrompt(
                 VisualizationChartDemoResponseService.CHART_EXAMPLE_PROMPT)).isTrue();
@@ -146,7 +94,7 @@ class VisualizationDemoResponseServiceTest {
         assertThat(VisualizationAppDemoResponseService.isUserEventDemoRequirementPrompt(
                 VisualizationDashboardDemoResponseService.DASHBOARD_EXAMPLE_PROMPT)).isFalse();
         assertThat(VisualizationAppDemoResponseService.isUserEventDemoRequirementPrompt(
-                VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT)).isTrue();
+                VisualizationAppDemoResponseService.MENU_EXAMPLE_PROMPT)).isFalse();
         assertThat(VisualizationDashboardDemoResponseService.isUserEventDemoRequirementPrompt(
                 VisualizationDashboardDemoResponseService.DASHBOARD_EXAMPLE_PROMPT)).isTrue();
         assertThat(VisualizationDashboardDemoResponseService.isUserEventDemoRequirementPrompt(

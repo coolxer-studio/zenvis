@@ -79,6 +79,24 @@ class ChatMessagePartParserTest {
     }
 
     @Test
+    @DisplayName("可视化应用预览缺少 id 时仍生成可交互记录标识")
+    void parseVisualizationAppPreviewAssignsMissingId() {
+        String content = """
+                ```zenvis:visualization-app-preview
+                {"workflowId":"workflow-1","passed":true,"validationStatus":"validated",
+                 "candidateDigest":"candidate","validationDigest":"validation"}
+                ```
+                """;
+
+        List<ChatMessagePart> parts = parser.parse(content, MessageType.TEXT);
+
+        assertEquals(1, parts.size());
+        assertEquals("visualization-app-preview", parts.get(0).getType());
+        assertNotNull(parts.get(0).getId());
+        assertFalse(parts.get(0).getId().isBlank());
+    }
+
+    @Test
     @DisplayName("可视化记录围栏应解析为对应记录片段")
     void parseVisualizationRecordFences() {
         String content = """
@@ -387,7 +405,7 @@ class ChatMessagePartParserTest {
                 {"title":"确认图表查询方案","action":"visualization_chart.confirm_query_plan","planId":"chart-plan-001"}
                 ```
                 ```zenvis:visualization-app-decision
-                {"title":"确认应用写入方案","action":"visualization_app.confirm_plan","planId":"app-plan-001"}
+                {"title":"确认应用方案","action":"visualization_app.confirm_application_plan","appId":"user-event-analysis","specDigest":"sha256-app"}
                 ```
                 ```zenvis:visualization-dashboard-decision
                 {"title":"确认大屏写入方案","action":"visualization_dashboard.confirm_plan","planId":"dashboard-plan-001"}
@@ -404,7 +422,8 @@ class ChatMessagePartParserTest {
         assertEquals("pending", parts.get(1).getStatus());
         assertEquals("pending", parts.get(2).getStatus());
         assertEquals("chart-plan-001", parts.get(0).getMetadata().get("planId"));
-        assertEquals("app-plan-001", parts.get(1).getMetadata().get("planId"));
+        assertEquals("user-event-analysis", parts.get(1).getMetadata().get("appId"));
+        assertEquals("sha256-app", parts.get(1).getMetadata().get("specDigest"));
         assertEquals("dashboard-plan-001", parts.get(2).getMetadata().get("planId"));
     }
 

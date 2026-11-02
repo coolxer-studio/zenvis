@@ -138,6 +138,23 @@
 
 普通工作流动作要求 `chat_id`、`message_id`、`part_id`、`workflow_id`、`action`，并按动作提供 `answers` 或 `revision`。服务端校验会话归属、消息/part 精确匹配、状态版本、允许动作和严格候选快照。临时图表、可视化应用和数据大屏各自的决策卡、成功记录、动作前缀与 `extraData` 分区见[业务智能体与工作流](/04-AI与数据智能/业务智能体与工作流.md)。遥测接口当前只接受临时图表工作流的 `chart_render_failed`。
 
+工作流消息和卡片对外使用 `stateRevision`，服务端持久化快照内部使用 `state_revision`；读取时兼容两种字段。快照按版本单调合并，低版本状态不能覆盖高版本状态或新的校验摘要。对数据应用发布确认，仅当工作流 ID、`PERSIST_CONFIRMATION` 步骤、`approve` 动作以及 `candidate_digest`/`validation_digest` 全部匹配时，服务端可修复一个落后修订的陈旧 `APP_VALIDATING`；该窄例外不适用于其他卡片，也不改变摘要不一致时的 fail-closed 行为。
+
+### 可视化应用只读预览
+
+`visualization_app_validate` 成功后生成工作流级只读预览。预览令牌绑定当前用户、会话、工作流和验证尝试，默认 30 分钟有效。
+
+| 方法 | 路径 | 输入 | 返回/用途 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/dih/chat/workflows/{workflowId}/app-preview/site` | `chat_id`、`token` | 读取本次候选的 `site.json` |
+| GET | `/api/v1/dih/chat/workflows/{workflowId}/app-preview/files` | `chat_id`、`token`、`path` | 读取清单内页面文件 |
+
+接口只从 `DataAppPreviewRegistry` 的编译产物读取，不直接访问配置目录，只允许清单内精确路径；`../`、未列入清单的文件、跨用户、跨会话、错误令牌或过期令牌均返回 404。响应使用 `Cache-Control: no-store`、`X-Content-Type-Options: nosniff`，并限制脚本、样式、图片和连接来源。预览模式不渲染新增、编辑和删除动作。
+
+预览令牌保存在后端内存注册表，服务重启后全部失效；令牌超过默认 30 分钟有效期后同样失效。旧预览卡不能继续用于读取或发布，必须重新执行 `visualization_app_validate` 生成新的预览和摘要。
+
+应用发布不接受任意文件或 AMIS 正文。`visualization_app_apply` 和 `visualization_app_retry_menu` 只接受工作流锁定的 `candidate_digest` 与 `validation_digest`；配置和菜单一次审批、全量读回。具体工具契约见[数据应用工具](/08-API参考/MCPtool/数据应用工具.md)。
+
 ### 聊天附件
 
 `POST /api/v1/dih/upload` 接收 multipart `file`，可选 `chatId`。单个文件最大 100 MB，单条消息最多 10 个附件。上传立即返回，不等待解析；调用方应把返回结果原样放入下一次 Chat 请求的 `attachments`。上传请求建议单独设置 10 分钟超时，避免 100 MB 文件被普通 60 秒超时中断。

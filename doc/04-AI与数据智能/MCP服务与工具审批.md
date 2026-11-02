@@ -8,7 +8,7 @@ ZenVis 同时具备：
 
 | 角色 | 用途 | 当前端点或来源 |
 | --- | --- | --- |
-| MCP Server | 按业务域向外部客户端暴露 80 个 ZenVis 本地工具 | 五组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
+| MCP Server | 按业务域向外部客户端暴露 85 个 ZenVis 本地工具 | 六组 `/mcp/{serviceCode}/sse`、`/mcp/{serviceCode}/message` |
 | MCP Client | 连接数据库中配置的外部 MCP Server | 当前使用 SSE Client |
 | 工具运行时 | 按 Agent、Skill 和策略组装实际工具集合 | 本地工具与已连接外部工具 |
 | 权限网关 | 统一实施策略、审批、授权、状态和审计 | Chat、后台任务、MCP Server、管理端测试 |
@@ -132,7 +132,7 @@ Agent 请求工具
 
 会话授权不会允许同一服务的其他工具，也不能覆盖全局 `DENY`。停止生成、断开本轮流或删除会话会清理相关等待状态；已完成的外部副作用不会自动回滚。
 
-内置元数据配置、数据推送服务、可视化应用和数据大屏演示会对默认 `ASK` 写工具强制逐次审批，不使用会话授权，详见[业务智能体与工作流](/04-AI与数据智能/业务智能体与工作流.md)。
+内置元数据配置、数据推送服务和数据大屏演示会对默认 `ASK` 写工具强制逐次审批，不使用会话授权。可视化应用示例直接进入正式 `data-app` 工作流，`visualization_app_apply` 与 `visualization_app_retry_menu` 始终为 `ASK/HIGH`，一次审批覆盖配置和菜单。该审批只控制工具执行，不推进 `APP_VALIDATING → PERSIST_CONFIRMATION` 的业务状态，也不能替代预览卡上的“确认发布应用”；详见[业务智能体与工作流](/04-AI与数据智能/业务智能体与工作流.md)。
 
 ### 持久化 Agent Run 审批
 
@@ -212,7 +212,7 @@ ZenVis 自带五个固定 MCP Server：
 | `analysis-task` | 16 | `/mcp/analysis-task/sse`、`/mcp/analysis-task/message` |
 
 服务端点和分组随代码固定发布；`app.ai.mcp.builtin-server.*` 只配置版本、请求超时和
-SSE 保活间隔。五组端点共享 `app.security.mcp.bearer-token`，旧聚合端点不再提供。
+SSE 保活间隔。六组端点共享 `app.security.mcp.bearer-token`，旧聚合端点不再提供。
 
 `config` 服务中的 `config_rename` 和 `config_delete` 默认 `ASK/HIGH`，并只授予元数据配置智能体。重命名只允许同一父目录且禁止覆盖；非空目录删除必须显式携带 `recursive=true`。Meta 操作完成后会严格重载并刷新 Schema，文件系统已变更但重载失败时必须保留现场并报告 `changed=true/applied=false`，不得宣称成功。
 

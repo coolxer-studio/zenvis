@@ -12,7 +12,7 @@ DIH 前端
   │     ├── 元数据配置 → MetadataConfigAgent → Workflow Orchestrator
   │     ├── 数据推送服务 → DataPushServiceAgent → Workflow Orchestrator
   │     ├── 临时图表 → VisualizationChartAgent → 受控只读 MCP Tool
-  │     ├── 可视化应用 → VisualizationAppAgent → 受控配置/菜单 MCP Tool
+  │     ├── 可视化应用 → VisualizationAppAgent → data-app MCP → 确定性 AMIS 编译与发布
   │     ├── 数据大屏 → VisualizationDashboardAgent → 受控配置/看板/菜单 MCP Tool
   │     └── 专项 Skill → PromptDrivenAgentRuntime → 绑定范围 RAG
   │
@@ -243,14 +243,37 @@ PUSH_INPUT_COLLECTION
 | Agent | Workflow | 写入边界 |
 | --- | --- | --- |
 | `VisualizationChartAgent` | `visualization_chart` | 无配置、Dashboard、菜单或 Meta 写工具；只生成临时图表和图表库快照 |
-| `VisualizationAppAgent` | `visualization_app` | 只写配置与菜单；不写 Dashboard、图表库或 Meta |
+| `VisualizationAppAgent` | `visualization_app` | 只生成 `DataAppSpec`/`DataAppChangeSet`，由 `data-app` 编译 AMIS 并一次发布配置与菜单；不写 Dashboard、图表库或 Meta |
 | `VisualizationDashboardAgent` | `visualization_dashboard` | 写配置、Dashboard 与菜单；不写图表库或 Meta |
 
 - 三者都不接入外部 MCP、不执行任意 SQL，也不新增、修改或删除动态实体数据。
 - 先查询实体和字段 Meta，再调用实体分析白名单；`entity_aggregate`、`entity_histogram`、`entity_scatter` 仅对这三个可视化 Agent 类型开放，且仍需 Skill 显式允许。
-- 应用和大屏的配置、Dashboard、菜单写入默认进入审批，创建后必须通过 `config_read`、`dashboard_view` 或 `menu_view` 读回校验。
+- 应用的配置和菜单写入只通过 `visualization_app_apply` 一次 `ASK/HIGH` 审批完成，创建后必须全量读回；大屏仍按配置、Dashboard 和菜单边界分别读回。
 - 图表预览是临时产物；应用配置、看板和菜单是持久化产物。只有临时图表可产生图表库记录。
 - 三个 Agent 之间没有自动调用或跨领域续跑。缺少 Meta 时只返回本领域 `missing_meta` 卡和前往元数据配置的预填深链。
+
+### 数据应用编译与发布
+
+`data-app` MCP 服务暴露 `visualization_app_list/get/validate/apply/retry_menu` 五个工具。可视化应用 Skill 只获得 retrieval、只读菜单查询和这五个 `data-app` 工具，不获得任何 `config_*` 写工具或 `menu_*` 写工具。
+
+```text
+DataAppSpec / DataAppChangeSet
+  → DataAppValidator（Meta、限额、操作符、摘要和漂移）
+  → DataAppCompiler（AMIS 6.7.0、固定 API、固定 adaptor）
+  → DataAppQuerySampler（代表性真实查询）
+  → DataAppPreviewRegistry（用户/会话/工作流/令牌，30 分钟）
+  → DataAppPublishService（配置事务 → 菜单 → 全量读回）
+```
+
+- 模型输入不包含 AMIS 节点、URL、adaptor、JavaScript、SQL 或配置文件正文；服务端只接受结构化规格。
+- 单页布局为 `index.json + _app.json`，多页布局为 `site.json + pages/*.json + _app.json`。`_app.json` 记录版本、规格摘要、Meta 摘要、页面清单、受管文件 SHA-256 和菜单身份。
+- 更新必须匹配 `base_app_version`、`base_spec_digest`、Meta 摘要和每个受管文件摘要，任一漂移即 fail-closed。
+- 发布顺序为页面文件 → `site.json` → 删除页面 → `_app.json`；配置读回成功后发布菜单，菜单读回成功后删除单页升级兼容入口。
+- 配置失败进入 `BLOCKED` 并尽力恢复快照；菜单失败进入 `PARTIAL_MENU`，配置不回滚，只能重试菜单。
+- 只读预览由 `DataAppPreviewController` 提供，令牌绑定当前用户、会话、工作流和验证尝试，只读取编译清单内文件，禁止目录直读和路径穿越。
+- `APP_VALIDATING` 表示已申请校验或校验成功、等待真实数据预览确认，不表示允许直接发布。`visualization_app_validate` 成功后必须输出只读预览卡并结束本轮；用户点击“确认发布应用”后，工作流才通过 `visualization_app.confirm_publish` 进入 `PERSIST_CONFIRMATION`/`APP_APPLYING`。在 `APP_VALIDATING` 直接调用 `visualization_app_apply` 会被拒绝。
+- MCP `ASK` 审批只控制 `visualization_app_apply` 工具是否执行，不推进工作流业务阶段，也不能替代用户对预览内容和发布范围的业务确认。
+- 工作流快照按 `stateRevision` 单调合并，并兼容持久化字段 `state_revision`；低版本会话快照不能覆盖高版本状态或新的校验摘要。仅当工作流为 `visualization_app`、步骤为 `PERSIST_CONFIRMATION`、动作为 `approve`，且 `candidate_digest` 与 `validation_digest` 均与服务端锁定值一致时，服务端可修复一个落后修订的陈旧 `APP_VALIDATING` 状态；该窄例外不放松其他卡片和摘要的严格校验。
 
 ## 本地与外部 MCP
 

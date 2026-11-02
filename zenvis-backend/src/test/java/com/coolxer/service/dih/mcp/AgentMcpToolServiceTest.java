@@ -185,12 +185,14 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void visualizationAppSkillExposesConfigAndMenuButNoDashboardTools() {
+    void visualizationAppSkillExposesOnlyRetrievalReadOnlyMenuAndDataAppTools() {
         SkillService skillService = mock(SkillService.class);
         List<String> allowedTools = List.of(
                 "retrieval_search", "entity_view",
-                "config_tree", "config_ensure_root", "config_add", "config_apply", "config_read",
-                "menu_create", "menu_list", "menu_view");
+                "menu_list", "menu_view", "menu_type_options", "menu_parent_options",
+                "visualization_app_list", "visualization_app_get",
+                "visualization_app_validate", "visualization_app_apply",
+                "visualization_app_retry_menu");
         when(skillService.resolveRuntimeConfig(List.of("visualization-app-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
                         null,
@@ -210,6 +212,13 @@ class AgentMcpToolServiceTest {
                         new FakeToolCallback("menu_create", "创建菜单"),
                         new FakeToolCallback("menu_list", "查询菜单"),
                         new FakeToolCallback("menu_view", "查看菜单"),
+                        new FakeToolCallback("menu_type_options", "菜单类型"),
+                        new FakeToolCallback("menu_parent_options", "父菜单"),
+                        new FakeToolCallback("visualization_app_list", "列出数据应用"),
+                        new FakeToolCallback("visualization_app_get", "读取数据应用"),
+                        new FakeToolCallback("visualization_app_validate", "校验数据应用"),
+                        new FakeToolCallback("visualization_app_apply", "发布数据应用"),
+                        new FakeToolCallback("visualization_app_retry_menu", "重试菜单"),
                         new FakeToolCallback("dashboard_create", "创建看板"),
                         new FakeToolCallback("dashboard_view", "查看看板"),
                         new FakeToolCallback("push_task_create_and_start", "创建推送任务"),
@@ -228,6 +237,9 @@ class AgentMcpToolServiceTest {
         assertThat(context.systemPrompt())
                 .contains(allowedTools.toArray(String[]::new))
                 .doesNotContain(
+                        "config_tree",
+                        "config_apply",
+                        "menu_create",
                         "dashboard_create",
                         "dashboard_view",
                         "push_task_create_and_start",
@@ -305,7 +317,7 @@ class AgentMcpToolServiceTest {
     }
 
     @Test
-    void visualizationAppSkillCannotEscalateToDashboardTools() {
+    void visualizationAppSkillCannotEscalateToLegacyWriteOrDashboardTools() {
         SkillService skillService = mock(SkillService.class);
         when(skillService.resolveRuntimeConfig(List.of("visualization-app-agent")))
                 .thenReturn(new SkillRuntimeConfigVo(
@@ -329,11 +341,10 @@ class AgentMcpToolServiceTest {
         McpToolContext context = service.resolve(
                 "agent_visualization_app", List.of("visualization-app-agent"));
 
-        assertThat(context.hasTools()).isTrue();
-        assertThat(context.toolCallbackProvider().getToolCallbacks())
-                .extracting(callback -> callback.getToolDefinition().name())
-                .containsExactly("config_tree", "menu_create");
-        assertThat(context.systemPrompt()).doesNotContain("dashboard_create");
+        assertThat(context.hasTools()).isFalse();
+        assertThat(context.toolCallbackProvider()).isNull();
+        assertThat(context.systemPrompt())
+                .doesNotContain("config_tree", "menu_create", "dashboard_create");
     }
 
     @Test

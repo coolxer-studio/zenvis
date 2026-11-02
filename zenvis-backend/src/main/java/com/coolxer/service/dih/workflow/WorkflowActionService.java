@@ -97,10 +97,13 @@ public class WorkflowActionService {
         if (state.getContext() == null) {
             state.setContext(new LinkedHashMap<>());
         }
+        boolean publishConfirmation =
+                reconcilePublishConfirmation(state, definition, located.part(), metadata,
+                        request.getAction());
         require(Objects.equals(state.getPartId(), request.getPartId()),
                 "该卡片已不是工作流的当前可操作卡片");
         if (metadata.get("stateRevision") instanceof Number revision) {
-            require(revision.longValue() == state.getStateRevision(),
+            require(revision.longValue() == state.getStateRevision() || publishConfirmation,
                     "工作流卡片已经过期，请使用最新卡片");
         }
         boolean cardAllows = isAllowed(metadata, request.getAction());
@@ -209,6 +212,73 @@ public class WorkflowActionService {
                 "retry".equals(request.getAction())
                         || state.getStep() == AgentWorkflowStep.BLOCKED,
                 chatSession.getExtraData());
+    }
+
+    /**
+     * A validation turn can persist a preview card while the workflow snapshot is
+     * still one revision behind. The preview card is server-owned and carries the
+     * locked digests, so accept its publish confirmation as an alias for the
+     * current state and repair the stale step before validating the action.
+     */
+    private boolean reconcilePublishConfirmation(AgentWorkflowState state,
+                                                 WorkflowDefinition definition,
+                                                 ChatMessagePart part,
+                                                 Map<String, Object> metadata,
+                                                 String action) {
+        if (!"approve".equals(action)
+                || !VisualizationAgentTypes.isApp(definition.agentType())
+                || !AgentWorkflowStep.PERSIST_CONFIRMATION.name()
+                .equals(text(metadata.get("step")))
+                || !("visualization-app-preview".equals(part.getType())
+                || "visualization-app-decision".equals(part.getType()))) {
+            return false;
+        }
+        if (!publishDigestsMatch(state, metadata)) {
+            return false;
+        }
+        if (state.getStep() != AgentWorkflowStep.APP_VALIDATING
+                && state.getStep() != AgentWorkflowStep.PERSIST_CONFIRMATION) {
+            return false;
+        }
+        state.setStep(AgentWorkflowStep.PERSIST_CONFIRMATION);
+        state.setStatus("active");
+        long cardRevision = revision(metadata.get("stateRevision"));
+        if (cardRevision > state.getStateRevision()) {
+            state.setStateRevision(cardRevision);
+        }
+        state.setPartId(part.getId());
+        state.setUpdatedAt(Instant.now().toString());
+        return true;
+    }
+
+    private boolean publishDigestsMatch(AgentWorkflowState state,
+                                        Map<String, Object> metadata) {
+        Map<String, Object> context = state.getContext() == null
+                ? Map.of() : state.getContext();
+        String candidate = firstText(
+                text(metadata.get("candidateDigest")),
+                text(metadata.get("candidate_digest")));
+        String validation = firstText(
+                text(metadata.get("validationDigest")),
+                text(metadata.get("validation_digest")));
+        return StringUtils.hasText(candidate)
+                && StringUtils.hasText(validation)
+                && candidate.equals(text(context.get("candidateDigest")))
+                && validation.equals(text(context.get("validationDigest")));
+    }
+
+    private long revision(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null) {
+            return -1L;
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
     }
 
     /**

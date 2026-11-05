@@ -42,6 +42,7 @@ zenvis-service/*
 
 # AI智能体
 .trae
+.workbuddy
 
 # TRAE HTML 分享打包缓存
 .trae-html-share-packages/

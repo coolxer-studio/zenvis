@@ -10,6 +10,11 @@
 
 .pnpm-store/
 
+# Local issue workflow state and generated API payloads
+/.zenvis/
+__pycache__/
+*.pyc
+
 # 先忽略 zenvis-plugin、zenvis-service 下全部
 zenvis-plugin/*
 zenvis-service/*

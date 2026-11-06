@@ -1,0 +1,38 @@
+name: Issue traceability
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-traceability-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  close-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout mirror history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Comment commit links and close issues
+        env:
+          ZENVIS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZENVIS_GITHUB_REPO: ${{ github.repository }}
+          ZENVIS_GITEE_TOKEN: ${{ secrets.ZENVIS_GITEE_TOKEN }}
+          ZENVIS_GITEE_REPO: "${{ vars.ZENVIS_GITEE_REPO || 'coolxer-studio/zenvis' }}"
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py \
+            --root "$GITHUB_WORKSPACE" \
+            action-close \
+            --before "$BEFORE_SHA" \
+            --after "$AFTER_SHA"

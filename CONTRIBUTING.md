@@ -19,6 +19,28 @@
 - 新增代码尽量补充必要注释
 - 如有文档变更，请同步更新 README 或相关文档
 
+## Issue 归纳与提交追踪
+
+根仓库提供按需生成的 GitHub / Gitee issue 归纳报告，以及提交与 issue 的追踪工具：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py doctor
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py report
+```
+
+报告保存到 `doc/09-issue-reports/`，生成阶段只读，不会自动修改代码或关闭 issue。人工删减报告并明确要求修复后，才按最终报告逐个 issue 修改和测试。Codex 默认只输出提交命令；只有明确要求“由你提交”时才执行 `git add` 和 `git commit`，推送始终需要单独授权。完整流程、凭据配置和故障恢复见 [Issue 归纳与修复工作流](doc/07-开发指南/issue-workflow.md)。
+
+如果本地已经完成分析和修复，可以指定平台补建 issue；提交时生成显式关联命令：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py create-issue --platform gitee \
+  --title "问题标题" --summary "脱敏后的问题摘要"
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py commit --issue gitee#IKSGM9 \
+  --message "fix: 修复问题" --file path/to/changed-file
+```
+
+`commit` 默认只输出 `git add` 和 `git commit` 命令，不执行 Git，也不包含推送。用户明确授权后才使用 `--execute`，它只创建本地提交；推送仍需用户单独确认。Issue 修复使用当前分支，不创建 issue 专用分支；每个 issue 一个 commit，也可以生成不关联任何 issue 的普通提交。Gitee 是主提交仓库，正常 `git push` 到 `origin` 后由自动镜像同步到 GitHub，提交到达 `main` 后由镜像 Action 关闭对应 issue。
+
 ## 开源协议
 本项目基于 [Apache License 2.0](LICENSE) 开源。
 提交任何代码、文档、文案贡献，即表示你同意按照 Apache 2.0 协议授权给本项目。

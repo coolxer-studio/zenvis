@@ -10,7 +10,7 @@ Build Zenvis plugins from source specifications while keeping entity models, Vec
 ## Establish Ground Truth
 
 1. Locate the Zenvis workspace and intended plugin directory. Prefer `rg --files` and `rg`.
-2. Read every applicable `AGENTS.md` completely before editing files below it. In this workspace they live at `zenvis-backend/AGENTS.md`, `zenvis-frontend/AGENTS.md`, `zenvis-service/zenvis-service-vectum/AGENTS.md`, and `zenvis-service/zenvis-service-analyzer/AGENTS.md` (there is none under `zenvis-plugin/`).
+2. Read every applicable `AGENTS.md` completely before editing files below it. Start with the repository root `AGENTS.md`, then read the nearest module-level file. In this workspace they live at `zenvis-backend/AGENTS.md`, `zenvis-frontend/AGENTS.md`, `zenvis-service/zenvis-service-vectum/AGENTS.md`, and `zenvis-service/zenvis-service-analyzer/AGENTS.md`. The root file still applies under `zenvis-plugin/`, but there is no module-level file there.
 3. Inspect the current platform contracts instead of relying on remembered schemas. The authoritative documents are under `doc/03-插件开发与集成/`:
    - `插件包规范.md` — directory layout, identities, package boundaries
    - `Meta与数据建模.md` — entity/attribute/operator and ClickHouse schema

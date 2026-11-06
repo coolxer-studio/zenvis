@@ -324,7 +324,7 @@ zenvis/
     │   ├── service/                      # 业务服务层
     │   └── utils/                        # 工具类
     ├── src/main/resources/               # 资源文件
-    ├── AGENTS.md                         # AI Agent 架构与开发边界
+    ├── AGENTS.md                         # 开发规范与 AI Agent 架构
     ├── Dockerfile                        # Docker 配置
     ├── build.sh                          # 构建脚本
     ├── LICENSE                           # 许可证

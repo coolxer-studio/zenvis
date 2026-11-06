@@ -2,7 +2,11 @@
 
 ## 项目定位
 
-`agent-skills` 保存面向研发人员和 Codex 的工作流技能。当前包含 `create-zenvis-plugin`，用于根据数据字典或集成规范创建、更新、校验和打包 ZenVis 插件。
+`agent-skills` 保存面向研发人员和 Codex 的工作流技能。当前包含：
+
+- `create-zenvis-plugin`：根据数据字典或集成规范创建、更新、校验和打包 ZenVis 插件；
+- `vectum-data-integration`：处理 Vector 数据接入、配置与校验；
+- `zenvis-issue-workflow`：按需归纳 GitHub / Gitee issue，人工审核后再逐个修复、提交、推送并关闭。
 
 它不属于 ZenVis 后端运行时插件，也不会被后端插件安装器或 `deploy/open_config/skill_config` 自动扫描：
 
@@ -17,16 +21,32 @@
 
 ```text
 agent-skills/
-└── create-zenvis-plugin/
+├── create-zenvis-plugin/
+│   ├── SKILL.md
+│   └── agents/
+│       └── openai.yaml
+├── vectum-data-integration/
+│   ├── SKILL.md
+│   ├── agents/
+│   └── references/
+└── zenvis-issue-workflow/
     ├── SKILL.md
-    └── agents/
-        └── openai.yaml
+    ├── agents/
+    │   └── openai.yaml
+    ├── scripts/
+    │   └── zenvis_issue.py
+    └── tests/
+        └── test_zenvis_issue.py
 ```
 
 - `SKILL.md`：技能元数据、触发范围、工作步骤、平台契约和验证清单。
 - `agents/openai.yaml`：客户端展示名称、简短说明和默认提示词。
+- `scripts/zenvis_issue.py`：该 Skill 的实现脚本，使用 Python 3 标准库。
+- `tests/test_zenvis_issue.py`：该 Skill 的自动化测试，随 Skill 一起维护。
 
-当前技能没有独立构建脚本、运行时依赖或测试框架。它的质量依赖于说明完整性、引用路径有效性，以及与当前后端、前端和插件代码的一致性。
+技能内容以 Markdown 和 YAML 为主。`zenvis-issue-workflow` 的脚本和测试全部位于技能目录内，不再依赖根仓库 `scripts/`；其他技能按自身说明执行校验。技能质量依赖于说明完整性、引用路径有效性，以及与当前后端、前端和插件代码的一致性。
+
+`zenvis-issue-workflow` 的报告阶段只读取 issue 和仓库上下文；只有维护者明确授权修复后，才按最终编辑版报告逐个 issue 修改代码。修改和测试完成后默认只输出提交命令；只有明确授权提交时才创建本地 commit，推送需要单独授权。流程、凭据和故障恢复见 [Issue 归纳与修复工作流](/07-开发指南/issue-workflow.md)。
 
 ## 上下游关系
 
@@ -75,7 +95,7 @@ description: Create, update, review, validate, and package Zenvis plugins...
 
 修改技能规则前先确认当前项目实际行为：
 
-1. 阅读目标工作树内的 `AGENTS.md`。
+1. 先阅读仓库根 `AGENTS.md` 的项目级规范，再阅读目标工作树内最近的 `AGENTS.md`；子目录规则覆盖根规范中的冲突内容。
 2. 检查平台级插件开发文档和代码契约。
 3. 检查目标插件和相邻插件，但把平台代码作为最终依据。
 4. 检查所有工作树状态，保留无关修改。

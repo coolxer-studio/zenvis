@@ -65,7 +65,7 @@ TraceHub 需要独立部署并加载 `current.zioc` 与 ip2region XDB 资源，�
 
 1. 启动 TraceHub，确认 `/health/live` 和 `/health/ready` 正常。
 2. 确认 TraceHub 对 ZenVis 后端可达，并在 MCP 管理页把占位 Bearer Token 替换为真实 Token。
-3. 在[插件管理](插件管理.md)中安装插件。
+3. 在[插件管理](插件管理.md)的**插件市场**中安装插件。
 4. 为角色授权“TraceHub 溯源查询”菜单，在浏览器中验证 iframe 可达并完成 Token 连接。
 5. 在 MCP 管理页确认 `tracehub` 连接成功并发现四个工具。
 6. 在 RAG 管理页确认 `tracehub-kb` 构建状态为 `BUILT`。

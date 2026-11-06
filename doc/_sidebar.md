@@ -76,6 +76,7 @@
   - [zenvis-plugin](/07-开发指南/zenvis-plugin-开发对接指南.md)
   - [业务服务 Starter](/07-开发指南/zenvis-business-service-spring-boot-starter-开发对接指南.md)
   - [UI 设计系统](/07-开发指南/zenvis-UI设计系统.md)
+  - [Issue 归纳与修复工作流](/07-开发指南/issue-workflow.md)
 
 - [API 参考](/08-API参考/README.md)
   - RESTful API
@@ -96,3 +97,5 @@
     - [看板与菜单工具](/08-API参考/MCPtool/看板与菜单工具.md)
     - [数据推送工具](/08-API参考/MCPtool/数据推送工具.md)
     - [权限审批与运行约束](/08-API参考/MCPtool/权限审批与运行约束.md)
+
+- [Issue 报告](/09-issue-reports/README.md)

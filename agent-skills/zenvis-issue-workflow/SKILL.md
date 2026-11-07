@@ -192,6 +192,18 @@ When the user tests locally, fixes the problem, and then asks for a tracking iss
   python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py retry-close
   ```
 
+- To close issues directly without a commit, use `close`. It reads the current state first,
+  skips issues already closed, writes the optional comment once, and re-reads the issue to
+  confirm `closed`:
+
+  ```bash
+  python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py close \
+    github#4 gitee#IKTO68 --comment "测试 issue 已完成验证，现直接关闭。"
+  ```
+
+  Add `--json` for machine-readable output; set `ZENVIS_ISSUE_DRY_RUN=1` to preview.
+  The command exits non-zero if any issue fails, while still processing the rest.
+
 - Never print or store tokens. Use the environment variables documented in
   `doc/07-开发指南/issue-workflow.md`.
 

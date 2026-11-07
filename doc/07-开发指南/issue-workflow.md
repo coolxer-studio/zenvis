@@ -274,6 +274,20 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py reconcile
 
 `reconcile` 会检查最近提交和 trailer，并通过 Gitee / GitHub 的 commit API 确认提交已经到达对应平台，只对确认存在的提交补评论和关闭；不需要本地 GitHub remote。
 
+## 直接关闭 issue
+
+需要不经提交直接关闭一个或多个 issue 时，使用 `close`：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py close \
+  github#4 gitee#IKTO68 \
+  --comment "测试 issue 已完成验证，现直接关闭。"
+```
+
+`close` 会先读取当前状态；已关闭的 issue 不会重复评论或更新，可安全重跑。传入 `--comment` 时，只有真正发生状态变更才写入一次说明；命令结束前会重新读取 issue，确认状态为 `closed`。使用 `--json` 输出机器可读结果，配合 `ZENVIS_ISSUE_DRY_RUN=1` 只预览不写入。任一 issue 失败时命令返回非零退出码，其余 issue 仍会继续处理。
+
+Gitee 的 issue 更新接口与读取接口不同：更新使用 `/repos/{owner}/issues/{number}`，并将 `repo` 作为请求字段传入。脚本已按该接口实现，不要改回 `/repos/{owner}/{repo}/issues/{number}`。
+
 ## 关闭失败恢复
 
 关闭评论或状态更新失败时，脚本写入忽略提交的 `.zenvis/issues/retry-close.json`。修复权限或网络后执行：
@@ -295,6 +309,7 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py retry-close
 | `commit-command` | `commit` 的兼容别名，只输出命令 | 否 | 否 |
 | `repair` | 读取审核后的报告并准备执行会话 | 否 | 否 |
 | `show` | 重新读取单个 issue 的当前平台内容 | 否 | 否 |
+| `close` | 直接关闭一个或多个 issue，幂等且会回读确认 | 是 | 否 |
 | `push` | 推送 Gitee `origin` 并关闭关联 Gitee issue | 是 | 是 |
 | `reconcile` | Action 不可用时，对已到达平台的提交补齐关闭 | 是 | 否 |
 | `retry-close` | 重试失败的评论或关闭 | 是 | 否 |

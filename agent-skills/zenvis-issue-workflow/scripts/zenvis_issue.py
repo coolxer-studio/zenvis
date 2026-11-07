@@ -514,12 +514,16 @@ class PlatformClient:
             payload={"body": body},
         )
 
-    def close_issue(self, number: str) -> None:
-        self.request(
-            "PATCH",
-            f"/repos/{self.repo}/issues/{number}",
-            payload={"state": "closed"},
-        )
+    def close_issue(self, number: str) -> dict[str, Any]:
+        payload: dict[str, Any] = {"state": "closed"}
+        if self.platform == "gitee":
+            owner, repo_name = self.repo.split("/", 1)
+            payload["repo"] = repo_name
+            path = f"/repos/{owner}/issues/{number}"
+        else:
+            path = f"/repos/{self.repo}/issues/{number}"
+        result = self.request("PATCH", path, payload=payload)
+        return result if isinstance(result, dict) else {}
 
     def commit_exists(self, sha: str) -> bool:
         if not re.fullmatch(r"[0-9a-fA-F]{7,64}", sha):
@@ -1162,6 +1166,67 @@ def create_issue_for_request(
     }
 
 
+def close_issues(
+    references: Sequence[str],
+    *,
+    comment: str = "",
+    preview: bool = False,
+) -> list[dict[str, Any]]:
+    if not references:
+        raise IssueWorkflowError("至少需要一个 github#N 或 gitee#ID 引用")
+    parsed: list[tuple[str, str]] = []
+    for value in references:
+        ref = parse_issue_selection(value)
+        if ref not in parsed:
+            parsed.append(ref)
+    results: list[dict[str, Any]] = []
+    for platform, number in parsed:
+        reference = f"{platform}#{number}"
+        client = PlatformClient.from_environment(platform)
+        result: dict[str, Any] = {
+            "platform": platform,
+            "number": number,
+            "ref": reference,
+            "url": client.issue_url(number),
+        }
+        try:
+            issue = client.get_issue(number)
+            result["previous_state"] = issue.state
+            if preview:
+                result.update(
+                    ok=True,
+                    dry_run=True,
+                    state=issue.state,
+                    changed=False,
+                    commented=False,
+                )
+                results.append(result)
+                continue
+            if not client.token:
+                raise IssueWorkflowError(f"缺少 {platform} token，无法关闭 issue")
+            changed = issue.state.lower() != "closed"
+            if changed and comment:
+                client.comment_issue(number, comment)
+            if changed:
+                client.close_issue(number)
+            verified = client.get_issue(number)
+            if verified.state.lower() != "closed":
+                raise IssueWorkflowError(
+                    f"{reference} 关闭后状态仍为 {verified.state or '<未知>'}"
+                )
+            result.update(
+                dry_run=False,
+                ok=True,
+                state=verified.state,
+                changed=changed,
+                commented=bool(changed and comment),
+            )
+        except Exception as exc:
+            result.update(ok=False, error=str(exc))
+        results.append(result)
+    return results
+
+
 def close_queue_path(root: Path) -> Path:
     return root / STATE_ROOT / "retry-close.json"
 
@@ -1798,6 +1863,34 @@ def command_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_close(args: argparse.Namespace) -> int:
+    results = close_issues(
+        args.issue,
+        comment=args.comment,
+        preview=dry_run(),
+    )
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        for item in results:
+            if not item.get("ok"):
+                print(
+                    f"[WARN] {item['ref']} 关闭失败：{item.get('error')}",
+                    file=sys.stderr,
+                )
+                continue
+            if item.get("dry_run"):
+                if item.get("previous_state", "").lower() == "closed":
+                    print(f"[DRY RUN] {item['ref']} 已是 closed，无需关闭")
+                else:
+                    print(f"[DRY RUN] 将关闭 {item['ref']}（当前 {item['state']}）")
+            elif item.get("changed"):
+                print(f"[OK] 已关闭 {item['ref']}：{item['url']}")
+            else:
+                print(f"[OK] {item['ref']} 已是 closed：{item['url']}")
+    return 0 if all(item.get("ok") for item in results) else 1
+
+
 def command_push(args: argparse.Namespace) -> int:
     root = resolve_root(args.root)
     return push_current_branch(
@@ -1912,6 +2005,22 @@ def build_parser() -> argparse.ArgumentParser:
     show = subparsers.add_parser("show", help="读取单个 issue 的当前平台内容")
     show.add_argument("issue", help="github#12 或 gitee#IKSGM9")
     show.set_defaults(func=command_show)
+
+    close = subparsers.add_parser(
+        "close", help="直接关闭一个或多个 issue，可重复执行"
+    )
+    close.add_argument(
+        "issue",
+        nargs="+",
+        help="github#12 或 gitee#IKSGM9，可传多个",
+    )
+    close.add_argument(
+        "--comment",
+        default="",
+        help="关闭前添加的说明；issue 已关闭时不会重复添加",
+    )
+    close.add_argument("--json", action="store_true", help="以 JSON 输出")
+    close.set_defaults(func=command_close)
 
     push = subparsers.add_parser(
         "push", help="推送当前分支到 Gitee 并关闭关联的 Gitee issue"

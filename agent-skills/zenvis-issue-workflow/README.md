@@ -103,6 +103,7 @@ $zenvis-issue-workflow 整理当前 GitHub 和 Gitee 的 open issue，生成审�
 | `repair` | “按报告修复”“修复 gitee#ID” | 修改代码、运行测试、输出提交命令 | 不自动 commit 或 push |
 | `commit` | “生成提交命令”“由你提交” | 默认输出命令；授权后只执行 add + commit | 永不顺带 push |
 | `push` | “推送”“推送到 origin” | 明确授权后推送当前分支 | 不会把提交授权当成推送授权 |
+| `close` | “直接关闭 github#4”“关闭这些测试 issue” | 关闭指定 issue 并回读确认 | 不操作 Git，不重复关闭已关闭 issue |
 
 ## 场景 1：整理并修复已有 issue
 

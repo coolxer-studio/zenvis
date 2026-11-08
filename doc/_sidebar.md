@@ -99,3 +99,4 @@
     - [权限审批与运行约束](/08-API参考/MCPtool/权限审批与运行约束.md)
 
 - [Issue 报告](/09-issue-reports/README.md)
+- [版本发布](/10-版本发布/README.md)

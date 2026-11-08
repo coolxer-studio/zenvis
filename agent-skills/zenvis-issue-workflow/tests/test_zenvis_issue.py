@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,98 @@ def make_issue(platform, number, title, body="", labels=()):
         created_at="2026-11-01T00:00:00+08:00",
         updated_at="2026-11-02T00:00:00+08:00",
     )
+
+
+class LocalEnvTests(unittest.TestCase):
+    def test_loads_supported_values_without_overriding_process_env(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env_file = root / ".zenvis" / ".env"
+            env_file.parent.mkdir(parents=True)
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "export ZENVIS_GITHUB_TOKEN=from-file",
+                        "ZENVIS_GITEE_TOKEN='gitee token'",
+                        'GITHUB_TOKEN="github\\tfallback"',
+                        "PATH=/should-not-load",
+                        "ZENVIS_ISSUE_DRY_RUN=1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {"ZENVIS_GITHUB_TOKEN": "from-process"},
+                clear=True,
+            ):
+                loaded = zi.load_local_env(root)
+                self.assertEqual(
+                    set(loaded),
+                    {
+                        "ZENVIS_GITHUB_TOKEN",
+                        "ZENVIS_GITEE_TOKEN",
+                        "GITHUB_TOKEN",
+                        "ZENVIS_ISSUE_DRY_RUN",
+                    },
+                )
+                self.assertEqual(
+                    os.environ["ZENVIS_GITHUB_TOKEN"], "from-process"
+                )
+                self.assertEqual(
+                    os.environ["ZENVIS_GITEE_TOKEN"], "gitee token"
+                )
+                self.assertEqual(
+                    os.environ["GITHUB_TOKEN"], "github\tfallback"
+                )
+                self.assertEqual(os.environ["ZENVIS_ISSUE_DRY_RUN"], "1")
+                self.assertNotIn("PATH", os.environ)
+
+    def test_malformed_local_env_fails_without_echoing_value(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env_file = root / ".zenvis" / ".env"
+            env_file.parent.mkdir(parents=True)
+            env_file.write_text(
+                "ZENVIS_GITHUB_TOKEN='secret-without-close\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(zi.IssueWorkflowError) as context:
+                zi.load_local_env(root)
+            self.assertNotIn(
+                "secret-without-close", str(context.exception)
+            )
+
+    def test_main_loads_local_env_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env_file = root / ".zenvis" / ".env"
+            env_file.parent.mkdir(parents=True)
+            env_file.write_text(
+                "ZENVIS_GITHUB_TOKEN=local-github\n"
+                "ZENVIS_GITEE_TOKEN=local-gitee\n",
+                encoding="utf-8",
+            )
+            output = StringIO()
+            with mock.patch.dict(os.environ, {}, clear=True):
+                with redirect_stdout(output):
+                    zi.main(
+                        [
+                            "--root",
+                            str(root),
+                            "doctor",
+                            "--offline",
+                        ]
+                    )
+                self.assertEqual(
+                    os.environ["ZENVIS_GITHUB_TOKEN"], "local-github"
+                )
+                self.assertEqual(
+                    os.environ["ZENVIS_GITEE_TOKEN"], "local-gitee"
+                )
+            self.assertIn("[OK] github token", output.getvalue())
+            self.assertIn("[OK] gitee token", output.getvalue())
 
 
 class FakeClient:

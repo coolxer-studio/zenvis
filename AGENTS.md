@@ -82,6 +82,7 @@ ZenVis 是面向企业数据分析场景的配置化应用框架，统一提供�
 
 - 先确认实际 Git 根目录：在目标目录运行 `git rev-parse --show-toplevel` 和 `git status --short`。本仓库可能包含嵌套工作树或独立子仓库，禁止把不同工作树的改动混入同一提交。
 - Codex 默认只输出完整、可复制的提交命令，不执行 `git add`、`git commit`、`git push`，也不创建或切换分支。用户明确说“由你提交”时才可运行 `commit --execute`，且只创建本地提交；用户另行明确说“推送”时才可推送。
+- 用户明确说“发布 <version> 版本”时，才可运行 `release --execute`；它只授权该版本的固定版本文件与发布说明提交、annotated tag、当前分支与 tag 的推送，以及 Gitee/GitHub Release 创建，不授权 issue 修复、普通提交、其他分支推送或 Docker 镜像发布。
 - 提交是否关联 issue 由用户决定。未指定 issue 时生成普通提交；指定时一个提交只能关联一个 issue，并添加 `Zenvis-Issue` 与对应关闭 trailer。
 - Gitee `origin` 是主提交仓库，GitHub 通过现有镜像同步代码；不要提供推送第二个 remote 的命令。镜像 Action 只在提交到达 `main` 并确认两个平台都存在该提交后评论并关闭 issue。
 - 只有用户明确要求“整理 issue”时才生成报告，报告阶段只读、不改代码。只有明确指定 GitHub/Gitee 时才创建 issue；只有明确说“按报告修复”“修复 github#N”或“修复 gitee#<id>”时才进入修复。

@@ -76,6 +76,8 @@ zenvis/                                      # 根工作树
 
 GitHub 和 Gitee issue 按需分别归纳到 `doc/09-issue-reports/`，人工删减并明确授权后再按报告逐个修复、测试、提交和关闭。配置、命令和故障恢复见 [Issue 归纳与修复工作流](/07-开发指南/issue-workflow.md)。
 
+版本发布由同一 Skill 的 `release` 模式处理：默认生成待审核的版本说明和变更计划，明确授权后更新版本文件、创建 annotated tag、推送并创建 Gitee/GitHub Release。发布说明归档在 [`doc/10-版本发布/`](/10-版本发布/README.md)。
+
 ## 文档站预览
 
 文档站使用 Docsify 4。在项目根目录运行：

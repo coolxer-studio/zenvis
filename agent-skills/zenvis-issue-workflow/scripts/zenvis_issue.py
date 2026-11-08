@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +25,12 @@ DEFAULT_GITHUB_REPO = "coolxer-studio/zenvis"
 DEFAULT_GITEE_REPO = "coolxer-studio/zenvis"
 REPORT_ROOT = Path("doc") / "09-issue-reports"
 STATE_ROOT = Path(".zenvis") / "issues"
+RELEASE_DOC_ROOT = Path("doc") / "10-版本发布"
+RELEASE_STATE_ROOT = Path(".zenvis") / "releases"
+LOCAL_ENV_FILE = Path(".zenvis") / ".env"
+RELEASE_VERSION_RE = re.compile(
+    r"^(\d+)\.(\d+)\.(\d+)(?:\.(alpha|beta|rc)(\d*))?$"
+)
 ISSUE_ID_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_-]*"
 ISSUE_REF_RE = re.compile(
     rf"(?<![\w-])(github|gitee)#({ISSUE_ID_PATTERN})(?![\w-])",
@@ -38,6 +45,99 @@ GITEE_CLOSES_RE = re.compile(
 )
 REPORT_BLOCK_RE = re.compile(
     rf"(?m)^##\s+(github|gitee)#({ISSUE_ID_PATTERN})\s+[—-]\s+(.+?)\s*$"
+)
+RELEASE_INDEX_MARKER = "<!-- releases:start -->"
+RELEASE_REVIEW_MARKER = "请审核提交清单，补充面向用户的版本重点后再执行发布。"
+
+
+@dataclass(frozen=True)
+class ReleaseVersion:
+    major: int
+    minor: int
+    patch: int
+    qualifier: str = ""
+    qualifier_number: int = 0
+
+    @property
+    def text(self) -> str:
+        suffix = (
+            f".{self.qualifier}{self.qualifier_number or ''}"
+            if self.qualifier
+            else ""
+        )
+        return f"{self.major}.{self.minor}.{self.patch}{suffix}"
+
+    @property
+    def key(self) -> tuple[int, int, int, int, int]:
+        rank = {"": 3, "rc": 2, "beta": 1, "alpha": 0}.get(self.qualifier, 0)
+        return (self.major, self.minor, self.patch, rank, self.qualifier_number)
+
+    @property
+    def prerelease(self) -> bool:
+        return bool(self.qualifier)
+
+
+@dataclass(frozen=True)
+class ReleaseTarget:
+    path: str
+    patterns: tuple[tuple[str, str], ...]
+
+
+RELEASE_TARGETS: tuple[ReleaseTarget, ...] = (
+    ReleaseTarget(
+        "deploy/.env.example",
+        ((r"(?m)^ZENVIS_VERSION=.*$", "ZENVIS_VERSION={version}"),),
+    ),
+    ReleaseTarget(
+        "zenvis-backend/build.sh",
+        ((r'(?m)^IMAGE_TAG="[^"]*"$', 'IMAGE_TAG="{version}"'),),
+    ),
+    ReleaseTarget(
+        "zenvis-frontend/build.sh",
+        ((r'(?m)^IMAGE_TAG="[^"]*"$', 'IMAGE_TAG="{version}"'),),
+    ),
+    ReleaseTarget(
+        "zenvis-backend/src/main/java/com/coolxer/component/DataInitiator.java",
+        ((r'setProductVersion\("[^"]*"\)', 'setProductVersion("{version}")'),),
+    ),
+    ReleaseTarget(
+        "doc/_coverpage.md",
+        ((r"<small>[^<]*</small>", "<small>{version}</small>"),),
+    ),
+    ReleaseTarget(
+        "README.md",
+        ((r"(/raw/)([^\s]+?)(/quick-deploy\.sh)", r"\g<1>{branch}\g<3>"),),
+    ),
+    ReleaseTarget(
+        "quick-deploy.sh",
+        (
+            (
+                r'(?m)^(readonly DEFAULT_REPO_BRANCH=")[^"]*(")$',
+                r"\g<1>{branch}\g<2>",
+            ),
+        ),
+    ),
+    ReleaseTarget(
+        "doc/02-安装部署与升级/快速开始.md",
+        (
+            (r"(/raw/)([^\s]+?)(/quick-deploy\.sh)", r"\g<1>{branch}\g<3>"),
+            (r"(?m)^(git checkout )\S+$", r"\g<1>{branch}"),
+        ),
+    ),
+    ReleaseTarget(
+        "doc/02-安装部署与升级/升级与回滚.md",
+        (
+            (
+                r"refs/heads/\S+?(:refs/remotes/origin/)\S+",
+                r"refs/heads/{branch}\g<1>{branch}",
+            ),
+            (
+                r"git switch -c \S+ refs/remotes/origin/\S+",
+                "git switch -c {branch} refs/remotes/origin/{branch}",
+            ),
+            (r"(?m)(--version )\S+", r"\g<1>{version}"),
+        ),
+    ),
 )
 
 
@@ -110,7 +210,60 @@ def dry_run() -> bool:
     return env_flag("ZENVIS_ISSUE_DRY_RUN")
 
 
-def resolve_root(value: Optional[str] = None) -> Path:
+def parse_local_env_value(raw: str, path: Path, line_number: int) -> str:
+    value = raw.strip()
+    if not value:
+        return ""
+    if value[0] not in {"'", '"'}:
+        return value
+    quote = value[0]
+    if len(value) < 2 or value[-1] != quote:
+        raise IssueWorkflowError(f"{path}:{line_number} 引号未闭合")
+    inner = value[1:-1]
+    if quote == "'":
+        return inner
+    escapes = {"\\": "\\", '"': '"', "n": "\n", "r": "\r", "t": "\t"}
+    return re.sub(
+        r"\\([\\\"nrt])",
+        lambda match: escapes[match.group(1)],
+        inner,
+    )
+
+
+def load_local_env(root: Path) -> tuple[str, ...]:
+    path = root / LOCAL_ENV_FILE
+    if not path.is_file():
+        return ()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise IssueWorkflowError(f"无法读取本地环境文件 {path}: {exc}") from exc
+    values: dict[str, str] = {}
+    for line_number, raw in enumerate(lines, 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            raise IssueWorkflowError(
+                f"{path}:{line_number} 应为 KEY=VALUE 格式"
+            )
+        key, raw_value = line.split("=", 1)
+        key = key.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise IssueWorkflowError(
+                f"{path}:{line_number} 变量名格式无效"
+            )
+        if key != "GITHUB_TOKEN" and not key.startswith("ZENVIS_"):
+            continue
+        values[key] = parse_local_env_value(raw_value, path, line_number)
+    for key, value in values.items():
+        os.environ.setdefault(key, value)
+    return tuple(values)
+
+
+def discover_root(value: Optional[str] = None) -> Path:
     candidate = value or os.environ.get("ZENVIS_ISSUE_ROOT")
     if candidate:
         return Path(candidate).expanduser().resolve()
@@ -123,6 +276,12 @@ def resolve_root(value: Optional[str] = None) -> Path:
     if result.returncode != 0:
         raise IssueWorkflowError("当前目录不在 Git 仓库内")
     return Path(result.stdout.strip()).resolve()
+
+
+def resolve_root(value: Optional[str] = None) -> Path:
+    root = discover_root(value)
+    load_local_env(root)
+    return root
 
 
 def run_git(
@@ -145,6 +304,13 @@ def run_git(
         detail = (result.stderr or result.stdout or "").strip()
         raise IssueWorkflowError(f"git {' '.join(args)} 失败：{detail}")
     return result
+
+
+def run_git_sensitive(root: Path, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    try:
+        return run_git(root, args)
+    except IssueWorkflowError as exc:
+        raise IssueWorkflowError(redact_sensitive(str(exc))) from exc
 
 
 def now_local() -> datetime:
@@ -532,6 +698,50 @@ class PlatformClient:
             "GET", f"/repos/{self.repo}/commits/{sha}", allow_404=True
         )
         return result is not None
+
+    def get_release(self, tag: str) -> Optional[dict[str, Any]]:
+        result = self.request(
+            "GET",
+            f"/repos/{self.repo}/releases/tags/{urllib.parse.quote(tag, safe='')}",
+            allow_404=True,
+        )
+        if result is None:
+            return None
+        if not isinstance(result, dict):
+            raise IssueWorkflowError(f"{self.platform} Release 返回格式异常")
+        return result
+
+    def create_release(
+        self,
+        tag: str,
+        name: str,
+        body: str,
+        *,
+        target_commitish: str = "",
+        prerelease: bool = False,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "tag_name": tag,
+            "name": name,
+            "body": body,
+            "prerelease": prerelease,
+        }
+        if target_commitish:
+            payload["target_commitish"] = target_commitish
+        result = self.request(
+            "POST", f"/repos/{self.repo}/releases", payload=payload
+        )
+        if not isinstance(result, dict):
+            raise IssueWorkflowError(f"{self.platform} 创建 Release 后返回格式异常")
+        return result
+
+    def tag_exists(self, tag: str) -> bool:
+        quoted = urllib.parse.quote(tag, safe="")
+        if self.platform == "github":
+            path = f"/repos/{self.repo}/git/ref/tags/{quoted}"
+        else:
+            path = f"/repos/{self.repo}/tags/{quoted}"
+        return self.request("GET", path, allow_404=True) is not None
 
     def commit_url(self, sha: str) -> str:
         if self.platform == "github":
@@ -1109,6 +1319,666 @@ def current_branch(root: Path) -> str:
     if result.returncode != 0:
         raise IssueWorkflowError("当前处于 detached HEAD，无法执行推送")
     return result.stdout.strip()
+
+
+def parse_release_version(value: str) -> ReleaseVersion:
+    text = (value or "").strip()
+    match = RELEASE_VERSION_RE.fullmatch(text)
+    if not match:
+        raise IssueWorkflowError(
+            f"版本号格式应为 X.Y.Z 或 X.Y.Z.alpha/beta/rc：{text or '<空>'}"
+        )
+    return ReleaseVersion(
+        major=int(match.group(1)),
+        minor=int(match.group(2)),
+        patch=int(match.group(3)),
+        qualifier=match.group(4) or "",
+        qualifier_number=int(match.group(5) or 0),
+    )
+
+
+def next_patch_version(version: ReleaseVersion) -> ReleaseVersion:
+    return ReleaseVersion(
+        major=version.major,
+        minor=version.minor,
+        patch=version.patch + 1,
+        qualifier=version.qualifier,
+        qualifier_number=version.qualifier_number,
+    )
+
+
+def read_declared_version(root: Path) -> ReleaseVersion:
+    path = root / "deploy" / ".env.example"
+    if not path.is_file():
+        raise IssueWorkflowError(f"缺少版本文件：{path}")
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r"(?m)^ZENVIS_VERSION=(.*?)\s*$", text)
+    if not match:
+        raise IssueWorkflowError("deploy/.env.example 缺少 ZENVIS_VERSION")
+    return parse_release_version(match.group(1))
+
+
+def list_release_tags(root: Path) -> list[ReleaseVersion]:
+    output = run_git(root, ["tag", "--list"]).stdout
+    versions: list[ReleaseVersion] = []
+    for line in output.splitlines():
+        value = line.strip()
+        if not RELEASE_VERSION_RE.fullmatch(value):
+            continue
+        versions.append(parse_release_version(value))
+    return sorted(versions, key=lambda item: item.key)
+
+
+def local_tag_exists(root: Path, tag: str) -> bool:
+    return (
+        run_git(
+            root,
+            ["rev-parse", "-q", "--verify", f"refs/tags/{tag}"],
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def remote_tag_exists(
+    root: Path, tag: str, *, fetch: bool = True
+) -> bool:
+    if not repository_remote_url(root, "origin"):
+        raise IssueWorkflowError("缺少 origin remote，无法检查或发布版本")
+    if fetch:
+        run_git(root, ["fetch", "origin", "--tags", "--prune"], capture=False)
+    result = run_git(
+        root,
+        ["ls-remote", "--tags", "origin", f"refs/tags/{tag}"],
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise IssueWorkflowError(f"检查远端 tag 失败：{redact_sensitive(detail)}")
+    return bool(result.stdout.strip())
+
+
+def release_branch(root: Path) -> str:
+    branch = current_branch(root)
+    if branch != "main" and not branch.startswith("feature/"):
+        raise IssueWorkflowError(
+            f"发布分支应为 main 或 feature/*，当前为 {branch}"
+        )
+    return branch
+
+
+def resolve_release_version(
+    root: Path, explicit: Optional[str]
+) -> tuple[ReleaseVersion, ReleaseVersion, Optional[ReleaseVersion]]:
+    declared = read_declared_version(root)
+    tags = list_release_tags(root)
+    latest = tags[-1] if tags else None
+    if explicit:
+        target = parse_release_version(explicit)
+        if target.key < declared.key:
+            raise IssueWorkflowError(
+                f"目标版本 {target.text} 低于当前声明版本 {declared.text}"
+            )
+        if latest and target.key <= latest.key:
+            raise IssueWorkflowError(
+                f"目标版本 {target.text} 未高于最新 tag {latest.text}"
+            )
+    elif latest is None:
+        target = declared
+    elif declared.key > latest.key:
+        target = declared
+    elif declared.key == latest.key:
+        target = next_patch_version(latest)
+    else:
+        raise IssueWorkflowError(
+            f"当前声明版本 {declared.text} 低于最新 tag {latest.text}"
+        )
+    if local_tag_exists(root, target.text):
+        raise IssueWorkflowError(f"本地已存在 tag {target.text}")
+    return target, declared, latest
+
+
+def apply_version_targets(
+    root: Path, version: str, branch: str
+) -> list[str]:
+    updated_files: list[str] = []
+    pending: list[tuple[Path, str, str]] = []
+    for target in RELEASE_TARGETS:
+        path = root / target.path
+        if not path.is_file():
+            raise IssueWorkflowError(f"版本文件不存在：{target.path}")
+        original = path.read_text(encoding="utf-8")
+        updated = original
+        for pattern, template in target.patterns:
+            replacement = template.format(version=version, branch=branch)
+            updated, count = re.subn(pattern, replacement, updated)
+            if count == 0:
+                raise IssueWorkflowError(
+                    f"版本引用模式未命中：{target.path} / {pattern}"
+                )
+        if (
+            target.path == "doc/02-安装部署与升级/升级与回滚.md"
+            and branch == "main"
+        ):
+            updated = updated.replace(
+                "git switch -c main refs/remotes/origin/main",
+                "git switch main",
+            )
+        pending.append((path, original, updated))
+        updated_files.append(target.path)
+    for path, original, updated in pending:
+        if updated != original:
+            atomic_write(path, updated)
+    return updated_files
+
+
+def release_commits(
+    root: Path, previous_tag: Optional[ReleaseVersion]
+) -> list[tuple[str, str]]:
+    args = ["log", "--no-merges", "--format=%H%x1f%s%x1e"]
+    if previous_tag:
+        args.append(f"{previous_tag.text}..HEAD")
+    else:
+        args.extend(["--max-count=200", "HEAD"])
+    output = run_git(root, args).stdout
+    commits: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for record in output.split("\x1e"):
+        fields = record.strip("\n").split("\x1f", 1)
+        if len(fields) != 2:
+            continue
+        sha, subject = fields[0].strip(), redact_sensitive(fields[1].strip())
+        if not sha or not subject or subject in seen:
+            continue
+        if re.match(
+            r"^(?:chore\(release\)|发布\s|更新版本|更新.*版本号|Merge\b)",
+            subject,
+            re.IGNORECASE,
+        ):
+            continue
+        seen.add(subject)
+        commits.append((sha, clean_title(subject, 200)))
+    return commits
+
+
+def classify_release_commit(subject: str) -> str:
+    lowered = subject.lower()
+    if re.match(r"^(?:feat|feature)(?:\(|:|!|\s)", lowered) or re.search(
+        r"(新增|支持|增加|添加|实现|接入|扩展)", subject
+    ):
+        return "新增能力"
+    if re.match(r"^fix(?:\(|:|!|\s)", lowered) or re.search(
+        r"(修复|解决|修正|纠正|避免)", subject
+    ):
+        return "问题修复"
+    if re.match(r"^(?:perf|refactor)(?:\(|:|!|\s)", lowered) or re.search(
+        r"(优化|改进|调整|重构|增强|完善|提升)", subject
+    ):
+        return "优化与体验"
+    if re.match(r"^(?:docs|build|ci|test|chore)(?:\(|:|!|\s)", lowered) or re.search(
+        r"(文档|构建|测试|依赖|配置|脚本|工作流)", subject
+    ):
+        return "文档与工程"
+    return "其他"
+
+
+def render_release_notes(
+    root: Path,
+    version: ReleaseVersion,
+    previous_tag: Optional[ReleaseVersion],
+    generated_at: Optional[datetime] = None,
+) -> str:
+    generated_at = generated_at or now_local()
+    commits = release_commits(root, previous_tag)
+    sections = {
+        "新增能力": [],
+        "问题修复": [],
+        "优化与体验": [],
+        "文档与工程": [],
+        "其他": [],
+    }
+    for sha, subject in commits:
+        sections[classify_release_commit(subject)].append(f"- {subject}（`{sha[:8]}`）")
+    lines = [
+        f"# ZenVis {version.text} 版本发布说明",
+        "",
+        f"- 发布日期：{generated_at.strftime('%Y-%m-%d')}",
+        f"- Git 标签：`{version.text}`",
+        f"- 对比范围："
+        + (
+            f"`{previous_tag.text}..HEAD`"
+            if previous_tag
+            else "`初始提交..HEAD`"
+        ),
+        "- 发布平台：Gitee、GitHub",
+        "",
+        "## 版本重点",
+        "",
+        RELEASE_REVIEW_MARKER,
+    ]
+    for name, items in sections.items():
+        if not items:
+            continue
+        lines.extend(["", f"## {name}", *items])
+    lines.append("")
+    return "\n".join(lines)
+
+
+def release_draft_path(root: Path, tag: str) -> Path:
+    return root / RELEASE_STATE_ROOT / f"{tag}.md"
+
+
+def release_doc_path(root: Path, tag: str) -> Path:
+    return root / RELEASE_DOC_ROOT / f"{tag}.md"
+
+
+def update_release_index(
+    root: Path, tag: str, generated_at: datetime
+) -> None:
+    index_path = root / RELEASE_DOC_ROOT / "README.md"
+    if not index_path.is_file():
+        atomic_write(
+            index_path,
+            "\n".join(
+                [
+                    "# 版本发布说明",
+                    "",
+                    "本目录保存 ZenVis 各版本的发布说明。",
+                    "发布说明由 `zenvis-issue-workflow` 生成初稿，经人工审核后发布。",
+                    "",
+                    RELEASE_INDEX_MARKER,
+                    "<!-- releases:end -->",
+                    "",
+                ]
+            ),
+        )
+    content = index_path.read_text(encoding="utf-8")
+    entry = f"- [{tag}]({tag}.md) — {generated_at.strftime('%Y-%m-%d')}"
+    if entry not in content:
+        if RELEASE_INDEX_MARKER in content:
+            content = content.replace(
+                RELEASE_INDEX_MARKER, f"{RELEASE_INDEX_MARKER}\n{entry}", 1
+            )
+        else:
+            content = content.rstrip() + "\n\n## 版本列表\n\n" + entry + "\n"
+        atomic_write(index_path, content)
+
+
+def update_release_sidebar(root: Path) -> None:
+    sidebar = root / "doc" / "_sidebar.md"
+    if not sidebar.is_file():
+        return
+    content = sidebar.read_text(encoding="utf-8")
+    entry = "- [版本发布](/10-版本发布/README.md)"
+    if entry in content:
+        return
+    anchor = "- [Issue 报告](/09-issue-reports/README.md)"
+    if anchor in content:
+        content = content.replace(anchor, f"{anchor}\n{entry}", 1)
+    else:
+        content = content.rstrip() + "\n\n" + entry + "\n"
+    atomic_write(sidebar, content)
+
+
+def ensure_tracked_worktree_clean(root: Path) -> None:
+    output = run_git(root, ["status", "--porcelain"]).stdout
+    dirty = [
+        line
+        for line in output.splitlines()
+        if line and not line.startswith("??")
+    ]
+    if dirty:
+        raise IssueWorkflowError(
+            "发布前工作区存在未提交的 tracked 修改；请先提交或还原：\n"
+            + "\n".join(dirty)
+        )
+
+
+def release_commit_message(tag: str) -> str:
+    return f"chore(release): 发布 {tag}\n"
+
+
+def release_state_path(root: Path, tag: str) -> Path:
+    return root / RELEASE_STATE_ROOT / f"{tag}.state.json"
+
+
+def read_release_state(root: Path, tag: str) -> dict[str, Any]:
+    value = read_json(release_state_path(root, tag), {})
+    return value if isinstance(value, dict) else {}
+
+
+def write_release_state(root: Path, tag: str, value: dict[str, Any]) -> None:
+    write_json(release_state_path(root, tag), value)
+
+
+def resolve_release_notes(root: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    if not path.is_file():
+        raise IssueWorkflowError(f"发布说明文件不存在：{path}")
+    return path.resolve()
+
+
+def release_plan(
+    root: Path,
+    *,
+    version_value: Optional[str],
+    notes_value: Optional[str],
+    fetch: bool,
+    generated_at: Optional[datetime] = None,
+) -> dict[str, Any]:
+    if fetch:
+        if not repository_remote_url(root, "origin"):
+            raise IssueWorkflowError("缺少 origin remote，无法发布版本")
+        run_git_sensitive(root, ["fetch", "origin", "--tags", "--prune"])
+    branch = release_branch(root)
+    version, declared, latest = resolve_release_version(root, version_value)
+    if remote_tag_exists(root, version.text, fetch=False):
+        raise IssueWorkflowError(f"origin 已存在 tag {version.text}")
+    generated_at = generated_at or now_local()
+    notes_path = (
+        Path(notes_value).expanduser()
+        if notes_value
+        else release_draft_path(root, version.text)
+    )
+    if not notes_path.is_absolute():
+        notes_path = root / notes_path
+    notes = render_release_notes(root, version, latest, generated_at)
+    doc_path = release_doc_path(root, version.text)
+    commit_message = release_commit_message(version.text)
+    files = [
+        target.path for target in RELEASE_TARGETS
+    ] + [
+        doc_path.relative_to(root).as_posix(),
+        (root / RELEASE_DOC_ROOT / "README.md").relative_to(root).as_posix(),
+    ]
+    if (root / "doc" / "_sidebar.md").is_file():
+        files.append("doc/_sidebar.md")
+    return {
+        "dry_run": dry_run(),
+        "version": version.text,
+        "declared_version": declared.text,
+        "previous_tag": latest.text if latest else "",
+        "branch": branch,
+        "notes_path": str(notes_path),
+        "notes": notes,
+        "doc_path": doc_path.relative_to(root).as_posix(),
+        "files": files,
+        "commit_message": commit_message,
+        "tag_command": (
+            f"git tag -a {shlex.quote(version.text)} -F "
+            f"{shlex.quote(doc_path.relative_to(root).as_posix())}"
+        ),
+        "push_command": (
+            f"git push origin HEAD:refs/heads/{branch} "
+            f"refs/tags/{shlex.quote(version.text)}"
+        ),
+        "generated_at": generated_at.isoformat(timespec="seconds"),
+    }
+
+
+def execute_release(
+    root: Path,
+    *,
+    version_value: Optional[str],
+    notes_value: Optional[str],
+    fetch: bool,
+    preview: bool,
+    generated_at: Optional[datetime] = None,
+    github_timeout: int = 120,
+    github_interval: float = 5.0,
+) -> dict[str, Any]:
+    if not notes_value:
+        raise IssueWorkflowError(
+            "release --execute 需要 --notes 指定已审核的发布说明；"
+            "请先运行 release 生成草稿"
+        )
+    plan = release_plan(
+        root,
+        version_value=version_value,
+        notes_value=notes_value,
+        fetch=fetch,
+        generated_at=generated_at,
+    )
+    if preview:
+        plan["dry_run"] = True
+        return {**plan, "preview": True}
+    version = parse_release_version(plan["version"])
+    notes_path = Path(plan["notes_path"])
+    if not notes_path.is_file():
+        raise IssueWorkflowError(f"发布说明文件不存在：{notes_path}")
+    notes = notes_path.read_text(encoding="utf-8").strip()
+    if not notes:
+        raise IssueWorkflowError("发布说明不能为空")
+    if RELEASE_REVIEW_MARKER in notes:
+        raise IssueWorkflowError(
+            "发布说明仍是未审核的草稿；请补充版本重点并移除审核提示后再执行"
+        )
+    ensure_tracked_worktree_clean(root)
+    clients = {
+        platform: PlatformClient.from_environment(platform)
+        for platform in ("gitee", "github")
+    }
+    for platform, client in clients.items():
+        if not client.token:
+            raise IssueWorkflowError(f"缺少 {platform} token，无法发布版本")
+        client.check_repo()
+        existing = client.get_release(version.text)
+        if existing is not None:
+            raise IssueWorkflowError(
+                f"{platform} 已存在 Release {version.text}"
+            )
+    plan["notes"] = notes
+    updated = apply_version_targets(root, version.text, plan["branch"])
+    doc_path = release_doc_path(root, version.text)
+    atomic_write(doc_path, notes.rstrip() + "\n")
+    update_release_index(root, version.text, generated_at or now_local())
+    update_release_sidebar(root)
+    files = updated + [
+        doc_path.relative_to(root).as_posix(),
+        (root / RELEASE_DOC_ROOT / "README.md").relative_to(root).as_posix(),
+    ]
+    if (root / "doc" / "_sidebar.md").is_file():
+        files.append("doc/_sidebar.md")
+    run_git(root, ["add", "--", *files], capture=False)
+    run_git(
+        root,
+        ["commit", "-F", "-"],
+        capture=False,
+        text_input=release_commit_message(version.text),
+    )
+    sha = run_git(root, ["rev-parse", "HEAD"]).stdout.strip()
+    run_git(
+        root,
+        [
+            "tag",
+            "-a",
+            version.text,
+            "-F",
+            doc_path.relative_to(root).as_posix(),
+            sha,
+        ],
+        capture=False,
+    )
+    run_git_sensitive(
+        root,
+        [
+            "push",
+            "origin",
+            f"HEAD:refs/heads/{plan['branch']}",
+            f"refs/tags/{version.text}",
+        ],
+    )
+    state = {
+        "tag": version.text,
+        "commit": sha,
+        "branch": plan["branch"],
+        "notes": doc_path.relative_to(root).as_posix(),
+        "git": {
+            "committed": True,
+            "tagged": True,
+            "pushed": True,
+            "at": iso_now(),
+        },
+        "platforms": {},
+    }
+    write_release_state(root, version.text, state)
+    result = publish_release(
+        root,
+        tag=version.text,
+        commit=sha,
+        notes=str(doc_path),
+        preview=False,
+        github_timeout=github_timeout,
+        github_interval=github_interval,
+    )
+    return {
+        **plan,
+        "commit": sha,
+        "platforms": result["platforms"],
+        "ok": result["ok"],
+    }
+
+
+def normalize_release_body(value: str) -> str:
+    return re.sub(r"\r\n?", "\n", value or "").strip()
+
+
+def publish_release(
+    root: Path,
+    *,
+    tag: str,
+    commit: str,
+    notes: str,
+    preview: bool = False,
+    github_timeout: int = 120,
+    github_interval: float = 5.0,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
+    version = parse_release_version(tag)
+    if not re.fullmatch(r"[0-9a-fA-F]{7,64}", commit):
+        raise IssueWorkflowError(f"提交 SHA 格式无效：{commit}")
+    notes_path = resolve_release_notes(root, notes)
+    body = notes_path.read_text(encoding="utf-8").strip()
+    if not body:
+        raise IssueWorkflowError("发布说明不能为空")
+    if RELEASE_REVIEW_MARKER in body:
+        raise IssueWorkflowError(
+            "发布说明仍是未审核的草稿；请补充版本重点并移除审核提示后再发布"
+        )
+    if preview:
+        return {
+            "ok": True,
+            "platforms": {
+                platform: {"status": "would_create"}
+                for platform in ("gitee", "github")
+            },
+        }
+    clients = {
+        platform: PlatformClient.from_environment(platform)
+        for platform in ("gitee", "github")
+    }
+    existing_releases: dict[str, dict[str, Any]] = {}
+    for platform, client in clients.items():
+        if not client.token:
+            raise IssueWorkflowError(f"缺少 {platform} token，无法发布版本")
+        client.check_repo()
+        existing = client.get_release(version.text)
+        if existing is not None:
+            existing_body = normalize_release_body(
+                str(existing.get("body") or "")
+            )
+            if existing_body != normalize_release_body(body):
+                raise IssueWorkflowError(
+                    f"{platform} 已存在同名 Release，但说明内容不同"
+                )
+            existing_releases[platform] = existing
+    results: dict[str, Any] = {}
+    failures = 0
+    for platform in ("gitee", "github"):
+        client = clients[platform]
+        try:
+            existing = existing_releases.get(platform)
+            if existing is not None:
+                results[platform] = {
+                    "status": "exists",
+                    "url": str(
+                        existing.get("html_url")
+                        or existing.get("url")
+                        or ""
+                    ),
+                }
+                continue
+            if preview:
+                results[platform] = {"status": "would_create"}
+                continue
+            target = ""
+            if platform == "github":
+                target = publish_github_release(
+                    client,
+                    version,
+                    commit,
+                    github_timeout=github_timeout,
+                    github_interval=github_interval,
+                    sleep=sleep,
+                    clock=clock,
+                )
+            created = client.create_release(
+                version.text,
+                version.text,
+                body,
+                target_commitish=target,
+                prerelease=version.prerelease,
+            )
+            results[platform] = {
+                "status": "created",
+                "url": str(
+                    created.get("html_url") or created.get("url") or ""
+                ),
+            }
+        except Exception as exc:
+            failures += 1
+            results[platform] = {"status": "failed", "error": str(exc)}
+    state = read_release_state(root, version.text)
+    state.update(
+        {
+            "tag": version.text,
+            "commit": commit,
+            "notes": notes_path.relative_to(root).as_posix()
+            if notes_path.is_relative_to(root)
+            else str(notes_path),
+            "platforms": results,
+            "updated_at": iso_now(),
+        }
+    )
+    write_release_state(root, version.text, state)
+    return {"ok": failures == 0, "platforms": results}
+
+
+def publish_github_release(
+    client: PlatformClient,
+    version: ReleaseVersion,
+    commit: str,
+    *,
+    github_timeout: int,
+    github_interval: float,
+    sleep: Callable[[float], None],
+    clock: Callable[[], float],
+) -> str:
+    deadline = clock() + max(0, github_timeout)
+    while True:
+        if client.tag_exists(version.text):
+            return ""
+        if clock() >= deadline:
+            print(
+                f"[WARN] GitHub 尚未同步 tag {version.text}；"
+                f"将使用 target_commitish={commit[:8]} 创建 Release。",
+                file=sys.stderr,
+            )
+            return commit
+        sleep(github_interval)
 
 
 def build_manual_issue_body(summary: str, verification: str = "") -> str:
@@ -1752,6 +2622,15 @@ def doctor(root: Path, *, offline: bool) -> int:
     checks: list[tuple[str, str]] = []
     checks.append(("OK", f"Python {sys.version.split()[0]}"))
     checks.append(("OK", f"仓库根目录：{root}"))
+    local_env = root / LOCAL_ENV_FILE
+    checks.append(
+        (
+            "OK" if local_env.is_file() else "INFO",
+            "本地环境文件 .zenvis/.env"
+            if local_env.is_file()
+            else "本地环境文件 .zenvis/.env 未配置",
+        )
+    )
     hooks_result = run_git(root, ["config", "--get", "core.hooksPath"], check=False)
     hooks_path = hooks_result.stdout.strip() if hooks_result.returncode == 0 else ""
     if not hooks_path:
@@ -1914,6 +2793,99 @@ def command_reconcile(args: argparse.Namespace) -> int:
     )
 
 
+def command_release(args: argparse.Namespace) -> int:
+    root = resolve_root(args.root)
+    preview = dry_run()
+    if args.execute:
+        result = execute_release(
+            root,
+            version_value=args.version,
+            notes_value=args.notes,
+            fetch=not args.no_fetch,
+            preview=preview,
+            github_timeout=args.github_timeout,
+        )
+    else:
+        result = release_plan(
+            root,
+            version_value=args.version,
+            notes_value=args.notes,
+            fetch=not args.no_fetch,
+        )
+        notes_path = Path(result["notes_path"])
+        should_write = not preview and not (args.notes and notes_path.is_file())
+        if should_write and notes_path.resolve().is_relative_to(root):
+            relative = notes_path.resolve().relative_to(root)
+            if relative.parts[:2] != (".zenvis", "releases"):
+                raise IssueWorkflowError(
+                    "准备阶段的草稿只能写入 .zenvis/releases/ 或仓库外路径；"
+                    "已审核的说明请用 release --execute 发布"
+                )
+        if should_write:
+            atomic_write(
+                notes_path,
+                str(result["notes"]).rstrip() + "\n",
+            )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("ok", True) else 1
+    if not args.execute or result.get("preview"):
+        print(f"目标版本：{result['version']}")
+        print(f"当前声明版本：{result['declared_version']}")
+        if result["previous_tag"]:
+            print(f"上一版本：{result['previous_tag']}")
+        print(f"发布分支：{result['branch']}")
+        print(f"说明草稿：{result['notes_path']}")
+        print("将更新：")
+        for path in result["files"]:
+            print(f"- {path}")
+        print(f"提交信息：{str(result['commit_message']).strip()}")
+        print(f"创建 tag：{result['tag_command']}")
+        print(f"推送：{result['push_command']}")
+        print("平台：创建 Gitee Release；等待 GitHub 镜像后创建 GitHub Release。")
+        if preview:
+            print("[DRY RUN] 未写入草稿、版本文件或平台数据。")
+        else:
+            print("审核说明后执行：")
+            print(
+                "python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py "
+                f"release --execute --notes {shlex.quote(str(result['notes_path']))}"
+            )
+        return 0
+    platforms = result.get("platforms") or {}
+    print(f"发布完成：{result['version']}")
+    print(f"提交：{result.get('commit', '')}")
+    for platform in ("gitee", "github"):
+        item = platforms.get(platform) or {}
+        status = item.get("status", "unknown")
+        url = item.get("url", "")
+        print(f"- {platform}: {status} {url}".rstrip())
+    return 0 if result.get("ok") else 1
+
+
+def command_release_publish(args: argparse.Namespace) -> int:
+    root = resolve_root(args.root)
+    result = publish_release(
+        root,
+        tag=args.tag,
+        commit=args.commit,
+        notes=args.notes,
+        preview=dry_run(),
+        github_timeout=args.github_timeout,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("ok") else 1
+    for platform in ("gitee", "github"):
+        item = result["platforms"].get(platform) or {}
+        status = item.get("status", "unknown")
+        url = item.get("url", "")
+        error = item.get("error", "")
+        suffix = f"：{error}" if error else f" {url}".rstrip()
+        print(f"- {platform}: {status}{suffix}")
+    return 0 if result.get("ok") else 1
+
+
 def command_retry_close(args: argparse.Namespace) -> int:
     root = resolve_root(args.root)
     return retry_close_queue(root, preview=dry_run())
@@ -1937,7 +2909,7 @@ def command_action_close(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="ZenVis GitHub / Gitee issue 归纳、追踪与关闭工具"
+        description="ZenVis GitHub / Gitee issue 归纳、追踪、关闭与版本发布工具"
     )
     parser.add_argument("--root", help="Git 仓库根目录，默认自动查询")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2022,6 +2994,44 @@ def build_parser() -> argparse.ArgumentParser:
     close.add_argument("--json", action="store_true", help="以 JSON 输出")
     close.set_defaults(func=command_close)
 
+    release = subparsers.add_parser(
+        "release", help="准备或执行版本发布，更新版本文件并创建 Gitee/GitHub Release"
+    )
+    release.add_argument("--version", help="目标版本；默认自动推算")
+    release.add_argument(
+        "--notes", help="准备时的草稿路径；执行时必须提供已审核的说明文件"
+    )
+    release.add_argument(
+        "--execute",
+        action="store_true",
+        help="实际提交、打 tag、推送并创建两个平台 Release",
+    )
+    release.add_argument("--no-fetch", action="store_true", help="不拉取远端 tag")
+    release.add_argument(
+        "--github-timeout",
+        type=int,
+        default=120,
+        help="等待 GitHub 镜像 tag 的秒数，默认 120",
+    )
+    release.add_argument("--json", action="store_true", help="以 JSON 输出")
+    release.set_defaults(func=command_release)
+
+    publish = subparsers.add_parser(
+        "release-publish",
+        help="仅重试平台 Release 创建，不重复 Git 操作",
+    )
+    publish.add_argument("--tag", required=True, help="版本 tag")
+    publish.add_argument("--commit", required=True, help="Release 对应的提交 SHA")
+    publish.add_argument("--notes", required=True, help="已审核的发布说明文件")
+    publish.add_argument(
+        "--github-timeout",
+        type=int,
+        default=120,
+        help="等待 GitHub 镜像 tag 的秒数，默认 120",
+    )
+    publish.add_argument("--json", action="store_true", help="以 JSON 输出")
+    publish.set_defaults(func=command_release_publish)
+
     push = subparsers.add_parser(
         "push", help="推送当前分支到 Gitee 并关闭关联的 Gitee issue"
     )
@@ -2058,6 +3068,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        try:
+            root = discover_root(args.root)
+        except IssueWorkflowError:
+            root = None
+        if root is not None:
+            load_local_env(root)
         return int(args.func(args))
     except IssueWorkflowError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

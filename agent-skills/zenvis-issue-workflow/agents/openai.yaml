@@ -1,4 +1,4 @@
 interface:
   display_name: "ZenVis Issue Workflow"
-  short_description: "Review GitHub/Gitee issue reports, create a chosen-platform issue, repair approved issues, and prepare commits; execute only when explicitly authorized."
-  default_prompt: "Use $zenvis-issue-workflow to organize GitHub and Gitee issues into a reviewable report. By default print complete commit commands without running Git. Do not repair code, create issues, commit, or push until I explicitly authorize the exact action and platform."
+  short_description: "Review GitHub/Gitee issues, repair approved issues, prepare commits, and prepare or publish version releases; execute only when explicitly authorized."
+  default_prompt: "Use $zenvis-issue-workflow to organize GitHub and Gitee issues into a reviewable report and to prepare version releases. By default print complete commit and release plans without running Git or calling platform write APIs. Do not repair code, create issues, commit, tag, push, or publish a Release until I explicitly authorize the exact action and platform."

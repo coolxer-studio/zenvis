@@ -41,6 +41,23 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py commit --issu
 
 `commit` 默认只输出 `git add` 和 `git commit` 命令，不执行 Git，也不包含推送。用户明确授权后才使用 `--execute`，它只创建本地提交；推送仍需用户单独确认。Issue 修复使用当前分支，不创建 issue 专用分支；每个 issue 一个 commit，也可以生成不关联任何 issue 的普通提交。Gitee 是主提交仓库，正常 `git push` 到 `origin` 后由自动镜像同步到 GitHub，提交到达 `main` 后由镜像 Action 关闭对应 issue。
 
+### 版本发布
+
+版本发布与 issue 修复分开授权。默认只准备版本草稿和变更计划：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release
+```
+
+审核 `.zenvis/releases/<tag>.md` 后，明确说“发布 <version> 版本”或执行：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release \
+  --execute --notes .zenvis/releases/1.1.6.alpha.md
+```
+
+该命令会更新仓库内固定版本引用、提交发布说明、创建 annotated tag、推送当前分支与 tag，并在 Gitee 和 GitHub 创建 Release。发布说明归档在 [doc/10-版本发布](doc/10-版本发布/README.md)，详细规则见 [Issue 归纳与修复工作流](doc/07-开发指南/issue-workflow.md)。
+
 ## 开源协议
 本项目基于 [Apache License 2.0](LICENSE) 开源。
 提交任何代码、文档、文案贡献，即表示你同意按照 Apache 2.0 协议授权给本项目。

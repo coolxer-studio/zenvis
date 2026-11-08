@@ -1,6 +1,6 @@
 # Issue 归纳与修复工作流
 
-本文说明两种 issue 工作流：
+本文说明两种 issue 工作流，以及独立的版本发布流程：
 
 1. 维护者按需要求“整理 issue”，生成报告并人工审核；明确授权后逐个修复、测试和提交。
 2. 本地测试发现问题并完成修复后，指定 GitHub 或 Gitee 创建追踪 issue；提交代码时关联并关闭该 issue。
@@ -8,6 +8,8 @@
 Gitee 是主提交仓库，代码通过已有的 Gitee-to-GitHub 自动镜像同步；两边 issue 数据独立处理，不做 issue 镜像。
 
 Codex 可以分析问题、修改代码和运行测试，但默认只输出完整的提交命令，不执行 `git add`、`git commit` 或 `git push`。只有维护者明确说“由你提交”时，Codex 才执行 `commit --execute`，且只创建本地提交；推送始终需要单独授权。本工作流不安装或依赖 Git hooks。
+
+版本发布是独立授权：默认只生成版本草稿和变更计划；只有维护者明确说“发布 <version> 版本”时，才允许 `release --execute` 完成版本文件提交、annotated tag、分支与 tag 推送，以及 Gitee/GitHub Release 创建。发布授权不包含 issue 修复、普通提交或其他分支推送。
 
 ## 适用范围
 
@@ -23,12 +25,28 @@ Codex 可以分析问题、修改代码和运行测试，但默认只输出完�
 
 ### 1. 配置平台凭据
 
-GitHub 使用具有 Issues 读写权限的 fine-grained PAT，Gitee 使用具有 issues 权限的个人令牌。只通过环境变量提供，不写入仓库：
+GitHub 使用具有 Issues 读写权限的 fine-grained PAT，Gitee 使用具有 issues 权限的个人令牌。通过进程环境变量或仓库根目录下被忽略的 `.zenvis/.env` 提供，不写入受版本控制的文件：
 
 ```bash
 export ZENVIS_GITHUB_TOKEN='<GITHUB_PAT>'
 export ZENVIS_GITEE_TOKEN='<GITEE_TOKEN>'
 ```
+
+本机也可以使用 `.zenvis/.env`：
+
+```bash
+mkdir -p .zenvis
+cat > .zenvis/.env <<'EOF'
+ZENVIS_GITHUB_TOKEN='<GITHUB_PAT>'
+ZENVIS_GITEE_TOKEN='<GITEE_TOKEN>'
+ZENVIS_GITHUB_REPO='coolxer-studio/zenvis'
+ZENVIS_GITEE_REPO='coolxer-studio/zenvis'
+# ZENVIS_ISSUE_DRY_RUN=1
+EOF
+chmod 600 .zenvis/.env
+```
+
+脚本只加载 `.zenvis/.env` 中的 `ZENVIS_*` 和 `GITHUB_TOKEN`，支持简单的 `KEY=VALUE`、`export KEY=VALUE`、单双引号和空行/整行注释；进程环境变量优先。`.zenvis/` 已被 `.gitignore` 忽略，可用 `git check-ignore -v .zenvis/.env` 确认。
 
 可选覆盖：
 
@@ -288,6 +306,52 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py close \
 
 Gitee 的 issue 更新接口与读取接口不同：更新使用 `/repos/{owner}/issues/{number}`，并将 `repo` 作为请求字段传入。脚本已按该接口实现，不要改回 `/repos/{owner}/{repo}/issues/{number}`。
 
+## 版本发布
+
+发布模式复用同一脚本，但和 issue 修复分开授权：
+
+```bash
+# 只准备：计算版本、生成草稿、打印变更计划
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release
+
+# 审核 .zenvis/releases/<tag>.md 后发布
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release \
+  --execute \
+  --notes .zenvis/releases/1.1.6.alpha.md
+```
+
+版本推算规则：
+
+- 读取 `deploy/.env.example` 的 `ZENVIS_VERSION` 和最新 `X.Y.Z[.alpha|beta|rc]` tag；
+- 当前声明版本高于最新 tag 时直接发布当前版本；相等时递增 patch；低于最新 tag 时报错；
+- `--version` 可显式指定更高版本，但必须同时高于当前声明版本和最新 tag；
+- 目标 tag 必须不存在于本地和 Gitee `origin`。
+
+草稿中的审核提示 `请审核提交清单，补充面向用户的版本重点后再执行发布。` 必须在发布前删除；脚本会拒绝仍含该提示的说明文件。
+
+`release --execute` 的写入范围固定为：`deploy/.env.example`、`zenvis-backend/build.sh`、`zenvis-frontend/build.sh`、`DataInitiator.java`、`doc/_coverpage.md`、`README.md`、`quick-deploy.sh`、`doc/02-安装部署与升级/快速开始.md`、`doc/02-安装部署与升级/升级与回滚.md`，以及 `doc/10-版本发布/<tag>.md`、索引和 `doc/_sidebar.md`。分支引用跟随当前 `main` 或 `feature/*` 分支。
+
+执行顺序：
+
+1. 预检工作区、两个平台 token、tag 和已有 Release；任何冲突都在改文件前失败。
+2. 更新版本文件，写入审核后的发布说明，更新索引和侧边栏。
+3. 只暂存发布文件，提交 `chore(release): 发布 <tag>`，创建同名 annotated tag。
+4. 一次推送当前分支和 tag 到 Gitee `origin`。
+5. 创建 Gitee Release；等待 GitHub 镜像 tag 最多 120 秒，超时使用 `target_commitish=<sha>` 创建。
+
+`.alpha`、`.beta`、`.rc` 版本在两个平台标记 prerelease。部分失败时写入 `.zenvis/releases/<tag>.state.json`，使用以下命令只重试平台发布：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release-publish \
+  --tag 1.1.6.alpha \
+  --commit <release-sha> \
+  --notes doc/10-版本发布/1.1.6.alpha.md
+```
+
+`release-publish` 幂等：说明相同的 Release 跳过，说明不同则拒绝。`ZENVIS_ISSUE_DRY_RUN=1` 只预览，不写文件、不执行 Git、不调用平台写接口。
+
+发布模式不构建或推送 Docker 镜像，不更新 Helm values，也不修改 `VECTUM_VERSION`。
+
 ## 关闭失败恢复
 
 关闭评论或状态更新失败时，脚本写入忽略提交的 `.zenvis/issues/retry-close.json`。修复权限或网络后执行：
@@ -313,6 +377,8 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py retry-close
 | `push` | 推送 Gitee `origin` 并关闭关联 Gitee issue | 是 | 是 |
 | `reconcile` | Action 不可用时，对已到达平台的提交补齐关闭 | 是 | 否 |
 | `retry-close` | 重试失败的评论或关闭 | 是 | 否 |
+| `release` | 默认生成版本草稿和变更计划；`--execute` 完成提交、tag、推送和两个平台 Release | 仅 `--execute` | 仅 `--execute` |
+| `release-publish` | 只重试 Gitee/GitHub Release 创建 | 是 | 否 |
 
 ## 相关文件
 
@@ -320,4 +386,6 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py retry-close
 - `agent-skills/zenvis-issue-workflow/SKILL.md`：Codex 的唯一完整执行规范。
 - `agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py`：工作流实现脚本。
 - `agent-skills/zenvis-issue-workflow/tests/test_zenvis_issue.py`：工作流自动化测试。
+- `agent-skills/zenvis-issue-workflow/tests/test_release.py`：版本发布自动化测试。
 - `doc/09-issue-reports/`：公开的审核报告和修复记录。
+- `doc/10-版本发布/`：公开的版本发布说明。

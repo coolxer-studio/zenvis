@@ -1,6 +1,6 @@
 # ZenVis Issue Workflow
 
-`zenvis-issue-workflow` 是 ZenVis 仓库内的研发侧 Codex Skill，用于把 GitHub / Gitee issue 整理、修复、提交和关闭串成一条可审核的追踪链路。
+`zenvis-issue-workflow` 是 ZenVis 仓库内的研发侧 Codex Skill，用于把 GitHub / Gitee issue 整理、修复、提交和关闭串成一条可审核的追踪链路，并提供可审核的版本发布流程。
 
 它不是 ZenVis 平台运行时插件，不会出现在平台的 Skill 管理页，也不会被后端自动加载。它服务于在本仓库中工作的研发人员和 Codex。
 
@@ -10,24 +10,42 @@
 - 修复必须由维护者明确授权，并以最终编辑版报告为唯一执行清单。
 - Codex 默认只输出提交命令，不执行 `git add`、`git commit` 或 `git push`。
 - 一个 issue 对应一个 commit；Gitee 是主提交仓库，GitHub 通过现有镜像同步代码。
+- 版本发布单独授权：默认只生成待审核说明和变更计划，明确说“发布 <version> 版本”后才提交、打 tag、推送并创建 Gitee/GitHub Release。
 
-## 两种使用场景
+## 常见使用场景
 
 | 场景 | 触发方式 | 结果 |
 | --- | --- | --- |
 | 已有 issue，需要整理和修复 | 说“整理 issue”，审核报告后说“按报告修复” | 生成报告，逐个修复，生成关联 issue 的提交命令 |
 | 本地已发现问题或完成修复，但没有 issue | 指定平台后说“为这个问题创建 Gitee/GitHub issue” | 立即创建 issue，返回 `github#N` 或 `gitee#ID`，之后可关联提交 |
+| 发布版本 | 说“准备版本发布”或“发布 1.1.6.alpha 版本” | 生成版本文件变更与 Release 说明，审核后提交、打 tag、推送并创建两个平台 Release |
 
 ## 前置条件
 
 1. 在 ZenVis 仓库根目录执行命令。脚本需要以根仓库作为报告、状态和 Git 操作基准。
 2. 安装 Python 3，仅使用标准库，不需要安装第三方 Python 包。
-3. 配置平台 token。只通过环境变量提供，不要把 token 写入命令示例、报告或仓库文件。
+3. 配置平台 token。通过进程环境变量或仓库根目录下被忽略的 `.zenvis/.env` 提供，不要把 token 写入命令示例、报告或受版本控制的文件。
 
 ```bash
 export ZENVIS_GITHUB_TOKEN='<GITHUB_PAT>'
 export ZENVIS_GITEE_TOKEN='<GITEE_TOKEN>'
 ```
+
+也可以在仓库根目录创建本机配置文件：
+
+```bash
+mkdir -p .zenvis
+cat > .zenvis/.env <<'EOF'
+ZENVIS_GITHUB_TOKEN='<GITHUB_PAT>'
+ZENVIS_GITEE_TOKEN='<GITEE_TOKEN>'
+ZENVIS_GITHUB_REPO='coolxer-studio/zenvis'
+ZENVIS_GITEE_REPO='coolxer-studio/zenvis'
+# ZENVIS_ISSUE_DRY_RUN=1
+EOF
+chmod 600 .zenvis/.env
+```
+
+脚本只从 `.zenvis/.env` 加载 `ZENVIS_*` 和 `GITHUB_TOKEN`；已经存在的进程环境变量优先，不会覆盖。`.zenvis/` 已被 `.gitignore` 忽略，可用 `git check-ignore -v .zenvis/.env` 确认。
 
 可选配置：
 
@@ -37,8 +55,8 @@ export ZENVIS_GITEE_REPO='coolxer-studio/zenvis'
 export ZENVIS_ISSUE_DRY_RUN='1'
 ```
 
-- GitHub token 需要目标仓库的 Issues 读写权限；fine-grained PAT 需要显式授权该仓库。
-- Gitee token 需要目标仓库的 issues 权限。
+- GitHub token 需要目标仓库的 Issues 读写权限；发布版本还需要 Contents 写权限。fine-grained PAT 需要显式授权该仓库。
+- Gitee token 需要目标仓库的 issues 权限；发布版本还需要仓库内容与 Release 写权限。
 - `ZENVIS_ISSUE_DRY_RUN=1` 用于预览平台写操作。`report` 仍会生成本地报告，`create-issue`、关闭和重试等平台写入不会真正执行。
 
 先做只读自检：
@@ -104,6 +122,7 @@ $zenvis-issue-workflow 整理当前 GitHub 和 Gitee 的 open issue，生成审�
 | `commit` | “生成提交命令”“由你提交” | 默认输出命令；授权后只执行 add + commit | 永不顺带 push |
 | `push` | “推送”“推送到 origin” | 明确授权后推送当前分支 | 不会把提交授权当成推送授权 |
 | `close` | “直接关闭 github#4”“关闭这些测试 issue” | 关闭指定 issue 并回读确认 | 不操作 Git，不重复关闭已关闭 issue |
+| `release` | “准备版本发布”“发布 1.1.6.alpha 版本” | 默认生成草稿；明确授权后提交、打 tag、推送并创建两个平台 Release | 不构建或推送 Docker 镜像，不更新 Helm 值 |
 
 ## 场景 1：整理并修复已有 issue
 
@@ -293,6 +312,50 @@ python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py commit \
 
 用户确认后执行输出的 `git add` 和 `git commit`，再执行 `git push`。提交到达 GitHub `main` 后，由镜像 Action 评论并关闭 issue。
 
+## 场景 3：准备和发布版本
+
+版本发布与 issue 修复分开授权。默认只做准备：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release
+```
+
+脚本会：
+
+- 读取 `deploy/.env.example` 的 `ZENVIS_VERSION` 和最新 `X.Y.Z[.alpha|beta|rc]` tag；
+- 当前声明版本高于最新 tag 时直接发布当前版本，相等时递增 patch；
+- 生成 `.zenvis/releases/<tag>.md` 待审核说明；
+- 打印将更新的版本文件、提交、tag 和推送计划，不修改 tracked 文件或平台数据。
+
+说明文件必须人工审核并补充“版本重点”，同时删除审核提示
+`请审核提交清单，补充面向用户的版本重点后再执行发布。`；`--execute` 会拒绝仍含该提示的草稿。明确授权后执行：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release \
+  --execute \
+  --notes .zenvis/releases/1.1.6.alpha.md
+```
+
+执行内容：
+
+1. 更新 `deploy/.env.example`、两个 `build.sh`、`DataInitiator.java`、`doc/_coverpage.md`、`README.md`、`quick-deploy.sh` 和两个安装升级文档中的版本/分支引用。
+2. 写入 `doc/10-版本发布/<tag>.md`，更新索引和 `doc/_sidebar.md`。
+3. 只提交发布文件，提交信息为 `chore(release): 发布 <tag>`，创建同名 annotated tag，并一次推送当前分支与 tag 到 Gitee `origin`。
+4. 创建 Gitee Release；等待 GitHub 镜像 tag 最多 120 秒，超时则用 `target_commitish=<release-sha>` 创建 GitHub Release。
+
+`.alpha`、`.beta`、`.rc` 版本在两个平台都会标记为 prerelease。发布失败时保留 `.zenvis/releases/<tag>.state.json`，可只重试平台发布：
+
+```bash
+python3 agent-skills/zenvis-issue-workflow/scripts/zenvis_issue.py release-publish \
+  --tag 1.1.6.alpha \
+  --commit <release-sha> \
+  --notes doc/10-版本发布/1.1.6.alpha.md
+```
+
+`release-publish` 幂等：说明相同的已有 Release 会跳过，说明不同则报错。预览所有发布动作可设置 `ZENVIS_ISSUE_DRY_RUN=1`。
+
+发布模式不构建或推送 Docker 镜像，不更新 Helm values，也不修改 `VECTUM_VERSION`。
+
 ## 普通提交
 
 省略 `--issue` 时生成普通提交，不创建 issue，也不添加 trailer：
@@ -326,6 +389,8 @@ python3 "$S" <command>
 | `push` | 明确授权后推送当前分支，并尝试关闭关联 Gitee issue |
 | `reconcile` | 提交已到平台但 Action 未关闭时，补齐评论和关闭 |
 | `retry-close` | 重试 `.zenvis/issues/retry-close.json` 中失败的关闭操作 |
+| `release` | 默认生成版本草稿和变更计划；`--execute` 提交、打 tag、推送并发布两个平台 Release |
+| `release-publish` | 只重试平台 Release 创建，不重复 Git 操作 |
 
 常用可选参数：
 
@@ -334,6 +399,8 @@ python3 "$S" report --github-repo owner/repo --gitee-repo owner/repo
 python3 "$S" create-issue --platform github --title "..." --summary "..." --verification "..." --json
 python3 "$S" repair --report doc/09-issue-reports/2026-11-03-120000 --issue github#12
 python3 "$S" commit --message "fix: ..." --file path/to/file --issue github#12
+python3 "$S" release --version 1.1.6.alpha --no-fetch
+python3 "$S" release-publish --tag 1.1.6.alpha --commit <sha> --notes doc/10-版本发布/1.1.6.alpha.md
 ```
 
 ## 关闭与恢复
@@ -437,7 +504,8 @@ agent-skills/zenvis-issue-workflow/
 ├── README.md
 ├── agents/openai.yaml
 ├── scripts/zenvis_issue.py
-└── tests/test_zenvis_issue.py
+├── tests/test_zenvis_issue.py
+└── tests/test_release.py
 ```
 
 运行单元测试：
@@ -455,5 +523,6 @@ python3 -m unittest discover \
 - [Skill 执行规范](SKILL.md)
 - [Issue 归纳与修复工作流](../../doc/07-开发指南/issue-workflow.md)
 - [Issue 报告索引](../../doc/09-issue-reports/README.md)
+- [版本发布说明](../../doc/10-版本发布/README.md)
 - [项目级 Agent 规范](../../AGENTS.md)
 - [镜像关闭 Action](../../.github/workflows/issue-traceability.yml)

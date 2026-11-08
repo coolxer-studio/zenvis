@@ -14,4 +14,5 @@
 完整命令和故障恢复见 [Issue 归纳与修复工作流](/07-开发指南/issue-workflow.md)。
 
 <!-- releases:start -->
+- [1.1.5.alpha](1.1.5.alpha.md) — 2026-11-08
 <!-- releases:end -->

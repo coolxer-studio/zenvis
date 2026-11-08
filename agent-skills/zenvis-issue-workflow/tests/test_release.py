@@ -264,6 +264,12 @@ class VersionTargetTests(ReleaseGitTestCase):
             (self.root / "README.md").read_text(encoding="utf-8"), before
         )
 
+    def test_preserves_executable_mode(self):
+        path = self.root / "quick-deploy.sh"
+        os.chmod(path, 0o755)
+        zi.apply_version_targets(self.root, "1.1.6.alpha", "main")
+        self.assertEqual(path.stat().st_mode & 0o777, 0o755)
+
 
 class ReleaseNotesTests(ReleaseGitTestCase):
     def test_groups_commits_and_excludes_release_commits(self):
@@ -560,6 +566,7 @@ class ReleasePublishTests(ReleaseGitTestCase):
         self.assertEqual([item["tag_name"] for item in clients["gitee"].created], ["1.1.6.alpha"])
         self.assertEqual([item["tag_name"] for item in clients["github"].created], ["1.1.6.alpha"])
         self.assertEqual(clients["gitee"].created[0]["prerelease"], True)
+        self.assertEqual(clients["gitee"].created[0]["target_commitish"], "a" * 40)
 
     def test_github_timeout_falls_back_to_commit_sha(self):
         clients = self.clients()

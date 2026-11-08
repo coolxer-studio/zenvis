@@ -323,11 +323,13 @@ def iso_now() -> str:
 
 def atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = (path.stat().st_mode & 0o777) if path.exists() else 0o644
     with tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", dir=path.parent, delete=False
     ) as handle:
         handle.write(content)
         temporary = Path(handle.name)
+    os.chmod(temporary, mode)
     temporary.replace(path)
 
 
@@ -1914,7 +1916,7 @@ def publish_release(
             if preview:
                 results[platform] = {"status": "would_create"}
                 continue
-            target = ""
+            target = commit
             if platform == "github":
                 target = publish_github_release(
                     client,

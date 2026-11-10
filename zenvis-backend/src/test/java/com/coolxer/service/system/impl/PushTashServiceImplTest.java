@@ -27,8 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -248,19 +251,38 @@ class PushTashServiceImplTest {
     }
 
     @Test
-    void proxyRejectsUnvalidatedTaskCreationBeforeForwarding() throws Exception {
-        PushTaskDto requestDto = validatedTask();
-        requestDto.setCandidateDigest(null);
+    void proxyForwardsWebPageCreationWithoutAgentGate() throws Exception {
+        PushTaskDto requestDto = unvalidatedTask("WEB");
 
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setMethod(HttpMethod.POST.name());
-        request.setRequestURI("/api/v1/system/push-task/add");
-        request.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        request.setContent(JacksonConfig.OBJECT_MAPPER.writeValueAsBytes(requestDto));
+        server.expect(once(), requestTo(DATA_SERVICE_URL + "/vectum/api/v1/task/add"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json(
+                        JacksonConfig.OBJECT_MAPPER.writeValueAsString(requestDto)))
+                .andRespond(withSuccess("{\"status\":0}", MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> service.proxy(request))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("缺少候选配置摘要");
+        MockHttpServletRequest request = proxyRequest(
+                HttpMethod.POST.name(), "/api/v1/system/push-task/add", requestDto);
+
+        assertThat(service.proxy(request)).isEqualTo("{\"status\":0}");
+        verify(validationService, never()).validate(any());
+        server.verify();
+    }
+
+    @Test
+    void proxyForwardsRestUpdateWithoutAgentGate() throws Exception {
+        PushTaskDto requestDto = unvalidatedTask("API");
+
+        server.expect(once(), requestTo(DATA_SERVICE_URL + "/vectum/api/v1/task/12"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().json(
+                        JacksonConfig.OBJECT_MAPPER.writeValueAsString(requestDto)))
+                .andRespond(withSuccess("{\"status\":0}", MediaType.APPLICATION_JSON));
+
+        MockHttpServletRequest request = proxyRequest(
+                HttpMethod.PUT.name(), "/api/v1/system/push-task/12", requestDto);
+
+        assertThat(service.proxy(request)).isEqualTo("{\"status\":0}");
+        verify(validationService, never()).validate(any());
         server.verify();
     }
 
@@ -285,6 +307,40 @@ class PushTashServiceImplTest {
         request.setCandidateDigest("candidate-digest");
         request.setMetaDigest("meta-digest");
         request.setValidationDigest("validation-digest");
+        return request;
+    }
+
+    private MockHttpServletRequest proxyRequest(String method,
+                                                String requestUri,
+                                                PushTaskDto requestDto) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setMethod(method);
+        request.setRequestURI(requestUri);
+        request.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        request.setContent(JacksonConfig.OBJECT_MAPPER.writeValueAsBytes(requestDto));
+        return request;
+    }
+
+    private PushTaskDto unvalidatedTask(String source) {
+        PushTaskDto request = new PushTaskDto();
+        request.setName("user_event数据推送");
+        request.setDescription("user_event数据推送配置（临时测试）");
+        request.setConfig("""
+                [sources.generator_demo_logs]
+                type = "demo_logs"
+
+                [transforms.parse_json]
+                inputs = ["generator_demo_logs"]
+                type = "remap"
+                source = '.event_id = uuid_v4()'
+
+                [sinks.clickhouse]
+                inputs = ["parse_json"]
+                type = "clickhouse"
+                database = "zenvis"
+                table = "msg_user_event"
+                """);
+        request.setSource(source);
         return request;
     }
 

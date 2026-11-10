@@ -70,7 +70,6 @@ public class PushTashServiceImpl implements PushTaskService {
             applyVectumAuthorization(headers);
 
             byte[] body = request.getInputStream().readAllBytes();
-            enforceProxyValidation(request, body);
             HttpEntity<byte[]> entity = new HttpEntity<>(body, headers);
 
             ResponseEntity<String> response = restTemplate.exchange(
@@ -506,26 +505,6 @@ public class PushTashServiceImpl implements PushTaskService {
                 validation.getValidationDigest())) {
             throw new PushTaskConfigException("校验结果已变化，必须重新确认配置");
         }
-    }
-
-    private void enforceProxyValidation(HttpServletRequest request, byte[] body) {
-        String method = request.getMethod() == null
-                ? "" : request.getMethod().toUpperCase(Locale.ROOT);
-        String path = request.getRequestURI()
-                .replace("/api/v1/system/push-task", "");
-        boolean create = "POST".equals(method) && "/add".equals(path);
-        boolean update = "PUT".equals(method)
-                && ("/batch".equals(path) || path.matches("/\\d+"));
-        if (!create && !update) {
-            return;
-        }
-        PushTaskDto pushTaskDto;
-        try {
-            pushTaskDto = JacksonConfig.OBJECT_MAPPER.readValue(body, PushTaskDto.class);
-        } catch (Exception e) {
-            throw new IllegalStateException("创建或更新推送任务时请求体必须是合法 JSON", e);
-        }
-        requireValidation(pushTaskDto);
     }
 
     private String validationFailureSummary(PushTaskValidationVo validation) {

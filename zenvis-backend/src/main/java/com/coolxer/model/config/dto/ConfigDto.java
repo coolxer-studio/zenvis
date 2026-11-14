@@ -31,6 +31,11 @@ public class ConfigDto {
     private String text;
 
     /**
+     * 是否递归删除目录
+     */
+    private Boolean recursive;
+
+    /**
      * 提交信息
      */
     private String commitMsg;

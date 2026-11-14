@@ -91,6 +91,7 @@ export type DeleteNodeParams = {
   id?: string;
   name?: string;
   file_name?: string;
+  recursive?: boolean;
   [key: string]: unknown;
 };
 

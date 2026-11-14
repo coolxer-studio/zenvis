@@ -124,6 +124,7 @@ type TreeNode = {
   id: string;
   file_name: string;
   relative_path?: string;
+  is_dir?: boolean;
   nodes?: TreeNode[];
   selectable?: boolean;
   [key: string]: any;
@@ -211,7 +212,13 @@ const editNode = (nodeData: TreeNode) => {
 };
 
 const deleteNode = (nodeData: TreeNode) => {
-  ElMessageBox.confirm(`确定要删除“${nodeData.file_name}”吗？`, '确认删除', {
+  const isDirectory = nodeData.is_dir === true || Array.isArray(nodeData.nodes);
+  const childCount = isDirectory ? countFiles(nodeData.nodes || []) : 0;
+  const directoryContent = childCount > 0 ? `及其中的 ${childCount} 个文件` : '及其全部内容';
+  const message = isDirectory
+    ? `确定要删除目录“${nodeData.file_name}”${directoryContent}吗？删除后不可恢复。`
+    : `确定要删除“${nodeData.file_name}”吗？删除后不可恢复。`;
+  ElMessageBox.confirm(message, '确认删除', {
     confirmButtonText: '确认删除',
     cancelButtonText: '取消',
     type: 'warning',

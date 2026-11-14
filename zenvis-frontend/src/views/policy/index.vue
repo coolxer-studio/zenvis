@@ -41,6 +41,7 @@ type TreeNode = {
   id: string;
   file_name: string;
   relative_path?: string;
+  is_dir?: boolean;
   nodes?: TreeNode[];
   selectable?: boolean;
   [key: string]: any;
@@ -158,23 +159,26 @@ const handleEditNode = (nodeData: { node: TreeNode; newName: string }) => {
 };
 
 const handleDeleteNode = (nodeData: TreeNode) => {
+  const deletedPath = nodePath(nodeData);
   PolicyService.deleteNode(configType.value, {
     id: nodeData.id,
-    file_name: nodePath(nodeData),
+    file_name: deletedPath,
+    recursive: nodeData.is_dir === true || Array.isArray(nodeData.nodes),
   })
     .then(() => {
       ElMessage.success('删除成功');
       getListConfig();
 
-      if (currentFileName.value === nodePath(nodeData)) {
+      if (
+        currentFileName.value === deletedPath ||
+        currentFileName.value.startsWith(`${deletedPath}/`)
+      ) {
         textContentRequestId += 1;
         fileContext.value = '';
         currentFileName.value = '';
       }
     })
-    .catch(() => {
-      ElMessage.error('删除失败');
-    });
+    .catch(() => undefined);
 };
 
 getListConfig();

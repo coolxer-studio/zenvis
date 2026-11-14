@@ -4,6 +4,7 @@ import com.coolxer.commons.enums.ResultCodeEnum;
 import com.coolxer.configuration.CustomWebConfig;
 import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.config.dto.ConfigDto;
+import com.coolxer.model.config.vo.ConfigPathOperationResult;
 import com.coolxer.model.config.vo.ConfigVo;
 import com.coolxer.service.config.ConfigService;
 import com.coolxer.utils.JacksonUtil;
@@ -178,11 +179,14 @@ public class ConfigController {
     @Operation(summary = "文件名", description = "文件名")
     public ResponseWrap<String> deleteFile(@PathVariable("type") String type, @RequestBody ConfigDto configDto) {
         if (configService.fileExistsInConfigPath(type, configDto.getFileName())) {
-            if (configService.deleteEntry(type, configDto.getFileName(), false).isSuccess()) {
+            ConfigPathOperationResult result = configService.deleteEntry(
+                    type,
+                    configDto.getFileName(),
+                    Boolean.TRUE.equals(configDto.getRecursive()));
+            if (result.isSuccess()) {
                 return ResponseWrap.success();
-            } else {
-                return ResponseWrap.fail(ResultCodeEnum.UNKNOWN_ERROR);
             }
+            return ResponseWrap.fail(400, result.getMessage());
         }
         return ResponseWrap.fail(ResultCodeEnum.NO_AUTHORITY);
     }

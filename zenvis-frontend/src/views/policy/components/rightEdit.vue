@@ -392,19 +392,21 @@ const configureJsonSchema = () => {
 watch(
   () => props.fileName,
   newValue => {
-    configureJsonSchema();
+    if (newValue) {
+      configureJsonSchema();
+    }
   },
 );
 
-// 监听 modelValue 变化
+// 文件切换或内容重新加载时显式同步编辑器，避免空内容被值比较跳过
 watch(
-  () => props.modelValue,
-  newValue => {
-    if (editor) {
-      const value = editor.getValue();
-      if (newValue !== value) {
-        editor.setValue(newValue || '');
-      }
+  [() => props.fileName, () => props.modelValue],
+  ([, content]) => {
+    if (!editor) return;
+
+    const nextValue = content || '';
+    if (editor.getValue() !== nextValue) {
+      editor.setValue(nextValue);
     }
   },
 );

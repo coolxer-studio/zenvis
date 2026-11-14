@@ -12,8 +12,8 @@
       </el-splitter-panel>
       <el-splitter-panel :size="isNarrow ? 66 : 76" :min="isNarrow ? 42 : 45">
         <RightEdit
+          v-model="fileContext"
           :schema-type="configType"
-          :model-value="fileContext"
           width="100%"
           height="100%"
           :file-name="currentFileName"
@@ -53,6 +53,7 @@ const fileContext = ref<string>('');
 const currentFileName = ref<string>('');
 const language = ref<string>('javascript');
 const isNarrow = ref<boolean>(false);
+let textContentRequestId = 0;
 
 const updateViewport = () => {
   isNarrow.value = window.innerWidth < 960;
@@ -77,11 +78,14 @@ const editorMounted = (_editor: monaco.editor.IStandaloneCodeEditor) => undefine
 
 const getTextContent = (path: string) => {
   if (!path || !configType.value) return;
+  const requestId = ++textContentRequestId;
   fileContext.value = '';
   currentFileName.value = '';
 
   PolicyService.textContent(configType.value, { file_name: path }).then((res: string) => {
-    fileContext.value = res;
+    if (requestId !== textContentRequestId) return;
+
+    fileContext.value = res || '';
     currentFileName.value = path;
 
     const dotIndex = currentFileName.value.lastIndexOf('.');
@@ -163,6 +167,7 @@ const handleDeleteNode = (nodeData: TreeNode) => {
       getListConfig();
 
       if (currentFileName.value === nodePath(nodeData)) {
+        textContentRequestId += 1;
         fileContext.value = '';
         currentFileName.value = '';
       }
@@ -182,6 +187,7 @@ watch(
   ([newParams]) => {
     const newConfigType = newParams?.toString() || '';
     if (newConfigType && newConfigType !== configType.value) {
+      textContentRequestId += 1;
       configType.value = newConfigType;
       getListConfig();
       fileContext.value = '';

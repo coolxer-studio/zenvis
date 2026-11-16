@@ -289,7 +289,7 @@ DIH 包含流式消息、会话、附件、审批、图表、HTML 预览、元�
 
 | 文件 | 职责 |
 | --- | --- |
-| `src/views/dih/components/view-center.vue` | 对话头部操作区，提供“智能体运行”入口并触发 `openAgentRuns` |
+| `src/views/dih/components/view-center.vue` | 对话头部操作区，提供“智能体运行状态”入口并触发 `openAgentRuns` |
 | `src/views/dih/components/view-left.vue` | 会话侧栏，只保留新建会话、置顶和最近会话，不再放置任务入口 |
 | `src/views/dih/components/agent-run-center.vue` | 任务中心：状态筛选、详情、计划、事件、审批、暂停、继续和取消 |
 | `src/views/dih/composables/use-agent-run.ts` | 创建、订阅、主动消息、统一交互响应、暂停、继续、取消和活动 Run 恢复 |

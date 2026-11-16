@@ -2,7 +2,7 @@
   <div class="drawer-container">
     <header class="drawer-header">
       <div class="drawer-title">
-        <span>AI分析任务</span>
+        <span>后台分析任务</span>
         <small>后台 Agent 分析队列</small>
       </div>
       <div class="header-actions">
@@ -18,7 +18,7 @@
           执行一次队列
         </el-button>
         <el-button :icon="Refresh" :loading="refreshing" @click="refreshAll(false)">刷新</el-button>
-        <el-button link :icon="Close" aria-label="关闭AI分析任务抽屉" @click="closeDrawer" />
+        <el-button link :icon="Close" aria-label="关闭后台分析任务抽屉" @click="closeDrawer" />
       </div>
     </header>
 

@@ -34,7 +34,6 @@
             :skill-entry-unavailable="skillEntryUnavailable"
             :system-logo="systemLogo"
             :task-queue-status="taskQueueStatus"
-            :task-queue-loading="taskQueueLoading"
             :task-queue-available="taskQueueAvailable"
             variant="workspace"
             :show-session-toggle="false"
@@ -89,7 +88,6 @@
         :skill-entry-unavailable="skillEntryUnavailable"
         :system-logo="systemLogo"
         :task-queue-status="taskQueueStatus"
-        :task-queue-loading="taskQueueLoading"
         :task-queue-available="taskQueueAvailable"
         variant="workspace"
         :show-session-toggle="true"
@@ -258,7 +256,6 @@ const taskQueueStatus = ref<TAnalysisTaskQueue>({
   maxSuspended: 0,
   checkedAt: '',
 });
-const taskQueueLoading = ref(true);
 const taskQueueAvailable = ref(false);
 let taskQueuePollingTimer: ReturnType<typeof setInterval> | undefined;
 let taskQueueRefreshInFlight = false;
@@ -376,14 +373,12 @@ const openAgentRunChat = (run: { chatId: string; chatType: string }) => {
 const loadTaskQueueStatus = async () => {
   if (taskQueueRefreshInFlight) return;
   taskQueueRefreshInFlight = true;
-  if (!taskQueueAvailable.value) taskQueueLoading.value = true;
   try {
     taskQueueStatus.value = await AnalysisTaskService.getQueueStatus(true);
     taskQueueAvailable.value = true;
   } catch {
     if (!taskQueueAvailable.value) taskQueueAvailable.value = false;
   } finally {
-    taskQueueLoading.value = false;
     taskQueueRefreshInFlight = false;
   }
 };

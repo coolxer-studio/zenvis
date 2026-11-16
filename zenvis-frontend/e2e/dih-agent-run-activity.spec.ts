@@ -521,9 +521,13 @@ test('无活动时显示空状态，任务中心保留折叠的原始事件', as
   await expect(activity).toContainText('本次任务没有可展示的检索、工具或压缩过程。')
   await expect(activity).toContainText('无上下文压缩记录；旧任务可能尚未采集该诊断。')
 
-  await page.getByRole('button', { name: '智能体运行' }).click()
+  await expect(page.getByRole('button', { name: '智能体运行状态' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '后台分析任务', exact: true })).toBeVisible()
+  await expect(page.getByText('队列状态', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '智能体运行状态' }).click()
   const drawer = page.locator('.agent-run-drawer')
   await expect(drawer).toBeVisible()
+  await expect(drawer.getByText('智能体运行', { exact: true })).toBeVisible()
   await drawer.getByText('核对元数据配置链路并给出结论').first().click()
 
   const detail = page.locator('.run-detail-dialog')

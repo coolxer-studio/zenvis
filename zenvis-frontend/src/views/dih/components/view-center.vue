@@ -28,48 +28,8 @@
         </el-button>
 
         <el-button class="agent-run-button" :icon="Tickets" @click="emit('openAgentRuns')">
-          <span class="agent-run-label">智能体运行</span>
+          <span class="agent-run-label">智能体运行状态</span>
         </el-button>
-
-        <el-skeleton-item
-          v-if="taskQueueLoading && !taskQueueAvailable"
-          class="task-status-skeleton"
-          variant="text"
-        />
-        <el-tooltip v-else :content="taskQueueTooltip" placement="bottom" :show-after="300">
-          <button
-            type="button"
-            class="task-status-summary"
-            :class="{
-              'is-idle': taskQueueIdle,
-              'is-unavailable': !taskQueueAvailable,
-            }"
-            :aria-label="taskQueueAriaLabel"
-            @click="emit('openAnalysisTasks')"
-          >
-            <span class="task-status-caption">队列状态</span>
-            <template v-if="!taskQueueAvailable">
-              <el-icon class="task-status-unavailable-icon"><WarningFilled /></el-icon>
-              <span>暂不可用</span>
-            </template>
-            <template v-else-if="taskQueueIdle">
-              <el-icon class="task-status-idle-icon"><CircleCheckFilled /></el-icon>
-              <span>空闲</span>
-            </template>
-            <template v-else>
-              <span
-                v-for="item in taskQueueItems"
-                :key="item.key"
-                class="task-status-item"
-                :class="`is-${item.tone}`"
-              >
-                <el-icon><component :is="item.icon" /></el-icon>
-                <span class="task-status-label">{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-              </span>
-            </template>
-          </button>
-        </el-tooltip>
 
         <el-badge
           class="analysis-task-badge"
@@ -77,7 +37,7 @@
           :hidden="!taskQueueAvailable || taskQueueTotal === 0"
         >
           <el-button class="analysis-task-button" :icon="Clock" @click="emit('openAnalysisTasks')">
-            <span class="analysis-task-label">分析任务</span>
+            <span class="analysis-task-label">后台分析任务</span>
           </el-button>
         </el-badge>
       </div>
@@ -418,21 +378,17 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import {
   Check,
-  CircleCheckFilled,
   Clock,
   Close,
   CopyDocument,
   DataAnalysis,
   Loading,
-  Lock,
   Menu,
   Monitor,
   Opportunity,
   Paperclip,
   Position,
   Tickets,
-  VideoPlay,
-  WarningFilled,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { DihService } from '@/service/api';
@@ -510,7 +466,6 @@ interface Props {
   variant?: 'workspace' | 'compact';
   systemLogo?: string;
   taskQueueStatus?: TAnalysisTaskQueue;
-  taskQueueLoading?: boolean;
   taskQueueAvailable?: boolean;
   showSessionToggle?: boolean;
   showResultToggle?: boolean;
@@ -520,7 +475,6 @@ const props = withDefaults(defineProps<Props>(), {
   skillEntryUnavailable: false,
   variant: 'workspace',
   systemLogo: '',
-  taskQueueLoading: false,
   taskQueueAvailable: false,
   showSessionToggle: false,
   showResultToggle: false,
@@ -538,50 +492,12 @@ const activeSkillLabel = computed(() => {
   return props.suggestions.find(item => item.type === type)?.label || '专业分析';
 });
 
-const taskQueueItems = computed(() => [
-  {
-    key: 'running',
-    label: '执行中',
-    value: props.taskQueueStatus?.runningCount || 0,
-    tone: 'warning',
-    icon: VideoPlay,
-  },
-  {
-    key: 'approval',
-    label: '待审批',
-    value: props.taskQueueStatus?.waitingApprovalCount || 0,
-    tone: 'danger',
-    icon: Lock,
-  },
-  {
-    key: 'pending',
-    label: '排队中',
-    value: props.taskQueueStatus?.pendingCount || 0,
-    tone: 'primary',
-    icon: Clock,
-  },
-]);
-
-const taskQueueTotal = computed(() =>
-  taskQueueItems.value.reduce((total, item) => total + item.value, 0),
+const taskQueueTotal = computed(
+  () =>
+    (props.taskQueueStatus?.runningCount || 0) +
+    (props.taskQueueStatus?.waitingApprovalCount || 0) +
+    (props.taskQueueStatus?.pendingCount || 0),
 );
-const taskQueueIdle = computed(
-  () => props.taskQueueAvailable && !props.taskQueueLoading && taskQueueTotal.value === 0,
-);
-const taskQueueAriaLabel = computed(() => {
-  if (!props.taskQueueAvailable) return '队列状态暂不可用，打开分析任务面板';
-  if (taskQueueIdle.value) return '队列状态空闲，打开分析任务面板';
-  return `${taskQueueItems.value
-    .map(item => `${item.label}${item.value}项`)
-    .join('，')}，打开分析任务面板`;
-});
-const taskQueueTooltip = computed(() => {
-  if (!props.taskQueueAvailable) return '暂时无法获取队列状态，点击打开任务面板';
-  const runningTaskName = props.taskQueueStatus?.runningTask?.name;
-  if (runningTaskName) return `当前任务：${runningTaskName}`;
-  if (taskQueueIdle.value) return '当前没有等待或执行中的分析任务';
-  return taskQueueItems.value.map(item => `${item.label} ${item.value}`).join(' · ');
-});
 
 const {
   pendingAttachments,
@@ -1291,118 +1207,6 @@ onBeforeUnmount(() => {
   gap: var(--zv-space-2);
 }
 
-.task-status-skeleton {
-  width: 230px;
-  height: 32px;
-  border-radius: var(--zv-radius-md);
-}
-
-.task-status-summary {
-  display: inline-flex;
-  min-height: 32px;
-  margin: 0;
-  padding: 0;
-  align-items: center;
-  overflow: hidden;
-  color: var(--zv-text-secondary);
-  font: inherit;
-  white-space: nowrap;
-  background: var(--zv-bg-subtle);
-  border: 1px solid var(--zv-border);
-  border-radius: var(--zv-radius-md);
-  cursor: pointer;
-  transition: color var(--zv-motion-fast) var(--zv-ease-standard),
-    background-color var(--zv-motion-fast) var(--zv-ease-standard),
-    border-color var(--zv-motion-fast) var(--zv-ease-standard),
-    box-shadow var(--zv-motion-fast) var(--zv-ease-standard);
-}
-
-.task-status-summary:hover {
-  color: var(--zv-primary);
-  background: var(--zv-primary-soft);
-  border-color: var(--zv-primary-border);
-}
-
-.task-status-summary:focus-visible {
-  outline: none;
-  box-shadow: var(--zv-focus-ring);
-}
-
-.task-status-summary.is-idle,
-.task-status-summary.is-unavailable {
-  padding: 0 var(--zv-space-3);
-  gap: var(--zv-space-2);
-  font-size: var(--zv-font-size-xs);
-  font-weight: var(--zv-font-weight-medium);
-}
-
-.task-status-caption {
-  padding-left: 10px;
-  color: var(--zv-text-secondary);
-  font-weight: var(--zv-font-weight-medium);
-}
-
-.task-status-caption::after {
-  content: '：';
-}
-
-.task-status-summary.is-idle .task-status-caption,
-.task-status-summary.is-unavailable .task-status-caption {
-  padding-left: 0;
-}
-
-.task-status-summary.is-idle {
-  color: var(--zv-success);
-  background: var(--zv-success-soft);
-  border-color: color-mix(in srgb, var(--zv-success) 26%, transparent);
-}
-
-.task-status-summary.is-unavailable {
-  color: var(--zv-text-muted);
-}
-
-.task-status-idle-icon,
-.task-status-unavailable-icon {
-  font-size: var(--zv-font-size-lg);
-}
-
-.task-status-item {
-  display: inline-flex;
-  min-width: 0;
-  height: 30px;
-  padding: 0 9px;
-  align-items: center;
-  gap: var(--zv-space-1);
-  font-size: var(--zv-font-size-xs);
-}
-
-.task-status-item + .task-status-item {
-  border-left: 1px solid var(--zv-divider);
-}
-
-.task-status-item .el-icon {
-  font-size: var(--zv-font-size-md);
-}
-
-.task-status-item strong {
-  min-width: 1ch;
-  color: var(--zv-text-primary);
-  font-size: var(--zv-font-size-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.task-status-item.is-warning .el-icon {
-  color: var(--zv-warning);
-}
-
-.task-status-item.is-danger .el-icon {
-  color: var(--zv-danger);
-}
-
-.task-status-item.is-primary .el-icon {
-  color: var(--zv-primary);
-}
-
 .analysis-task-badge {
   flex: 0 0 auto;
 }
@@ -2106,22 +1910,7 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-@container (max-width: 900px) {
-  .task-status-item {
-    padding-inline: var(--zv-space-2);
-  }
-
-  .task-status-label {
-    display: none;
-  }
-}
-
 @container (max-width: 680px) {
-  .task-status-summary,
-  .task-status-skeleton {
-    display: none;
-  }
-
   .analysis-task-badge :deep(.el-badge__content) {
     display: inline-flex;
   }

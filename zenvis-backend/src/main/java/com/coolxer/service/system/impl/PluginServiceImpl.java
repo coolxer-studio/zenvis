@@ -384,6 +384,8 @@ public class PluginServiceImpl implements PluginService {
         // 1.查询插件详情
         Plugin plugin = getPluginOrThrow(id);
         validatePackageName(plugin.getPackageName());
+        String exportVersion = requireExportVersion(plugin.getVersion());
+        String downloadFileName = pluginArchiveFileName(plugin.getPackageName(), exportVersion);
         Path pluginTarGzPath = null;
         if (normalizeStatus(plugin.getStatus()) != PluginStatusType.INSTALLED && StringUtils.isNotEmpty(plugin.getPluginPath())) {
             // 未安装状态，存在默认插件包，直接输出
@@ -391,15 +393,16 @@ public class PluginServiceImpl implements PluginService {
         } else {
             // 已安装状态，或者没有默认包，以加载内容输出插件包.构建打包属性包装类
             Path installedRoot = installedPluginRoot(plugin);
-            PluginPackTool pluginPackTool = new PluginPackTool().buildPacker(pluginRoot().toString(), plugin.getPackageName())
+            PluginPackTool pluginPackTool = new PluginPackTool()
+                    .buildPacker(pluginRoot().toString(), plugin.getPackageName(), downloadFileName)
                     .init().mkdir();
             // 2.构建插件包
             try {
-                // 2-1 构建index.json,存放icon,生成readme
+                // 2-1 构建index.json,存放icon,复制readme
                 PluginVo pluginVo = new PluginVo();
                 pluginVo.setName(plugin.getName());
                 pluginVo.setPackageName(plugin.getPackageName());
-                pluginVo.setVersion(plugin.getVersion());
+                pluginVo.setVersion(exportVersion);
                 pluginVo.setDescription(plugin.getDescription());
                 pluginVo.setAuthor(plugin.getAuthor());
                 pluginVo.setIcon(pluginPackTool.saveImageFile(plugin.getIcon()));
@@ -407,6 +410,9 @@ public class PluginServiceImpl implements PluginService {
                 // 拷贝 DOC 文档
                 Path docPath = requireChildPath(installedRoot.resolve("00_doc"), installedRoot);
                 pluginPackTool.copyDoc(docPath);
+                // 拷贝 README，插件未导入或未落盘时创建空文件
+                Path readmePath = requireChildPath(installedRoot.resolve("README.md"), installedRoot);
+                pluginPackTool.copyReadme(readmePath);
                 // 拷贝 Skill 配置
                 Path installedSkillPath = skillService.getInstalledPluginSkillPath(plugin.getPackageName());
                 Path currentSkillPath = hasDirectoryContent(installedSkillPath)
@@ -460,11 +466,12 @@ public class PluginServiceImpl implements PluginService {
                 // 2-10 压缩目录
                 pluginTarGzPath = pluginPackTool.compressDirToTarGz();
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("导出插件失败: id={}, package={}", id, plugin.getPackageName(), e);
+                throw new ApiException(ResultCodeEnum.UNKNOWN_ERROR.getCode(), "导出插件失败: " + e.getMessage());
             }
         }
         // 3.下载插件
-        responseDownload(response, pluginTarGzPath);
+        responseDownload(response, pluginTarGzPath, downloadFileName);
     }
 
     @Override
@@ -3116,7 +3123,7 @@ public class PluginServiceImpl implements PluginService {
     }
 
     private static boolean hasDirectoryContent(Path path) {
-        if (!Files.exists(path) || !Files.isDirectory(path)) {
+        if (path == null || !Files.exists(path) || !Files.isDirectory(path)) {
             return false;
         }
         try (Stream<Path> paths = Files.list(path)) {
@@ -3126,7 +3133,23 @@ public class PluginServiceImpl implements PluginService {
         }
     }
 
-    private static void responseDownload(HttpServletResponse response, Path inputFilePath) {
+    private static String requireExportVersion(String version) {
+        String normalized = StringUtils.trimToEmpty(version);
+        if (normalized.isEmpty()
+                || normalized.contains("/")
+                || normalized.contains("\\")
+                || normalized.contains("\0")
+                || normalized.contains("..")) {
+            throw new ApiException(ResultCodeEnum.PLUGIN_PACKAGE_INVALID.getCode(), "插件版本不合法，无法生成导出包名");
+        }
+        return normalized;
+    }
+
+    private static String pluginArchiveFileName(String packageName, String version) {
+        return StorageObjectKey.sanitizeFileName(packageName.replace('.', '-') + "-" + version + ".tar.gz");
+    }
+
+    private static void responseDownload(HttpServletResponse response, Path inputFilePath, String downloadFileName) {
         InputStream inputStream = null;// 文件的存放路径
         try {
             inputStream = new FileInputStream(inputFilePath.toFile());
@@ -3136,7 +3159,7 @@ public class PluginServiceImpl implements PluginService {
         response.reset();
         response.setContentType("application/octet-stream");
         try {
-            response.addHeader("Content-Disposition", "attachment; filename=" + URLEncoder.encode(inputFilePath.getFileName().toString(), "UTF-8"));
+            response.addHeader("Content-Disposition", "attachment; filename=" + URLEncoder.encode(downloadFileName, "UTF-8"));
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         }
@@ -3278,9 +3301,9 @@ public class PluginServiceImpl implements PluginService {
         private Path mcpPath;
         private Path ragPath;
 
-        public PluginPackTool buildPacker(String workspaceDir, String packageName) {
+        public PluginPackTool buildPacker(String workspaceDir, String packageName, String archiveFileName) {
             this.pluginFilePath = Paths.get(workspaceDir).resolve("temp/" + DateUtil.getCurrentDateTime().replace(" ", "/") + "/" + packageName);
-            this.pluginTarGzPath = pluginFilePath.getParent().resolve(packageName + ".tar.gz");
+            this.pluginTarGzPath = pluginFilePath.getParent().resolve(archiveFileName);
             return this;
         }
 
@@ -3353,10 +3376,21 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public void copyDoc(Path srcPath) {
+            if (!Files.exists(srcPath)) {
+                return;
+            }
             try {
                 WalkFileUtil.copy(srcPath, docPath);
             } catch (IOException e) {
                 e.printStackTrace();
+            }
+        }
+
+        public void copyReadme(Path srcPath) throws IOException {
+            if (Files.isRegularFile(srcPath)) {
+                Files.copy(srcPath, readmePath, StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                writeReadme("");
             }
         }
 
@@ -3387,6 +3421,9 @@ public class PluginServiceImpl implements PluginService {
         }
 
         public void copyApiJar(Path currentApiJarPath) {
+            if (!Files.exists(currentApiJarPath)) {
+                return;
+            }
             try {
                 WalkFileUtil.copy(currentApiJarPath, apiPath);
             } catch (IOException e) {
@@ -3440,12 +3477,8 @@ public class PluginServiceImpl implements PluginService {
             return null;
         }
 
-        public void writeReadme(String context) {
-            try {
-                Files.write(readmePath, context.getBytes());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        public void writeReadme(String context) throws IOException {
+            Files.writeString(readmePath, context, StandardCharsets.UTF_8);
         }
 
         public Path compressDirToTarGz() {

@@ -31,6 +31,7 @@ import com.coolxer.service.core.MinioService;
 import com.coolxer.service.system.MenuService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.model.system.vo.PluginVo;
+import com.coolxer.utils.TarGzUtil;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
@@ -38,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -674,6 +676,72 @@ class PluginServiceImplTest {
     }
 
     @Test
+    void exportDirectCreatedPluginAddsEmptyReadmeAndUsesBuildArchiveName() throws Exception {
+        Plugin plugin = exportPlugin("com.acme.demo", "1.0.0", PluginStatusType.UN_INSTALL, null);
+        PluginServiceImpl service = newExportService(plugin);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        service.export(21L, response);
+
+        assertThat(response.getHeader("Content-Disposition"))
+                .isEqualTo("attachment; filename=com-acme-demo-1.0.0.tar.gz");
+        Path archive = pluginRoot.resolve("direct-export.tar.gz");
+        Files.write(archive, response.getContentAsByteArray());
+        assertThat(TarGzUtil.readRootFile(archive, "README.md")).isEmpty();
+    }
+
+    @Test
+    void exportInstalledPluginCopiesExistingReadme() throws Exception {
+        String packageName = "com.acme.demo";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLED, null);
+        Path installedRoot = pluginRoot.resolve(packageName);
+        Files.createDirectories(installedRoot);
+        Files.writeString(installedRoot.resolve("README.md"), "# Installed README\n");
+        PluginServiceImpl service = newExportService(plugin);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        service.export(21L, response);
+
+        Path archive = pluginRoot.resolve("installed-export.tar.gz");
+        Files.write(archive, response.getContentAsByteArray());
+        assertThat(TarGzUtil.readRootFile(archive, "README.md")).isEqualTo("# Installed README\n");
+    }
+
+    @Test
+    void exportUninstalledOriginalPackageOnlyRenamesDownloadFile() throws Exception {
+        String packageName = "com.acme.demo";
+        String objectKey = "packages/" + packageName + "/abcdef.tar.gz";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.UN_INSTALL, objectKey);
+        PluginServiceImpl service = newExportService(plugin);
+        byte[] originalPackage = tarGz(Map.of(
+                "index.json", "{\"package_name\":\"com.acme.demo\"}",
+                "README.md", "original README"
+        ));
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        when(minioService.getObjectInfo(objectKey, "zenvis-plugins"))
+                .thenReturn(new MinioObjectInfo(originalPackage.length, "application/gzip", "etag", Instant.now()));
+        when(minioService.downloadFile(objectKey, "zenvis-plugins"))
+                .thenReturn(new ByteArrayInputStream(originalPackage));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        service.export(21L, response);
+
+        assertThat(response.getHeader("Content-Disposition"))
+                .isEqualTo("attachment; filename=com-acme-demo-1.0.0.tar.gz");
+        assertThat(response.getContentAsByteArray()).isEqualTo(originalPackage);
+    }
+
+    @Test
+    void exportRejectsBlankVersionBeforeBuildingArchive() throws Exception {
+        Plugin plugin = exportPlugin("com.acme.demo", " ", PluginStatusType.UN_INSTALL, null);
+        PluginServiceImpl service = newExportService(plugin);
+
+        assertThatThrownBy(() -> service.export(21L, new MockHttpServletResponse()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("插件版本不合法");
+    }
+
+    @Test
     void pluginUiRollbackDeletesEveryCopiedConfigPath() throws Exception {
         PluginServiceImpl service = newService();
         Path first = pluginRoot.resolve("config/com.acme.demo.app_config");
@@ -1133,6 +1201,56 @@ class PluginServiceImplTest {
         ReflectionTestUtils.setField(service, "minioService", minioService);
         ReflectionTestUtils.setField(service, "minioProperties", new MinioProperties());
         return service;
+    }
+
+    private PluginServiceImpl newExportService(Plugin plugin) throws Exception {
+        PluginServiceImpl service = newService();
+        PluginRepository pluginRepository = mock(PluginRepository.class);
+        when(pluginRepository.findById(plugin.getId().longValue())).thenReturn(Optional.of(plugin));
+        ReflectionTestUtils.setField(service, "pluginRepository", pluginRepository);
+
+        MenuService menuService = mock(MenuService.class);
+        when(menuService.findBySource(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+
+        PushTaskService pushTaskService = mock(PushTaskService.class);
+        when(pushTaskService.findBySourceMark(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "pushTaskService", pushTaskService);
+
+        SkillService skillService = mock(SkillService.class);
+        when(skillService.getInstalledPluginSkillPath(plugin.getPackageName())).thenReturn(null);
+        ReflectionTestUtils.setField(service, "skillService", skillService);
+
+        DashboardRepository dashboardRepository = mock(DashboardRepository.class);
+        when(dashboardRepository.findBySource(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "dashboardRepository", dashboardRepository);
+
+        McpServerConfigRepository mcpServerConfigRepository = mock(McpServerConfigRepository.class);
+        when(mcpServerConfigRepository.findBySource(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", mcpServerConfigRepository);
+
+        Path metaPath = pluginRoot.resolve("export-meta");
+        Files.createDirectories(metaPath);
+        CustomWebConfig customWebConfig = (CustomWebConfig) ReflectionTestUtils.getField(service, "customWebConfig");
+        ReflectionTestUtils.setField(customWebConfig, "retrievalMetaFilePath", metaPath.toString());
+        return service;
+    }
+
+    private Plugin exportPlugin(String packageName,
+                                String version,
+                                PluginStatusType status,
+                                String pluginPath) {
+        Plugin plugin = new Plugin();
+        plugin.setId(21);
+        plugin.setName("Demo");
+        plugin.setPackageName(packageName);
+        plugin.setVersion(version);
+        plugin.setDescription("demo");
+        plugin.setAuthor("tester");
+        plugin.setIcon("data:image/png;base64,AA==");
+        plugin.setStatus(status);
+        plugin.setPluginPath(pluginPath);
+        return plugin;
     }
 
     private DashboardDto linkDashboardDto() {

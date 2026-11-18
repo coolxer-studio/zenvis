@@ -2056,7 +2056,6 @@ public class PluginServiceImpl implements PluginService {
             String upgradeOperationId = plugin.getUpgradeOperationId();
             writeLog(id, "插件检查......");
             cleanupPluginCoreResources(id, plugin, true);
-            deletePluginPackageObject(plugin.getPluginPath());
             if (StringUtils.isNotBlank(upgradeOperationId)) {
                 deletePluginUpgradeObjects(plugin.getPackageName(), upgradeOperationId);
                 deleteIfExists(upgradeOperationRoot(id, upgradeOperationId));

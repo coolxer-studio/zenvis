@@ -6,6 +6,7 @@ import com.coolxer.commons.enums.MenuType;
 import com.coolxer.commons.enums.PluginStatusType;
 import com.coolxer.commons.exception.ApiException;
 import com.coolxer.configuration.CustomWebConfig;
+import com.coolxer.configuration.extend.ExtendJarManager;
 import com.coolxer.configuration.minio.MinioProperties;
 import com.coolxer.model.core.vo.MinioObjectInfo;
 import com.coolxer.dao.mysql.entity.Dashboard;
@@ -200,6 +201,68 @@ class PluginServiceImplTest {
         assertThatThrownBy(() -> service.install(9L))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("请重新上传并安装");
+    }
+
+    @Test
+    void uninstallKeepsPackageObjectForReinstall() throws Exception {
+        PluginServiceImpl service = newService();
+        String packageName = "com.acme.demo";
+        String objectKey = "packages/" + packageName + "/abcdef.tar.gz";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLED, objectKey);
+        PluginRepository repository = mock(PluginRepository.class);
+        when(repository.findById(21L)).thenReturn(Optional.of(plugin));
+        when(repository.save(any(Plugin.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "pluginRepository", repository);
+
+        MenuService menuService = mock(MenuService.class);
+        when(menuService.findBySource(packageName)).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+        DashboardRepository dashboardRepository = mock(DashboardRepository.class);
+        when(dashboardRepository.findBySource(packageName)).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "dashboardRepository", dashboardRepository);
+        McpServerConfigRepository mcpRepository = mock(McpServerConfigRepository.class);
+        when(mcpRepository.findBySource(packageName)).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", mcpRepository);
+        ReflectionTestUtils.setField(service, "extendJarManager", mock(ExtendJarManager.class));
+        ReflectionTestUtils.setField(service, "pushTaskService", mock(PushTaskService.class));
+        ReflectionTestUtils.setField(service, "skillService", mock(SkillService.class));
+
+        Path installedRoot = pluginRoot.resolve(packageName);
+        Files.createDirectories(installedRoot);
+        Files.writeString(installedRoot.resolve("index.json"), "{}");
+
+        ReflectionTestUtils.invokeMethod(service, "executeUninstall", 21L);
+
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.UN_INSTALL);
+        assertThat(plugin.getPluginPath()).isEqualTo(objectKey);
+        assertThat(installedRoot).doesNotExist();
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        verify(minioService, never()).deleteFile(anyString(), anyString());
+
+        PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
+        ReflectionTestUtils.setField(service, "pluginOperationExecutor", executor);
+        when(minioService.getObjectInfo(objectKey, "zenvis-plugins"))
+                .thenReturn(new MinioObjectInfo(128L, "application/gzip", "etag", Instant.now()));
+
+        assertThatCode(() -> service.install(21L)).doesNotThrowAnyException();
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.INSTALLING);
+    }
+
+    @Test
+    void deletingUninstalledPluginRemovesPackageObject() {
+        PluginServiceImpl service = newService();
+        String packageName = "com.acme.demo";
+        String objectKey = "packages/" + packageName + "/abcdef.tar.gz";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.UN_INSTALL, objectKey);
+        PluginRepository repository = mock(PluginRepository.class);
+        when(repository.findById(21L)).thenReturn(Optional.of(plugin));
+        ReflectionTestUtils.setField(service, "pluginRepository", repository);
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+
+        service.delete(21L);
+
+        verify(minioService).deleteFile(objectKey, "zenvis-plugins");
+        verify(repository).deleteById(21L);
     }
 
     @Test

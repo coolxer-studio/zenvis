@@ -6,6 +6,10 @@
     <section class="brand-panel" :style="bannerStyle">
       <div class="brand-overlay"></div>
       <div class="brand-content">
+        <div class="product-chip" v-if="systemInfo?.productVersion">
+          <span class="status-dot"></span>
+          SYSTEM · v{{ systemInfo.productVersion }}
+        </div>
         <h2>{{ systemInfo?.productName }}</h2>
         <p>
           {{
@@ -111,7 +115,9 @@
         </div>
       </div>
 
-      <footer>{{ systemInfo?.copyright }}</footer>
+      <footer>
+        {{ systemInfo?.copyright }}<template v-if="systemInfo?.productVersion"> · v{{ systemInfo.productVersion }}</template>
+      </footer>
     </section>
   </main>
 </template>

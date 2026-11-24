@@ -1,0 +1,39 @@
+# ============================================================
+# Kerberos 配置示例 (krb5.conf.example)
+# ============================================================
+# 将本文件复制为 krb5.conf 并按实际 Kerberos KDC 环境修改：
+#   cp krb5.conf.example krb5.conf
+# 然后通过 docker-compose volume 挂载到容器内 /etc/krb5.conf
+# ============================================================
+
+[libdefaults]
+    # 默认 Realm，大写（Kerberos 标准要求）
+    default_realm = EXAMPLE.COM
+
+    # DNS 查找 Realm / KDC 时优先使用 TCP（UDP 65535 限制常见问题）
+    dns_lookup_realm = false
+    dns_lookup_kdc = true
+    udp_preference_limit = 1
+
+    # Kerberos 协议版本，现代 KDC 均支持 v5
+    default_ccache_name = FILE:/tmp/krb5cc_%{uid}
+
+[realms]
+    EXAMPLE.COM = {
+        # KDC 地址（DNS 或 IP），按实际环境修改
+        kdc = kdc.example.com:88
+        admin_server = kdc.example.com:749
+        default_domain = example.com
+
+        # 可选：使用 TCP 代替 UDP
+        # kdc = tcp/kdc.example.com:88
+    }
+
+[domain_realm]
+    # DNS → Realm 映射，确保 broker hostname 能正确解析到 Realm
+    .example.com = EXAMPLE.COM
+    example.com = EXAMPLE.COM
+
+[logging]
+    # Kerberos 运行时日志（调试时可改为 FILE:/var/log/krb5libs.log）
+    default = FILE:/dev/null

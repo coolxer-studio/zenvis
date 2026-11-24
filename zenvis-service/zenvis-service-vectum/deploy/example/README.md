@@ -299,3 +299,66 @@ docker-compose down -v
 - `depends_on` + `condition: service_healthy` 确保依赖服务健康
 - 启动间隔 `start_period: 60s` 给予足够初始化时间
 
+## Kerberos (GSSAPI) 认证 Kafka
+
+当生产 Kafka 集群启用了 Kerberos (GSSAPI) 认证时，Vectum 通过向 Vector 进程注入 `KRB5_*` 环境变量，并在 Vector YAML 中使用 `librdkafka_options` 传递 GSSAPI 参数，完成 Kerberos 认证链路。
+
+### 前置准备
+
+1. **在 Kerberos KDC 中创建 Vector service principal 并导出 keytab**：
+
+```bash
+# kadmin 中执行
+addprinc -randkey vectum@YOUR-REALM.COM
+ktadd -k vectum.keytab -norandkey vectum@YOUR-REALM.COM
+```
+
+2. **准备 krb5.conf**：复制 `kerberos/krb5.conf.example` 为 `kerberos/krb5.conf`，按实际 Realm/KDC 地址修改。
+
+3. **挂载文件并启用 Kerberos**：
+
+```yaml
+# docker-compose.yml 中取消注释并修改：
+volumes:
+  - ./kerberos/krb5.conf:/etc/krb5.conf:ro
+  - ./kerberos/vectum.keytab:/etc/krb5/vectum.keytab:ro
+environment:
+  VECTUM_KERBEROS_ENABLED: "true"
+  VECTUM_KERBEROS_PRINCIPAL: vectum@YOUR-REALM.COM
+  VECTUM_KERBEROS_SERVICE_NAME: kafka
+```
+
+### Vector YAML 配置示例
+
+在 Vectum 创建任务时，使用 `kerberos/kafka-gssapi-source.yaml` 中的配置模板。核心要点：
+
+```yaml
+sources:
+  my_kafka:
+    type: kafka
+    bootstrap_servers: broker1:9092,broker2:9092
+    group_id: my-consumer-group
+    topics: [ "secured-topic" ]
+    librdkafka_options:
+      security.protocol: SASL_PLAINTEXT
+      sasl.mechanism: GSSAPI
+      sasl.kerberos.service.name: kafka
+      sasl.jaas.config: >-
+        com.sun.security.auth.module.Krb5LoginModule required
+        useKeyTab=true
+        keyTab="/etc/krb5/vectum.keytab"
+        principal="vectum@YOUR-REALM.COM"
+        storeKey=true;
+```
+
+> **重要提示**：Vector 的内建 `sasl` 字段仅支持 PLAIN 和 SCRAM 机制。GSSAPI (Kerberos) 必须通过 `librdkafka_options` 配置。同时需要容器内存在有效的 `krb5.conf` 和 keytab 文件，vectum 会在启动 Vector 进程时自动注入 `KRB5_CONFIG` 等环境变量。
+
+### 故障排查
+
+| 症状 | 可能原因 | 排查命令 |
+|------|----------|----------|
+| `Failed to acquire Principal from Subject (null)` | keytab 路径不正确或 principal 不匹配 | `docker exec vectum kinit -kt /etc/krb5/vectum.keytab vectum@YOUR-REALM.COM && klist` |
+| `Client's GSSAPI Mechanism Level not allowed` | Broker `sasl.enabled.mechanisms` 未包含 `GSSAPI` | 检查 Kafka `server.properties` |
+| `KRB5_CONFIG env missing` 或 `No such file` | 容器内 krb5.conf 未正确挂载 | `docker exec vectum ls -la /etc/krb5.conf` |
+| `Preformatted broker hostname does not match principal` | `sasl.kerberos.service.name` 与 Broker principal 的 service 部分不一致 | 通常应为 `kafka` |
+

@@ -1,5 +1,6 @@
 package com.coolxer.service.impl;
 
+import com.coolxer.config.KerberosProperties;
 import com.coolxer.model.LuaFile;
 import com.coolxer.model.RunMetadata;
 import com.coolxer.service.MonitorService;
@@ -17,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,14 +46,17 @@ public class VectorServiceImpl implements VectorService {
     private final MonitorService monitorService;
     private final String vectorHomePath;
     private final String taskWorkspace;
+    private final KerberosProperties kerberosProperties;
     private String cmdPath;
 
-    public VectorServiceImpl(MonitorService monitorService, 
+    public VectorServiceImpl(MonitorService monitorService,
                             @Value("${vector.home}") String vectorHomePath,
-                            @Value("${task.workspace:${vector.home}/workspace}") String taskWorkspace) {
+                            @Value("${task.workspace:${vector.home}/workspace}") String taskWorkspace,
+                            KerberosProperties kerberosProperties) {
         this.monitorService = monitorService;
         this.vectorHomePath = vectorHomePath;
         this.taskWorkspace = taskWorkspace;
+        this.kerberosProperties = kerberosProperties;
     }
 
     /**
@@ -175,7 +180,8 @@ public class VectorServiceImpl implements VectorService {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(cmdPath, "-c", configPath);
-        
+        applyKerberosEnvironment(processBuilder.environment());
+
         try {
             RunMetadata runMetadata = new RunMetadata(
                     UUID.randomUUID().toString(), Instant.now().toString());
@@ -434,5 +440,28 @@ public class VectorServiceImpl implements VectorService {
             log.debug("Failed to kill process: {}", processId, e);
         }
         return false;
+    }
+
+    /**
+     * 向 Vector 进程注入 Kerberos 所需的 KRB5_* 环境变量。
+     * <p>
+     * 仅当 {@link KerberosProperties#isAvailable()} 为 true 时才注入，
+     * 并跳过路径文件不存在的变量，避免传递无效值导致 librdkafka 启动崩溃。
+     * </p>
+     *
+     * @param env ProcessBuilder 的环境变量 Map，会被原地修改
+     */
+    private void applyKerberosEnvironment(Map<String, String> env) {
+        if (!kerberosProperties.isAvailable()) {
+            log.debug("Kerberos is not available, skipping KRB5_* environment injection");
+            return;
+        }
+        Map<String, String> krbEnv = kerberosProperties.buildProcessEnvironment();
+        for (Map.Entry<String, String> entry : krbEnv.entrySet()) {
+            env.put(entry.getKey(), entry.getValue());
+            log.debug("Injected {}={} into Vector process environment",
+                    entry.getKey(), entry.getValue());
+        }
+        log.info("Kerberos environment injected for Vector process: {}", krbEnv.keySet());
     }
 }

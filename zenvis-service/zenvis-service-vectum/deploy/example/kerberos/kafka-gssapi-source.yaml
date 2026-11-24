@@ -1,0 +1,70 @@
+# ============================================================
+# 使用 Kerberos (GSSAPI) 认证的 Kafka Source 示例
+# ============================================================
+# 前置条件：
+#   1. docker-compose.yml 中已挂载 krb5.conf 和 service keytab 到容器
+#   2. 已设置 VECTUM_KERBEROS_ENABLED=true 和相关环境变量
+#   3. Kerberos KDC 中已为 Vector service principal 创建 keytab
+#      （如 vectum@YOUR-REALM.COM，ktutil 导出后保存为 vectum.keytab）
+#   4. Kafka Broker 的 server.properties 已启用 GSSAPI listener
+#      （security.inter.broker.protocol=SASL_PLAINTEXT + 对应 jaas.config）
+# ============================================================
+
+sources:
+  # 从 Kerberos Kafka 消费的 source
+  kafka_gssapi_source:
+    type: kafka
+    bootstrap_servers: kafka-broker.example.com:9092
+    group_id: vectum-consumer-group
+    topics:
+      - secured-topic
+    auto_offset_reset: earliest
+    # 关键：所有 GSSAPI 参数通过 librdkafka_options 传递
+    # Vector 内建 sasl 字段仅支持 PLAIN/SCRAM，GSSAPI 必须走 librdkafka_options
+    librdkafka_options:
+      security.protocol: SASL_PLAINTEXT          # 或 SASL_SSL + ssl.* 配置
+      sasl.mechanism: GSSAPI
+      sasl.kerberos.service.name: kafka          # Broker principal 的 service 部分
+      # JAAS 配置：指向容器内挂载的 keytab 文件 + principal
+      # 这里的路径应与 VECTUM_KERBEROS_KEYTAB_PATH 保持一致
+      sasl.jaas.config: >-
+        com.sun.security.auth.module.Krb5LoginModule required
+        useKeyTab=true
+        keyTab="/etc/krb5/vectum.keytab"
+        principal="vectum@YOUR-REALM.COM"
+        storeKey=true;
+
+transforms:
+  parse_json:
+    type: remap
+    inputs:
+      - kafka_gssapi_source
+    source: |
+      . = parse_json!(string!(.message))
+
+sinks:
+  # 写控制台验证
+  console_out:
+    type: console
+    inputs:
+      - parse_json
+    encoding:
+      codec: json
+
+  # 写 Kerberos Kafka 的 sink（生产向另一个 secured topic）
+  # kafka_gssapi_sink:
+  #   type: kafka
+  #   inputs:
+  #     - parse_json
+  #   bootstrap_servers: kafka-broker.example.com:9092
+  #   topic: another-secured-topic
+  #   librdkafka_options:
+  #     security.protocol: SASL_PLAINTEXT
+  #     sasl.mechanism: GSSAPI
+  #     sasl.kerberos.service.name: kafka
+  #     sasl.jaas.config: >-
+  #       com.sun.security.auth.module.Krb5LoginModule required
+  #       useKeyTab=true
+  #       keyTab="/etc/krb5/vectum.keytab"
+  #       principal="vectum@YOUR-REALM.COM"
+  #       storeKey=true;

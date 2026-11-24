@@ -9,11 +9,20 @@ services:
     volumes:
       - workspace-data:/workspace
       - vector-data:/var/lib/vector
+      # Kerberos 认证 Kafka 时，取消下方注释以挂载 krb5.conf 和 service keytab
+      # - ./kerberos/krb5.conf:/etc/krb5.conf:ro
+      # - ./kerberos/vectum.keytab:/etc/krb5/vectum.keytab:ro
     environment:
       TZ: Asia/Shanghai
       VECTUM_AUTH_TOKEN: sk-vectum-token
       ZENVIS_BUSINESS_SERVICE_BASE_URL: ${ZENVIS_BUSINESS_SERVICE_BASE_URL:-http://zenvis-backend:11001}
       ZENVIS_BUSINESS_SERVICE_INSTANCE_ID: ${ZENVIS_BUSINESS_SERVICE_INSTANCE_ID:-}
+      # Kerberos 认证 Kafka 时，取消下方注释并根据实际集群修改 principal / realm / keytab
+      # VECTUM_KERBEROS_ENABLED: "true"
+      # VECTUM_KERBEROS_KRB5_CONFIG_PATH: /etc/krb5.conf
+      # VECTUM_KERBEROS_KEYTAB_PATH: /etc/krb5/vectum.keytab
+      # VECTUM_KERBEROS_PRINCIPAL: vectum@YOUR-REALM.COM
+      # VECTUM_KERBEROS_SERVICE_NAME: kafka
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11002/actuator/health"]

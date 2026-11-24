@@ -1,5 +1,6 @@
 package com.coolxer.service.impl;
 
+import com.coolxer.config.KerberosProperties;
 import com.coolxer.service.MonitorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,10 +23,14 @@ class VectorServiceImplTest {
     @BeforeEach
     void setUp() {
         workspace = tempDir.resolve("workspace");
+        KerberosProperties kerberos = new KerberosProperties();
+        // 默认关闭 Kerberos，不影响现有测试
+        kerberos.setEnabled(false);
         service = new VectorServiceImpl(
                 mock(MonitorService.class),
                 tempDir.resolve("vector").toString(),
-                workspace.toString());
+                workspace.toString(),
+                kerberos);
     }
 
     @Test

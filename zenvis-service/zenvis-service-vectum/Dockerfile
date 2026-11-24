@@ -3,6 +3,18 @@ FROM crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/ec
 
 WORKDIR /app
 
+# Install Kerberos client libraries so Vector's embedded librdkafka
+# can authenticate against Kerberos Kafka clusters via GSSAPI.
+# krb5-user provides kinit/klist for ad-hoc ticket management;
+# krb5-clients is the lighter alternative if only runtime libs are needed.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends krb5-user ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for external Kerberos files to be mounted in.
+# Users mount their krb5.conf and service keytab into these locations.
+RUN mkdir -p /etc/krb5 /workspace/kerberos
+
 COPY target/application.jar ./application.jar
 COPY src/main/resources/application-prod.properties ./application.properties
 COPY vector/vector /vector

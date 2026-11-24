@@ -22,6 +22,36 @@ Compose 编排包含 9 个服务：ZenVis 前后端、Vectum、MySQL、ClickHous
 
 需要定制时，在首次启动前编辑 `deploy/.env`。不要把生成文件复制回 `.env.example`。
 
+## 离线部署包
+
+目标机无法访问镜像仓库时，先在可联网且已具备目标架构镜像的构建机生成离线包：
+
+```bash
+./package-offline.sh --arch arm64
+```
+
+默认输出到 `deploy/offline/zenvis-offline-<版本>-<架构>-<时间>.tar.gz`。可用 `--output` 指定文件或目录，`--pull` 在镜像缺失或架构不符时按目标架构拉取，`--force` 覆盖同名输出。一个离线包只包含一种 CPU 架构，`amd64` 和 `arm64` 需要分别打包。
+
+压缩包包含：
+
+- `quick-deploy.sh`、`zenvisctl` 和离线安装说明；
+- `deploy/docker-compose.yml`、`.env.example`、`config/` 和 Git 跟踪的 `open_config/` 基线；
+- `offline/images.tar`、镜像清单和 manifest。
+
+离线包不包含 `deploy/.env`、`data/`、备份、插件展开缓存、本机自定义 HTML 页面和 Helm Chart。
+
+目标机解压后直接执行：
+
+```bash
+tar -xzf zenvis-offline-<版本>-<架构>-<时间>.tar.gz
+cd zenvis-offline-<版本>-<架构>-<时间>
+./quick-deploy.sh
+```
+
+`quick-deploy.sh` 会校验离线包架构，先执行 `docker load` 导入 `offline/images.tar`，确认清单中的全部镜像存在，再执行 `compose init` 和 `compose up`。安装过程重新生成 `deploy/.env` 和全部随机凭据，不会沿用压缩包外部的生产密钥。
+
+迁移已有环境时不要直接初始化空数据目录：先恢复数据库、对象存储和 `open_config`，再单独迁移原 `deploy/.env`，然后执行 `./zenvisctl compose doctor` 和 `./zenvisctl compose up`。
+
 ## 预置插件（可选）
 
 首次部署通常需要安装插件才能看到业务效果。可在首次启动前，将插件包放入 `deploy/open_config/plugin-package_config/bootstrap/` 目录：

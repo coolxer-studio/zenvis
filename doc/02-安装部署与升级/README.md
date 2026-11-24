@@ -28,6 +28,7 @@
 ./zenvisctl compose backup
 ./zenvisctl compose upgrade --version <固定版本>
 ./zenvisctl compose rollback --backup <备份ID> --confirm <备份ID>
+./package-offline.sh --arch <amd64|arm64>
 
 ./zenvisctl k8s init|doctor|install|status|logs
 ./zenvisctl k8s backup --external-ref <外部备份引用>

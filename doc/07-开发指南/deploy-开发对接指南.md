@@ -50,6 +50,7 @@ deploy/
 │   ├── minio/
 │   ├── kafka/
 │   └── vectum/
+├── offline/               # package-offline.sh 生成的离线包，Git 忽略
 └── open_config/
     ├── meta_config/
     ├── plugin-package_config/
@@ -62,6 +63,7 @@ deploy/
 
 - `config/`：容器启动配置，属于部署模板。
 - `data/`：数据库、Kafka、Vectum 等运行数据，不是源码。
+- `offline/`：`package-offline.sh` 的输出目录，不提交到仓库。
 - `open_config/`：后端读取的开放配置根目录，容器内挂载为 `/config/open_config`。
 - `plugin-package_config/`：插件展开目录、升级工作目录和 Bootstrap 输入，属于可重建缓存；权威插件包在 MinIO。
 
@@ -139,6 +141,16 @@ docker compose ps
 ```
 
 更新前应备份数据库、MinIO 五个 Bucket、`open_config` 和插件运行缓存，确认插件与目标后端版本兼容。不要在没有备份的情况下删除 `data/` 或执行 `docker compose down -v`。
+
+### 生成离线部署包
+
+在可联网的构建机执行：
+
+```bash
+./package-offline.sh --arch arm64
+```
+
+脚本通过 `docker compose config --images` 解析当前 Compose 配置的全部镜像，复制 Git 跟踪的 `deploy/config` 和 `deploy/open_config` 基线，并生成包含 `quick-deploy.sh` 和 `zenvisctl` 的 `tar.gz`。目标机解压后执行 `./quick-deploy.sh` 即可离线导入镜像、初始化和启动。离线包不包含 `.env`、运行数据或本机插件缓存。
 
 ## 启动关系和健康检查
 

@@ -58,6 +58,8 @@ cd zenvis
 
 初始化命令会为数据库、API、MCP、Vectum 和两个内置账号生成独立随机凭据。首次登录后应修改账号密码；完整说明见[快速开始](doc/02-安装部署与升级/快速开始.md)。Kubernetes 环境使用仓库内的 [Helm Chart 部署指南](doc/02-安装部署与升级/Kubernetes部署.md)。
 
+离线环境可在可联网的构建机执行 `./package-offline.sh --arch arm64`（或 `amd64`）生成 `deploy/offline/*.tar.gz`，把压缩包拷贝到目标机解压后直接执行 `./quick-deploy.sh`。脚本会先导入包内镜像，再初始化并启动 Compose 环境；详细说明见 [Docker Compose 部署](doc/02-安装部署与升级/Docker-Compose部署.md#离线部署包)。
+
 ### 本地开发
 
 后端：

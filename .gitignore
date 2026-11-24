@@ -6,6 +6,7 @@
 # Local deployment state and secrets
 /deploy/.env
 /deploy/backups/
+/deploy/offline/
 /deploy/.zenvis/
 
 .pnpm-store/

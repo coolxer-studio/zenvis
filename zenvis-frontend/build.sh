@@ -1,14 +1,42 @@
 #!/bin/bash
+
 IMAGE_NAME="crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-frontend"
-IMAGE_TAG="1.1.5.alpha"
 DATE_TAG=$(date +%Y%m%d)
 PUSH_IMAGE="${PUSH_IMAGE:-false}"
+
+# 读取 ZENVIS_VERSION：优先 deploy/.env，回退 deploy/.env.example
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../deploy/.env"
+ENV_EXAMPLE="${SCRIPT_DIR}/../deploy/.env.example"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a; source "$ENV_FILE"; set +a
+elif [ -f "$ENV_EXAMPLE" ]; then
+    set -a; source "$ENV_EXAMPLE"; set +a
+fi
+
+IMAGE_TAG="${ZENVIS_VERSION:-1.0.0}"
+
+# 同步 package.json version 为 IMAGE_TAG
+CURRENT_PKG_VERSION=$(node -e "console.log(require('${SCRIPT_DIR}/package.json').version)" 2>/dev/null || echo "0.0.0")
+if [ "$CURRENT_PKG_VERSION" != "$IMAGE_TAG" ]; then
+    node -e "
+const fs = require('fs');
+const pkgPath = '${SCRIPT_DIR}/package.json';
+const pkg = JSON.parse(fs.readFileSync(pkgPath));
+pkg.version = '${IMAGE_TAG}';
+fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+"
+    echo "已同步 package.json version : ${CURRENT_PKG_VERSION} → ${IMAGE_TAG}"
+fi
+
+echo "========== 开始构建 zenvis-frontend (版本 ${IMAGE_TAG}) =========="
 
 # 检测系统架构
 ARCH=$(uname -m)
 echo "检测到系统架构: ${ARCH}"
 
-# 根据架构确定 vector 下载包名称
+# 根据架构确定基础镜像
 if [ "$ARCH" = "arm64" ]; then
     BASE_IMAGE_ARCH="arm64"
 elif [ "$ARCH" = "x86_64" ]; then
@@ -18,10 +46,8 @@ else
     exit 1
 fi
 
-echo "========== 开始构建zenvis-frontend项目 =========="
-
 echo "1. 执行 yarn 打包..."
-    yarn build:pro
+cd "${SCRIPT_DIR}" && yarn build:pro
 if [ $? -ne 0 ]; then
     echo "yarn 打包失败!"
     exit 1
@@ -33,7 +59,8 @@ echo "3. 构建 Docker 镜像..."
 docker build \
     --build-arg BASE_IMAGE_ARCH=${BASE_IMAGE_ARCH} \
     -t ${IMAGE_NAME}:${IMAGE_TAG}-${BASE_IMAGE_ARCH} \
-    -t ${IMAGE_NAME}:${DATE_TAG}-${BASE_IMAGE_ARCH} .
+    -t ${IMAGE_NAME}:${DATE_TAG}-${BASE_IMAGE_ARCH} \
+    "${SCRIPT_DIR}"
 
 if [ $? -ne 0 ]; then
     echo "Docker 构建失败!"

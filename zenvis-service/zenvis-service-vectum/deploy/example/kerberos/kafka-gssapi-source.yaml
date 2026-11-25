@@ -25,14 +25,9 @@ sources:
       security.protocol: SASL_PLAINTEXT          # 或 SASL_SSL + ssl.* 配置
       sasl.mechanism: GSSAPI
       sasl.kerberos.service.name: kafka          # Broker principal 的 service 部分
-      # JAAS 配置：指向容器内挂载的 keytab 文件 + principal
-      # 这里的路径应与 VECTUM_KERBEROS_KEYTAB_PATH 保持一致
-      sasl.jaas.config: >-
-        com.sun.security.auth.module.Krb5LoginModule required
-        useKeyTab=true
-        keyTab="/etc/krb5/vectum.keytab"
-        principal="vectum@YOUR-REALM.COM"
-        storeKey=true;
+      # librdkafka 原生参数；这里的路径应与 VECTUM_KERBEROS_KEYTAB_PATH 保持一致
+      sasl.kerberos.principal: vectum@YOUR-REALM.COM
+      sasl.kerberos.keytab: /etc/krb5/vectum.keytab
 
 transforms:
   parse_json:
@@ -62,9 +57,5 @@ sinks:
   #     security.protocol: SASL_PLAINTEXT
   #     sasl.mechanism: GSSAPI
   #     sasl.kerberos.service.name: kafka
-  #     sasl.jaas.config: >-
-  #       com.sun.security.auth.module.Krb5LoginModule required
-  #       useKeyTab=true
-  #       keyTab="/etc/krb5/vectum.keytab"
-  #       principal="vectum@YOUR-REALM.COM"
-  #       storeKey=true;
+  #     sasl.kerberos.principal: vectum@YOUR-REALM.COM
+  #     sasl.kerberos.keytab: /etc/krb5/vectum.keytab

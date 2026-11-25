@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
@@ -42,6 +43,8 @@ public class VectorServiceImpl implements VectorService {
     private static final String LOG_INFO_FORMAT = "%s/%s/info.log";
     private static final String LOG_ERROR_FORMAT = "%s/%s/error.log";
     private static final String RUN_FORMAT = "%s/%s/run.properties";
+    private static final String ENV_ALLOW_INTERPOLATION =
+            "VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION";
 
     private final MonitorService monitorService;
     private final String vectorHomePath;
@@ -180,7 +183,7 @@ public class VectorServiceImpl implements VectorService {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(cmdPath, "-c", configPath);
-        applyKerberosEnvironment(processBuilder.environment());
+        processBuilder.environment().putAll(buildVectorProcessEnvironment());
 
         try {
             RunMetadata runMetadata = new RunMetadata(
@@ -463,5 +466,26 @@ public class VectorServiceImpl implements VectorService {
                     entry.getKey(), entry.getValue());
         }
         log.info("Kerberos environment injected for Vector process: {}", krbEnv.keySet());
+    }
+
+    /**
+     * 构造 Vector 子进程需要的兼容环境变量。
+     * <p>
+     * Vector 0.62 默认关闭环境变量插值，而 Vectum 历史任务配置大量使用
+     * ${VAR:-default}，因此显式开启插值以保持兼容。Kerberos 变量只在
+     * krb5.conf 实际存在时注入。
+     * </p>
+     *
+     * @return 需要注入 Vector 进程的环境变量
+     */
+    Map<String, String> buildVectorProcessEnvironment() {
+        Map<String, String> env = new LinkedHashMap<>();
+        env.put(ENV_ALLOW_INTERPOLATION, "true");
+        if (kerberosProperties.isEnabled() && !kerberosProperties.isKeytabAvailable()) {
+            log.warn("Kerberos is enabled but keytab does not exist: {}",
+                    kerberosProperties.getKeytabPath());
+        }
+        applyKerberosEnvironment(env);
+        return env;
     }
 }

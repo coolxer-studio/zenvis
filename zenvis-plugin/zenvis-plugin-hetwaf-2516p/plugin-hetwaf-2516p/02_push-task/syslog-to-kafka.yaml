@@ -3,7 +3,8 @@ sources:
   het_waf_2516p_syslog_input:
     type: "syslog"
     address: "${HET_WAF_2516P_SYSLOG_ADDRESS:-0.0.0.0:12516}"
-    mode: "${HET_WAF_2516P_SYSLOG_MODE:-udp}"
+    # Vector 0.62 先解析后插值，枚举 tag 不能用环境变量；需要 TCP 时直接改为 tcp
+    mode: "udp"
     max_length: 102400
 
 transforms:

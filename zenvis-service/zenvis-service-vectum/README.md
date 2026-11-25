@@ -139,7 +139,7 @@ Vectum = **Vector 多实例编排 + 可视化运维 + API 化管理 + MCP 智能
 
 - JDK 17+
 - Maven 3.8+
-- Vector 0.35+（需提前安装）
+- Vector 0.62.0（构建脚本会自动编译带 Kerberos/GSSAPI 的版本）
 
 ### 3. 启动方式
 
@@ -169,14 +169,17 @@ VECTUM_AUTH_TOKEN='change-me' java -jar target/application.jar --spring.config.l
 #### Docker 构建 启动
 
 ```bash
-# 使用构建脚本构建（默认不推送镜像）
+# 首次构建会自动编译带 GSSAPI 的 Vector 0.62（耗时较长）
 ./build.sh
+
+# 强制重新编译 Vector
+REBUILD_VECTOR=true ./build.sh
 
 # 构建并推送镜像到 Docker Registry
 PUSH_IMAGE=true ./build.sh
 
 # 运行容器
-docker run -d -p 11002:11002 -e VECTUM_AUTH_TOKEN='change-me' crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-service-vectum:latest-{arch}
+docker run -d -p 11002:11002 -e VECTUM_AUTH_TOKEN='change-me' crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-service-vectum:1.0.3-{arch}
 ```
 
 **构建参数说明：**
@@ -184,6 +187,14 @@ docker run -d -p 11002:11002 -e VECTUM_AUTH_TOKEN='change-me' crpi-4pdi7kz96g4v0
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `PUSH_IMAGE` | `false` | 是否推送镜像到 Docker Registry |
+| `REBUILD_VECTOR` | `false` | 是否强制重新编译 GSSAPI Vector |
+| `VECTOR_VERSION` | `0.62.0` | 编译的 Vector 版本 |
+| `VECTOR_GSSAPI_MODE` | `auto` | `auto` 先尝试 vendored、失败回退 dynamic；也可固定为 `vendored` / `dynamic` |
+| `VECTOR_LTO` | `false` | 链接优化；16GB 内存机器建议 `false`，`fat` 在 16GB 环境会被 OOM kill |
+
+> `vendored` 会在构建时编译 libsasl2 + krb5，当前 Ubuntu 24.04+/GCC 14+ 环境下 krb5 1.19 会因
+> `-Werror=discarded-qualifiers` 编译失败，`auto` 会自动回退到 `dynamic`，运行镜像需安装
+> `libsasl2-modules-gssapi-mit`（Dockerfile 已包含）。
 
 **镜像标签说明：**
 

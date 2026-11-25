@@ -52,7 +52,7 @@ SecGate 3600 NSG 演示数据生成
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `SECGATE3600_NSG_SYSLOG_ADDRESS` | `0.0.0.0:12001` | Syslog 监听地址 |
-| `SECGATE3600_NSG_SYSLOG_MODE` | `udp` | `udp` 或 `tcp` |
+| `SECGATE3600_NSG_SYSLOG_MODE` | `udp` | 已固定为 `udp`：Vector 0.62 先解析后插值，枚举 tag 不能使用环境变量；需要 TCP 时直接修改任务配置 |
 | `SECGATE3600_NSG_RAW_TOPIC` | `secgate3600-nsg-syslog-raw` | 正式接入与演示服务共用的原始 Kafka Topic |
 | `SECGATE3600_NSG_GROUP_ID` | `secgate3600-nsg-transform-v1` | 转换消费者组 |
 | `SECGATE3600_NSG_DLQ_TOPIC` | `secgate3600-nsg-dead-letter` | 死信 Topic |

@@ -1,5 +1,6 @@
 package com.coolxer.service.impl;
 
+import com.coolxer.config.KerberosProperties;
 import com.coolxer.model.validation.ConfigValidationResult;
 import com.coolxer.model.validation.ValidationDiagnostic;
 import com.coolxer.model.validation.ValidationRequest;
@@ -43,7 +44,7 @@ class TaskValidationServiceImplTest {
         assertThat(result.isPassed()).isTrue();
         assertThat(result.isBlocked()).isFalse();
         assertThat(result.getFormat()).isEqualTo("yaml");
-        assertThat(result.getVectorVersion()).isEqualTo("vector 0.55.0");
+        assertThat(result.getVectorVersion()).isEqualTo("vector 0.62.0");
         assertThat(result.getCandidateDigest()).hasSize(64);
         assertThat(result.getTests().isPresent()).isTrue();
         assertThat(result.getTests().getTotal()).isEqualTo(2);
@@ -153,7 +154,8 @@ class TaskValidationServiceImplTest {
     @Test
     void missingVectorBinaryIsBlocked() {
         TaskValidationServiceImpl service = new TaskValidationServiceImpl(
-                tempDir.resolve("missing-vector-home").toString(), 5);
+                tempDir.resolve("missing-vector-home").toString(), 5,
+                kerberos(false));
 
         ConfigValidationResult result = service.validate(request(VALID_CONFIG, false));
 
@@ -162,9 +164,73 @@ class TaskValidationServiceImplTest {
         assertThat(codes(result)).contains("VECTOR_VALIDATION_UNAVAILABLE");
     }
 
+    @Test
+    void rejectsJavaJaasConfig() throws Exception {
+        TaskValidationServiceImpl service = service(5, fakeVector());
+
+        ConfigValidationResult result = service.validate(request("""
+                sources:
+                  kafka:
+                    type: kafka
+                    bootstrap_servers: kafka:9092
+                    topics: [demo]
+                    librdkafka_options:
+                      sasl.jaas.config: com.sun.security.auth.module.Krb5LoginModule required;
+                sinks:
+                  out:
+                    type: console
+                    inputs: [kafka]
+                """, false));
+
+        assertThat(result.isPassed()).isFalse();
+        assertThat(codes(result)).contains("VECTOR_KAFKA_JAAS_UNSUPPORTED");
+    }
+
+    @Test
+    void rejectsGssapiWhenKerberosIsDisabled() throws Exception {
+        TaskValidationServiceImpl service = service(5, fakeVector());
+
+        ConfigValidationResult result = service.validate(request("""
+                sources:
+                  kafka:
+                    type: kafka
+                    bootstrap_servers: kafka:9092
+                    topics: [demo]
+                    librdkafka_options:
+                      sasl.mechanism: GSSAPI
+                sinks:
+                  out:
+                    type: console
+                    inputs: [kafka]
+                """, false));
+
+        assertThat(result.isPassed()).isFalse();
+        assertThat(codes(result)).contains("VECTOR_KAFKA_KERBEROS_DISABLED");
+    }
+
     private TaskValidationServiceImpl service(int timeoutSeconds, Path vector) {
         return new TaskValidationServiceImpl(vector.getParent().getParent().toString(),
-                timeoutSeconds);
+                timeoutSeconds, kerberos(false));
+    }
+
+    @Test
+    void placeholderValuesMatchTargetFieldTypes() {
+        TaskValidationServiceImpl service = new TaskValidationServiceImpl(
+                tempDir.toString(), 5, kerberos(false));
+
+        assertThat(service.placeholderFor("OPERATION_DEMO_INTERVAL_SECONDS")).isEqualTo("5");
+        assertThat(service.placeholderFor("KAFKA_REQUEST_TIMEOUT_MS")).isEqualTo("5");
+        assertThat(service.placeholderFor("FEATURE_ENABLED")).isEqualTo("false");
+        assertThat(service.placeholderFor("CLICKHOUSE_ENDPOINT"))
+                .isEqualTo("http://validation.invalid:1");
+        assertThat(service.placeholderFor("KAFKA_BOOTSTRAP_SERVERS"))
+                .isEqualTo("validation.invalid:9092");
+    }
+
+    private KerberosProperties kerberos(boolean enabled) {
+        KerberosProperties properties = new KerberosProperties();
+        properties.setEnabled(enabled);
+        return properties;
     }
 
     private ValidationRequest request(String config, boolean testsRequired) {
@@ -189,7 +255,7 @@ class TaskValidationServiceImplTest {
         Files.writeString(vector, """
                 #!/bin/sh
                 if [ "$1" = "--version" ]; then
-                  echo "vector 0.55.0"
+                  echo "vector 0.62.0"
                   exit 0
                 fi
                 config=""

@@ -3,7 +3,8 @@ sources:
   secgate3600_nsg_syslog_input:
     type: "syslog"
     address: "${SECGATE3600_NSG_SYSLOG_ADDRESS:-0.0.0.0:12001}"
-    mode: "${SECGATE3600_NSG_SYSLOG_MODE:-udp}"
+    # Vector 0.62 先解析后插值，枚举 tag 不能用环境变量；需要 TCP 时直接改为 tcp
+    mode: "udp"
     max_length: 102400
 
 sinks:

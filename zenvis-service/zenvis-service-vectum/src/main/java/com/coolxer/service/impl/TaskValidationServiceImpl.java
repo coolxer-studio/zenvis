@@ -1,5 +1,6 @@
 package com.coolxer.service.impl;
 
+import com.coolxer.config.KerberosProperties;
 import com.coolxer.model.validation.ConfigValidationResult;
 import com.coolxer.model.validation.TestCaseResult;
 import com.coolxer.model.validation.TestSummary;
@@ -48,19 +49,26 @@ public class TaskValidationServiceImpl implements TaskValidationService {
             "(?m)^test (.+?) \\.\\.\\. (passed|failed)\\s*$");
     private static final Pattern TEST_DECLARATION = Pattern.compile(
             "(?m)^\\s*tests\\s*:|^\\s*\\[\\[tests]]|\"tests\"\\s*:");
+    private static final Pattern KAFKA_JAAS_CONFIG = Pattern.compile(
+            "(?im)^\\s*sasl\\.jaas\\.config\\s*:");
+    private static final Pattern KAFKA_GSSAPI = Pattern.compile(
+            "(?im)^\\s*sasl\\.mechanism\\s*:\\s*[\"']?GSSAPI[\"']?\\s*(?:#.*)?$");
     private static final Set<String> SUPPORTED_FORMATS = Set.of(
             "yaml", "yml", "json", "toml");
 
     private final String vectorHomePath;
     private final int timeoutSeconds;
+    private final KerberosProperties kerberosProperties;
     private volatile String vectorVersion;
 
     public TaskValidationServiceImpl(
             @Value("${vector.home}") String vectorHomePath,
-            @Value("${vector.validation.timeout-seconds:20}") int timeoutSeconds) {
+            @Value("${vector.validation.timeout-seconds:20}") int timeoutSeconds,
+            KerberosProperties kerberosProperties) {
         this.vectorHomePath = vectorHomePath;
         this.timeoutSeconds = timeoutSeconds > 0
                 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
+        this.kerberosProperties = kerberosProperties;
     }
 
     /**
@@ -95,6 +103,23 @@ public class TaskValidationServiceImpl implements TaskValidationService {
                     "使用 yaml、toml 或 json。")));
             return result.build();
         }
+        if (KAFKA_JAAS_CONFIG.matcher(config).find()) {
+            result.passed(false).blocked(false);
+            result.diagnostics(List.of(error(
+                    "VECTOR_KAFKA_JAAS_UNSUPPORTED", "$kafka",
+                    "librdkafka 不支持 sasl.jaas.config。",
+                    "改用 sasl.kerberos.service.name、sasl.kerberos.principal "
+                            + "和 sasl.kerberos.keytab。")));
+            return result.build();
+        }
+        if (KAFKA_GSSAPI.matcher(config).find() && !kerberosProperties.isAvailable()) {
+            result.passed(false).blocked(false);
+            result.diagnostics(List.of(error(
+                    "VECTOR_KAFKA_KERBEROS_DISABLED", "$kafka",
+                    "任务使用 GSSAPI，但 Vectum 未启用 Kerberos。",
+                    "设置 VECTUM_KERBEROS_ENABLED=true，并挂载可用的 krb5.conf 与 keytab。")));
+            return result.build();
+        }
 
         Path vectorPath = Path.of(vectorHomePath, "bin", "vector");
         if (!Files.isExecutable(vectorPath)) {
@@ -115,18 +140,18 @@ public class TaskValidationServiceImpl implements TaskValidationService {
             CommandExecution validation = runVector(
                     List.of(vectorPath.toString(), "validate",
                             "--no-environment",
-                            "--disable-env-var-interpolation",
                             configPath.toString()),
                     temporaryDirectory,
-                    config);
+                    config,
+                    false);
             if (!validation.timedOut()
                     && validation.exitCode() != 0
-                    && hasEnvironmentReference(config)
-                    && looksLikeUninterpolatedEnvironmentFailure(validation.output())) {
+                    && hasEnvironmentReference(config)) {
                 validation = runVector(
                         List.of(vectorPath.toString(), "validate", configPath.toString()),
                         temporaryDirectory,
-                        config);
+                        config,
+                        true);
             }
             if (validation.timedOut()) {
                 result.passed(false).blocked(true);
@@ -195,7 +220,8 @@ public class TaskValidationServiceImpl implements TaskValidationService {
         CommandExecution execution = runVector(
                 List.of(vectorPath.toString(), "test", configPath.toString()),
                 workingDirectory,
-                config);
+                config,
+                true);
         if (execution.timedOut()) {
             return TestSummary.builder()
                     .present(true)
@@ -305,11 +331,16 @@ public class TaskValidationServiceImpl implements TaskValidationService {
 
     private CommandExecution runVector(List<String> command,
                                        Path workingDirectory,
-                                       String config) throws IOException {
+                                       String config,
+                                       boolean allowEnvInterpolation) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command)
                 .redirectErrorStream(true);
         if (workingDirectory != null) {
             builder.directory(workingDirectory.toFile());
+        }
+        if (allowEnvInterpolation) {
+            builder.environment().put(
+                    "VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION", "true");
         }
         applyPlaceholderEnvironment(builder.environment(), config);
         Process process = builder.start();
@@ -363,8 +394,20 @@ public class TaskValidationServiceImpl implements TaskValidationService {
         }
     }
 
-    private String placeholderFor(String name) {
+    String placeholderFor(String name) {
         String normalized = name.toUpperCase(Locale.ROOT);
+        if (normalized.endsWith("_ENABLED") || normalized.startsWith("ENABLE_")) {
+            return "false";
+        }
+        if (normalized.contains("INTERVAL") || normalized.contains("SECONDS")
+                || normalized.contains("TIMEOUT") || normalized.endsWith("_MS")
+                || normalized.contains("COUNT") || normalized.contains("LIMIT")
+                || normalized.contains("SIZE") || normalized.endsWith("_PORT")
+                || normalized.endsWith("_MAX") || normalized.endsWith("_MIN")
+                || normalized.contains("BATCH") || normalized.contains("RETENTION")
+                || normalized.contains("THREADS") || normalized.contains("RETRIES")) {
+            return "5";
+        }
         if (normalized.contains("ENDPOINT") || normalized.contains("URL")
                 || normalized.contains("URI")) {
             return "http://validation.invalid:1";
@@ -376,13 +419,6 @@ public class TaskValidationServiceImpl implements TaskValidationService {
             return "validation-topic";
         }
         return "validation-placeholder";
-    }
-
-    private boolean looksLikeUninterpolatedEnvironmentFailure(String output) {
-        String normalized = output == null ? "" : output.toLowerCase(Locale.ROOT);
-        return normalized.contains("invalid uri")
-                || normalized.contains("$")
-                || normalized.contains("environment variable");
     }
 
     private boolean hasEnvironmentReference(String config) {
@@ -400,7 +436,7 @@ public class TaskValidationServiceImpl implements TaskValidationService {
         }
         try {
             CommandExecution execution = runVector(
-                    List.of(vectorPath.toString(), "--version"), null, "");
+                    List.of(vectorPath.toString(), "--version"), null, "", false);
             vectorVersion = execution.output().trim();
         } catch (IOException e) {
             vectorVersion = "unavailable";

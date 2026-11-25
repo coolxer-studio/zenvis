@@ -65,7 +65,7 @@ demo-data-to-kafka.yaml（独立演示任务，可停止）
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `HET_WAF_2516P_SYSLOG_ADDRESS` | `0.0.0.0:12516` | Syslog 监听地址 |
-| `HET_WAF_2516P_SYSLOG_MODE` | `udp` | Syslog 传输模式 |
+| `HET_WAF_2516P_SYSLOG_MODE` | `udp` | 已固定为 `udp`：Vector 0.62 先解析后插值，枚举 tag 不能使用环境变量；需要 TCP 时直接修改任务配置 |
 | `HET_WAF_2516P_SOURCE_IP` | `192.168.42.234` | 允许接入的 WAF 发送端 IP |
 | `HET_WAF_2516P_SYSLOG_TOPIC` | `hetwaf2516p-syslog-raw` | 原始 Syslog Kafka 主题 |
 | `HET_WAF_2516P_CLICKHOUSE_GROUP_ID` | `hetwaf2516p-waf-v1` | Kafka → ClickHouse 消费组 |

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -78,5 +79,72 @@ class VectorServiceImplTest {
 
         assertThat(workspace.resolve("10/push.yaml")).doesNotExist();
         assertThat(workspace.resolve("10/push.toml")).isRegularFile();
+    }
+
+    @Test
+    void exposesInterpolationAndKerberosEnvironment() throws Exception {
+        Path krb5Conf = tempDir.resolve("krb5.conf");
+        Path keytab = tempDir.resolve("client.keytab");
+        Files.writeString(krb5Conf, "");
+        Files.writeString(keytab, "");
+
+        KerberosProperties kerberos = new KerberosProperties();
+        kerberos.setEnabled(true);
+        kerberos.setKrb5ConfigPath(krb5Conf.toString());
+        kerberos.setKeytabPath(keytab.toString());
+        kerberos.setCcachePath("/tmp/krb5cc_test");
+        VectorServiceImpl kerberosService = new VectorServiceImpl(
+                mock(MonitorService.class),
+                tempDir.resolve("vector").toString(),
+                workspace.toString(),
+                kerberos);
+
+        Map<String, String> env = kerberosService.buildVectorProcessEnvironment();
+
+        assertThat(env)
+                .containsEntry("VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION", "true")
+                .containsEntry("KRB5_CONFIG", krb5Conf.toString())
+                .containsEntry("KRB5_KTNAME", keytab.toString())
+                .containsEntry("KRB5CCNAME", "/tmp/krb5cc_test");
+    }
+
+    @Test
+    void passesKerberosAndInterpolationEnvironmentToVectorProcess() throws Exception {
+        Path vectorHome = tempDir.resolve("vector-runtime");
+        Path executable = vectorHome.resolve("bin").resolve("vector");
+        Files.createDirectories(executable.getParent());
+        Path envDump = tempDir.resolve("vector-env.txt");
+        Files.writeString(executable, "#!/bin/sh\nenv > " + envDump + "\n");
+        assertThat(executable.toFile().setExecutable(true)).isTrue();
+
+        Path krb5Conf = tempDir.resolve("krb5.conf");
+        Path keytab = tempDir.resolve("client.keytab");
+        Files.writeString(krb5Conf, "");
+        Files.writeString(keytab, "");
+
+        KerberosProperties kerberos = new KerberosProperties();
+        kerberos.setEnabled(true);
+        kerberos.setKrb5ConfigPath(krb5Conf.toString());
+        kerberos.setKeytabPath(keytab.toString());
+        kerberos.setCcachePath("/tmp/krb5cc_test");
+        VectorServiceImpl kerberosService = new VectorServiceImpl(
+                mock(MonitorService.class),
+                vectorHome.toString(),
+                workspace.toString(),
+                kerberos);
+
+        kerberosService.init();
+        assertThat(kerberosService.createProcess("42", "sources: {}", null, "yaml")).isNull();
+        assertThat(kerberosService.startProcess("42")).isPositive();
+
+        for (int attempt = 0; attempt < 50 && !Files.exists(envDump); attempt++) {
+            Thread.sleep(100);
+        }
+        assertThat(envDump).isRegularFile();
+        assertThat(Files.readString(envDump))
+                .contains("VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true")
+                .contains("KRB5_CONFIG=" + krb5Conf)
+                .contains("KRB5_KTNAME=" + keytab)
+                .contains("KRB5CCNAME=/tmp/krb5cc_test");
     }
 }

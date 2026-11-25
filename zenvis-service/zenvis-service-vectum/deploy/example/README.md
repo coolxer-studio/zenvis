@@ -324,6 +324,8 @@ volumes:
   - ./kerberos/vectum.keytab:/etc/krb5/vectum.keytab:ro
 environment:
   VECTUM_KERBEROS_ENABLED: "true"
+  VECTUM_KERBEROS_KRB5_CONFIG_PATH: /etc/krb5.conf
+  VECTUM_KERBEROS_KEYTAB_PATH: /etc/krb5/vectum.keytab
   VECTUM_KERBEROS_PRINCIPAL: vectum@YOUR-REALM.COM
   VECTUM_KERBEROS_SERVICE_NAME: kafka
 ```
@@ -343,15 +345,13 @@ sources:
       security.protocol: SASL_PLAINTEXT
       sasl.mechanism: GSSAPI
       sasl.kerberos.service.name: kafka
-      sasl.jaas.config: >-
-        com.sun.security.auth.module.Krb5LoginModule required
-        useKeyTab=true
-        keyTab="/etc/krb5/vectum.keytab"
-        principal="vectum@YOUR-REALM.COM"
-        storeKey=true;
+      sasl.kerberos.principal: vectum@YOUR-REALM.COM
+      sasl.kerberos.keytab: /etc/krb5/vectum.keytab
 ```
 
-> **重要提示**：Vector 的内建 `sasl` 字段仅支持 PLAIN 和 SCRAM 机制。GSSAPI (Kerberos) 必须通过 `librdkafka_options` 配置。同时需要容器内存在有效的 `krb5.conf` 和 keytab 文件，vectum 会在启动 Vector 进程时自动注入 `KRB5_CONFIG` 等环境变量。
+> **重要提示**：Vector 的内建 `sasl` 字段仅支持 PLAIN 和 SCRAM 机制。GSSAPI (Kerberos) 必须通过 `librdkafka_options` 配置。`sasl.jaas.config` 是 Java 客户端参数，librdkafka 会报 `Java JAAS configuration is not supported`，不要使用。同时需要容器内存在有效的 `krb5.conf` 和 keytab 文件，vectum 会在启动 Vector 进程时自动注入 `KRB5_CONFIG` 等环境变量。
+
+> Vector 0.62 默认关闭环境变量插值；Vectum 会为 Vector 进程注入 `VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true`，保持 `${VAR:-default}` 的既有行为。镜像必须使用带 GSSAPI 的自建 Vector，不能用官方 musl 版本。
 
 ### 故障排查
 
@@ -361,4 +361,6 @@ sources:
 | `Client's GSSAPI Mechanism Level not allowed` | Broker `sasl.enabled.mechanisms` 未包含 `GSSAPI` | 检查 Kafka `server.properties` |
 | `KRB5_CONFIG env missing` 或 `No such file` | 容器内 krb5.conf 未正确挂载 | `docker exec vectum ls -la /etc/krb5.conf` |
 | `Preformatted broker hostname does not match principal` | `sasl.kerberos.service.name` 与 Broker principal 的 service 部分不一致 | 通常应为 `kafka` |
+| `No provider for SASL mechanism GSSAPI` | Vector 二进制未启用 GSSAPI | 使用 `./build-vector-gssapi.sh` 重新构建 |
+| `Java JAAS configuration is not supported` | 配置里仍使用 `sasl.jaas.config` | 改用 `sasl.kerberos.principal` + `sasl.kerberos.keytab` |
 

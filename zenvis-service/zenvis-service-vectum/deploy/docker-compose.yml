@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   zenvis-service-vectum:
-    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-service-vectum:1.0.2-amd64
+    image: crpi-4pdi7kz96g4v0tg3.cn-beijing.personal.cr.aliyuncs.com/coolxer-studio/zenvis-service-vectum:1.0.3-amd64
     container_name: zenvis-service-vectum
     ports:
       - "11002:11002"
@@ -10,7 +10,7 @@ services:
       - workspace-data:/workspace
       - vector-data:/var/lib/vector
       # Kerberos 认证 Kafka 时，取消下方注释以挂载 krb5.conf 和 service keytab
-      # - ./kerberos/krb5.conf:/etc/krb5.conf:ro
+      # - ./kerberos/krb5-container.conf:/etc/krb5.conf:ro
       # - ./kerberos/vectum.keytab:/etc/krb5/vectum.keytab:ro
     environment:
       TZ: Asia/Shanghai

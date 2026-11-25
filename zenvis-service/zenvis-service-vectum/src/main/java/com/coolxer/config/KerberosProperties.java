@@ -14,7 +14,8 @@ import java.util.Map;
  * 用于向 Vector 进程注入 Kerberos 所需的 KRB5_* 环境变量，
  * 使得 Vector 内置的 librdkafka 能够通过 GSSAPI 机制认证 Kafka 集群。
  * 任务级别的 librdkafka_options（security.protocol、sasl.mechanism、
- * sasl.jaas.config 等）由用户在 Vector YAML 配置中直接提供，
+ * sasl.kerberos.principal、sasl.kerberos.keytab 等）由用户在 Vector YAML
+ * 配置中直接提供，
  * 本配置类只负责进程级环境变量。
  * </p>
  */
@@ -37,13 +38,13 @@ public class KerberosProperties {
     /**
      * Service principal keytab 文件路径，对应进程环境变量 KRB5_KTNAME。
      * 典型位置 /etc/krb5/vectum.keytab。
-     * 可选：当 librdkafka_options.sasl.jaas.config 中已内联 keyTab 路径时可省略。
+     * 可选：当任务配置中已通过 sasl.kerberos.keytab 指定 keytab 时可省略。
      */
     private String keytabPath = "/etc/krb5/vectum.keytab";
 
     /**
      * Service principal，如 vectum@YOUR-REALM.COM。
-     * 用于在 Vector YAML 的 librdkafka_options.sasl.jaas.config 中引用。
+     * 用于在 Vector YAML 的 librdkafka_options.sasl.kerberos.principal 中引用。
      * 此处仅作为占位符，实际注入进程的是环境变量而非 principal 字段。
      */
     private String principal = "vectum@YOUR-REALM.COM";
@@ -74,6 +75,21 @@ public class KerberosProperties {
         }
         return krb5ConfigPath != null
                 && Files.exists(Path.of(krb5ConfigPath));
+    }
+
+    /**
+     * 判断 keytab 文件是否存在。
+     * <p>
+     * 任务也可以通过 sasl.kerberos.keytab 或已存在的 ccache 提供凭据，
+     * 因此 keytab 缺失不阻止启动，但应在日志中提示。
+     * </p>
+     *
+     * @return true 表示配置的 keytab 文件存在
+     */
+    public boolean isKeytabAvailable() {
+        return keytabPath != null
+                && !keytabPath.isBlank()
+                && Files.exists(Path.of(keytabPath));
     }
 
     /**

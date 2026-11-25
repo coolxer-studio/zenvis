@@ -1,0 +1,9 @@
+.git
+.idea
+.vscode
+workspace
+logs
+vector/.build
+vector/*.tar.gz
+*.iml
+*.log

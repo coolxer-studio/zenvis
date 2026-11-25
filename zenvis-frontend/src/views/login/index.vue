@@ -6,10 +6,6 @@
     <section class="brand-panel" :style="bannerStyle">
       <div class="brand-overlay"></div>
       <div class="brand-content">
-        <div class="product-chip" v-if="systemInfo?.productVersion">
-          <span class="status-dot"></span>
-          SYSTEM · v{{ systemInfo.productVersion }}
-        </div>
         <h2>{{ systemInfo?.productName }}</h2>
         <p>
           {{
@@ -319,32 +315,6 @@ onUnmounted(() => {
 .brand-footer {
   position: relative;
   z-index: 2;
-}
-
-.product-chip {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  height: 32px;
-  padding-inline: 13px;
-  color: #dce8ff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  backdrop-filter: blur(10px);
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  margin-right: 8px;
-  background: #32d69b;
-  border-radius: 50%;
-  box-shadow: 0 0 12px #32d69b;
 }
 
 .brand-content h1,

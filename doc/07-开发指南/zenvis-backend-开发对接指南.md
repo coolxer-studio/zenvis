@@ -309,7 +309,7 @@ plugin-custom/
         └── V001__init_schema.sql
 ```
 
-已执行迁移不得修改；后续变更增加更高版本。插件卸载不删除业务表和迁移历史。ClickHouse 结构由 Meta `auto_create` 与实际部署共同决定。
+已执行迁移不得修改；后续变更增加更高版本。插件应在 `03_api/migrations/mysql/owned-tables.json` 按创建顺序声明自有表；默认卸载按逆序删除这些表并在全部成功后清理迁移历史，勾选保留数据时两者都保留。ClickHouse 结构由 Meta `auto_create` 与实际部署共同决定。
 
 ## 测试策略
 

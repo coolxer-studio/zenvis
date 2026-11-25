@@ -551,6 +551,7 @@
 								"plugin_name": "${name}",
 								"package_name": "${package_name}",
 								"plugin_version": "${version}",
+								"keep_data": "${data_retained}",
 								"hide_log": true,
 								"hide_confirm": false
 							},
@@ -581,7 +582,13 @@
 											"actions": [
 												{
 													"actionType": "ajax",
-													"api": "post:/zenvis/api/v1/system/plugin/${plugin_id}/uninstall"
+													"api": {
+														"method": "post",
+														"url": "/zenvis/api/v1/system/plugin/${plugin_id}/uninstall",
+														"data": {
+															"keep_data": "${keep_data}"
+														}
+													}
 												},
 												{
 													"actionType": "setValue",
@@ -600,15 +607,41 @@
 							],
 							"body": [
 								{
+									"type": "form",
+									"wrapWithPanel": false,
+									"hiddenOn": "data.hide_confirm",
+									"body": [
+										{
+											"type": "checkbox",
+											"name": "keep_data",
+											"label": "保留插件数据",
+											"option": "保留 ClickHouse、MySQL、插件 RAG 知识库/数据集及 MinIO 文件，重新安装后可继续使用",
+											"description": "默认不勾选，卸载时删除插件业务数据。"
+										}
+									]
+								},
+								{
 									"type": "alert",
 									"level": "danger",
-									"title": "卸载将对系统造成不可逆影响",
+									"title": "卸载将删除插件数据且不可恢复",
 									"showIcon": true,
 									"showCloseButton": false,
-									"hiddenOn": "data.hide_confirm",
+									"visibleOn": "!data.hide_confirm && !data.keep_data",
 									"body": {
 										"type": "tpl",
-										"tpl": "<p>卸载插件后将产生以下影响：</p><ul><li>停止并删除插件的数据推送任务，相关数据将不再接入；</li><li>移除插件菜单、页面、看板、MCP、Skill、RAG 文档及动态 API，正在使用的功能可能立即中断；</li><li>删除插件 Meta 定义及其关联的 ClickHouse 数据表，已有业务数据将永久丢失；</li><li>依赖上述接口、菜单或数据表的其他系统功能可能出现异常。</li></ul><p><strong>此操作不可撤销。请确认已完成必要的数据备份，且当前没有更新、分析或外部调用依赖该插件。</strong></p>"
+										"tpl": "<p>未勾选“保留插件数据”时，卸载将产生以下影响：</p><ul><li>停止并删除插件的数据推送任务，相关数据将不再接入；</li><li>移除插件菜单、页面、看板、MCP、动态 API、UI 配置和 Skill；</li><li>删除插件 Meta 定义及其关联的 ClickHouse 表和数据；</li><li>删除插件创建的 MySQL 表、业务数据及 MySQL 迁移历史；</li><li>删除插件托管 RAG 知识库、数据集、向量和 MinIO 文件；</li><li>依赖上述接口、菜单或数据表的其他系统功能可能出现异常。</li></ul><p><strong>此操作不可撤销。请确认已完成必要的数据备份，且当前没有更新、分析或外部调用依赖该插件。</strong></p>"
+									}
+								},
+								{
+									"type": "alert",
+									"level": "info",
+									"title": "已选择保留插件数据",
+									"showIcon": true,
+									"showCloseButton": false,
+									"visibleOn": "!data.hide_confirm && data.keep_data",
+									"body": {
+										"type": "tpl",
+										"tpl": "<p>卸载仍会清理插件的运行资源与配置，但保留以下数据：</p><ul><li>ClickHouse 表及数据；</li><li>MySQL 插件表、业务数据和 MySQL 迁移历史；</li><li>插件托管 RAG 知识库、数据集、向量和 MinIO 文件。</li></ul><p>重新安装同包名插件时会复用上述数据，并只执行新增的 MySQL 迁移；插件菜单、看板、MCP、UI、API、Push Task 和 Skill 会按新插件包重新安装。</p><p><strong>保留的数据不会在后续卸载时自动清理；如确认不再需要，请按运维流程单独处理。</strong></p>"
 									}
 								},
 								{

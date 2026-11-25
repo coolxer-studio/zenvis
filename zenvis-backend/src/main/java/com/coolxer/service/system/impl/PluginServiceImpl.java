@@ -475,7 +475,7 @@ public class PluginServiceImpl implements PluginService {
     }
 
     @Override
-    public synchronized PluginVo uninstall(Long id) {
+    public synchronized PluginVo uninstall(Long id, boolean keepData) {
         Plugin plugin = getPluginOrThrow(id);
         PluginStatusType status = normalizeStatus(plugin.getStatus());
         if (status.isInProgress()) {
@@ -486,7 +486,9 @@ public class PluginServiceImpl implements PluginService {
         }
         validatePackageName(plugin.getPackageName());
         resetLogs(id);
-        updateOperationState(plugin, PluginStatusType.UNINSTALLING, "卸载已开始", null, true);
+        plugin.setDataRetained(keepData);
+        updateOperationState(plugin, PluginStatusType.UNINSTALLING,
+                keepData ? "卸载已开始（保留数据）" : "卸载已开始（删除数据）", null, true);
         Plugin saved = pluginRepository.save(plugin);
         try {
             submitPluginOperation(
@@ -1967,7 +1969,8 @@ public class PluginServiceImpl implements PluginService {
                     .init();
 
             writeLog(id, "插件检查......");
-            cleanupPluginCoreResources(id, plugin, false);
+            boolean retainData = Boolean.TRUE.equals(plugin.getDataRetained());
+            cleanupPluginCoreResources(id, plugin, false, !retainData);
 
             writeLog(id, "1 解压插件包......");
             Path pluginDir = pluginPackTool.getPluginFilePath();
@@ -1983,7 +1986,9 @@ public class PluginServiceImpl implements PluginService {
             List<String> pluginTableNames = readMetaTableNames(pluginPackTool.listMetaFiles());
             List<Path> copiedMetaPaths = copyPluginMetaFiles(packageName, pluginPackTool.listMetaFiles());
             compensationStack.add("删除meta和库表", () -> {
-                deletePluginTables(pluginTableNames);
+                if (!retainData) {
+                    deletePluginTables(pluginTableNames);
+                }
                 for (Path metaPath : copiedMetaPaths) {
                     deleteIfExists(metaPath);
                 }
@@ -2037,6 +2042,9 @@ public class PluginServiceImpl implements PluginService {
                 writeLog(id, "加载插件Skill失败，跳过");
             }
 
+            plugin = getPluginOrThrow(id);
+            plugin.setDataRetained(false);
+            pluginRepository.save(plugin);
             String message = warnings.isEmpty() ? "安装完成" : "安装完成（" + String.join("，", warnings) + "）";
             finishOperation(id, PluginStatusType.INSTALLED, message, null);
             writeLog(id, "完成......");
@@ -2054,8 +2062,9 @@ public class PluginServiceImpl implements PluginService {
         try {
             Plugin plugin = getPluginOrThrow(id);
             String upgradeOperationId = plugin.getUpgradeOperationId();
+            boolean keepData = Boolean.TRUE.equals(plugin.getDataRetained());
             writeLog(id, "插件检查......");
-            cleanupPluginCoreResources(id, plugin, true);
+            cleanupPluginCoreResources(id, plugin, true, !keepData);
             if (StringUtils.isNotBlank(upgradeOperationId)) {
                 deletePluginUpgradeObjects(plugin.getPackageName(), upgradeOperationId);
                 deleteIfExists(upgradeOperationRoot(id, upgradeOperationId));
@@ -2063,7 +2072,8 @@ public class PluginServiceImpl implements PluginService {
             plugin = getPluginOrThrow(id);
             clearUpgradePending(plugin);
             pluginRepository.save(plugin);
-            finishOperation(id, PluginStatusType.UN_INSTALL, "卸载完成", null);
+            finishOperation(id, PluginStatusType.UN_INSTALL,
+                    keepData ? "卸载完成（数据已保留）" : "卸载完成（数据已删除）", null);
             writeLog(id, "完成......");
         } catch (Exception e) {
             log.error("插件卸载失败: id={}", id, e);
@@ -2538,9 +2548,14 @@ public class PluginServiceImpl implements PluginService {
         return requireChildPath(installedPluginRoot(plugin).resolve("00_doc"), installedPluginRoot(plugin));
     }
 
-    private void cleanupPluginCoreResources(Long id, Plugin plugin, boolean includeRagSkill) throws Exception {
+    private void cleanupPluginCoreResources(Long id, Plugin plugin, boolean includeRagSkill,
+                                            boolean deleteData) throws Exception {
         String packageName = plugin.getPackageName();
         validatePackageName(packageName);
+        Path installedRoot = installedPluginRoot(plugin);
+        Path mysqlMigrationDir = requireChildPath(
+                installedRoot.resolve("03_api/migrations/mysql"), installedRoot);
+        List<String> clickhouseTables = readPluginMetaTableNames(packageName);
 
         writeLog(id, "清理菜单按钮......");
         deletePluginMenus(packageName);
@@ -2552,7 +2567,7 @@ public class PluginServiceImpl implements PluginService {
         cleanupPluginMcpServers(packageName);
 
         writeLog(id, "清理UI配置......");
-        Path installedUiPath = requireChildPath(installedPluginRoot(plugin).resolve("04_ui"), installedPluginRoot(plugin));
+        Path installedUiPath = requireChildPath(installedRoot.resolve("04_ui"), installedRoot);
         cleanupPluginUi(packageName, installedUiPath);
 
         writeLog(id, "卸载API包......");
@@ -2561,23 +2576,7 @@ public class PluginServiceImpl implements PluginService {
         writeLog(id, "清理push-task任务......");
         pushTaskService.deleteBySourceMark(packageName);
 
-        writeLog(id, "清理meta和库表......");
-        deletePluginMetaAndTables(packageName);
-
-        writeLog(id, "清理解压目录......");
-        deleteIfExists(installedPluginRoot(plugin));
-
         if (includeRagSkill) {
-            writeLog(id, "卸载插件RAG资源......");
-            try {
-                List<String> ragWarnings = new ArrayList<>();
-                pluginRagService.cleanupManagedResources(packageName, ragWarnings);
-                ragWarnings.forEach(warning -> writeLog(id, warning));
-            } catch (Exception e) {
-                log.error("卸载插件RAG资源失败: package={}", packageName, e);
-                writeLog(id, "卸载插件RAG资源失败，跳过");
-            }
-
             writeLog(id, "卸载插件Skill......");
             try {
                 skillService.uninstallPluginSkills(packageName);
@@ -2586,6 +2585,27 @@ public class PluginServiceImpl implements PluginService {
                 writeLog(id, "卸载插件Skill失败，跳过");
             }
         }
+
+        if (deleteData) {
+            writeLog(id, "删除插件ClickHouse表......");
+            deletePluginTables(clickhouseTables);
+            if (includeRagSkill) {
+                writeLog(id, "删除插件RAG资源......");
+                List<String> ragWarnings = pluginRagService.cleanupManagedResourcesForUninstall(packageName);
+                ragWarnings.forEach(warning -> writeLog(id, warning));
+
+                writeLog(id, "删除插件MySQL表......");
+                pluginMigrationService.cleanupMysql(packageName, mysqlMigrationDir);
+            }
+        } else {
+            writeLog(id, "保留插件数据（ClickHouse/MySQL/RAG）......");
+        }
+
+        writeLog(id, "清理meta配置......");
+        deletePluginMetaFiles(packageName);
+
+        writeLog(id, "清理解压目录......");
+        deleteIfExists(installedRoot);
     }
 
     private List<Path> copyPluginMetaFiles(String packageName, List<Path> metaFiles) throws IOException {
@@ -2622,7 +2642,25 @@ public class PluginServiceImpl implements PluginService {
         return tableNames;
     }
 
-    private void deletePluginMetaAndTables(String packageName) throws IOException {
+    private List<String> readPluginMetaTableNames(String packageName) throws IOException {
+        Path metaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
+        if (!Files.exists(metaRoot)) {
+            return Collections.emptyList();
+        }
+        List<Path> pluginMetaFiles;
+        try (Stream<Path> paths = Files.walk(metaRoot)) {
+            pluginMetaFiles = paths.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith(packageName + "_"))
+                    .toList();
+        }
+        List<String> tableNames = new ArrayList<>();
+        for (Path path : pluginMetaFiles) {
+            tableNames.addAll(readMetaTableNames(path));
+        }
+        return tableNames;
+    }
+
+    private void deletePluginMetaFiles(String packageName) throws IOException {
         Path metaRoot = requireChildPath(configRoot().resolve("meta_config"), configRoot());
         if (!Files.exists(metaRoot)) {
             return;
@@ -2634,7 +2672,6 @@ public class PluginServiceImpl implements PluginService {
                     .toList();
         }
         for (Path path : pluginMetaFiles) {
-            deletePluginTables(readMetaTableNames(path));
             deleteIfExists(path);
         }
         metaDataService.loadMetaData();

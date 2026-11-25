@@ -104,10 +104,11 @@ public interface PluginService {
     /**
      * 卸载插件
      *
-     * @param id
+     * @param id       插件id
+     * @param keepData 是否保留插件数据
      * @return
      */
-    PluginVo uninstall(Long id);
+    PluginVo uninstall(Long id, boolean keepData);
 
     /**
      * 安装插件

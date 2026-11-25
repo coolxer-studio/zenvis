@@ -326,6 +326,31 @@ class ClickhouseSchemeServiceImplTest {
                 org.mockito.ArgumentMatchers.startsWith("ALTER TABLE"));
     }
 
+    @Test
+    void deleteTableUsesDropStatement() {
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+
+        service.deleteTable("zenvis.asset");
+
+        verify(entityManager).createNativeQuery("DROP TABLE IF EXISTS zenvis.asset;");
+    }
+
+    @Test
+    void deleteTableThrowsWhenDropFails() {
+        EntityManager entityManager = mock(EntityManager.class);
+        when(entityManager.createNativeQuery(anyString())).thenThrow(new IllegalStateException("drop failed"));
+        ClickhouseSchemeServiceImpl service = service(entityManager);
+
+        assertThatThrownBy(() -> service.deleteTable("zenvis.asset"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ClickHouse表删除失败")
+                .hasMessageContaining("DROP TABLE IF EXISTS zenvis.asset;");
+    }
+
     private ClickhouseSchemeServiceImpl service(EntityManager entityManager) {
         ClickhouseSchemeServiceImpl service = new ClickhouseSchemeServiceImpl();
         ReflectionTestUtils.setField(service, "entityManager", entityManager);

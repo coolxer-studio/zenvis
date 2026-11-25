@@ -331,11 +331,19 @@ When the extension provides agent tools, expose SSE in-process with the MCP SDK:
 
 Put versioned SQL at `03_api/migrations/mysql/V<version>__<description>.sql` (for example `V001__create_btw_work_order.sql`; versions may be multi-segment such as `V1.2`; descriptions use only letters, digits, underscore, hyphen). Name plugin tables with a stable `t_<plugin>_<entity>` convention.
 
+Also add `03_api/migrations/mysql/owned-tables.json` in creation order:
+
+```json
+{"tables": ["t_example_parent", "t_example_child"]}
+```
+
 Rules:
 
 - Migrations run in numeric order and are tracked in `t_sys_plugin_migration` with a SHA-256 checksum.
 - No duplicate versions; executed files must be retained verbatim (name, description, checksum immutable); new versions must be higher.
-- Always forward and idempotent (`CREATE TABLE IF NOT EXISTS`); never rolled back by uninstall or failed upgrade. Design every migration so the previous plugin version keeps running after it.
+- Always forward and idempotent (`CREATE TABLE IF NOT EXISTS`); failed upgrades do not auto-rollback DDL. Design every migration so the previous plugin version keeps running after it.
+- Uninstall deletes data by default: ClickHouse tables/data, declared MySQL tables/data, migration history, and managed RAG resources. The uninstall dialog can opt into `keep_data`, which skips MySQL/RAG/ClickHouse data deletion and preserves migration history for same-package reinstall.
+- `owned-tables.json` tables are dropped in reverse order; names may contain only letters, digits, and underscore, must not start with `t_sys_`, and must not name another plugin’s tables. Without the manifest, the platform infers tables from `CREATE TABLE [IF NOT EXISTS]` in migrations.
 - ClickHouse analytics tables are managed by Meta `auto_create`, never by MySQL migrations.
 
 ### Test the extension

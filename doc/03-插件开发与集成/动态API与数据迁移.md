@@ -184,6 +184,23 @@ V1.2__add_owner_column.sql
 
 版本由一个或多个数字段组成，描述只能使用英文、数字、下划线或连字符。
 
+插件应在同目录提供 `owned-tables.json`，按创建顺序声明自己拥有的业务表：
+
+```text
+03_api/migrations/mysql/owned-tables.json
+```
+
+```json
+{
+  "tables": [
+    "t_example_record",
+    "t_example_record_action"
+  ]
+}
+```
+
+表名只能使用字母、数字和下划线，且不能以 `t_sys_` 开头。平台按声明顺序的逆序删除表，通常先生成的父表最后删除。缺少清单时，平台会从迁移 SQL 的 `CREATE TABLE [IF NOT EXISTS]` 语句推断表名；推断结果同样经过安全校验。存在外键时，清单顺序应与建表顺序一致，并避免声明平台表或其他插件表。
+
 ```sql
 CREATE TABLE IF NOT EXISTS t_example_record (
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -203,6 +220,14 @@ CREATE TABLE IF NOT EXISTS t_example_record (
 | `checksum` | SQL 文件 SHA-256 |
 | `installed_on` | 执行时间 |
 
+## 卸载与数据保留
+
+- 默认卸载会删除 `owned-tables.json` 声明（或迁移 SQL 推断）的 MySQL 表，并在全部 DROP 成功后删除该 `package_name` 的 `t_sys_plugin_migration` 历史。
+- 卸载弹窗勾选“保留插件数据”时，跳过 MySQL 表、业务数据和迁移历史删除。
+- 删除数据后重新安装会重新执行全部迁移；保留数据后重新安装只执行新增迁移。
+- 任一 DROP 失败时，迁移历史保留，卸载进入 `UNINSTALL_FAILED`，修复数据库连接或表依赖后可重试。
+- 插件记录、MinIO 原始插件包、Kafka/Vectum 和第三方系统数据不在 MySQL 表清理范围内。
+
 ## 迁移规则
 
 - 迁移按数字版本顺序执行。
@@ -211,7 +236,7 @@ CREATE TABLE IF NOT EXISTS t_example_record (
 - 已执行文件的名称、描述和 SHA-256 不可修改。
 - 新增版本必须高于已经执行的最高版本。
 - 升级和重新安装只执行未记录的迁移。
-- MySQL 迁移只向前，不由插件卸载自动回滚。
+- MySQL 迁移本身只向前，不生成回滚脚本；卸载的数据删除策略由 `owned-tables.json` 和“保留插件数据”选项控制。
 
 迁移应具备幂等保护和向前兼容性。升级失败时，旧插件可能恢复运行，但已经执行的 MySQL DDL 不会自动撤销。
 

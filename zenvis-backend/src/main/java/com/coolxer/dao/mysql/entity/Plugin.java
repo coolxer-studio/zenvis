@@ -136,6 +136,12 @@ public class Plugin extends BaseEntity {
     @Column(name = "operation_ended_at")
     private Date operationEndedAt;
 
+    /**
+     * 最近一次卸载是否保留插件数据，用于重新安装时避免误删保留数据。
+     */
+    @Column(name = "data_retained")
+    private Boolean dataRetained = false;
+
     public void updateFromDto(PluginDto pluginDto) {
         if (pluginDto.getName() != null) {
             this.name = pluginDto.getName();

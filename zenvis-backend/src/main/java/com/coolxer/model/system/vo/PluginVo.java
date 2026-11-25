@@ -129,6 +129,11 @@ public class PluginVo implements Serializable {
     private Date operationEndedAt;
 
     /**
+     * 最近一次卸载是否保留插件数据
+     */
+    private boolean dataRetained;
+
+    /**
      * 更新时间
      */
     private Date updateTime;
@@ -151,6 +156,7 @@ public class PluginVo implements Serializable {
         this.operationError = plugin.getOperationError();
         this.operationStartedAt = plugin.getOperationStartedAt();
         this.operationEndedAt = plugin.getOperationEndedAt();
+        this.dataRetained = Boolean.TRUE.equals(plugin.getDataRetained());
         this.updateTime = plugin.getUpdateTime();
     }
 

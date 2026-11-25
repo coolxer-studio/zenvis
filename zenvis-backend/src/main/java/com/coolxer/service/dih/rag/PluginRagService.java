@@ -170,6 +170,18 @@ public class PluginRagService {
         cleanupManagedResources(packageName, warnings, false);
     }
 
+    /**
+     * 卸载插件时严格删除托管 RAG 资源；知识库、数据集或 MinIO 文件删除失败会抛出异常。
+     *
+     * @param packageName 插件包名
+     * @return 非阻断告警
+     */
+    public List<String> cleanupManagedResourcesForUninstall(String packageName) {
+        List<String> warnings = new ArrayList<>();
+        cleanupManagedResources(packageName, warnings, true);
+        return warnings;
+    }
+
     private void cleanupManagedResources(String packageName, Collection<String> warnings, boolean failFast) {
         for (RagKnowledgeBase knowledgeBase : ragKnowledgeBaseRepository.findAllManaged(packageName)) {
             try {
@@ -189,7 +201,11 @@ public class PluginRagService {
                 continue;
             }
             try {
-                ragDatasetService.delete(dataset.getId());
+                if (failFast) {
+                    ragDatasetService.deleteStrict(dataset.getId());
+                } else {
+                    ragDatasetService.delete(dataset.getId());
+                }
             } catch (Exception e) {
                 if (failFast) {
                     throw cleanupFailure("数据集「" + dataset.getName() + "」清理失败", e);

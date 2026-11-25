@@ -17,6 +17,8 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -45,6 +47,40 @@ class PluginControllerTest {
                 .andExpect(status().isOk());
 
         verify(pluginService).upgrade(eq(7L), any());
+    }
+
+    @Test
+    void uninstallWithoutBodyDeletesDataByDefault() throws Exception {
+        when(pluginService.uninstall(anyLong(), anyBoolean())).thenReturn(null);
+
+        mockMvc.perform(post("/api/v1/system/plugin/7/uninstall"))
+                .andExpect(status().isOk());
+
+        verify(pluginService).uninstall(7L, false);
+    }
+
+    @Test
+    void uninstallHonorsKeepDataFlag() throws Exception {
+        when(pluginService.uninstall(anyLong(), anyBoolean())).thenReturn(null);
+
+        mockMvc.perform(post("/api/v1/system/plugin/7/uninstall")
+                        .contentType("application/json")
+                        .content("{\"keep_data\":true}"))
+                .andExpect(status().isOk());
+
+        verify(pluginService).uninstall(7L, true);
+    }
+
+    @Test
+    void uninstallEmptyBodyDeletesDataByDefault() throws Exception {
+        when(pluginService.uninstall(anyLong(), anyBoolean())).thenReturn(null);
+
+        mockMvc.perform(post("/api/v1/system/plugin/7/uninstall")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isOk());
+
+        verify(pluginService).uninstall(7L, false);
     }
 
     @Test

@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -479,7 +480,7 @@ class PluginRagServiceTest {
         dataset.setId(11);
         when(serviceRepository(service).findAllManaged("com.acme.demo")).thenReturn(List.of(dataset));
         org.mockito.Mockito.doThrow(new IllegalStateException("database unavailable"))
-                .when(serviceDatasetService(service)).delete(11);
+                .when(serviceDatasetService(service)).deleteStrict(11);
 
         assertThatThrownBy(() -> service.synchronize("com.acme.demo",
                 new PluginRagPlan("com.acme.demo", List.of(), List.of()), pluginRoot, new ArrayList<>()))
@@ -612,6 +613,55 @@ class PluginRagServiceTest {
         verify(serviceKnowledgeBaseService(service)).delete(22);
         verify(serviceDatasetService(service)).delete(11);
         verify(serviceVectorStore(service)).unloadDocFromRag("com_acme_demo");
+    }
+
+    @Test
+    void strictCleanupFailsWhenManagedKnowledgeBaseCannotBeDeleted() {
+        PluginRagService service = newService();
+        RagKnowledgeBase knowledgeBase = new RagKnowledgeBase().setName("KB")
+                .setPluginPackage("com.acme.demo").setPluginCode("kb");
+        knowledgeBase.setId(22);
+        when(serviceKnowledgeBaseRepository(service).findAllManaged("com.acme.demo"))
+                .thenReturn(List.of(knowledgeBase));
+        doThrow(new IllegalStateException("vector store unavailable"))
+                .when(serviceKnowledgeBaseService(service)).delete(22);
+
+        assertThatThrownBy(() -> service.cleanupManagedResourcesForUninstall("com.acme.demo"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("知识库「KB」清理失败");
+
+        verify(serviceDatasetService(service), never()).deleteStrict(anyInt());
+    }
+
+    @Test
+    void strictCleanupFailsWhenManagedDatasetCannotBeDeleted() {
+        PluginRagService service = newService();
+        RagDataset managed = new RagDataset().setName("Docs")
+                .setPluginPackage("com.acme.demo").setPluginCode("docs");
+        managed.setId(11);
+        when(serviceRepository(service).findAllManaged("com.acme.demo")).thenReturn(List.of(managed));
+        doThrow(new IllegalStateException("file delete failed"))
+                .when(serviceDatasetService(service)).deleteStrict(11);
+
+        assertThatThrownBy(() -> service.cleanupManagedResourcesForUninstall("com.acme.demo"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("数据集「Docs」清理失败");
+    }
+
+    @Test
+    void strictCleanupKeepsDatasetReferencedByOtherKnowledgeBaseWithWarning() {
+        PluginRagService service = newService();
+        RagDataset managed = new RagDataset().setName("Docs")
+                .setPluginPackage("com.acme.demo").setPluginCode("docs");
+        managed.setId(11);
+        when(serviceRepository(service).findAllManaged("com.acme.demo")).thenReturn(List.of(managed));
+        when(serviceRelationRepository(service).findByDatasetId(11))
+                .thenReturn(List.of(new RagKnowledgeBaseDataset().setKnowledgeBaseId(5).setDatasetId(11)));
+
+        List<String> warnings = service.cleanupManagedResourcesForUninstall("com.acme.demo");
+
+        verify(serviceDatasetService(service), never()).deleteStrict(11);
+        assertThat(warnings).anyMatch(item -> item.contains("仍被其他知识库引用"));
     }
 
     @Test

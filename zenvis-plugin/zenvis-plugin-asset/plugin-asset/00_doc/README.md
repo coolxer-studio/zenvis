@@ -244,7 +244,7 @@
 
 API 源码位于仓库根目录的 `extend-asset/`，发布包只包含
 `03_api/extend-asset-1.0.0.jar`。`V001__create_asset_rule.sql` 接管既有
-`t_asset_rule`，安装升级不搬迁历史记录，卸载插件也不会删除该表。
+`t_asset_rule`，安装升级不搬迁历史记录。默认卸载会删除该表和迁移历史；卸载弹窗勾选“保留插件数据”时保留，重新安装同包名插件后可继续使用。
 
 原核心路径 `/api/v1/asset/**` 已移除。资产查询、查看、更新和删除统一使用平台
 `/api/v1/entity/{entityCode}/**` 接口；聚合调查使用

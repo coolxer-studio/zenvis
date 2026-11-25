@@ -443,7 +443,7 @@ public class ClickhouseSchemeServiceImpl implements ClickhouseSchemeService {
 
     @Override
     public void deleteTable(String tableName) {
-        executeSql(String.format("DROP TABLE IF EXISTS %s;", tableName));
+        executeRequiredSql(String.format("DROP TABLE IF EXISTS %s;", tableName), "ClickHouse表删除失败");
     }
 
     private void executeSql(String sqlScript) {

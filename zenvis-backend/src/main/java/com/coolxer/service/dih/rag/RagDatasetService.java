@@ -136,6 +136,20 @@ public class RagDatasetService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Integer id) {
+        deleteInternal(id, false);
+    }
+
+    /**
+     * 删除数据集；任一 MinIO 文件删除失败时抛出异常，供插件卸载等严格清理场景使用。
+     *
+     * @param id 数据集id
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteStrict(Integer id) {
+        deleteInternal(id, true);
+    }
+
+    private void deleteInternal(Integer id, boolean failOnObjectDelete) {
         RagDataset dataset = getDatasetOrThrow(id);
         List<RagKnowledgeBaseDataset> references = ragKnowledgeBaseDatasetRepository.findByDatasetId(id);
         if (CollectionUtils.isNotEmpty(references)) {
@@ -147,6 +161,9 @@ public class RagDatasetService {
             try {
                 minioService.deleteFile(objectName, ragBucket());
             } catch (Exception e) {
+                if (failOnObjectDelete) {
+                    throw new IllegalStateException("删除数据集文件失败: " + objectName, e);
+                }
                 log.warn("删除数据集文件失败: objectName={}", objectName, e);
             }
         }

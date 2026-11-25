@@ -93,7 +93,7 @@ ai-agent-chat-message ─────专属消费组──▶ 校验/转换 ─�
 2. 在推送任务页面**手动启用**「Sentinel安全事件解析入库」和「Sentinel会话事件解析入库」。
 3. 菜单安装后**不自动授权**，需在角色权限中分配；会话事件包含消息原文，应额外限制可见角色。
 4. 升级限制：包名不可变、版本递增；已有 Entity / Attribute / 表 / 列 / 类型 / 排序键 / 分区键不可删改；推送任务名、Dashboard Code、Skill ID、UI 配置索引保持稳定。本插件 `03_api` 无迁移，无 MySQL 数据。
-5. 卸载会删除菜单、Dashboard、低代码配置、推送任务、Meta 与 Meta 关联的 ClickHouse 表及数据、运行时 Skill；不会回滚 MySQL（本插件无）。
+5. 卸载默认删除菜单、Dashboard、低代码配置、推送任务、Meta、Meta 关联的 ClickHouse 表及数据、运行时 Skill；勾选“保留插件数据”时保留 ClickHouse 数据。本插件无 MySQL 迁移和托管 RAG 资源。
 
 ## UI 页面
 

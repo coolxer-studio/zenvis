@@ -158,7 +158,7 @@ public class ExampleController {
 - MySQL 保存用户、角色、菜单、配置和插件元数据；ClickHouse 保存插件实体分析数据；Redis 保存 Session、缓存和运行状态；Redis Stack 只用于向量/RAG；MinIO 保存附件和业务对象。
 - Retrieval 由 Meta、规则、受限表达式、查询引擎和前端状态共同组成，不接受任意 SQL。修改前阅读[数据与检索架构](../doc/06-架构设计/数据与检索架构.md)。
 - 权限改动必须同时检查 `AuthorityInterceptor`、角色菜单树、超级管理员行为、审计日志和敏感字段脱敏。
-- 插件业务表不加入核心 Entity 扫描。插件 MySQL 迁移放在 `03_api/migrations/mysql`，已执行迁移不得修改，只能追加更高版本；插件卸载不删除业务表和迁移历史。
+- 插件业务表不加入核心 Entity 扫描。插件 MySQL 迁移放在 `03_api/migrations/mysql`，已执行迁移不得修改，只能追加更高版本。插件应在 `03_api/migrations/mysql/owned-tables.json` 按创建顺序声明自有表，供卸载和保留数据策略使用；默认卸载删除插件 MySQL 表及迁移历史，勾选保留数据时两者都保留。
 - 插件 ClickHouse 结构由 Meta `auto_create` 和部署共同决定；安装、升级、恢复、卸载必须保持 Meta、动态 API、UI、看板、MCP、Skill、菜单和迁移一致。
 - 不得恢复任意 SQL 生成、SQL 执行或 SQL 校验链路；数据访问只能通过平台定义的安全查询和工具白名单。
 

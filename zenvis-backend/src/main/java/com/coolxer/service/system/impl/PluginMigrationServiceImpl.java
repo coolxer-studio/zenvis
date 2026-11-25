@@ -1,6 +1,10 @@
 package com.coolxer.service.system.impl;
 
+import com.coolxer.configuration.JacksonConfig;
 import com.coolxer.service.system.PluginMigrationService;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.FileSystemResource;
@@ -15,6 +19,7 @@ import java.security.MessageDigest;
 import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -25,6 +30,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -32,7 +38,12 @@ public class PluginMigrationServiceImpl implements PluginMigrationService {
 
     private static final Pattern MIGRATION_FILE =
             Pattern.compile("^V([0-9]+(?:\\.[0-9]+)*)__([A-Za-z0-9_-]+)\\.sql$");
+    private static final String OWNED_TABLES_FILE = "owned-tables.json";
     private static final String HISTORY_TABLE = "t_sys_plugin_migration";
+    private static final Pattern CREATE_TABLE = Pattern.compile(
+            "(?is)\\bCREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"
+                    + "(?:`?[A-Za-z0-9_]+`?\\s*\\.\\s*)?`?([A-Za-z0-9_]+)`?");
+    private static final Pattern SAFE_TABLE_NAME = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]{0,63}$");
 
     private final DataSource mysqlDataSource;
     private final JdbcTemplate jdbcTemplate;
@@ -97,6 +108,40 @@ public class PluginMigrationServiceImpl implements PluginMigrationService {
         }
     }
 
+    @Override
+    public synchronized void cleanupMysql(String packageName, Path migrationDir) {
+        if (migrationDir == null || !Files.isDirectory(migrationDir)) {
+            ensureHistoryTable();
+            Integer historyCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM " + HISTORY_TABLE + " WHERE package_name = ?",
+                    Integer.class,
+                    packageName
+            );
+            if (historyCount != null && historyCount > 0) {
+                throw new IllegalStateException(
+                        "无法清理插件 MySQL 数据，迁移目录不存在: " + packageName + " " + migrationDir);
+            }
+            log.info("跳过插件 MySQL 数据清理，迁移目录不存在且无迁移历史: package={}, path={}",
+                    packageName, migrationDir);
+            return;
+        }
+        List<Path> migrations = listMigrationFiles(migrationDir);
+        List<String> tables = resolveOwnedTables(migrationDir, migrations);
+        List<String> dropOrder = new ArrayList<>(tables);
+        Collections.reverse(dropOrder);
+        for (String tableName : dropOrder) {
+            try {
+                jdbcTemplate.execute("DROP TABLE IF EXISTS `" + tableName + "`");
+            } catch (Exception e) {
+                throw new IllegalStateException(
+                        "删除插件 MySQL 表失败: " + packageName + " " + tableName, e);
+            }
+        }
+        ensureHistoryTable();
+        jdbcTemplate.update("DELETE FROM " + HISTORY_TABLE + " WHERE package_name = ?", packageName);
+        log.info("插件 MySQL 数据清理完成: package={}, tables={}", packageName, tables);
+    }
+
     private void ensureHistoryTable() {
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_sys_plugin_migration (
@@ -108,6 +153,85 @@ public class PluginMigrationServiceImpl implements PluginMigrationService {
                     PRIMARY KEY (package_name, migration_version)
                 )
                 """);
+    }
+
+    private List<Path> listMigrationFiles(Path migrationDir) {
+        try (Stream<Path> paths = Files.walk(migrationDir)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".sql"))
+                    .sorted()
+                    .toList();
+        } catch (Exception e) {
+            throw new IllegalStateException("读取插件 MySQL 迁移目录失败: " + migrationDir, e);
+        }
+    }
+
+    private List<String> resolveOwnedTables(Path migrationDir, List<Path> migrations) {
+        Path manifest = migrationDir.resolve(OWNED_TABLES_FILE);
+        if (Files.isRegularFile(manifest)) {
+            return readOwnedTables(manifest);
+        }
+        List<String> tables = new ArrayList<>();
+        for (Path migration : migrations) {
+            tables.addAll(parseCreateTables(migration));
+        }
+        if (!tables.isEmpty()) {
+            log.warn("插件缺少 {}，已从迁移 SQL 推断 MySQL 表清单: dir={}",
+                    OWNED_TABLES_FILE, migrationDir);
+        }
+        return validateOwnedTables(tables);
+    }
+
+    private List<String> readOwnedTables(Path manifest) {
+        OwnedTables ownedTables;
+        try {
+            ownedTables = JacksonConfig.OBJECT_MAPPER.readValue(
+                    Files.readString(manifest), OwnedTables.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("读取插件 MySQL 表清单失败: " + manifest, e);
+        }
+        if (ownedTables == null || ownedTables.getTables() == null) {
+            throw new IllegalStateException("插件 MySQL 表清单缺少 tables: " + manifest);
+        }
+        return validateOwnedTables(ownedTables.getTables());
+    }
+
+    private List<String> parseCreateTables(Path migration) {
+        String sql;
+        try {
+            sql = Files.readString(migration);
+        } catch (Exception e) {
+            throw new IllegalStateException("读取插件 MySQL 迁移失败: " + migration, e);
+        }
+        String withoutComments = sql
+                .replaceAll("(?s)/\\*.*?\\*/", " ")
+                .replaceAll("(?m)--.*$", " ");
+        Matcher matcher = CREATE_TABLE.matcher(withoutComments);
+        List<String> tables = new ArrayList<>();
+        while (matcher.find()) {
+            tables.add(matcher.group(1));
+        }
+        return tables;
+    }
+
+    private List<String> validateOwnedTables(List<String> tables) {
+        Set<String> unique = new HashSet<>();
+        List<String> validated = new ArrayList<>();
+        for (String table : tables) {
+            String normalized = table == null ? "" : table.trim();
+            if (!SAFE_TABLE_NAME.matcher(normalized).matches()) {
+                throw new IllegalArgumentException("插件 MySQL 表名不合法: " + table);
+            }
+            String lower = normalized.toLowerCase(java.util.Locale.ROOT);
+            if (lower.startsWith("t_sys_")) {
+                throw new IllegalArgumentException("禁止删除平台系统表: " + normalized);
+            }
+            if (!unique.add(normalized)) {
+                throw new IllegalArgumentException("插件 MySQL 表清单重复: " + normalized);
+            }
+            validated.add(normalized);
+        }
+        return validated;
     }
 
     private List<Migration> parseMigrations(List<Path> paths) {
@@ -199,5 +323,11 @@ public class PluginMigrationServiceImpl implements PluginMigrationService {
     }
 
     private record AppliedMigration(String version, String description, String checksum) {
+    }
+
+    @Data
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    static class OwnedTables {
+        private List<String> tables;
     }
 }

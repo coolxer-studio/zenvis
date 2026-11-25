@@ -29,7 +29,7 @@ public interface ClickhouseSchemeService {
     void synchronizeTableTtl(MetaData metaData);
 
     /**
-     * 删除表
+     * 删除表。删除失败时抛出异常。
      *
      * @param tableName
      */

@@ -19,7 +19,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -122,6 +125,75 @@ class RagDatasetServiceTest {
         assertThat(knowledgeBase.getStatus()).isEqualTo(RagKnowledgeBaseStatus.UNBUILD);
     }
 
+    @Test
+    void deleteStrictKeepsRecordWhenMinioDeletionFails() {
+        RagDatasetRepository repository = mock(RagDatasetRepository.class);
+        RagKnowledgeBaseDatasetRepository relationRepository = mock(RagKnowledgeBaseDatasetRepository.class);
+        MinioService minioService = mock(MinioService.class);
+        RagDataset dataset = new RagDataset().setName("Docs");
+        dataset.setId(11);
+        dataset.setIsDelete(0);
+        dataset.setDirectory("rag/plugins/com.acme.demo/docs");
+        when(repository.findById(11)).thenReturn(Optional.of(dataset));
+        when(relationRepository.findByDatasetId(11)).thenReturn(List.of());
+        when(minioService.listObjects(dataset.getDirectory(), "zenvis-rag"))
+                .thenReturn(List.of("rag/plugins/com.acme.demo/docs/a.md"));
+        doThrow(new IllegalStateException("minio unavailable"))
+                .when(minioService).deleteFile("rag/plugins/com.acme.demo/docs/a.md", "zenvis-rag");
+        RagDatasetService service = newService(repository, relationRepository,
+                mock(RagKnowledgeBaseRepository.class), minioService);
+
+        assertThatThrownBy(() -> service.deleteStrict(11))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("删除数据集文件失败");
+        verify(repository, never()).delete(dataset);
+    }
+
+    @Test
+    void deleteKeepsToleratingMinioFailure() {
+        RagDatasetRepository repository = mock(RagDatasetRepository.class);
+        RagKnowledgeBaseDatasetRepository relationRepository = mock(RagKnowledgeBaseDatasetRepository.class);
+        MinioService minioService = mock(MinioService.class);
+        RagDataset dataset = new RagDataset().setName("Docs");
+        dataset.setId(11);
+        dataset.setIsDelete(0);
+        dataset.setDirectory("rag/plugins/com.acme.demo/docs");
+        when(repository.findById(11)).thenReturn(Optional.of(dataset));
+        when(relationRepository.findByDatasetId(11)).thenReturn(List.of());
+        when(minioService.listObjects(dataset.getDirectory(), "zenvis-rag"))
+                .thenReturn(List.of("rag/plugins/com.acme.demo/docs/a.md"));
+        doThrow(new IllegalStateException("minio unavailable"))
+                .when(minioService).deleteFile("rag/plugins/com.acme.demo/docs/a.md", "zenvis-rag");
+        RagDatasetService service = newService(repository, relationRepository,
+                mock(RagKnowledgeBaseRepository.class), minioService);
+
+        service.delete(11);
+
+        verify(repository).delete(dataset);
+    }
+
+    @Test
+    void deleteStrictRemovesFilesAndRecord() {
+        RagDatasetRepository repository = mock(RagDatasetRepository.class);
+        RagKnowledgeBaseDatasetRepository relationRepository = mock(RagKnowledgeBaseDatasetRepository.class);
+        MinioService minioService = mock(MinioService.class);
+        RagDataset dataset = new RagDataset().setName("Docs");
+        dataset.setId(11);
+        dataset.setIsDelete(0);
+        dataset.setDirectory("rag/plugins/com.acme.demo/docs");
+        when(repository.findById(11)).thenReturn(Optional.of(dataset));
+        when(relationRepository.findByDatasetId(11)).thenReturn(List.of());
+        when(minioService.listObjects(dataset.getDirectory(), "zenvis-rag"))
+                .thenReturn(List.of("rag/plugins/com.acme.demo/docs/a.md"));
+        RagDatasetService service = newService(repository, relationRepository,
+                mock(RagKnowledgeBaseRepository.class), minioService);
+
+        service.deleteStrict(11);
+
+        verify(minioService).deleteFile("rag/plugins/com.acme.demo/docs/a.md", "zenvis-rag");
+        verify(repository).delete(dataset);
+    }
+
     private RagDatasetService newService(RagDatasetRepository repository) {
         return newService(repository, mock(RagKnowledgeBaseDatasetRepository.class),
                 mock(RagKnowledgeBaseRepository.class));
@@ -130,11 +202,18 @@ class RagDatasetServiceTest {
     private RagDatasetService newService(RagDatasetRepository repository,
                                          RagKnowledgeBaseDatasetRepository relationRepository,
                                          RagKnowledgeBaseRepository knowledgeBaseRepository) {
+        return newService(repository, relationRepository, knowledgeBaseRepository, mock(MinioService.class));
+    }
+
+    private RagDatasetService newService(RagDatasetRepository repository,
+                                         RagKnowledgeBaseDatasetRepository relationRepository,
+                                         RagKnowledgeBaseRepository knowledgeBaseRepository,
+                                         MinioService minioService) {
         RagDatasetService service = new RagDatasetService();
         ReflectionTestUtils.setField(service, "ragDatasetRepository", repository);
         ReflectionTestUtils.setField(service, "ragKnowledgeBaseDatasetRepository", relationRepository);
         ReflectionTestUtils.setField(service, "ragKnowledgeBaseRepository", knowledgeBaseRepository);
-        ReflectionTestUtils.setField(service, "minioService", mock(MinioService.class));
+        ReflectionTestUtils.setField(service, "minioService", minioService);
         return service;
     }
 }

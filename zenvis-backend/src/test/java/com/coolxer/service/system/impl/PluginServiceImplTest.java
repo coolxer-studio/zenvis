@@ -25,11 +25,15 @@ import com.coolxer.dao.mysql.repository.MenuRepository;
 import com.coolxer.dao.mysql.repository.McpServerConfigRepository;
 import com.coolxer.dao.mysql.repository.PluginRepository;
 import com.coolxer.dao.mysql.repository.RolePermissionRepository;
+import com.coolxer.service.core.ClickhouseSchemeService;
 import com.coolxer.service.dih.agent.skill.SkillService;
 import com.coolxer.service.dih.mcp.McpClientService;
 import com.coolxer.service.dih.rag.PluginRagService;
+import com.coolxer.service.dih.rag.PluginRagService.PluginRagPlan;
 import com.coolxer.service.core.MinioService;
+import com.coolxer.service.retrieval.MetaDataService;
 import com.coolxer.service.system.MenuService;
+import com.coolxer.service.system.PluginMigrationService;
 import com.coolxer.service.system.PushTaskService;
 import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.utils.TarGzUtil;
@@ -60,10 +64,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -246,6 +252,162 @@ class PluginServiceImplTest {
 
         assertThatCode(() -> service.install(21L)).doesNotThrowAnyException();
         assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.INSTALLING);
+    }
+
+    @Test
+    void uninstallDeletesClickHouseMysqlAndRagDataByDefault() throws Exception {
+        String packageName = "com.acme.demo";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLED,
+                "packages/" + packageName + "/abcdef.tar.gz");
+        PluginServiceImpl service = uninstallService(plugin);
+        Path metaFile = writePluginMeta(packageName, "zenvis.demo");
+        Path installedRoot = pluginRoot.resolve(packageName);
+        Files.createDirectories(installedRoot.resolve("03_api/migrations/mysql"));
+
+        ReflectionTestUtils.invokeMethod(service, "executeUninstall", 21L);
+
+        ClickhouseSchemeService clickhouseSchemeService =
+                (ClickhouseSchemeService) ReflectionTestUtils.getField(service, "clickhouseSchemeService");
+        PluginMigrationService migrationService =
+                (PluginMigrationService) ReflectionTestUtils.getField(service, "pluginMigrationService");
+        PluginRagService ragService =
+                (PluginRagService) ReflectionTestUtils.getField(service, "pluginRagService");
+        verify(clickhouseSchemeService).deleteTable("zenvis.demo");
+        verify(ragService).cleanupManagedResourcesForUninstall(packageName);
+        ArgumentCaptor<Path> migrationDir = ArgumentCaptor.forClass(Path.class);
+        verify(migrationService).cleanupMysql(eq(packageName), migrationDir.capture());
+        assertThat(migrationDir.getValue())
+                .isEqualTo(installedRoot.resolve("03_api/migrations/mysql").toAbsolutePath().normalize());
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.UN_INSTALL);
+        assertThat(plugin.getOperationMessage()).contains("数据已删除");
+        assertThat(installedRoot).doesNotExist();
+        assertThat(metaFile).doesNotExist();
+    }
+
+    @Test
+    void uninstallRetainsClickHouseMysqlAndRagDataWhenRequested() throws Exception {
+        String packageName = "com.acme.demo";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLED,
+                "packages/" + packageName + "/abcdef.tar.gz");
+        plugin.setDataRetained(true);
+        PluginServiceImpl service = uninstallService(plugin);
+        Path metaFile = writePluginMeta(packageName, "zenvis.demo");
+        Path installedRoot = pluginRoot.resolve(packageName);
+        Files.createDirectories(installedRoot.resolve("03_api/migrations/mysql"));
+
+        ReflectionTestUtils.invokeMethod(service, "executeUninstall", 21L);
+
+        ClickhouseSchemeService clickhouseSchemeService =
+                (ClickhouseSchemeService) ReflectionTestUtils.getField(service, "clickhouseSchemeService");
+        PluginMigrationService migrationService =
+                (PluginMigrationService) ReflectionTestUtils.getField(service, "pluginMigrationService");
+        PluginRagService ragService =
+                (PluginRagService) ReflectionTestUtils.getField(service, "pluginRagService");
+        verify(clickhouseSchemeService, never()).deleteTable(anyString());
+        verify(ragService, never()).cleanupManagedResourcesForUninstall(anyString());
+        verify(migrationService, never()).cleanupMysql(anyString(), any());
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.UN_INSTALL);
+        assertThat(plugin.getOperationMessage()).contains("数据已保留");
+        assertThat(plugin.getDataRetained()).isTrue();
+        assertThat(installedRoot).doesNotExist();
+        assertThat(metaFile).doesNotExist();
+    }
+
+    @Test
+    void uninstallPersistsKeepDataBeforeSubmittingTask() {
+        String packageName = "com.acme.demo";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLED,
+                "packages/" + packageName + "/abcdef.tar.gz");
+        PluginServiceImpl service = uninstallService(plugin);
+        PluginOperationExecutor executor = mock(PluginOperationExecutor.class);
+        ReflectionTestUtils.setField(service, "pluginOperationExecutor", executor);
+
+        PluginVo vo = service.uninstall(21L, true);
+
+        assertThat(plugin.getDataRetained()).isTrue();
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.UNINSTALLING);
+        assertThat(plugin.getOperationMessage()).contains("保留数据");
+        assertThat(vo.isDataRetained()).isTrue();
+        verify(executor).submit(any(Runnable.class));
+    }
+
+    @Test
+    void uninstallFailurePreservesResourcesAndRetryCompletes() throws Exception {
+        String packageName = "com.acme.demo";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLED,
+                "packages/" + packageName + "/abcdef.tar.gz");
+        PluginServiceImpl service = uninstallService(plugin);
+        Path metaFile = writePluginMeta(packageName, "zenvis.demo");
+        Path installedRoot = pluginRoot.resolve(packageName);
+        Files.createDirectories(installedRoot.resolve("03_api/migrations/mysql"));
+        PluginMigrationService migrationService =
+                (PluginMigrationService) ReflectionTestUtils.getField(service, "pluginMigrationService");
+        doThrow(new IllegalStateException("mysql drop failed"))
+                .when(migrationService).cleanupMysql(eq(packageName), any());
+
+        ReflectionTestUtils.invokeMethod(service, "executeUninstall", 21L);
+
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.UNINSTALL_FAILED);
+        assertThat(plugin.getOperationError()).contains("mysql drop failed");
+        assertThat(installedRoot).isDirectory();
+        assertThat(metaFile).isRegularFile();
+
+        doNothing().when(migrationService).cleanupMysql(eq(packageName), any());
+        ReflectionTestUtils.invokeMethod(service, "executeUninstall", 21L);
+
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.UN_INSTALL);
+        assertThat(installedRoot).doesNotExist();
+        assertThat(metaFile).doesNotExist();
+    }
+
+    @Test
+    void installPreCleanSkipsDataDeletionWhenDataWasRetained() throws Exception {
+        String packageName = "com.acme.demo";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.UN_INSTALL,
+                "packages/" + packageName + "/abcdef.tar.gz");
+        plugin.setDataRetained(true);
+        PluginServiceImpl service = uninstallService(plugin);
+        Path metaFile = writePluginMeta(packageName, "zenvis.demo");
+        Path installedRoot = pluginRoot.resolve(packageName);
+        Files.createDirectories(installedRoot.resolve("03_api/migrations/mysql"));
+
+        ReflectionTestUtils.invokeMethod(service, "cleanupPluginCoreResources", 21L, plugin, false, false);
+
+        ClickhouseSchemeService clickhouseSchemeService =
+                (ClickhouseSchemeService) ReflectionTestUtils.getField(service, "clickhouseSchemeService");
+        PluginMigrationService migrationService =
+                (PluginMigrationService) ReflectionTestUtils.getField(service, "pluginMigrationService");
+        PluginRagService ragService =
+                (PluginRagService) ReflectionTestUtils.getField(service, "pluginRagService");
+        verify(clickhouseSchemeService, never()).deleteTable(anyString());
+        verify(migrationService, never()).cleanupMysql(anyString(), any());
+        verify(ragService, never()).cleanupManagedResourcesForUninstall(anyString());
+        assertThat(installedRoot).doesNotExist();
+        assertThat(metaFile).doesNotExist();
+    }
+
+    @Test
+    void successfulInstallClearsDataRetainedFlag() throws Exception {
+        String packageName = "com.acme.demo";
+        byte[] packageBytes = bootstrapPackageBytes();
+        String objectKey = "packages/" + packageName + "/demo.tar.gz";
+        Plugin plugin = exportPlugin(packageName, "1.0.0", PluginStatusType.INSTALLING, objectKey);
+        plugin.setDataRetained(true);
+        PluginServiceImpl service = uninstallService(plugin);
+        MinioService minioService = (MinioService) ReflectionTestUtils.getField(service, "minioService");
+        when(minioService.getObjectInfo(objectKey, "zenvis-plugins"))
+                .thenReturn(new MinioObjectInfo(packageBytes.length, "application/gzip", "etag", Instant.now()));
+        when(minioService.downloadFile(objectKey, "zenvis-plugins"))
+                .thenReturn(new ByteArrayInputStream(packageBytes));
+        PluginRagService ragService = (PluginRagService) ReflectionTestUtils.getField(service, "pluginRagService");
+        when(ragService.prepare(eq(packageName), any(Path.class), any()))
+                .thenReturn(new PluginRagPlan(packageName, List.of(), List.of()));
+
+        ReflectionTestUtils.invokeMethod(service, "executeInstall", 21L);
+
+        assertThat(plugin.getStatus()).isEqualTo(PluginStatusType.INSTALLED);
+        assertThat(plugin.getDataRetained()).isFalse();
+        assertThat(pluginRoot.resolve(packageName).resolve("index.json")).isRegularFile();
     }
 
     @Test
@@ -1248,6 +1410,38 @@ class PluginServiceImplTest {
         ));
     }
 
+    private PluginServiceImpl uninstallService(Plugin plugin) {
+        PluginServiceImpl service = newService();
+        PluginRepository repository = mock(PluginRepository.class);
+        when(repository.findById(plugin.getId().longValue())).thenReturn(Optional.of(plugin));
+        when(repository.save(any(Plugin.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "pluginRepository", repository);
+
+        MenuService menuService = mock(MenuService.class);
+        when(menuService.findBySource(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "menuService", menuService);
+        DashboardRepository dashboardRepository = mock(DashboardRepository.class);
+        when(dashboardRepository.findBySource(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "dashboardRepository", dashboardRepository);
+        McpServerConfigRepository mcpRepository = mock(McpServerConfigRepository.class);
+        when(mcpRepository.findBySource(plugin.getPackageName())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "mcpServerConfigRepository", mcpRepository);
+        ReflectionTestUtils.setField(service, "pushTaskService", mock(PushTaskService.class));
+        ReflectionTestUtils.setField(service, "extendJarManager", mock(ExtendJarManager.class));
+        ReflectionTestUtils.setField(service, "skillService", mock(SkillService.class));
+        return service;
+    }
+
+    private Path writePluginMeta(String packageName, String tableName) throws Exception {
+        Path metaRoot = pluginRoot.resolve("config/meta_config");
+        Files.createDirectories(metaRoot);
+        Path metaFile = metaRoot.resolve(packageName + "_demo.json");
+        Files.writeString(metaFile, """
+                {"entity":[{"name":"demo","table_name":"%s"}]}
+                """.formatted(tableName));
+        return metaFile;
+    }
+
     private PluginServiceImpl newService() {
         CustomWebConfig customWebConfig = new CustomWebConfig();
         ReflectionTestUtils.setField(customWebConfig, "pluginPath", pluginRoot.toString());
@@ -1263,6 +1457,9 @@ class PluginServiceImplTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
         ReflectionTestUtils.setField(service, "minioService", minioService);
         ReflectionTestUtils.setField(service, "minioProperties", new MinioProperties());
+        ReflectionTestUtils.setField(service, "pluginMigrationService", mock(PluginMigrationService.class));
+        ReflectionTestUtils.setField(service, "clickhouseSchemeService", mock(ClickhouseSchemeService.class));
+        ReflectionTestUtils.setField(service, "metaDataService", mock(MetaDataService.class));
         return service;
     }
 

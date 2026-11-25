@@ -8,6 +8,7 @@ import com.coolxer.model.base.vo.ResponseWrap;
 import com.coolxer.model.base.vo.SingleValueVo;
 import com.coolxer.model.system.dto.PluginDto;
 import com.coolxer.model.system.dto.PluginSearchDto;
+import com.coolxer.model.system.dto.PluginUninstallDto;
 import com.coolxer.model.system.dto.PluginUpgradeDto;
 import com.coolxer.model.system.vo.PluginVo;
 import com.coolxer.service.system.PluginService;
@@ -241,9 +242,11 @@ public class PluginController extends BaseController {
     }
 
     @PostMapping({"/{id}/uninstall"})
-    public ResponseWrap<PluginVo> uninstall(@PathVariable("id") Long id) {
+    public ResponseWrap<PluginVo> uninstall(@PathVariable("id") Long id,
+                                            @RequestBody(required = false) PluginUninstallDto uninstallDto) {
         try {
-            return ResponseWrap.success(pluginService.uninstall(id));
+            boolean keepData = uninstallDto != null && uninstallDto.isKeepData();
+            return ResponseWrap.success(pluginService.uninstall(id, keepData));
         } catch (Exception e) {
             return ResponseWrap.fail(e);
         }

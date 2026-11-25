@@ -20,4 +20,12 @@ public interface PluginMigrationService {
      * @param migrations 迁移脚本
      */
     void migrateMysql(String packageName, List<Path> migrations);
+
+    /**
+     * 删除插件声明拥有的 MySQL 表，并在全部表删除成功后清理迁移历史。
+     *
+     * @param packageName  插件包名
+     * @param migrationDir 插件 MySQL 迁移目录，可为空
+     */
+    void cleanupMysql(String packageName, Path migrationDir);
 }

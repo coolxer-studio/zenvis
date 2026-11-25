@@ -112,4 +112,144 @@ class PluginMigrationServiceImplTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("必须高于已执行版本");
     }
+
+    @Test
+    void cleanupDropsOwnedTablesInReverseOrderAndDeletesHistory() throws Exception {
+        String packageName = "com.coolxer.plugin.cleanup";
+        Path migration = tempDir.resolve("V001__create_tables.sql");
+        Files.writeString(migration, """
+                CREATE TABLE plugin_parent (id INT PRIMARY KEY);
+                CREATE TABLE plugin_child (
+                    id INT PRIMARY KEY,
+                    parent_id INT,
+                    CONSTRAINT fk_plugin_child_parent FOREIGN KEY (parent_id) REFERENCES plugin_parent(id)
+                );
+                """);
+        service.migrateMysql(packageName, List.of(migration));
+        Files.writeString(tempDir.resolve("owned-tables.json"),
+                "{\"tables\":[\"plugin_parent\",\"plugin_child\"]}");
+
+        service.cleanupMysql(packageName, tempDir);
+
+        assertThat(tableCount("PLUGIN_PARENT")).isZero();
+        assertThat(tableCount("PLUGIN_CHILD")).isZero();
+        assertThat(historyCount()).isZero();
+    }
+
+    @Test
+    void cleanupFallsBackToCreateTableStatementsWhenManifestIsMissing() throws Exception {
+        String packageName = "com.coolxer.plugin.fallback";
+        Path migration = tempDir.resolve("V001__create_demo.sql");
+        Files.writeString(migration, """
+                -- create demo table
+                CREATE TABLE IF NOT EXISTS plugin_demo_fallback (id INT PRIMARY KEY);
+                """);
+        service.migrateMysql(packageName, List.of(migration));
+
+        service.cleanupMysql(packageName, tempDir);
+
+        assertThat(tableCount("PLUGIN_DEMO_FALLBACK")).isZero();
+        assertThat(historyCount()).isZero();
+    }
+
+    @Test
+    void cleanupDeletesHistoryForSeedOnlyMigrations() throws Exception {
+        String packageName = "com.coolxer.plugin.seed";
+        Path migration = tempDir.resolve("V001__seed.sql");
+        Files.writeString(migration, "SELECT 1;");
+        service.migrateMysql(packageName, List.of(migration));
+        Files.writeString(tempDir.resolve("owned-tables.json"), "{\"tables\":[]}");
+
+        service.cleanupMysql(packageName, tempDir);
+
+        assertThat(historyCount()).isZero();
+    }
+
+    @Test
+    void cleanupFailsWhenMigrationDirectoryMissingButHistoryExists() throws Exception {
+        String packageName = "com.coolxer.plugin.missingdir";
+        Path migration = tempDir.resolve("V001__create_demo.sql");
+        Files.writeString(migration, "CREATE TABLE missingdir_demo (id INT PRIMARY KEY);");
+        service.migrateMysql(packageName, List.of(migration));
+
+        assertThatThrownBy(() -> service.cleanupMysql(packageName, tempDir.resolve("missing")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("迁移目录不存在");
+
+        assertThat(tableCount("MISSINGDIR_DEMO")).isOne();
+        assertThat(historyCount()).isOne();
+    }
+
+    @Test
+    void cleanupSkipsMissingDirectoryWithoutHistory() {
+        service.cleanupMysql("com.coolxer.plugin.nodb", tempDir.resolve("missing"));
+
+        assertThat(historyCount()).isZero();
+    }
+
+    @Test
+    void cleanupRejectsUnsafeOrDuplicateOwnedTables() throws Exception {
+        String packageName = "com.coolxer.plugin.unsafe";
+        Path migration = tempDir.resolve("V001__create_system.sql");
+        Files.writeString(migration, "CREATE TABLE t_sys_plugin (id INT PRIMARY KEY);");
+        service.migrateMysql(packageName, List.of(migration));
+
+        Files.writeString(tempDir.resolve("owned-tables.json"),
+                "{\"tables\":[\"t_sys_plugin\"]}");
+        assertThatThrownBy(() -> service.cleanupMysql(packageName, tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("禁止删除平台系统表");
+        assertThat(tableCount("T_SYS_PLUGIN")).isOne();
+        assertThat(historyCount()).isOne();
+
+        Files.writeString(tempDir.resolve("owned-tables.json"),
+                "{\"tables\":[\"bad-name\"]}");
+        assertThatThrownBy(() -> service.cleanupMysql(packageName, tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("表名不合法");
+
+        Files.writeString(tempDir.resolve("owned-tables.json"),
+                "{\"tables\":[\"plugin_dup\",\"plugin_dup\"]}");
+        assertThatThrownBy(() -> service.cleanupMysql(packageName, tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("表清单重复");
+    }
+
+    @Test
+    void cleanupKeepsHistoryWhenAnyDropFails() throws Exception {
+        String packageName = "com.coolxer.plugin.dropfail";
+        Path migration = tempDir.resolve("V001__create_tables.sql");
+        Files.writeString(migration, """
+                CREATE TABLE dropfail_parent (id INT PRIMARY KEY);
+                CREATE TABLE dropfail_child (
+                    id INT PRIMARY KEY,
+                    parent_id INT,
+                    CONSTRAINT fk_dropfail_child_parent FOREIGN KEY (parent_id) REFERENCES dropfail_parent(id)
+                );
+                """);
+        service.migrateMysql(packageName, List.of(migration));
+        // 错误顺序会在逆序后先 DROP 父表，被外键阻止，用于验证失败时保留迁移历史。
+        Files.writeString(tempDir.resolve("owned-tables.json"),
+                "{\"tables\":[\"dropfail_child\",\"dropfail_parent\"]}");
+
+        assertThatThrownBy(() -> service.cleanupMysql(packageName, tempDir))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("删除插件 MySQL 表失败");
+
+        assertThat(tableCount("DROPFAIL_PARENT")).isOne();
+        assertThat(tableCount("DROPFAIL_CHILD")).isOne();
+        assertThat(historyCount()).isOne();
+    }
+
+    private int tableCount(String tableName) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ?",
+                Integer.class,
+                tableName);
+    }
+
+    private int historyCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_sys_plugin_migration", Integer.class);
+    }
 }

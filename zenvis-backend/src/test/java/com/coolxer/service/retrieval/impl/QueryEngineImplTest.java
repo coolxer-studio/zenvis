@@ -14,6 +14,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -348,6 +350,41 @@ class QueryEngineImplTest {
                 queryEngine, "queryResultList", "select payload from asset", List.of(column));
 
         assertThat(result).containsExactly(Collections.singletonMap("payload", null));
+    }
+
+    @Test
+    void retrievalResultFormatsJdbcTemporalValuesAsShanghaiWallClock() {
+        QueryEngineImpl queryEngine = new QueryEngineImpl();
+        ReflectionTestUtils.setField(queryEngine, "retrievalTimeZone", "Asia/Shanghai");
+        EntityManager entityManager = mock(EntityManager.class);
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.singletonList(new Object[]{
+                OffsetDateTime.parse("2026-11-25T20:00:00+08:00"),
+                LocalDateTime.parse("2026-11-25T20:00:00"),
+                OffsetDateTime.parse("2026-11-25T12:00:00Z"),
+                42L}));
+        ReflectionTestUtils.setField(queryEngine, "entityManager", entityManager);
+        List<DisplayColumn> columns = List.of(
+                responseColumn("received_at"), responseColumn("plain_time"),
+                responseColumn("utc_time"), responseColumn("count"));
+
+        List<Map<String, Object>> result = ReflectionTestUtils.invokeMethod(
+                queryEngine, "queryResultList", "select received_at from asset", columns);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0))
+                .containsEntry("received_at", "2026-11-25 20:00:00")
+                .containsEntry("plain_time", "2026-11-25 20:00:00")
+                .containsEntry("utc_time", "2026-11-25 20:00:00")
+                .containsEntry("count", 42L);
+    }
+
+    private DisplayColumn responseColumn(String name) {
+        DisplayColumn column = new DisplayColumn();
+        column.setColumnName(name);
+        column.setDisplayName(name);
+        return column;
     }
 
     private ColumnCriteria criteria(String column, String columnType, String operator, String value) {

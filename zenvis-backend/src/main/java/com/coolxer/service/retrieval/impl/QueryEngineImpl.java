@@ -27,8 +27,12 @@ import org.springframework.beans.factory.annotation.Value;
 import java.math.BigDecimal;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -126,7 +130,7 @@ public class QueryEngineImpl implements QueryEngine {
             Object[] row = result.get(0);
             Map<String, Object> resultMap = new HashMap<>();
             for (int i = 0; i < columnList.size(); i++) {
-                resultMap.put(columnList.get(i), row[i]);
+                resultMap.put(columnList.get(i), normalizeTemporalValue(row[i]));
             }
             return resultMap;
         }
@@ -717,12 +721,39 @@ public class QueryEngineImpl implements QueryEngine {
                         resultMap.put(displayColumn.getDisplayName(), jsonMap);
                     }
                 } else {
-                    resultMap.put(displayColumn.getDisplayName(), rowValues[i]);
+                    resultMap.put(displayColumn.getDisplayName(), normalizeTemporalValue(rowValues[i]));
                 }
             }
             resultMapList.add(resultMap);
         });
         return resultMapList;
+    }
+
+    /**
+     * ClickHouse 的 DateTime64 带显式时区时 JDBC 返回 {@link OffsetDateTime}，
+     * 不带时区时返回 {@link LocalDateTime}，MySQL DATETIME 也会返回 {@link LocalDateTime}。
+     * 检索结果直接序列化为 JSON，必须在出口转成字符串，否则全局 ObjectMapper
+     * 会因为缺少 JavaTimeModule 抛出 "Type definition error"。
+     */
+    private Object normalizeTemporalValue(Object value) {
+        if (value instanceof OffsetDateTime offsetDateTime) {
+            return DATE_TIME_FORMATTER.format(
+                    offsetDateTime.atZoneSameInstant(ZoneId.of(retrievalTimeZone)));
+        }
+        if (value instanceof ZonedDateTime zonedDateTime) {
+            return DATE_TIME_FORMATTER.format(
+                    zonedDateTime.withZoneSameInstant(ZoneId.of(retrievalTimeZone)));
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return DATE_TIME_FORMATTER.format(localDateTime);
+        }
+        if (value instanceof LocalDate localDate) {
+            return localDate.toString();
+        }
+        if (value instanceof LocalTime localTime) {
+            return localTime.toString();
+        }
+        return value;
     }
 
 }
